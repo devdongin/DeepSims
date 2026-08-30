@@ -52,6 +52,8 @@
         <div class="bar"><span class="label">수면</span><div class="track"><div class="fill" id="b-energy" style="background:#7ab5e8"></div></div></div>
         <div class="bar"><span class="label">사교</span><div class="track"><div class="fill" id="b-social" style="background:#8fd48a"></div></div></div>
         <div class="bar"><span class="label">재미</span><div class="track"><div class="fill" id="b-fun" style="background:#c79ae8"></div></div></div>
+        <div class="bar"><span class="label">기분</span><div class="track"><div class="fill" id="b-mood" style="background:#e8d47a"></div></div></div>
+        <div id="traits" style="font-size:11px;color:#b6b0c4;margin:6px 0 2px"></div>
         <div id="money"></div>
         <div id="action"></div>
         <div id="assigns">
@@ -73,6 +75,25 @@
     <div class="content" id="report"></div>
     <button onclick="document.getElementById('modal').style.display='none'">확인</button>
   </div></div>
+  <div id="onboard" style="position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:20">
+    <div class="box" style="width:380px;background:#1e1a26;border:2px solid #ffd97a;border-radius:10px;padding:20px">
+      <h2 style="color:#ffd97a;font-size:16px;margin-bottom:6px">이 마을에 이사 왔습니다</h2>
+      <p style="font-size:12px;color:#b6b0c4;margin-bottom:14px">당신의 배경을 알려주세요. 당신을 닮은 심이 마을에서 살아갑니다.</p>
+      <div style="display:grid;grid-template-columns:70px 1fr;gap:8px;font-size:13px;align-items:center">
+        <label>이름</label><input id="ob-name" maxlength="12" style="padding:5px;background:#14121a;border:1px solid #35304a;color:#e8e2d8;border-radius:4px">
+        <label>성별</label><select id="ob-gender" style="padding:5px;background:#14121a;border:1px solid #35304a;color:#e8e2d8;border-radius:4px">
+          <option value="F">여성</option><option value="M">남성</option><option value="X">기타</option></select>
+        <label>나이</label><input id="ob-age" type="number" min="15" max="90" value="30" style="padding:5px;background:#14121a;border:1px solid #35304a;color:#e8e2d8;border-radius:4px">
+        <label>MBTI</label><select id="ob-mbti" style="padding:5px;background:#14121a;border:1px solid #35304a;color:#e8e2d8;border-radius:4px"></select>
+        <label>직업</label><select id="ob-occ" style="padding:5px;background:#14121a;border:1px solid #35304a;color:#e8e2d8;border-radius:4px">
+          <option value="office_worker">회사원</option><option value="barista">바리스타</option>
+          <option value="freelancer">프리랜서</option><option value="student">학생 (25세 이하)</option>
+          <option value="retired">은퇴 (60세 이상)</option></select>
+      </div>
+      <div id="ob-error" style="color:#e87a7a;font-size:12px;margin-top:8px"></div>
+      <button id="ob-submit" style="margin-top:14px;padding:7px 16px;background:#ffd97a;color:#14121a;border:0;border-radius:5px;cursor:pointer;font-weight:bold">이사 오기</button>
+    </div>
+  </div>
   <script type="module" src="./main.js"></script>
 </body>
 </html>

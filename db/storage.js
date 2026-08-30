@@ -2,6 +2,7 @@
 import Database from 'better-sqlite3';
 import { createWorld } from '../sim/world.js';
 import { serialize, deserialize } from '../sim/serialize.js';
+import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION, TICKS_PER_DAY, EVENT_TYPES } from '../sim/constants.js';
 
 const SCHEMA = `
@@ -40,6 +41,7 @@ export class Storage {
       const init = this.db.transaction(() => {
         const metaSet = this.db.prepare('INSERT INTO meta(key, value) VALUES (?, ?)');
         metaSet.run('schemaVersion', String(SCHEMA_VERSION));
+        metaSet.run('behaviorVersion', String(SCHEMA_VERSION));
         metaSet.run('seed', String(seed));
         metaSet.run('epochUtcMs', String(nowUtcMs));
         metaSet.run('lastSimulatedTick', '0');
@@ -56,7 +58,38 @@ export class Storage {
         `DB corruption: snapshot.tick(${snap?.tick}) != meta.lastSimulatedTick(${lastSimulatedTick}). ` +
         `README의 수동 복구 절차를 따라 snapshot id=2로 복구하세요.`);
     }
-    return { world: deserialize(snap.state), epochUtcMs, lastSimulatedTick };
+    // 마이그레이션은 입력 처리 전 로드 시점에 완료하고, 메타·스냅샷에 원자 커밋 (PLAN §12.1)
+    const raw = deserialize(snap.state);
+    const wasV1 = (raw.schemaVersion ?? 1) < SCHEMA_VERSION;
+    const world = migrateWorld(raw);
+    if (wasV1) {
+      const tx = this.db.transaction(() => {
+        this.db.prepare('UPDATE snapshot SET state = ? WHERE id = 1').run(serialize(world));
+        const metaSet = this.db.prepare('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)');
+        metaSet.run('schemaVersion', String(SCHEMA_VERSION));
+        metaSet.run('behaviorVersion', String(SCHEMA_VERSION));
+      });
+      tx();
+    }
+    return { world, epochUtcMs, lastSimulatedTick };
+  }
+
+  getMetaInt(key, def = 0) {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key);
+    return row ? Number(row.value) : def;
+  }
+
+  setMetaInt(key, value) {
+    this.db.prepare('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)').run(key, String(value));
+  }
+
+  // 유효 대기 로직 계산용: 미적용 logic_update를 (target, sequence) 순으로 (PLAN §14.1 부팅 정합)
+  getPendingLogicUpdates() {
+    return this.db.prepare(
+      `SELECT id, target_tick, sequence, payload FROM inputs
+       WHERE applied = 0 AND command = 'logic_update' ORDER BY target_tick, sequence`)
+      .all()
+      .map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
   }
 
   // 배치 커밋: 스냅샷 회전 + events + inputs.applied + meta 원자 커밋 (PLAN §4)

@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { Storage } from '../db/storage.js';
 import { Engine } from './engine.js';
 import { PROTOCOL_VERSION } from '../sim/constants.js';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -45,6 +46,25 @@ acquireLock();
 const storage = new Storage(DB_PATH);
 const engine = new Engine(storage, { seed: SEED });
 
+// 판단 로직 파일 (PLAN §14.1): 없으면 기본값 생성, 변경 감지 시 logic_update 입력으로 등록
+const PARAMS_PATH = process.env.DEEPSIMS_LOGIC || path.join(ROOT, 'logic', 'params.json');
+if (!fs.existsSync(PARAMS_PATH)) {
+  fs.mkdirSync(path.dirname(PARAMS_PATH), { recursive: true });
+  fs.writeFileSync(PARAMS_PATH, JSON.stringify(DEFAULT_LOGIC, null, 2) + '\n');
+}
+engine.reconcileLogic(PARAMS_PATH); // 부팅 정합 — 따라잡기 전에 등록 (따라잡기 전체가 새 로직)
+
+let watchDebounce = null;
+fs.watch(path.dirname(PARAMS_PATH), (_ev, file) => {
+  if (file !== path.basename(PARAMS_PATH)) return;
+  clearTimeout(watchDebounce);
+  watchDebounce = setTimeout(() => {
+    const r = engine.reconcileLogic(PARAMS_PATH);
+    if (r.registered) console.log(`로직 갱신 감지 → rev ${r.revision} (${r.hash}) 다음 틱부터 적용`);
+    else if (r.reason === 'invalid') console.warn('로직 파일 검증 실패:', r.errors?.slice(0, 3));
+  }, 500);
+});
+
 const app = express();
 app.use(express.json());
 
@@ -63,6 +83,9 @@ app.post('/api/input', async (req, res) => {
     || typeof command !== 'string'
     || payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
     return res.status(400).json({ error: 'clientInputId(문자열), command(문자열), payload(객체)가 필요합니다' });
+  }
+  if (!['assign', 'create_player'].includes(command)) {
+    return res.status(400).json({ error: '허용되지 않은 명령입니다' }); // logic_update는 서버 내부 전용
   }
   if (command === 'assign'
     && (typeof payload.simId !== 'number' || typeof payload.actionType !== 'string')) {
@@ -132,5 +155,6 @@ wss.on('connection', async (ws) => {
 server.listen(PORT, async () => {
   console.log(`DeepSims 서버: http://localhost:${PORT} (db: ${DB_PATH}, tick: ${engine.world.worldTick})`);
   await engine.catchUp(); // 부팅 따라잡기
+  engine.assertLogicSynced(PARAMS_PATH); // 부팅 정합 ⑤
   console.log(`따라잡기 완료: tick ${engine.world.worldTick}`);
 });

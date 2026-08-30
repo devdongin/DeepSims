@@ -144,7 +144,8 @@ test('13. socialize 페어링: 2명이면 회복, 1명이면 lonely', () => {
   for (let i = 0; i < 3; i++) evs2.push(...tick(w2, []));
   assert.ok(w2.sims[0].needs.social > before, '페어링 시 사교 회복');
   assert.notEqual(w2.affinity[0][1], 0, '호감도 변화');
-  assert.equal(w2.affinity[0][1], w2.affinity[1][0], '호감도 대칭');
+  // Phase 2부터 호감도는 비대칭(각자 TF 계수) — 부호만 일치 검증 (PLAN §12.1)
+  assert.equal(Math.sign(w2.affinity[0][1]), Math.sign(w2.affinity[1][0]), '호감도 부호 일치');
   assert.ok(!evs2.some((e) => e.type === 'lonely'), '페어링되면 lonely 없음');
 });
 

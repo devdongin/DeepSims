@@ -117,12 +117,27 @@ function fmtClock(tick) {
 }
 
 const ACTION_KO = { eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기' };
+const OCC_KO = { office_worker: '회사원', barista: '바리스타', freelancer: '프리랜서', student: '학생', retired: '은퇴' };
+const NEED_KO = { hunger: '배고픔', energy: '수면 욕구', social: '외로움', fun: '심심함', money: '돈 걱정' };
 function simName(id) { return world?.sims.find((s) => s.id === id)?.name ?? `심${id}`; }
+
+// 판단 사유 문장화 (PLAN §14.1)
+function reasonText(r) {
+  if (!r) return '';
+  if (r.assigned) return ' (지시받음)';
+  if (r.noCandidates) return ' (할 게 없음)';
+  const parts = [];
+  if (r.urgencyOverride) parts.push('위급!');
+  if (r.need) parts.push(`${NEED_KO[r.need] ?? r.need} ${Math.round((r.deficit ?? 0) / 100)}%`);
+  if (r.moodMod > 0) parts.push('기분 전환');
+  if (r.persFactor > 120) parts.push('성향');
+  return parts.length ? ` (${parts.join('·')})` : '';
+}
 
 function eventText(e) {
   const n = simName(e.simId);
   switch (e.type) {
-    case 'action_started': return e.payload.action === 'idle' ? null : `${n}: ${ACTION_KO[e.payload.action]} 시작`;
+    case 'action_started': return e.payload.action === 'idle' ? null : `${n}: ${ACTION_KO[e.payload.action]} 시작${reasonText(e.payload.reason)}`;
     case 'action_completed': return `${n}: ${ACTION_KO[e.payload.action]} 완료`;
     case 'action_failed': return `${n}: 행동 실패 (${e.payload.reason})`;
     case 'money_changed': return `${n}: ${e.payload.delta > 0 ? '+' : ''}${e.payload.delta}원 (잔액 ${e.payload.balance})`;
@@ -130,6 +145,8 @@ function eventText(e) {
     case 'lonely': return `${n}이(가) 혼자 시간을 보냈습니다…`;
     case 'argument': return `💢 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 말다툼했습니다`;
     case 'input_rejected': return `지시 거부됨 (${e.payload.reason})`;
+    case 'player_created': return `🏠 ${e.payload.name}이(가) 마을에 이사 왔습니다! (${OCC_KO[e.payload.occupation]})`;
+    case 'logic_changed': return `🔧 심들의 판단 로직이 갱신되었습니다 (${e.payload.hash})`;
     default: return null;
   }
 }
@@ -137,9 +154,13 @@ function eventText(e) {
 function pushFeed(e) {
   const text = eventText(e);
   if (!text) return;
+  // 이름 등 사용자 유래 문자열이 섞이므로 innerHTML 금지 — DOM 노드로 조립
   const div = document.createElement('div');
   div.className = 'ev' + (['starving', 'argument', 'lonely'].includes(e.type) ? ' warn' : '');
-  div.innerHTML = `<span class="t">${fmtClock(e.tick)}</span>${text}`;
+  const ts = document.createElement('span');
+  ts.className = 't';
+  ts.textContent = fmtClock(e.tick);
+  div.append(ts, document.createTextNode(text));
   const feed = $('feed');
   feed.prepend(div);
   while (feed.children.length > 80) feed.lastChild.remove();
@@ -156,6 +177,14 @@ function renderPanel() {
   for (const k of ['hunger', 'energy', 'social', 'fun']) {
     $(`b-${k}`).style.width = `${sim.needs[k] / 100}%`;
   }
+  $('b-mood').style.width = `${((sim.mood ?? 0) + 10000) / 200}%`;
+  const tr = sim.traits;
+  if (tr) {
+    const mbti = (tr.mbti.EI < 50 ? 'E' : 'I') + (tr.mbti.SN < 50 ? 'S' : 'N')
+      + (tr.mbti.TF < 50 ? 'T' : 'F') + (tr.mbti.JP < 50 ? 'J' : 'P');
+    const g = { F: '여', M: '남', X: '-' }[tr.gender];
+    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${OCC_KO[tr.occupation]}${sim.isPlayer ? ' · ⭐나' : ''}`;
+  }
   $('money').textContent = `💰 ${sim.money}원`;
   $('action').textContent = `현재: ${ACTION_KO[sim.state.action] ?? '대기'} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
 }
@@ -169,6 +198,40 @@ $('assigns').addEventListener('click', async (ev) => {
   }).then((r) => r.json()); // 피드 반영은 서버 이벤트로만 (중복 방지)
 });
 
+// ---- 온보딩 (PLAN §13): 플레이어 심이 없으면 배경 입력 폼 ----
+const MBTI_TYPES = ['ISTJ','ISFJ','INFJ','INTJ','ISTP','ISFP','INFP','INTP','ESTP','ESFP','ENFP','ENTP','ESTJ','ESFJ','ENFJ','ENTJ'];
+{
+  const sel = $('ob-mbti');
+  for (const t of MBTI_TYPES) { const o = document.createElement('option'); o.value = t; o.textContent = t; sel.append(o); }
+  sel.value = 'ENFP';
+}
+
+function maybeShowOnboarding() {
+  const hasPlayer = world?.sims.some((s) => s.isPlayer);
+  $('onboard').style.display = hasPlayer ? 'none' : 'flex';
+}
+
+$('ob-submit').addEventListener('click', async () => {
+  const name = $('ob-name').value.trim();
+  const age = Number($('ob-age').value);
+  const type = $('ob-mbti').value;
+  const axisVal = (letter, first) => (letter === first ? 25 : 75); // 글자 → 축 값 (완만한 극단)
+  const payload = {
+    name,
+    gender: $('ob-gender').value,
+    age,
+    mbti: { EI: axisVal(type[0], 'E'), SN: axisVal(type[1], 'S'), TF: axisVal(type[2], 'T'), JP: axisVal(type[3], 'J') },
+    occupation: $('ob-occ').value,
+  };
+  if (!name) { $('ob-error').textContent = '이름을 입력하세요'; return; }
+  const res = await fetch('/api/input', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientInputId: crypto.randomUUID(), command: 'create_player', payload }),
+  }).then((r) => r.json());
+  if (res.error) { $('ob-error').textContent = res.error; return; }
+  $('onboard').style.display = 'none'; // 생성 결과는 다음 tickBatch로 도착 (거부 시 피드에 표시)
+});
+
 // ---- 부재중 리포트 ----
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
@@ -178,23 +241,23 @@ async function showReport() {
   const rep = await fetch(`/api/report?cursor=${cursor}`).then((r) => r.json());
   lsSet('deepsims.lastSeenTick', String(rep.nextCursor));
   if (rep.toTick - rep.fromTick < 60) return; // 1게임시간 미만 공백은 생략
-  const lines = [];
+  const lines = []; // 문자열은 전부 textContent로 렌더 (이름 유래 XSS 방지)
   const hours = Math.floor((rep.toTick - rep.fromTick) / 60);
-  lines.push(`당신이 없는 동안 게임 시간 <b>${Math.floor(hours / 24)}일 ${hours % 24}시간</b>이 흘렀습니다.`);
+  lines.push(`당신이 없는 동안 게임 시간 ${Math.floor(hours / 24)}일 ${hours % 24}시간이 흘렀습니다.`);
   const count = (t) => rep.counts.find((c) => c.type === t)?.n ?? 0;
   lines.push(`완료된 행동 ${count('action_completed')}건, 말다툼 ${count('argument')}건, 굶주림 ${count('starving')}건.`);
   for (const m of rep.meals) lines.push(`· ${simName(m.sim_id)}: 식사 ${m.n}회`);
   for (const w of rep.works) lines.push(`· ${simName(w.sim_id)}: 근무 ${w.n}회`);
   for (const mo of rep.moneyBySim) lines.push(`· ${simName(mo.sim_id)}: 잔액 ${mo.delta > 0 ? '+' : ''}${mo.delta}원 변동`);
   if (rep.highlights.length) {
-    lines.push('<br><b>주요 사건</b>');
+    lines.push('◆ 주요 사건');
     for (const h of rep.highlights.slice(0, 10)) {
       const t = eventText({ ...h, simId: h.sim_id });
       if (t) lines.push(`· ${fmtClock(h.tick)} ${t}`);
     }
   }
   if (rep.prunedAggregates?.length) {
-    lines.push('<br><b>오래된 기간 요약</b> (일 단위 집계)');
+    lines.push('◆ 오래된 기간 요약 (일 단위 집계)');
     const byDay = new Map();
     for (const a of rep.prunedAggregates) {
       const day = Math.floor(a.day_start_tick / 1440);
@@ -204,7 +267,13 @@ async function showReport() {
       lines.push(`· Day ${day}: 사건 ${n}건`);
     }
   }
-  $('report').innerHTML = lines.join('<br>');
+  const rc = $('report');
+  rc.replaceChildren(...lines.map((l) => {
+    const div = document.createElement('div');
+    div.textContent = l;
+    if (l.startsWith('◆')) div.style.fontWeight = 'bold';
+    return div;
+  }));
   $('modal').style.display = 'flex';
 }
 
@@ -235,6 +304,7 @@ function connect() {
         $('clock').textContent = fmtClock(world.worldTick);
         if (scene) { simSprites.forEach((s) => s.destroy()); simSprites.clear(); scene.drawWorld(); }
         showReport();
+        maybeShowOnboarding();
         renderPanel();
         break;
       case 'tickBatch':
@@ -243,6 +313,7 @@ function connect() {
         world.sims = msg.sims;
         $('clock').textContent = fmtClock(world.worldTick);
         for (const e of msg.events) pushFeed(e);
+        if (msg.events.some((e) => e.type === 'player_created')) maybeShowOnboarding();
         if (scene) scene.syncSims();
         renderPanel();
         lsSet('deepsims.lastSeenTick', String(world.worldTick));

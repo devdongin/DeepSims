@@ -320,6 +320,127 @@ Codex 리뷰 → 커밋 → 푸시) → 9. Codex 도트 에셋 생성·통합
   테이블 확장(산책 wander, 취미 hobby, 독서 read, 운동 exercise 등)을 데이터 주도로 추가한다.
   enum 추가는 타이브레이크 순서 뒤에 append(기존 리플레이 결정성 유지).
 
+## 14.1 판단 로직의 데이터화·핫스왑·사유 기록 (사용자 결정, Phase 2에서 도입)
+
+**목표**: 심의 판단 규칙이 코드에 고정되지 않고, LLM 리뷰를 거쳐 갱신된 로직이 **플레이 도중에도,
+따라잡기 실행 전에도** 적용된다. 결정성은 유지한다.
+
+### 로직 파일
+- 모든 튜너블 규칙을 `logic/params.json`으로 외부화: 감쇠 테이블, 행동 정의(지속·회복·비용),
+  MBTI 변조 공식의 계수, 기분 델타, 다툼 임계 계수, (Phase 3+) importance 테이블·검색 가중치.
+- 공식의 **구조**는 코드, **수치**는 params. 구조 변경은 여전히 코드 릴리스.
+- **검증 계약**: 적용 전 필수/허용 키(미지 키 거부), 전 수치 safe integer + 범위, canonical 해시가
+  입력의 hash 필드와 일치, params 전문 UTF-8 ≤ 8KB, logicSchemaVersion 일치. 잘못된 **파일**은
+  입력으로 등록하지 않고 ops_log 기록. 이미 내구 저장된 손상 입력은 결정적 input_rejected 처리.
+
+### 결정성 보존 — 로직 변경은 입력이다
+- world.logic = 활성 파라미터 전체 (스냅샷에 직렬화). tick()은 상수 대신 world.logic만 읽는다.
+- 파일 변경 감지(부팅 시 + fs.watch로 플레이 도중) → 파일 파라미터의 canonical 해시가
+  현행 로직과 다르면 `logic_update{params, hash}` 입력을 다음 틱에 등록.
+  clientInputId = "logic:<revision>:<hash>" — revision은 meta의 단조 증가 카운터(A→B→A 복귀 지원).
+  중복 억제는 "등록 대기 중인 revision+hash" 기준이며 콘텐츠 해시를 영구 멱등키로 쓰지 않는다.
+- 1단계에서 logic_update 적용: world.logic 교체 + `logic_changed` 이벤트. **파라미터 전문이 입력
+  로그에 내구 저장**되므로, 크래시 후 재생·따라잡기·리플레이 모두 같은 틱부터 같은 로직을 쓴다.
+- 부팅 정합(reconcile): ① pending logic_update들을 target/sequence 순으로 읽어 **유효 대기 로직**
+  (마지막 pending의 params, 없으면 snapshot의 world.logic)을 계산 → ② 파일과 비교 → ③ 다르면
+  파일 params를 pending 뒤에 새 revision으로 등록 → ④ 따라잡기 → ⑤ 종료 후 world.logic 해시 ==
+  파일 해시 단정(불일치 시 경고 + 재정합). 플레이 도중 fs.watch 감지도 같은 reconcile 경로.
+- **1단계 적용 순서 계약**: 같은 틱의 입력은 [logic_update들(sequence 순)] → [나머지 명령(sequence
+  순)]. 이벤트 ordinal도 이 적용 순서를 따른다 — 첫 따라잡기 틱의 기존 입력도 새 로직으로 검증된다.
+
+### 판단 사유(reason) 기록
+- action_started payload에 구조화 사유 첨부: { need, deficit, persFactor, planFactor, moodMod,
+  urgencyOverride, (Phase 3+) citedMemorySeqs[] } — "왜 이 행동을 했는가"와 "무엇이 다음 행동에
+  영향을 주는가"(인용된 기억·기분)를 추적 가능하게. 클라이언트가 사유를 문장화해 피드·패널에 표시.
+- payload 1KB 상한 내로 요약(상위 요인만).
+
+### LLM 자동 리뷰 루프 (GitHub Actions)
+- `.github/workflows/llm-logic-review.yml`: `needs-llm-review` 라벨 이슈에 대해 저장소 Secret의
+  LLM API 키(사용자가 설정)로 분석을 실행 → 원인 분석 + `logic/params.json` 수정안을 이슈 코멘트로
+  게시. 사람이 PR로 반영 → 배포된 서버들이 파일 변경을 감지해 §14.1 경로로 적용.
+- 권한 최소화: `issues: write` + `contents: read`만. 이슈 본문은 프롬프트 인젝션 가능 입력이므로
+  LLM 출력은 비신뢰 — 직접 커밋·워크플로 디스패치·시크릿 접근 불가, 코멘트 게시까지만.
+
+## 12.1 Phase 2 구현 스펙 (정수 테이블 확정)
+
+### traits 구조
+```
+traits: {
+  gender: 'F' | 'M' | 'X',
+  age: 정수 15~90,
+  mbti: { EI, SN, TF, JP: 각 0~100 },   // 0 = 첫 글자 극단(E/S/T/J), 100 = 둘째 글자 극단(I/N/F/P), 50 = 중립
+  occupation: 'office_worker' | 'barista' | 'freelancer' | 'student' | 'retired'
+}
+```
+- NPC 생성: rngWorldgen. 순서 고정: gender → age → mbti 4축 → occupation(나이 제약 필터 후 잔여 중 선택).
+  나이 제약: retired는 age ≥ 60에서만, student는 age ≤ 25에서만 후보.
+- 이름: 기존 SIM_NAMES 유지.
+
+### 유틸리티 변조 persFactor (행동별, 곱은 floorDiv(·,100) 후 [50,200] 클램프 1회)
+| 행동 | factor 공식 |
+|---|---|
+| socialize | 150 - EI (E일수록 ↑) |
+| play | 100 + (EI - 50) (I일수록 ↑, 혼자 놀기) |
+| work | 150 - JP (J일수록 ↑) |
+| eat, sleep | 100 (생리 욕구는 변조 없음) |
+- 반올림 순서: score = floorDiv(floorDiv(base × persFactor, 100) × planFactor, 100) (§G와 동일 슬롯).
+
+### T/F → 관계 역학
+- 호감도 델타(부호 보존): delta' = sign(delta) × floorDiv(|delta| × (50 + TF), 100) —
+  F(100)일수록 변동 폭 1.5배, T(0)는 0.5배. 음수에서 0에서 멀어지는 floorDiv 편향 방지.
+- 다툼 임계(심별): clamp(-3000 - (TF - 50) × 20, -5000, -1000) — F는 임계가 깊어져 다툼이 어려움.
+- 페어 기준: 두 심의 임계 중 더 얕은(높은) 값 사용, 델타는 각자 자기 계수로 적용 → 호감도 비대칭
+  허용으로 전환 (affinity[a][b] ≠ affinity[b][a] 가능). argument는 어느 한쪽이라도 임계를 하향
+  교차하면 1회 발생.
+
+### 나이 → 감쇠 (기존 DECAY에 가산)
+| 구간 | 보정 |
+|---|---|
+| 15~29 | fun +2/틱 |
+| 30~59 | 없음 |
+| 60~90 | energy +2/틱 |
+
+### 직업 테이블 (단일 직장 유지, 계수만 차등)
+| occupation | 근무 창(tod) | 임금 계수(%) | 초기 자금 |
+|---|---|---|---|
+| office_worker | 540~1080 | 100 | 1000+rng500 |
+| barista | 420~960 | 90 | 1000+rng500 |
+| freelancer | 0~1440 (제한 없음) | 80 | 1000+rng500 |
+| student | 840~1200 | 50 | 500+rng500 |
+| retired | 근무 불가 | — | 3000+rng500 |
+- moneyDelta = floorDiv(1200 × 계수, 100). retired는 work 후보에서 하드 제약으로 제외.
+
+### 기분 (Phase 2 부분: 이벤트 직결 + 감쇠, 회고 없음)
+- currentMood 정수 [-10000, 10000], 초기 0. pendingMood는 Phase 3에서 도입.
+- 이벤트 직결 변동: **사실 발생 지점에서 즉시 적용+클램프** — argument(2단계) -800, lonely·
+  action_completed(+50)·money_changed(+) +100(3단계), starving -1000(4단계 감쇠 직후, 기분 감쇠 전).
+- 4단계 내부 순서 고정: 욕구 감쇠 → starving 판정·기분 델타 → 기분을 0 방향 5 감쇠.
+  5단계는 감쇠 후의 기분을 읽는다.
+- moodMod (§G 슬롯): action ∈ {play, socialize}이고 mood < 0이면 +floorDiv(-mood × 2.5e7, 1)
+  (기분 전환 욕구, 최대 2.5e11). mood < -5000이면 전 후보에 (mood + 5000) × 5e7 (무기력 감점,
+  최소 -2.5e11). 클램프는 §G 표 그대로.
+
+### create_player 명령 (두 번째 명령)
+- payload: { name(유니코드 코드포인트 1~12개), gender, age, mbti{4축}, occupation } — 전 필드
+  §12.1 범위 검증. 초기 자금 고정값: office_worker/barista/freelancer 1000, student 500,
+  retired 3000 (rng 미소비).
+- 거부 조건: 범위 위반 / 나이-직업 제약 위반 / 이미 isPlayer 심 존재 → input_rejected.
+- 생성(1단계에서 원자적): id = max(id)+1, isPlayer=true, 홈 = 거주자 최소 집(동수면 facilityId
+  오름차순), 스폰 = 홈 문 앞(door.y+1), 욕구 전부 7000(고정, rng 미소비), 자금 = 직업 테이블
+  (rng 미소비 — 고정분만), 기분 0, affinity 행/열 0 확장.
+- 이벤트: player_created (레지스트리 추가).
+
+### 마이그레이션
+- schemaVersion 2. 마이그레이션은 **입력 처리 전 로드 시점에 완료**: ① traits/mood 기본값 —
+  심별 임시 RNG mulberry32((seed ^ simId) >>> 0)로 §12.1 생성 규칙 재실행 (rngSim/rngWorldgen
+  상태 비소비), ② world.logic에 코드 내장 기본 파라미터(v1 등가) 설치, ③ schemaVersion=2 기록.
+  그 다음에야 파일 params가 logic_update 입력으로 등록된다. behaviorVersion 2를 meta에 기록.
+
+### Phase 2 클라이언트
+- 심 패널: MBTI 4글자·나이·성별·직업·기분 바 표시.
+- 온보딩: snapshot에 isPlayer 심이 없으면 배경 입력 폼 모달(이름/성별/나이/MBTI 16유형 선택/직업)
+  → create_player 전송. 생성 후 내 심 하이라이트(카메라 포커스).
+
 ## 13. 플레이어 온보딩 (Phase 2)
 
 - 처음 접속 시 world에 플레이어 심이 없으면 클라이언트가 **배경 입력 폼**(이름/성별/나이/MBTI 4축
@@ -343,3 +464,18 @@ Codex 리뷰 → 커밋 → 푸시) → 9. Codex 도트 에셋 생성·통합
   구분한다. 새 상태 필드는 결정적 기본값과 함께 도입해 기존 세이브를 이어 시뮬레이션한다
   (과거 리플레이 호환은 비목표). 재현 이슈에는 seed·게임 시각 외에 schema/behavior 버전과
   스냅샷 해시를 기록한다 — 이슈 템플릿에 반영.
+
+## 15. 로드맵 — 인간 행동 패턴 라이브러리 (Phase 5+)
+
+사용자 방향성: 특정 규칙 몇 개가 아니라 인간 행동 패턴을 자세히 분석해 로직화한다.
+§14.1의 사유 기록이 "그 과정에서 어떤 생각이 관여했는지"의 기반 데이터가 된다.
+
+- **대처 행동(coping)**: 스트레스(기분 저하 지속) → 대처 전략 선택이 성격·습관 의존.
+  예: 술집 시설 추가 → 기분 급락 시 음주(단기 기분 회복, 다음날 energy 페널티, 반복 시 습관
+  가중치 강화 — 중독 루프), 폭식, 은둔(집에만), 운동. 대처 선택 자체가 성격(T/F, E/I)과
+  과거 기억(효과가 있었나)의 함수.
+- **건설**: 심이 세계를 바꾼다 — 자재 모으기 → 집 증축/신축, 도로 놓기(자주 다니는 경로가
+  도로화). 맵이 불변이라는 Phase 1 전제가 깨지므로 경로 캐시·도달성 검증의 재설계 필요.
+- **문제 해결 과정 추적**: 목표가 막혔을 때(돈 없음·시설 만석) 대안 탐색 체인을 reason에
+  기록 — "카페 만석 → 집 식사 시도 → 재료 없음 → 일단 일하러" 같은 사고 흐름의 로그화.
+- 각 항목은 §14 이슈 루프로 우선순위를 정하고 §12.1처럼 정수 테이블 스펙 확정 후 구현.

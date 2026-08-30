@@ -1,0 +1,48 @@
+// 특성 (PLAN §12/12.1): 성별·나이·MBTI·직업. 생성 순서 고정 — gender → age → mbti 4축 → occupation.
+import { makeRng, rngInt } from './prng.js';
+
+export const GENDERS = ['F', 'M', 'X'];
+export const OCCUPATIONS = ['office_worker', 'barista', 'freelancer', 'student', 'retired'];
+export const MBTI_AXES = ['EI', 'SN', 'TF', 'JP'];
+
+// rng를 소비하며 특성 생성 (worldgen 또는 마이그레이션 임시 rng)
+export function generateTraits(rng) {
+  const gender = GENDERS[rngInt(rng, 3)];
+  const age = 15 + rngInt(rng, 76); // 15~90
+  const mbti = {};
+  for (const axis of MBTI_AXES) mbti[axis] = rngInt(rng, 101); // 0~100
+  const eligible = OCCUPATIONS.filter((o) => occupationAllowed(o, age));
+  const occupation = eligible[rngInt(rng, eligible.length)];
+  return { gender, age, mbti, occupation };
+}
+
+export function occupationAllowed(occupation, age) {
+  if (occupation === 'retired') return age >= 60;
+  if (occupation === 'student') return age <= 25;
+  return true;
+}
+
+// 마이그레이션용 결정적 특성 (PLAN §12.1: 임시 rng, 월드 rng 비소비)
+export function migrationTraits(seed, simId) {
+  return generateTraits(makeRng((seed ^ simId) >>> 0));
+}
+
+export function validateTraits(t) {
+  if (t === null || typeof t !== 'object' || Array.isArray(t)) return '특성이 객체가 아님';
+  if (!GENDERS.includes(t.gender)) return '성별 오류';
+  if (!Number.isSafeInteger(t.age) || t.age < 15 || t.age > 90) return '나이 범위(15~90) 오류';
+  if (t.mbti === null || typeof t.mbti !== 'object' || Array.isArray(t.mbti)) return 'MBTI 오류';
+  for (const axis of MBTI_AXES) {
+    const v = t.mbti[axis];
+    if (!Number.isSafeInteger(v) || v < 0 || v > 100) return `MBTI ${axis} 범위(0~100) 오류`;
+  }
+  if (Object.keys(t.mbti).length !== 4) return 'MBTI 축 수 오류';
+  if (!OCCUPATIONS.includes(t.occupation)) return '직업 오류';
+  if (!occupationAllowed(t.occupation, t.age)) return '나이-직업 제약 위반';
+  return null;
+}
+
+export function mbtiString(mbti) {
+  return (mbti.EI < 50 ? 'E' : 'I') + (mbti.SN < 50 ? 'S' : 'N')
+    + (mbti.TF < 50 ? 'T' : 'F') + (mbti.JP < 50 ? 'J' : 'P');
+}
