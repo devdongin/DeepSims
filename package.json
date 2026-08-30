@@ -1,0 +1,24 @@
+{
+  "name": "deepsims",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "2D isometric Sims-like with deterministic offline catch-up simulation",
+  "scripts": {
+    "start": "npm run build && node server/index.js",
+    "serve": "node server/index.js",
+    "build": "vite build client",
+    "dev:client": "vite client",
+    "test": "node --test test/",
+    "bench": "node bench/bench.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "phaser": "^3.90.0",
+    "vite": "^5.4.11"
+  }
+}
