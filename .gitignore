@@ -6,3 +6,4 @@ node_modules/
 dist/
 *.lock.pid
 .codex_review_session
+client/public/sprites/raw/

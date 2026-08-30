@@ -12,8 +12,8 @@
 - **오프라인 세계 진행**: 서버가 꺼져 있던 시간만큼 접속 시 빨리감기로 따라잡기. 같은 시드 + 같은
   입력이면 언제 어떻게 나눠 실행해도 결과가 완전히 동일한 결정적 시뮬레이션.
 - **논문 기반 에이전트 인지**: Stanford *Generative Agents*(Smallville)의 기억 스트림·회고·하루 계획·
-  정보 확산 아키텍처를 LLM 없이 정수 규칙 연산으로 이식. 심들은 성격(Big Five)·기분·관계·습관에
-  따라 스스로 판단합니다.
+  정보 확산 아키텍처를 LLM 없이 정수 규칙 연산으로 이식. 심들은 특성(성별·나이·MBTI·직업)·기분·
+  기억·관계·습관에 따라 스스로 판단하고, 왜 그렇게 행동했는지 사유가 기록됩니다.
 - **전부 로컬**: Node 서버 + SQLite 파일 + 브라우저 클라이언트. 외부 서비스·API 키 불필요.
 - 도트그래픽 아트 (Codex imagegen 생성).
 
@@ -35,18 +35,43 @@ npm start
 
 **초기화**: 세계를 처음부터 다시 시작하려면 서버를 끄고 `deepsims.db*` 파일을 삭제하세요.
 **다른 시드**: `DEEPSIMS_SEED=12345 npm start`
-**손상 복구**: 부팅 시 손상이 감지되면 서버가 안내 메시지와 함께 정지합니다. `deepsims.db`의
-`snapshot` 테이블에서 id=2(직전 체크포인트)의 값을 id=1로 복사하고 `meta.lastSimulatedTick`을
-그 틱으로 맞춘 뒤 재시작하세요.
+**손상 복구**: 부팅 시 손상이 감지되면 서버가 안내와 함께 정지합니다. 직전 체크포인트(snapshot
+id=2)로 되돌리려면 서버를 끄고 아래를 실행하세요 — **직전 체크포인트 이후의 역사(이벤트·그
+구간에 적용됐던 지시)는 소실되며**, 재시작 시 그 구간을 따라잡기로 새로 살아냅니다:
+
+```bash
+sqlite3 deepsims.db "
+UPDATE snapshot SET tick=(SELECT tick FROM snapshot WHERE id=2), state=(SELECT state FROM snapshot WHERE id=2) WHERE id=1;
+UPDATE meta SET value=(SELECT tick FROM snapshot WHERE id=1) WHERE key='lastSimulatedTick';
+DELETE FROM events WHERE tick > (SELECT tick FROM snapshot WHERE id=1);
+DELETE FROM inputs WHERE applied=0 AND target_tick <= (SELECT tick FROM snapshot WHERE id=1);"
+```
+
+이미 적용(applied=1)됐던 지시는 되돌리지 않습니다(과거는 다시 쓰지 않음 — 그 효과만 스냅샷과
+함께 사라집니다). 미적용 지시 중 과거를 타깃하게 된 것은 삭제됩니다.
+
+**LLM 이슈 리뷰(선택)**: 저장소 Settings → Secrets에 `ANTHROPIC_API_KEY`를 넣으면
+`needs-llm-review` 라벨이 붙은 이슈를 Claude가 자동 분석해 코멘트로 로직 수정안을 제안합니다.
 
 ## 프로젝트 상태
 
-- [x] 기획서 (Claude ↔ Codex 교차 검증 5회, [PLAN.md](PLAN.md))
-- [x] Phase 1: 결정적 코어 루프 (욕구·유틸리티 AI·예약·따라잡기·영속화·클라이언트, 테스트 31개)
-- [ ] Phase 2: 특성(성별·나이·MBTI·직업)·기분 + 플레이어 온보딩(내 배경 입력 → 내 심 생성)
-- [ ] Phase 3: 기억 스트림·회고
-- [ ] Phase 4: 하루 계획·정보 확산 (파티 확산 실험 재현) + 행동 종류 확장
-- [ ] 도트 에셋 통합
+- [x] 기획서 (Claude ↔ Codex 교차 검증, [PLAN.md](PLAN.md))
+- [x] Phase 1: 결정적 코어 루프 (욕구·유틸리티 AI·예약·따라잡기·영속화·클라이언트)
+- [x] Phase 2: 특성(성별·나이·MBTI·직업)·기분 + 플레이어 온보딩 + **핫스왑 판단 로직**
+      (`logic/params.json`을 고치면 실행 중인 세계가 다음 틱부터 새 규칙으로 삽니다)
+- [x] Phase 3: 기억 스트림·검색·회고·관계 티어·습관 (Generative Agents 아키텍처의 결정적 이식)
+- [x] Phase 4: 하루 계획·정보 확산·모임 공지 (파티 확산 실험 재현 — 소문이 입소문으로만 퍼져
+      몇 명이 모이는지는 창발적 결과)
+- [x] 도트 캐릭터 스프라이트 (Codex imagegen)
+- [ ] 로드맵: 대처 행동(음주·폭식·은둔), 건설(집·도로), 사고 과정 추적 ([PLAN §15](PLAN.md))
+
+## 플레이 방법
+
+1. 접속하면 **당신의 배경**(이름·성별·나이·MBTI·직업)을 입력합니다 — 당신을 닮은 심이 마을에 이사 옵니다.
+2. 심을 클릭하면 욕구·기분·성격·판단 사유가 보이고, 행동을 지시할 수 있습니다.
+3. 상단 **📣 모임 공지**로 파티를 열어보세요 — 소문은 심들의 수다를 통해서만 퍼집니다.
+4. 서버를 꺼도 세계는 흘러갑니다. 다시 켜면 부재중 리포트가 그동안의 이야기를 들려줍니다.
+5. 심들이 이상하게 행동하나요? `logic/params.json`의 수치를 고쳐보세요 — 저장 즉시 적용됩니다.
 
 ## 특이사항 제보 → 로직 진화
 

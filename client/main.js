@@ -19,6 +19,13 @@ const isoY = (x, y) => (x + y) * (TH / 2);
 
 // ---- Phaser ----
 class TownScene extends Phaser.Scene {
+  preload() {
+    // 도트 캐릭터 스프라이트 (Codex imagegen). 없으면 색 원 폴백.
+    for (let i = 0; i < 10; i++) this.load.image(`sim${i}`, `./sprites/sim${i}.png`);
+    this.load.image('player', './sprites/player.png');
+    this.load.on('loaderror', () => { /* 폴백이 처리 */ });
+  }
+
   create() {
     scene = this;
     this.cameras.main.setBackgroundColor('#14121a');
@@ -86,9 +93,16 @@ class TownScene extends Phaser.Scene {
       let sp = simSprites.get(sim.id);
       const tx = isoX(sim.x, sim.y), ty = isoY(sim.x, sim.y) - 8;
       if (!sp) {
-        const circle = this.add.circle(0, 0, 6, SIM_COLORS[sim.id]).setStrokeStyle(1.5, 0x14121a);
-        const label = this.add.text(0, -16, sim.name, { fontSize: '10px', color: '#e8e2d8', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
-        const c = this.add.container(tx, ty, [circle, label]);
+        const key = sim.isPlayer ? 'player' : `sim${sim.id}`;
+        let body;
+        if (this.textures.exists(key)) {
+          body = this.add.image(0, -12, key);
+          body.setScale(36 / body.height); // 표시 높이 ~36px로 정규화
+        } else {
+          body = this.add.circle(0, 0, 6, SIM_COLORS[sim.id % SIM_COLORS.length]).setStrokeStyle(1.5, 0x14121a);
+        }
+        const label = this.add.text(0, -28, sim.name, { fontSize: '10px', color: '#e8e2d8', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
+        const c = this.add.container(tx, ty, [body, label]);
         sp = c; simSprites.set(sim.id, sp);
       }
       this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
