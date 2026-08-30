@@ -1,0 +1,8 @@
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+dist/
+*.lock.pid
+.codex_review_session
