@@ -136,6 +136,8 @@ function reasonText(r) {
   if (r.stateMod > 0) parts.push('친구 있음');
   if (r.stateMod < 0) parts.push('라이벌 있음에도');
   if (r.habitMod > 0) parts.push('단골');
+  if (r.partyPull) parts.push('모임 참석');
+  if (r.planFactor > 100 && !r.partyPull) parts.push('일과');
   return parts.length ? ` (${parts.join('·')})` : '';
 }
 
@@ -152,6 +154,16 @@ function eventText(e) {
     case 'input_rejected': return `지시 거부됨 (${e.payload.reason})`;
     case 'player_created': return `🏠 ${e.payload.name}이(가) 마을에 이사 왔습니다! (${OCC_KO[e.payload.occupation]})`;
     case 'logic_changed': return `🔧 심들의 판단 로직이 갱신되었습니다 (${e.payload.hash})`;
+    case 'token_created': {
+      const place = e.payload.placeId === 'cafe' ? '카페' : '공원';
+      return e.payload.announced
+        ? `📣 ${n}이(가) ${place} 모임을 공지했습니다! (${fmtClock(e.payload.scheduledTick)})`
+        : `📅 ${place}에서 모임 소문이 돌기 시작했습니다 (${fmtClock(e.payload.scheduledTick)})`;
+    }
+    case 'gathering': {
+      const place = e.payload.placeId === 'cafe' ? '카페' : '공원';
+      return `🎉 ${place} 모임에 ${e.payload.count}명이 모였습니다!`;
+    }
     default: return null;
   }
 }
@@ -214,7 +226,18 @@ const MBTI_TYPES = ['ISTJ','ISFJ','INFJ','INTJ','ISTP','ISFP','INFP','INTP','EST
 function maybeShowOnboarding() {
   const hasPlayer = world?.sims.some((s) => s.isPlayer);
   $('onboard').style.display = hasPlayer ? 'none' : 'flex';
+  $('announce').style.display = hasPlayer ? 'flex' : 'none'; // 모임 공지는 플레이어가 있어야 (PLAN D7)
 }
+
+$('an-btn').addEventListener('click', async () => {
+  await fetch('/api/input', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      clientInputId: crypto.randomUUID(), command: 'announce',
+      payload: { placeId: $('an-place').value, hoursFromNow: Number($('an-hours').value) },
+    }),
+  });
+});
 
 $('ob-submit').addEventListener('click', async () => {
   const name = $('ob-name').value.trim();

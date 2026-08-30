@@ -9,6 +9,7 @@ import { rngInt } from './prng.js';
 import { validateLogic, logicHash } from './logic.js';
 import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection } from './cognition.js';
+import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -41,7 +42,8 @@ function moodModFor(sim, action, L) {
   return clamp(mod, -250000000000, 250000000000);
 }
 
-// 점수: base=floorDiv(num×1e5, den), den=manhattan+16 — 경계 증명은 PLAN §2.5.G
+// 점수 코어: base=floorDiv(num×1e5, den) × persFactor — planFactor·보정 합산은 collectCandidates에서
+// (§G 순서: base × pers → × plan → + mods). 경계 증명은 PLAN §2.5.G.
 function scoreCandidate(sim, action, res, L) {
   const deficit = NEED_MAX - needValueFor(sim, action);
   const num = deficit * deficit * 16;
@@ -49,7 +51,7 @@ function scoreCandidate(sim, action, res, L) {
   const base = floorDiv(num * SCORE_SCALE, den);
   const pf = persFactorFor(sim, action, L);
   const mm = moodModFor(sim, action, L);
-  return { score: floorDiv(base * pf, 100) + mm, deficit, persFactor: pf, moodMod: mm };
+  return { core: floorDiv(base * pf, 100), deficit, persFactor: pf, moodMod: mm };
 }
 
 // 하드 제약 (assign·자율 결정 공통). t = 전이 틱.
@@ -79,7 +81,16 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
           const holder = world.reservations[resKey(fac.id, res.id)];
           if (holder !== undefined && holder !== sim.id) continue;
           const sc = scoreCandidate(sim, action, res, L);
-          const cand = { action, facilityId: fac.id, resourceId: res.id, res, ...sc, memoryMod: 0, stateMod: 0, habitMod: 0, cited: [] };
+          // planFactor (D4/D6): 위급 시 100 강제 (구조적 배제, PLAN §2.5.D)
+          const pl = (ctx && ctx.urgency)
+            ? { factor: 100, partyPull: false }
+            : planFactorFor(world, sim, action, fac.id, t, L);
+          const cand = {
+            action, facilityId: fac.id, resourceId: res.id, res, ...sc,
+            planFactor: pl.factor, partyPull: pl.partyPull,
+            score: floorDiv(sc.core * pl.factor, 100) + sc.moodMod,
+            memoryMod: 0, stateMod: 0, habitMod: 0, cited: [],
+          };
           if (ctx) {
             const mm = memoryModFor(ctx.shortlist, [action, `facility:${fac.id}`], t, L);
             cand.memoryMod = mm.mod;
@@ -222,6 +233,7 @@ function applyCreatePlayer(world, inp, t, emit) {
     state: emptyState(),
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
+    knownTokens: [], plan: null, lastPlannedDay: -1,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -229,6 +241,31 @@ function applyCreatePlayer(world, inp, t, emit) {
   for (const row of world.interactions) row.push(0);
   world.interactions.push(new Array(world.sims.length).fill(0));
   emit('player_created', id, { name, occupation: traits.occupation, homeId: home.id });
+}
+
+// announce (D7): 플레이어가 모임 공지 토큰을 주입 — 초기엔 플레이어만 알고 확산으로 퍼진다
+function applyAnnounce(world, inp, t, emit) {
+  const p = inp.payload;
+  const reject = (reason) => emit('input_rejected', null, { reason, inputId: inp.id ?? null });
+  if (p === null || typeof p !== 'object' || Array.isArray(p)) return reject('malformed_payload');
+  const player = world.sims.find((s) => s.isPlayer);
+  if (!player) return reject('no_player');
+  if (!['cafe', 'park'].includes(p.placeId)) return reject('invalid_place');
+  const L = world.logic;
+  if (!Number.isSafeInteger(p.hoursFromNow) || p.hoursFromNow < 1 || p.hoursFromNow > L.diffusion.announceMaxHours) {
+    return reject('invalid_hours');
+  }
+  const token = {
+    tokenId: world.tokenCounter++,
+    topic: 'announce',
+    originTick: t,
+    scheduledTick: t + p.hoursFromNow * 60,
+    placeId: p.placeId,
+    expiresTick: t + p.hoursFromNow * 60 + L.diffusion.expireAfter,
+  };
+  world.tokens.push(token);
+  learnToken(player, token, t, L);
+  emit('token_created', player.id, { tokenId: token.tokenId, placeId: p.placeId, scheduledTick: token.scheduledTick, announced: true });
 }
 
 function applyAssign(world, inp, t, emit) {
@@ -264,6 +301,7 @@ export function tick(world, inputsForThisTick = []) {
   for (const inp of sorted.filter((i) => i.command !== 'logic_update')) {
     if (inp.command === 'assign') applyAssign(world, inp, t, emit);
     else if (inp.command === 'create_player') applyCreatePlayer(world, inp, t, emit);
+    else if (inp.command === 'announce') applyAnnounce(world, inp, t, emit);
     else emit('input_rejected', null, { reason: 'unknown_command', inputId: inp.id ?? null });
   }
 
@@ -301,6 +339,8 @@ export function tick(world, inputsForThisTick = []) {
         const a = group[i], b = group[i + 1];
         pairedThisTick.add(a.id); pairedThisTick.add(b.id);
         a.state.pairedTicks++; b.state.pairedTicks++;
+        // D5: 토큰 전파 — 그 틱 호감도 변동 **이전** (발신자→수신자 방향 호감도 사용)
+        transferTokens(world, a, b, t, emit);
         // D3: 상호작용 카운트 (대칭, 포화 캡)
         const IC = 1000000;
         world.interactions[a.id][b.id] = Math.min(IC, world.interactions[a.id][b.id] + 1);
@@ -364,10 +404,17 @@ export function tick(world, inputsForThisTick = []) {
       if (kind) {
         recordFact(sim, t, L, kind, { placeId: s.facilityId, tags: [s.action, `facility:${s.facilityId}`] });
       }
-      // 기상: 회고가 기록해둔 pendingMood를 적용 (PLAN §2.5.E)
-      if (s.action === 'sleep' && sim.pendingMood !== null) {
-        sim.mood = sim.pendingMood;
-        sim.pendingMood = null;
+      // 기상: 회고가 기록해둔 pendingMood 적용 + 하루 계획 생성 (PLAN §2.5.D/E)
+      if (s.action === 'sleep') {
+        if (sim.pendingMood !== null) {
+          sim.mood = sim.pendingMood;
+          sim.pendingMood = null;
+        }
+        const day = floorDiv(t, 1440); // 틱 내부 날짜 규약
+        if (sim.lastPlannedDay === undefined || sim.lastPlannedDay < day) {
+          sim.plan = buildDailyPlan(sim, L);
+          sim.lastPlannedDay = day;
+        }
       }
     }
     releaseReservation(world, sim);
@@ -395,6 +442,10 @@ export function tick(world, inputsForThisTick = []) {
     else if (sim.mood < 0) sim.mood = Math.min(0, sim.mood + dm);
   }
 
+  // 4b) 토큰: 모임 판정 → 만료 → 생성 (고정 순서, D5) (PLAN §F)
+  expireAndMeasureTokens(world, t, emit);
+  maybeGenerateToken(world, t, emit);
+
   // 5) idle 심 결정 (id 오름차순, world.reservations = 틱-로컬 원장)
   for (const sim of world.sims) {
     if (sim.state.kind !== 'idle') continue;
@@ -416,7 +467,8 @@ export function tick(world, inputsForThisTick = []) {
         need: NEED_OF_ACTION[best.action] ?? 'money',
         deficit: best.deficit,
         persFactor: best.persFactor,
-        planFactor: 100, // Phase 4에서 하루 계획 도입 전까지 중립
+        planFactor: best.planFactor,
+        partyPull: best.partyPull,
         moodMod: best.moodMod,
         memoryMod: best.memoryMod,
         stateMod: best.stateMod,

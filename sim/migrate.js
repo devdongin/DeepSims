@@ -25,11 +25,21 @@ export function migrateWorld(world) {
       if (sim.pendingMood === undefined) sim.pendingMood = null;
     }
     world.interactions ??= world.sims.map(() => new Array(world.sims.length).fill(0));
-    // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
-    if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
-      world.logic = mergeLogicDefaults(world.logic);
-    }
   }
-  world.schemaVersion = 3;
+  if (from < 4) {
+    // Phase 4: 토큰·계획 상태
+    for (const sim of world.sims) {
+      sim.knownTokens ??= [];
+      if (sim.plan === undefined) sim.plan = null;
+      sim.lastPlannedDay ??= -1;
+    }
+    world.tokens ??= [];
+    world.tokenCounter ??= 0;
+  }
+  // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
+  if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
+    world.logic = mergeLogicDefaults(world.logic);
+  }
+  world.schemaVersion = 4;
   return world;
 }

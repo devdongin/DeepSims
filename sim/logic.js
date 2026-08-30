@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 2,
+  logicSchemaVersion: 3,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -53,6 +53,26 @@ export const DEFAULT_LOGIC = {
     habitIncrement: 10000000000,      // 회고당(=하루당) 습관 증가 상한 (PLAN §G: 1e10/일)
     habitCap: 250000000000,           // 행동당 habitMod 상한 (PLAN §G: 2.5e11)
     habitMinRepeats: 3,               // 같은 행동×시설 반복 임계
+  },
+  // Phase 4 (logicSchemaVersion 3): 하루 계획·정보 확산 (PLAN §2.5 D/F)
+  plan: {
+    mealSlot1Start: 420, mealSlot1End: 540,     // 아침 식사 창
+    mealSlot2Start: 1050, mealSlot2End: 1170,   // 저녁 식사 창
+    leisureStart: 1170, leisureEnd: 1380,       // 저녁 여가
+    bonusMax: 50,                               // planFactor = 100 + floorDiv(bonusMax×(100-JP),100)
+    partyPullFactor: 150,                       // 토큰 장소 socialize의 planFactor
+    partyWindowBefore: 120,                     // scheduledTick 전 몇 틱부터 끌리는가
+  },
+  diffusion: {
+    intervalTicks: 4320,      // 3게임일마다
+    generateAtTod: 600,       // 10:00
+    scheduleTod: 1140,        // 다음날 19:00
+    expireAfter: 120,
+    seedCount: 2,             // 외향성 상위 n명이 초기 습득
+    transferBase: 300,        // 성공 임계(‰): base + affinity/20 + TF/5, [50, 950] 클램프
+    transferAffinityDiv: 20,
+    transferTfDiv: 5,
+    announceMaxHours: 48,
   },
 };
 
@@ -172,6 +192,25 @@ function checkRanges(p, errors) {
   inRange('social.habitIncrement', p.social.habitIncrement, 0, 10000000000);
   inRange('social.habitCap', p.social.habitCap, 0, 250000000000);
   inRange('social.habitMinRepeats', p.social.habitMinRepeats, 1, 100);
+  // Phase 4 섹션
+  for (const k of ['mealSlot1Start', 'mealSlot1End', 'mealSlot2Start', 'mealSlot2End', 'leisureStart', 'leisureEnd']) {
+    inRange(`plan.${k}`, p.plan[k], 0, 1440);
+  }
+  if (p.plan.mealSlot1Start >= p.plan.mealSlot1End) errors.push('plan: mealSlot1 역전');
+  if (p.plan.mealSlot2Start >= p.plan.mealSlot2End) errors.push('plan: mealSlot2 역전');
+  if (p.plan.leisureStart >= p.plan.leisureEnd) errors.push('plan: leisure 역전');
+  inRange('plan.bonusMax', p.plan.bonusMax, 0, 50); // planFactor ≤ 150 (§G)
+  inRange('plan.partyPullFactor', p.plan.partyPullFactor, 100, 150);
+  inRange('plan.partyWindowBefore', p.plan.partyWindowBefore, 0, 1440);
+  inRange('diffusion.intervalTicks', p.diffusion.intervalTicks, 1440, 1000000);
+  inRange('diffusion.generateAtTod', p.diffusion.generateAtTod, 0, 1439);
+  inRange('diffusion.scheduleTod', p.diffusion.scheduleTod, 0, 1439);
+  inRange('diffusion.expireAfter', p.diffusion.expireAfter, 1, 10000);
+  inRange('diffusion.seedCount', p.diffusion.seedCount, 0, 100);
+  inRange('diffusion.transferBase', p.diffusion.transferBase, 0, 1000);
+  inRange('diffusion.transferAffinityDiv', p.diffusion.transferAffinityDiv, 1, 100000);
+  inRange('diffusion.transferTfDiv', p.diffusion.transferTfDiv, 1, 100000);
+  inRange('diffusion.announceMaxHours', p.diffusion.announceMaxHours, 1, 720);
 }
 
 function checkShape(ref, val, path, errors) {

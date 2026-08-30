@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 2,
+  "logicSchemaVersion": 3,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -147,5 +147,27 @@
     "habitIncrement": 10000000000,
     "habitCap": 250000000000,
     "habitMinRepeats": 3
+  },
+  "plan": {
+    "mealSlot1Start": 420,
+    "mealSlot1End": 540,
+    "mealSlot2Start": 1050,
+    "mealSlot2End": 1170,
+    "leisureStart": 1170,
+    "leisureEnd": 1380,
+    "bonusMax": 50,
+    "partyPullFactor": 150,
+    "partyWindowBefore": 120
+  },
+  "diffusion": {
+    "intervalTicks": 4320,
+    "generateAtTod": 600,
+    "scheduleTod": 1140,
+    "expireAfter": 120,
+    "seedCount": 2,
+    "transferBase": 300,
+    "transferAffinityDiv": 20,
+    "transferTfDiv": 5,
+    "announceMaxHours": 48
   }
 }

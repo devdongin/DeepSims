@@ -42,6 +42,10 @@ export function createWorld(seed) {
       lastReflectedDay: -1,
       reflectionMemoryCursor: 0,
       pendingMood: null,
+      // Phase 4 (PLAN §2.5 D/F)
+      knownTokens: [],
+      plan: null,
+      lastPlannedDay: -1,
     });
   }
 
@@ -49,7 +53,7 @@ export function createWorld(seed) {
   const interactions = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),
@@ -59,6 +63,8 @@ export function createWorld(seed) {
     affinity,
     interactions, // 페어링 틱 카운트 (대칭, PLAN §12.1 D3)
     reservations: {}, // "facilityId:resourceId" -> simId
+    tokens: [],       // 활성 정보 토큰 (PLAN §F)
+    tokenCounter: 0,
     logic: DEFAULT_LOGIC,
   };
 }

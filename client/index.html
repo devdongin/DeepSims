@@ -43,6 +43,13 @@
     <div id="topbar">
       <h1>DeepSims</h1>
       <div id="clock">Day 0 00:00</div>
+      <div id="announce" style="display:none;align-items:center;gap:6px;font-size:12px">
+        <select id="an-place" style="padding:3px;background:#14121a;border:1px solid #35304a;color:#e8e2d8;border-radius:4px">
+          <option value="park">공원</option><option value="cafe">카페</option></select>
+        <select id="an-hours" style="padding:3px;background:#14121a;border:1px solid #35304a;color:#e8e2d8;border-radius:4px">
+          <option value="2">2시간 뒤</option><option value="6">6시간 뒤</option><option value="12">12시간 뒤</option><option value="24">내일 이 시간</option></select>
+        <button id="an-btn" style="padding:3px 10px;background:#ffd97a;color:#14121a;border:0;border-radius:4px;cursor:pointer;font-weight:bold">📣 모임 공지</button>
+      </div>
       <div id="status">접속 중…</div>
     </div>
     <div id="game">
