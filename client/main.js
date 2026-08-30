@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c };
-const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a };
+const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8 };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
 
 let world = null;
@@ -23,7 +23,7 @@ class TownScene extends Phaser.Scene {
     // 도트 캐릭터 스프라이트 (Codex imagegen). 없으면 색 원 폴백.
     for (let i = 0; i < 10; i++) this.load.image(`sim${i}`, `./sprites/sim${i}.png`);
     this.load.image('player', './sprites/player.png');
-    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat']) {
+    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell']) {
       this.load.image(p, `./props/${p}.png`);
     }
     this.load.on('loaderror', () => { /* 폴백이 처리 */ });
@@ -54,10 +54,14 @@ class TownScene extends Phaser.Scene {
         for (const r of fac.resources) put('cafe_table', r.x, r.y, 24);
       } else if (fac.type === 'office') {
         for (const r of fac.resources) put('desk', r.x, r.y, 24);
+      } else if (fac.type === 'bar') {
+        put('bar_counter', fac.x + 3, fac.y + 3, 30);
+        for (const r of fac.resources) put('beer', r.x, r.y, 16);
       } else if (fac.type === 'park') {
         fac.resources.forEach((r, i) => {
           if (i < 4) put('bench', r.x, r.y, 22);
           else if (i === 8) put('slide', r.x, r.y, 30);
+          else if (i === 12) put('dumbbell', r.x, r.y, 18);
         });
         put('fountain', fac.x + 8, fac.y + 5, 34);
         put('flowerbed', fac.x + 2, fac.y + 8, 18);
@@ -124,7 +128,7 @@ class TownScene extends Phaser.Scene {
     }
     this.drawProps();
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원' }[fac.type];
+      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집' }[fac.type];
       const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - 24;
       this.add.text(tx, ty, label, { fontSize: '11px', color: '#ffd97a', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
       g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
@@ -228,6 +232,8 @@ function handleVisualEvent(e) {
       showBubble(e.payload.withSimId, '💢', 2500);
       break;
     case 'lonely': showBubble(e.simId, '💧…', 2500); break;
+    case 'hangover': showBubble(e.simId, '🥴', 2500); break;
+    case 'bed_built': showBubble(e.simId, '🔨✨', 3000); break;
     case 'starving': showBubble(e.simId, '🍚…!', 3000); break;
     case 'gathering': {
       const fac = world?.map.facilities.find((f) => f.id === e.payload.placeId);
@@ -250,9 +256,16 @@ function fmtClock(tick) {
   return `Day ${day} ${hh}:${mm}`;
 }
 
-const ACTION_KO = { eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기' };
+const ACTION_KO = {
+  eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기',
+  drink: '술 한잔', binge_eat: '폭식', hole_up: '은둔', exercise: '운동', build: '침대 만들기',
+};
+const BLOCK_KO = {
+  no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
+  not_coping: '멀쩡함', not_needed: '불필요',
+};
 const OCC_KO = { office_worker: '회사원', barista: '바리스타', freelancer: '프리랜서', student: '학생', retired: '은퇴' };
-const NEED_KO = { hunger: '배고픔', energy: '수면 욕구', social: '외로움', fun: '심심함', money: '돈 걱정' };
+const NEED_KO = { hunger: '배고픔', energy: '수면 욕구', social: '외로움', fun: '심심함', money: '돈 걱정', mood: '울적함', space: '집이 좁음' };
 function simName(id) { return world?.sims.find((s) => s.id === id)?.name ?? `심${id}`; }
 
 // 판단 사유 문장화 (PLAN §14.1)
@@ -272,7 +285,13 @@ function reasonText(r) {
   if (r.habitMod > 0) parts.push('단골');
   if (r.partyPull) parts.push('모임 참석');
   if (r.planFactor > 100 && !r.partyPull) parts.push('일과');
-  return parts.length ? ` (${parts.join('·')})` : '';
+  let out = parts.length ? ` (${parts.join('·')})` : '';
+  // §15.1.C 사고 흐름: 막힌 대안 표시
+  const blocked = (r.chain ?? []).filter((c) => ['no_money', 'off_hours', 'full'].includes(c.b));
+  if (blocked.length) {
+    out += ` [${blocked.slice(0, 2).map((c) => `${ACTION_KO[c.a]}✗${BLOCK_KO[c.b]}`).join(', ')}]`;
+  }
+  return out;
 }
 
 function eventText(e) {
@@ -299,6 +318,9 @@ function eventText(e) {
       return `🎉 ${place} 모임에 ${e.payload.count}명이 모였습니다!`;
     }
     case 'conversation': return `💬 ${n} → ${simName(e.payload.withSimId)}: "${conversationLine(e)}"`;
+    case 'hangover': return `🥴 ${n}이(가) 과음했습니다… 내일이 걱정입니다`;
+    case 'road_formed': return `🛤️ 많이 다니던 길이 도로가 되었습니다 (${e.payload.x}, ${e.payload.y})`;
+    case 'bed_built': return `🛏️ ${n}이(가) 집에 침대를 새로 만들었습니다!`;
     case 'greeting': return `👋 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 지나가며 인사했습니다`;
     default: return null;
   }
@@ -477,6 +499,21 @@ function connect() {
         world.sims = msg.sims;
         $('clock').textContent = fmtClock(world.worldTick);
         for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }
+        // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
+        let mapDirty = false;
+        for (const e of msg.events) {
+          if (e.type === 'road_formed' && world) {
+            world.map.tiles[e.payload.y * world.map.w + e.payload.x] = 1;
+            mapDirty = true;
+          } else if (e.type === 'bed_built' && world) {
+            const fac = world.map.facilities.find((f) => f.id === e.payload.facilityId);
+            if (fac && !fac.resources.some((r) => r.id === e.payload.resourceId)) {
+              fac.resources.push({ id: e.payload.resourceId, kind: 'bed', x: e.payload.x, y: e.payload.y });
+            }
+            mapDirty = true;
+          }
+        }
+        if (mapDirty && scene) scene.drawWorld();
         if (msg.events.some((e) => e.type === 'player_created')) maybeShowOnboarding();
         if (scene) scene.syncSims();
         renderPanel();

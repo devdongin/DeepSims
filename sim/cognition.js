@@ -111,7 +111,11 @@ export function computeTier(affinityVal, interactionCount, L) {
   return 'stranger';
 }
 
-const HABIT_KINDS = { meal: 'eat', work_done: 'work', small_talk: 'socialize', play_time: 'play' };
+// 기억 kind → 습관 키의 행동 부분. 대처 행동 포함 — 반복 대처가 습관(중독)으로 창발 (§15.1.A)
+const HABIT_KINDS = {
+  meal: 'eat', work_done: 'work', small_talk: 'socialize', play_time: 'play',
+  drank: 'drink', binge: 'binge_eat', hole_up: 'hole_up', workout: 'exercise',
+};
 
 // 회고 (onEnterPerforming(sleep) 훅, PLAN §2.5.E). 멱등: lastReflectedDay + memorySeq 커서.
 // transitionDay = floorDiv(t, 1440) (틱 내부 날짜 규약). rng 미소비.

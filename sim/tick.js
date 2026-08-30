@@ -3,7 +3,9 @@
 import {
   ACTIONS, ACTION_FACILITY, NEED_OF_ACTION, NEED_MAX,
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
+  COPING_ACTIONS, HOME_ONLY_ACTIONS,
 } from './constants.js';
+import { TILE } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { validateLogic, logicHash } from './logic.js';
@@ -16,8 +18,11 @@ function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function resKey(facilityId, resourceId) { return `${facilityId}:${resourceId}`; }
 
-function needValueFor(sim, action) {
+function needValueFor(sim, action, L) {
   if (action === 'work') return Math.min(sim.money, NEED_MAX); // 돈 0 → deficit 최대
+  // coping: 기분이 나쁠수록 급함 — deficit = -mood (게이트로 mood < 0 보장, §15.1.A)
+  if (COPING_ACTIONS.includes(action)) return NEED_MAX + sim.mood;
+  if (action === 'build') return NEED_MAX - L.build.deficit; // 고정 중간 급함 (§15.1.B)
   return sim.needs[NEED_OF_ACTION[action]];
 }
 
@@ -28,6 +33,11 @@ function persFactorFor(sim, action, L) {
   if (action === 'socialize') f = L.persFactor.socializeBase - m.EI;
   else if (action === 'play') f = L.persFactor.playBase + (m.EI - 50);
   else if (action === 'work') f = L.persFactor.workBase - m.JP;
+  // 대처 성향 (§15.1.A): E→음주, F→폭식, I→은둔, T→운동
+  else if (action === 'drink') f = L.coping.persDrinkBase - floorDiv(m.EI, 2);
+  else if (action === 'binge_eat') f = 100 + (m.TF - 50);
+  else if (action === 'hole_up') f = 100 + (m.EI - 50);
+  else if (action === 'exercise') f = 100 + (50 - m.TF);
   return clamp(f, 50, 200);
 }
 
@@ -46,9 +56,11 @@ function moodModFor(sim, action, L) {
 // 점수 코어: base=floorDiv(num×1e5, den) × persFactor — planFactor·보정 합산은 collectCandidates에서
 // (§G 순서: base × pers → × plan → + mods). 경계 증명은 PLAN §2.5.G.
 function scoreCandidate(sim, action, res, L) {
-  const deficit = NEED_MAX - needValueFor(sim, action);
+  const deficit = NEED_MAX - needValueFor(sim, action, L);
   const num = deficit * deficit * 16;
-  const den = manhattan(sim.x, sim.y, res.x, res.y) + 16;
+  // 대처 행동은 거리 무시 (den 고정 16) — 대처 방식 선택은 성격이 지배해야 한다 (§15.1.A).
+  // 아니면 "집이 가까워서 은둔"이 항상 이겨 성격 변조가 무력화된다.
+  const den = COPING_ACTIONS.includes(action) ? 16 : manhattan(sim.x, sim.y, res.x, res.y) + 16;
   const base = floorDiv(num * SCORE_SCALE, den);
   const pf = persFactorFor(sim, action, L);
   const mm = moodModFor(sim, action, L);
@@ -56,16 +68,30 @@ function scoreCandidate(sim, action, res, L) {
 }
 
 // 하드 제약 (assign·자율 결정 공통). t = 전이 틱.
-function actionAllowed(world, sim, action, t) {
+// 사유 반환 변형 — reason chain(§15.1.C)과 공유. null = 허용.
+// blockedBy 우선순위: no_money → off_hours → not_coping → not_needed (Codex 20차 항목 2)
+function actionBlockReason(world, sim, action, t) {
   const L = world.logic;
-  if (action === 'eat' && sim.money < L.actions.eat.cost) return false;
+  const cost = L.actions[action]?.cost ?? 0;
+  if (cost > 0 && sim.money < cost) return 'no_money';
   if (action === 'work') {
     const occ = L.occupations[sim.traits.occupation];
-    if (occ.wagePct === 0) return false; // retired
+    if (occ.wagePct === 0) return 'off_hours';
     const tod = t % 1440;
-    if (tod < occ.workStart || tod >= occ.workEnd) return false;
+    if (tod < occ.workStart || tod >= occ.workEnd) return 'off_hours';
   }
-  return true;
+  if (COPING_ACTIONS.includes(action) && sim.mood >= L.coping.threshold) return 'not_coping';
+  if (action === 'build') {
+    const home = world.map.facilities.find((f) => f.id === sim.homeId);
+    const residents = world.sims.reduce((n, x) => n + (x.homeId === sim.homeId ? 1 : 0), 0);
+    const extraBuilt = home.resources.length - 2;
+    if (residents <= home.resources.length || extraBuilt >= L.build.maxExtraBeds) return 'not_needed';
+  }
+  return null;
+}
+
+function actionAllowed(world, sim, action, t) {
+  return actionBlockReason(world, sim, action, t) === null;
 }
 
 // ctx: { shortlist, urgency } — Phase 3 인지 보정. urgency 시 습관 보정 배제 (PLAN §2.5.D).
@@ -78,6 +104,7 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
     for (const ftype of ACTION_FACILITY[action]) {
       for (const fac of world.map.facilities) {
         if (fac.type !== ftype) continue;
+        if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue; // 자기 집만 (§15.1)
         for (const res of fac.resources) {
           const holder = world.reservations[resKey(fac.id, res.id)];
           if (holder !== undefined && holder !== sim.id) continue;
@@ -235,6 +262,7 @@ function applyCreatePlayer(world, inp, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
+    hangoverUntil: -1,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -317,6 +345,15 @@ export function tick(world, inputsForThisTick = []) {
     if (s.kind !== 'walking') continue;
     const next = s.path.shift();
     sim.x = next.x; sim.y = next.y;
+    // §15.1.B 도로화: GRASS 밟힘 마모 누적 → 임계 도달 시 ROAD 전환 (rng 미사용)
+    const ti = sim.y * world.map.w + sim.x;
+    if (world.map.tiles[ti] === TILE.GRASS) {
+      world.wear[ti]++;
+      if (world.wear[ti] >= world.logic.build.wearThreshold) {
+        world.map.tiles[ti] = TILE.ROAD;
+        emit('road_formed', sim.id, { x: sim.x, y: sim.y });
+      }
+    }
     if (s.path.length === 0) {
       s.kind = 'performing';
       // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
@@ -386,15 +423,45 @@ export function tick(world, inputsForThisTick = []) {
       const recovers = s.action !== 'socialize' || pairedThisTick.has(sim.id);
       if (recovers) sim.needs[need] = Math.min(NEED_MAX, sim.needs[need] + def.recoverPerTick);
     }
+    // 대처 행동의 틱당 효과 (§15.1.A): 기분 직접 회복 + 부수 욕구
+    if (def.moodPerTick) applyMood(sim, def.moodPerTick);
+    if (def.funPerTick) sim.needs.fun = Math.min(NEED_MAX, sim.needs.fun + def.funPerTick);
+    if (def.energyPerTick) sim.needs.energy = Math.min(NEED_MAX, sim.needs.energy + def.energyPerTick);
+    if (def.hungerPerTick) sim.needs.hunger = Math.min(NEED_MAX, sim.needs.hunger + def.hungerPerTick);
   }
 
   // 3) 완료 정산 (id 오름차순) — 기분 델타는 사실 발생 지점에서 즉시 (PLAN §12.1)
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'performing' || s.ticksLeft > 0) continue;
-    if (s.action === 'eat') {
-      sim.money -= L.actions.eat.cost;
-      emit('money_changed', sim.id, { delta: -L.actions.eat.cost, balance: sim.money, action: 'eat' });
+    if (s.action === 'eat' || s.action === 'drink' || s.action === 'binge_eat') {
+      const cost = L.actions[s.action].cost;
+      sim.money -= cost;
+      emit('money_changed', sim.id, { delta: -cost, balance: sim.money, action: s.action });
+      if (s.action === 'drink') {
+        // 숙취 (§15.1.A): t < hangoverUntil 동안 energy(수면 욕구) 감쇠 가산
+        sim.hangoverUntil = t + L.coping.hangoverTicks;
+        emit('hangover', sim.id, { untilTick: sim.hangoverUntil });
+      }
+      if (s.action === 'binge_eat') applyMood(sim, -L.actions.binge_eat.regretMood); // 후회
+    } else if (s.action === 'exercise') {
+      applyMood(sim, L.actions.exercise.completeMoodBonus);
+    } else if (s.action === 'build') {
+      // 완료 시 게이트 재검증 (같은 집 동시 건설 초과 방지, Codex 20차 항목 3)
+      const home = world.map.facilities.find((f) => f.id === s.facilityId);
+      const extraBuilt = home.resources.length - 2;
+      if (extraBuilt >= L.build.maxExtraBeds || sim.money < L.actions.build.cost) {
+        emit('action_failed', sim.id, { action: 'build', reason: extraBuilt >= L.build.maxExtraBeds ? 'already_built' : 'no_money' });
+        releaseReservation(world, sim);
+        sim.state = emptyState();
+        continue;
+      }
+      sim.money -= L.actions.build.cost;
+      emit('money_changed', sim.id, { delta: -L.actions.build.cost, balance: sim.money, action: 'build' });
+      const slot = home.extraBedSlots[extraBuilt]; // 슬롯 순서 고정 (§15.1.B)
+      const newRes = { id: `bed${home.resources.length}`, kind: 'bed', x: slot.x, y: slot.y };
+      home.resources.push(newRes);
+      emit('bed_built', sim.id, { facilityId: home.id, resourceId: newRes.id, x: slot.x, y: slot.y });
     } else if (s.action === 'work') {
       const wage = floorDiv(L.actions.work.wageBase * L.occupations[sim.traits.occupation].wagePct, 100);
       sim.money += wage;
@@ -408,7 +475,10 @@ export function tick(world, inputsForThisTick = []) {
     } else if (s.action !== 'idle') {
       emit('action_completed', sim.id, { action: s.action, facilityId: s.facilityId });
       applyMood(sim, L.mood.actionCompleted);
-      const kind = { eat: 'meal', work: 'work_done', socialize: 'small_talk', play: 'play_time' }[s.action];
+      const kind = {
+        eat: 'meal', work: 'work_done', socialize: 'small_talk', play: 'play_time',
+        drink: 'drank', binge_eat: 'binge', hole_up: 'hole_up', exercise: 'workout', build: 'built_bed',
+      }[s.action];
       if (kind) {
         recordFact(sim, t, L, kind, { placeId: s.facilityId, tags: [s.action, `facility:${s.facilityId}`] });
       }
@@ -436,6 +506,7 @@ export function tick(world, inputsForThisTick = []) {
       let d = L.decay[need];
       if (need === 'fun' && age <= L.ageDecay.youngMax) d += L.ageDecay.youngFunAdd;
       if (need === 'energy' && age >= L.ageDecay.oldMin) d += L.ageDecay.oldEnergyAdd;
+      if (need === 'energy' && sim.hangoverUntil > t) d += L.coping.hangoverEnergyDecay; // 숙취 (§15.1.A)
       const before = sim.needs[need];
       sim.needs[need] = Math.max(0, before - d);
       if (need === 'hunger' && before > 0 && sim.needs[need] === 0) {
@@ -470,9 +541,22 @@ export function tick(world, inputsForThisTick = []) {
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, urgency: false });
     const best = pickBest(cands);
     if (best) {
+      // §15.1.C 사고 흐름: 막힌 대안 수집 (rng 미사용, ACTIONS 순, 최대 4개)
+      const chain = [];
+      for (const action of ACTIONS) {
+        if (action === 'idle' || action === best.action || chain.length >= 4) continue;
+        const blocked = actionBlockReason(world, sim, action, t);
+        if (blocked) { chain.push({ a: action, b: blocked }); continue; }
+        if (!cands.some((c) => c.action === action)) {
+          const deficit = NEED_MAX - needValueFor(sim, action, L);
+          chain.push({ a: action, b: deficit <= 0 ? 'sated' : 'full' });
+        }
+      }
       // 사유 필드는 §14.1 계약대로 + Phase 3 citedMemorySeqs
       startAction(world, sim, best, emit, {
-        need: NEED_OF_ACTION[best.action] ?? 'money',
+        chain,
+        need: NEED_OF_ACTION[best.action]
+          ?? (COPING_ACTIONS.includes(best.action) ? 'mood' : best.action === 'build' ? 'space' : 'money'),
         deficit: best.deficit,
         persFactor: best.persFactor,
         planFactor: best.planFactor,

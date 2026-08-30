@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 4,
+  "logicSchemaVersion": 5,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -36,6 +36,34 @@
     },
     "idle": {
       "duration": 5
+    },
+    "drink": {
+      "duration": 45,
+      "cost": 300,
+      "moodPerTick": 40,
+      "funPerTick": 50
+    },
+    "binge_eat": {
+      "duration": 20,
+      "cost": 400,
+      "moodPerTick": 25,
+      "hungerPerTick": 400,
+      "regretMood": 200
+    },
+    "hole_up": {
+      "duration": 120,
+      "moodPerTick": 10,
+      "energyPerTick": 15
+    },
+    "exercise": {
+      "duration": 60,
+      "moodPerTick": 15,
+      "funPerTick": 80,
+      "completeMoodBonus": 100
+    },
+    "build": {
+      "duration": 240,
+      "cost": 3000
     }
   },
   "occupations": {
@@ -108,7 +136,12 @@
       "work_done": 3,
       "meal": 2,
       "small_talk": 1,
-      "play_time": 1
+      "play_time": 1,
+      "drank": 3,
+      "binge": 3,
+      "hole_up": 2,
+      "workout": 3,
+      "built_bed": 5
     },
     "recencyLut": [
       1000,
@@ -182,5 +215,16 @@
     "greetingAffinity": 15,
     "greetingSocial": 100,
     "greetingRange": 1
+  },
+  "coping": {
+    "threshold": -2000,
+    "hangoverTicks": 1440,
+    "hangoverEnergyDecay": 3,
+    "persDrinkBase": 120
+  },
+  "build": {
+    "wearThreshold": 400,
+    "maxExtraBeds": 2,
+    "deficit": 5000
   }
 }

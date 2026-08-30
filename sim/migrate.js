@@ -2,6 +2,7 @@
 // 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
+import { addBarTo } from './map.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -40,10 +41,21 @@ export function migrateWorld(world) {
     // D9: 인사 가드 매트릭스
     world.lastGreetDay ??= world.sims.map(() => new Array(world.sims.length).fill(-1));
   }
+  if (from < 6) {
+    // §15.1: 술집 주입(buildMap과 동일 헬퍼 = 신규 월드와 바이트 동일), 마모·숙취 상태
+    addBarTo(world.map.tiles, world.map.facilities);
+    for (const f of world.map.facilities) {
+      if (f.type === 'house' && !f.extraBedSlots) {
+        f.extraBedSlots = [{ x: f.x + 2, y: f.y + 2 }, { x: f.x + 3, y: f.y + 2 }];
+      }
+    }
+    world.wear ??= new Array(world.map.w * world.map.h).fill(0);
+    for (const sim of world.sims) sim.hangoverUntil ??= -1;
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 5;
+  world.schemaVersion = 6;
   return world;
 }

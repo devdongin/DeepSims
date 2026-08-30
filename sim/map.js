@@ -16,6 +16,23 @@ function building(tiles, x, y, w, h, doorX, doorY) {
   tiles[doorY * MAP_W + doorX] = TILE.FLOOR;
 }
 
+// 술집 주입 — buildMap과 v5→v6 마이그레이션이 공유하는 단일 권위 (Codex 20차 항목 1).
+// footprint (30,41) 7×5, 문 (33,41), 좌석 4개 고정 좌표. facilities 배열 끝에 append.
+export function addBarTo(tiles, facilities) {
+  if (facilities.some((f) => f.id === 'bar')) return;
+  building(tiles, 30, 41, 7, 5, 33, 41);
+  facilities.push({
+    id: 'bar', type: 'bar', x: 30, y: 41, w: 7, h: 5,
+    door: { x: 33, y: 41 },
+    resources: [
+      { id: 'seat0', kind: 'seat', x: 31, y: 42 },
+      { id: 'seat1', kind: 'seat', x: 35, y: 42 },
+      { id: 'seat2', kind: 'seat', x: 31, y: 44 },
+      { id: 'seat3', kind: 'seat', x: 35, y: 44 },
+    ],
+  });
+}
+
 export function buildMap() {
   const tiles = new Array(MAP_W * MAP_H).fill(TILE.GRASS);
 
@@ -46,6 +63,8 @@ export function buildMap() {
         { id: 'bed0', kind: 'bed', x: hx + 1, y: hy + 1 },
         { id: 'bed1', kind: 'bed', x: hx + 4, y: hy + 1 },
       ],
+      // 증축 침대 예비 슬롯 — 이 순서대로 사용 (§15.1.B)
+      extraBedSlots: [{ x: hx + 2, y: hy + 2 }, { x: hx + 3, y: hy + 2 }],
     });
   });
 
@@ -81,6 +100,9 @@ export function buildMap() {
       id: `spot${k}`, kind: 'spot', x: 30 + (k % 4) * 3, y: 14 + Math.floor(k / 4) * 2,
     })),
   });
+
+  // 술집 — facilities 맨 끝 append (마이그레이션과 삽입 순서 동일, Codex 20차 항목 1)
+  addBarTo(tiles, facilities);
 
   return { w: MAP_W, h: MAP_H, tiles, facilities };
 }

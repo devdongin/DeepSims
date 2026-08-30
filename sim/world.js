@@ -46,6 +46,7 @@ export function createWorld(seed) {
       knownTokens: [],
       plan: null,
       lastPlannedDay: -1,
+      hangoverUntil: -1, // §15.1.A: t < hangoverUntil 동안 숙취
     });
   }
 
@@ -54,7 +55,7 @@ export function createWorld(seed) {
   const lastGreetDay = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(-1));
 
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),
@@ -64,6 +65,7 @@ export function createWorld(seed) {
     affinity,
     interactions, // 페어링 틱 카운트 (대칭, PLAN §12.1 D3)
     lastGreetDay, // 인사 하루 1회 가드 (대칭, D9)
+    wear: new Array(map.w * map.h).fill(0), // 경로 마모 → 도로화 (§15.1.B)
     reservations: {}, // "facilityId:resourceId" -> simId
     tokens: [],       // 활성 정보 토큰 (PLAN §F)
     tokenCounter: 0,
