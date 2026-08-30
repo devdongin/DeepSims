@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 1,
+  logicSchemaVersion: 2,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -32,7 +32,47 @@ export const DEFAULT_LOGIC = {
     decayPerTick: 5, lethargyThreshold: -5000, reliefScale: 25000000, lethargyScale: 50000000,
   },
   needCritical: 2000,
+  // Phase 3 (logicSchemaVersion 2): 기억·회고·관계 티어 (PLAN §2.5 B/C/E + D2 델타)
+  memory: {
+    cap: 256, topK: 8,
+    importance: {
+      argument: 8, starving: 8, party_info: 7, relationship_changed: 6,
+      lonely: 4, work_done: 3, meal: 2, small_talk: 1, play_time: 1,
+    },
+    recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
+    wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
+    posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프
+  },
+  social: {
+    friendAffinity: 3000, friendInteractions: 60,
+    rivalAffinity: -2000, rivalInteractions: 30,
+    acquaintanceInteractions: 15,
+    friendStateBonus: 150000000000,   // stateMod: 친구가 그 시설에 있으면 (±2.5e11 클램프)
+    rivalStatePenalty: 200000000000,  // 라이벌이 있으면 감점 (양수로 저장, 적용 시 부호)
+    reflectionMoodScale: 60,          // pendingMood = clamp(Σ 부호 importance × scale, ±10000)
+    habitIncrement: 10000000000,      // 회고당(=하루당) 습관 증가 상한 (PLAN §G: 1e10/일)
+    habitCap: 250000000000,           // 행동당 habitMod 상한 (PLAN §G: 2.5e11)
+    habitMinRepeats: 3,               // 같은 행동×시설 반복 임계
+  },
 };
+
+// 부호가 음(불쾌)인 기억 종류 — memoryMod·pendingMood 계산에 사용 (구조, 코드 고정)
+export const NEGATIVE_MEMORY_KINDS = ['argument', 'starving', 'lonely'];
+
+// 구버전 world.logic에 새 섹션의 기본값을 결정적으로 병합 (마이그레이션 전용)
+export function mergeLogicDefaults(oldLogic) {
+  const merged = structuredClone(DEFAULT_LOGIC);
+  const copy = (dst, src) => {
+    for (const k of Object.keys(dst)) {
+      if (!(k in src)) continue;
+      if (typeof dst[k] === 'object' && dst[k] !== null && !Array.isArray(dst[k])) copy(dst[k], src[k] ?? {});
+      else dst[k] = src[k];
+    }
+  };
+  copy(merged, oldLogic ?? {});
+  merged.logicSchemaVersion = DEFAULT_LOGIC.logicSchemaVersion;
+  return merged;
+}
 
 export function logicHash(params) {
   return fnv1a(JSON.stringify(sortKeys(params)));
@@ -110,6 +150,28 @@ function checkRanges(p, errors) {
   inRange('mood.reliefScale', p.mood.reliefScale, 0, 25000000);     // 10000×scale ≤ 2.5e11 (§G)
   inRange('mood.lethargyScale', p.mood.lethargyScale, 0, 50000000); // 5000×scale ≤ 2.5e11 (§G)
   inRange('needCritical', p.needCritical, 0, 10000);
+  // Phase 3 섹션
+  inRange('memory.cap', p.memory.cap, 16, 1024);
+  inRange('memory.topK', p.memory.topK, 1, 32);
+  for (const [k, v] of Object.entries(p.memory.importance)) inRange(`memory.importance.${k}`, v, 1, 10);
+  for (let i = 0; i < p.memory.recencyLut.length; i++) inRange(`memory.recencyLut[${i}]`, p.memory.recencyLut[i], 0, 10000);
+  inRange('memory.wRecency', p.memory.wRecency, 0, 100);
+  inRange('memory.wImportance', p.memory.wImportance, 0, 1000);
+  inRange('memory.relevancePer', p.memory.relevancePer, 0, 1000);
+  inRange('memory.relevanceCap', p.memory.relevanceCap, 0, 16);
+  inRange('memory.posScale', p.memory.posScale, 0, 5000000000);   // 합계가 §G ±5e11 내로 클램프 가능
+  inRange('memory.negScale', p.memory.negScale, 0, 5000000000);
+  inRange('social.friendAffinity', p.social.friendAffinity, 0, 10000);
+  inRange('social.rivalAffinity', p.social.rivalAffinity, -10000, 0);
+  inRange('social.friendInteractions', p.social.friendInteractions, 0, 1000000);
+  inRange('social.rivalInteractions', p.social.rivalInteractions, 0, 1000000);
+  inRange('social.acquaintanceInteractions', p.social.acquaintanceInteractions, 0, 1000000);
+  inRange('social.friendStateBonus', p.social.friendStateBonus, 0, 250000000000);
+  inRange('social.rivalStatePenalty', p.social.rivalStatePenalty, 0, 250000000000);
+  inRange('social.reflectionMoodScale', p.social.reflectionMoodScale, 0, 1000);
+  inRange('social.habitIncrement', p.social.habitIncrement, 0, 10000000000);
+  inRange('social.habitCap', p.social.habitCap, 0, 250000000000);
+  inRange('social.habitMinRepeats', p.social.habitMinRepeats, 1, 100);
 }
 
 function checkShape(ref, val, path, errors) {
@@ -121,6 +183,11 @@ function checkShape(ref, val, path, errors) {
     if (typeof r === 'number') {
       if (!Number.isSafeInteger(v)) errors.push(`정수 아님: ${path}${k}=${v}`);
       else if (Math.abs(v) > 1e12) errors.push(`범위 초과: ${path}${k}=${v}`);
+    } else if (Array.isArray(r)) {
+      if (!Array.isArray(v) || v.length !== r.length) errors.push(`배열 길이 불일치: ${path}${k}`);
+      else for (let i = 0; i < v.length; i++) {
+        if (!Number.isSafeInteger(v[i])) errors.push(`정수 아님: ${path}${k}[${i}]`);
+      }
     } else if (typeof r === 'object' && r !== null) {
       if (typeof v !== 'object' || v === null || Array.isArray(v)) errors.push(`객체 아님: ${path}${k}`);
       else checkShape(r, v, `${path}${k}.`, errors);

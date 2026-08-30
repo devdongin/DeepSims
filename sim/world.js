@@ -34,13 +34,22 @@ export function createWorld(seed) {
       },
       money: DEFAULT_LOGIC.occupations[traits.occupation].startMoney + rngInt(rngWorldgen, 500),
       state: { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 },
+      // Phase 3 인지 상태 (PLAN §2.5)
+      memories: [],
+      memorySeq: 0,
+      habit: {},           // "action:facilityId" -> 누적 보너스 (§G habitMod)
+      relTiers: {},        // otherSimId -> 'acquaintance'|'friend'|'rival' (stranger는 미기록)
+      lastReflectedDay: -1,
+      reflectionMemoryCursor: 0,
+      pendingMood: null,
     });
   }
 
   const affinity = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
+  const interactions = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),
@@ -48,6 +57,7 @@ export function createWorld(seed) {
     map,
     sims,
     affinity,
+    interactions, // 페어링 틱 카운트 (대칭, PLAN §12.1 D3)
     reservations: {}, // "facilityId:resourceId" -> simId
     logic: DEFAULT_LOGIC,
   };

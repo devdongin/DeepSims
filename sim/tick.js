@@ -8,6 +8,7 @@ import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { validateLogic, logicHash } from './logic.js';
 import { validateTraits } from './traits.js';
+import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection } from './cognition.js';
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -64,7 +65,8 @@ function actionAllowed(world, sim, action, t) {
   return true;
 }
 
-function collectCandidates(world, sim, actions, t, includeZeroScore = false) {
+// ctx: { shortlist, urgency } — Phase 3 인지 보정. urgency 시 습관 보정 배제 (PLAN §2.5.D).
+function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx = null) {
   const L = world.logic;
   const out = [];
   for (const action of actions) {
@@ -77,8 +79,17 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false) {
           const holder = world.reservations[resKey(fac.id, res.id)];
           if (holder !== undefined && holder !== sim.id) continue;
           const sc = scoreCandidate(sim, action, res, L);
-          if (sc.score <= 0 && !includeZeroScore) continue;
-          out.push({ action, facilityId: fac.id, resourceId: res.id, res, ...sc });
+          const cand = { action, facilityId: fac.id, resourceId: res.id, res, ...sc, memoryMod: 0, stateMod: 0, habitMod: 0, cited: [] };
+          if (ctx) {
+            const mm = memoryModFor(ctx.shortlist, [action, `facility:${fac.id}`], t, L);
+            cand.memoryMod = mm.mod;
+            cand.cited = mm.cited;
+            cand.stateMod = stateModFor(world, sim, fac.id, L);
+            if (!ctx.urgency) cand.habitMod = Math.min(sim.habit[`${action}:${fac.id}`] ?? 0, L.social.habitCap);
+            cand.score += cand.memoryMod + cand.stateMod + cand.habitMod;
+          }
+          if (cand.score <= 0 && !includeZeroScore) continue;
+          out.push(cand);
         }
       }
     }
@@ -133,6 +144,10 @@ function startAction(world, sim, cand, emit, reason) {
   emit('action_started', sim.id, {
     action: cand.action, facilityId: cand.facilityId, resourceId: cand.resourceId, reason,
   });
+  // onEnterPerforming(sleep) 훅 — 경로 0으로 즉시 수행 진입하는 경우 (PLAN §2 전이 훅)
+  if (sim.state.kind === 'performing' && cand.action === 'sleep') {
+    runReflection(world, sim, world.worldTick + 1, emit);
+  }
   return true;
 }
 
@@ -205,10 +220,14 @@ function applyCreatePlayer(world, inp, t, emit) {
     needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 }, // 고정, rng 미소비
     money: world.logic.occupations[traits.occupation].startMoney,   // 고정분만
     state: emptyState(),
+    memories: [], memorySeq: 0, habit: {}, relTiers: {},
+    lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
   world.affinity.push(new Array(world.sims.length).fill(0));
+  for (const row of world.interactions) row.push(0);
+  world.interactions.push(new Array(world.sims.length).fill(0));
   emit('player_created', id, { name, occupation: traits.occupation, homeId: home.id });
 }
 
@@ -257,7 +276,11 @@ export function tick(world, inputsForThisTick = []) {
     if (s.kind !== 'walking') continue;
     const next = s.path.shift();
     sim.x = next.x; sim.y = next.y;
-    if (s.path.length === 0) s.kind = 'performing';
+    if (s.path.length === 0) {
+      s.kind = 'performing';
+      // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
+      if (s.action === 'sleep') runReflection(world, sim, t, emit);
+    }
   }
 
   // 2b) socialize 페어링: 시설별, id 오름차순 2명씩. 호감도는 비대칭(각자 TF 계수) (PLAN §12.1)
@@ -278,6 +301,10 @@ export function tick(world, inputsForThisTick = []) {
         const a = group[i], b = group[i + 1];
         pairedThisTick.add(a.id); pairedThisTick.add(b.id);
         a.state.pairedTicks++; b.state.pairedTicks++;
+        // D3: 상호작용 카운트 (대칭, 포화 캡)
+        const IC = 1000000;
+        world.interactions[a.id][b.id] = Math.min(IC, world.interactions[a.id][b.id] + 1);
+        world.interactions[b.id][a.id] = Math.min(IC, world.interactions[b.id][a.id] + 1);
         const delta = rngInt(world.rngSim, L.affinity.deltaSpan) + L.affinity.deltaMin; // [-20, 40]
         const fA = L.affinity.tfScaleBase + a.traits.mbti.TF;
         const fB = L.affinity.tfScaleBase + b.traits.mbti.TF;
@@ -293,6 +320,8 @@ export function tick(world, inputsForThisTick = []) {
         if (crossed) {
           emit('argument', a.id, { withSimId: b.id });
           applyMood(a, L.mood.argument); applyMood(b, L.mood.argument); // 사실 발생 지점 (PLAN §12.1)
+          recordFact(a, t, L, 'argument', { subjectSimId: b.id, placeId: facId, tags: ['argument', `facility:${facId}`, `sim:${b.id}`] });
+          recordFact(b, t, L, 'argument', { subjectSimId: a.id, placeId: facId, tags: ['argument', `facility:${facId}`, `sim:${a.id}`] });
         }
       }
     }
@@ -327,9 +356,19 @@ export function tick(world, inputsForThisTick = []) {
     if (s.action === 'socialize' && s.pairedTicks === 0) {
       emit('lonely', sim.id, { facilityId: s.facilityId });
       applyMood(sim, L.mood.lonely);
+      recordFact(sim, t, L, 'lonely', { placeId: s.facilityId, tags: ['socialize', `facility:${s.facilityId}`] });
     } else if (s.action !== 'idle') {
       emit('action_completed', sim.id, { action: s.action, facilityId: s.facilityId });
       applyMood(sim, L.mood.actionCompleted);
+      const kind = { eat: 'meal', work: 'work_done', socialize: 'small_talk', play: 'play_time' }[s.action];
+      if (kind) {
+        recordFact(sim, t, L, kind, { placeId: s.facilityId, tags: [s.action, `facility:${s.facilityId}`] });
+      }
+      // 기상: 회고가 기록해둔 pendingMood를 적용 (PLAN §2.5.E)
+      if (s.action === 'sleep' && sim.pendingMood !== null) {
+        sim.mood = sim.pendingMood;
+        sim.pendingMood = null;
+      }
     }
     releaseReservation(world, sim);
     sim.state = emptyState();
@@ -347,6 +386,7 @@ export function tick(world, inputsForThisTick = []) {
       if (need === 'hunger' && before > 0 && sim.needs[need] === 0) {
         emit('starving', sim.id, {});
         applyMood(sim, L.mood.starving);
+        recordFact(sim, t, L, 'starving', { tags: ['eat'] });
       }
     }
     // 기분 감쇠: 0 방향으로 decayPerTick 수렴 — 5단계는 감쇠 후 기분을 읽는다
@@ -358,22 +398,30 @@ export function tick(world, inputsForThisTick = []) {
   // 5) idle 심 결정 (id 오름차순, world.reservations = 틱-로컬 원장)
   for (const sim of world.sims) {
     if (sim.state.kind !== 'idle') continue;
+    const shortlist = shortlistMemories(sim, t, L); // D1: 심당 1회 계산
     const critical = Object.entries(NEED_OF_ACTION)
       .filter(([, need]) => sim.needs[need] < L.needCritical)
       .map(([action]) => action);
     let cands = [];
     let urgency = false;
-    if (critical.length > 0) { cands = collectCandidates(world, sim, critical, t); urgency = cands.length > 0; }
-    if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t);
+    if (critical.length > 0) {
+      cands = collectCandidates(world, sim, critical, t, false, { shortlist, urgency: true });
+      urgency = cands.length > 0;
+    }
+    if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, urgency: false });
     const best = pickBest(cands);
     if (best) {
-      // 사유 필드는 §14.1 계약대로: need, deficit, persFactor, planFactor, moodMod(원값), urgencyOverride
+      // 사유 필드는 §14.1 계약대로 + Phase 3 citedMemorySeqs
       startAction(world, sim, best, emit, {
         need: NEED_OF_ACTION[best.action] ?? 'money',
         deficit: best.deficit,
         persFactor: best.persFactor,
         planFactor: 100, // Phase 4에서 하루 계획 도입 전까지 중립
         moodMod: best.moodMod,
+        memoryMod: best.memoryMod,
+        stateMod: best.stateMod,
+        habitMod: best.habitMod,
+        citedMemorySeqs: best.cited,
         urgencyOverride: urgency,
       });
     } else startIdle(sim, L, emit);

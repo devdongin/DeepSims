@@ -131,6 +131,11 @@ function reasonText(r) {
   if (r.need) parts.push(`${NEED_KO[r.need] ?? r.need} ${Math.round((r.deficit ?? 0) / 100)}%`);
   if (r.moodMod > 0) parts.push('기분 전환');
   if (r.persFactor > 120) parts.push('성향');
+  if (r.memoryMod > 0) parts.push('좋은 기억');
+  if (r.memoryMod < 0) parts.push('나쁜 기억에도 불구');
+  if (r.stateMod > 0) parts.push('친구 있음');
+  if (r.stateMod < 0) parts.push('라이벌 있음에도');
+  if (r.habitMod > 0) parts.push('단골');
   return parts.length ? ` (${parts.join('·')})` : '';
 }
 

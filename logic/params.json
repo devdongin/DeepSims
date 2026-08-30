@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 1,
+  "logicSchemaVersion": 2,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -95,5 +95,57 @@
     "reliefScale": 25000000,
     "lethargyScale": 50000000
   },
-  "needCritical": 2000
+  "needCritical": 2000,
+  "memory": {
+    "cap": 256,
+    "topK": 8,
+    "importance": {
+      "argument": 8,
+      "starving": 8,
+      "party_info": 7,
+      "relationship_changed": 6,
+      "lonely": 4,
+      "work_done": 3,
+      "meal": 2,
+      "small_talk": 1,
+      "play_time": 1
+    },
+    "recencyLut": [
+      1000,
+      820,
+      670,
+      550,
+      450,
+      370,
+      300,
+      250,
+      200,
+      165,
+      135,
+      110,
+      90,
+      74,
+      60,
+      50
+    ],
+    "wRecency": 2,
+    "wImportance": 100,
+    "relevancePer": 100,
+    "relevanceCap": 4,
+    "posScale": 2000000000,
+    "negScale": 4000000000
+  },
+  "social": {
+    "friendAffinity": 3000,
+    "friendInteractions": 60,
+    "rivalAffinity": -2000,
+    "rivalInteractions": 30,
+    "acquaintanceInteractions": 15,
+    "friendStateBonus": 150000000000,
+    "rivalStatePenalty": 200000000000,
+    "reflectionMoodScale": 60,
+    "habitIncrement": 10000000000,
+    "habitCap": 250000000000,
+    "habitMinRepeats": 3
+  }
 }

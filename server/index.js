@@ -51,6 +51,16 @@ const PARAMS_PATH = process.env.DEEPSIMS_LOGIC || path.join(ROOT, 'logic', 'para
 if (!fs.existsSync(PARAMS_PATH)) {
   fs.mkdirSync(path.dirname(PARAMS_PATH), { recursive: true });
   fs.writeFileSync(PARAMS_PATH, JSON.stringify(DEFAULT_LOGIC, null, 2) + '\n');
+} else {
+  // 구버전 로직 파일은 기존 수치를 보존한 채 새 섹션 기본값을 병합해 업그레이드 (PLAN §14.1 D2)
+  try {
+    const cur = JSON.parse(fs.readFileSync(PARAMS_PATH, 'utf8'));
+    if ((cur.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
+      const { mergeLogicDefaults } = await import('../sim/logic.js');
+      fs.writeFileSync(PARAMS_PATH, JSON.stringify(mergeLogicDefaults(cur), null, 2) + '\n');
+      console.log('로직 파일을 logicSchemaVersion', DEFAULT_LOGIC.logicSchemaVersion, '으로 업그레이드했습니다');
+    }
+  } catch { /* 파싱 불가 파일은 reconcile이 ops_log에 기록 */ }
 }
 engine.reconcileLogic(PARAMS_PATH); // 부팅 정합 — 따라잡기 전에 등록 (따라잡기 전체가 새 로직)
 

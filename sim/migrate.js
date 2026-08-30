@@ -1,16 +1,35 @@
-// v1 → v2 마이그레이션 (PLAN §12.1): 입력 처리 전 로드 시점에 완료.
-// 결정적 — 심별 임시 RNG 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
+// 세이브 마이그레이션 (PLAN §12.1): 입력 처리 전 로드 시점에 완료.
+// 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
-import { DEFAULT_LOGIC } from './logic.js';
+import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 
 export function migrateWorld(world) {
-  if ((world.schemaVersion ?? 1) >= 2) return world;
-  for (const sim of world.sims) {
-    if (!sim.traits) sim.traits = migrationTraits(world.seed, sim.id);
-    if (sim.mood === undefined) sim.mood = 0;
-    if (sim.isPlayer === undefined) sim.isPlayer = false;
+  const from = world.schemaVersion ?? 1;
+  if (from < 2) {
+    for (const sim of world.sims) {
+      if (!sim.traits) sim.traits = migrationTraits(world.seed, sim.id);
+      if (sim.mood === undefined) sim.mood = 0;
+      if (sim.isPlayer === undefined) sim.isPlayer = false;
+    }
+    if (!world.logic) world.logic = DEFAULT_LOGIC;
   }
-  if (!world.logic) world.logic = DEFAULT_LOGIC; // v1 등가 기본값 설치 — 이후 파일 params가 입력으로 등록됨
-  world.schemaVersion = 2;
+  if (from < 3) {
+    // Phase 3 인지 상태 — 결정적 기본값
+    for (const sim of world.sims) {
+      sim.memories ??= [];
+      sim.memorySeq ??= 0;
+      sim.habit ??= {};
+      sim.relTiers ??= {};
+      sim.lastReflectedDay ??= -1;
+      sim.reflectionMemoryCursor ??= 0;
+      if (sim.pendingMood === undefined) sim.pendingMood = null;
+    }
+    world.interactions ??= world.sims.map(() => new Array(world.sims.length).fill(0));
+    // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
+    if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
+      world.logic = mergeLogicDefaults(world.logic);
+    }
+  }
+  world.schemaVersion = 3;
   return world;
 }
