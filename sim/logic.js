@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 3,
+  logicSchemaVersion: 4,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -73,6 +73,14 @@ export const DEFAULT_LOGIC = {
     transferAffinityDiv: 20,
     transferTfDiv: 5,
     announceMaxHours: 48,
+  },
+  // 대화·상호작용 (logicSchemaVersion 4): D8~D10
+  conversation: {
+    lineInterval: 15,          // socialize 페어의 발화 간격 (pairedTicks % interval == 1)
+    topicWeights: { food: 20, gossip: 30, memory_share: 20, weather: 10, work_gripe: 20 },
+    greetingAffinity: 15,      // 인사 시 호감도(부호 보존 TF 스케일 적용 전 기본값)
+    greetingSocial: 100,       // 인사 시 사교 회복
+    greetingRange: 1,          // 맨해튼 거리 임계
   },
 };
 
@@ -211,6 +219,16 @@ function checkRanges(p, errors) {
   inRange('diffusion.transferAffinityDiv', p.diffusion.transferAffinityDiv, 1, 100000);
   inRange('diffusion.transferTfDiv', p.diffusion.transferTfDiv, 1, 100000);
   inRange('diffusion.announceMaxHours', p.diffusion.announceMaxHours, 1, 720);
+  inRange('conversation.lineInterval', p.conversation.lineInterval, 1, 1440);
+  let topicSum = 0;
+  for (const [k, v] of Object.entries(p.conversation.topicWeights)) {
+    inRange(`conversation.topicWeights.${k}`, v, 0, 1000);
+    topicSum += v;
+  }
+  if (topicSum <= 0) errors.push('conversation.topicWeights 합이 0');
+  inRange('conversation.greetingAffinity', p.conversation.greetingAffinity, 0, 10000);
+  inRange('conversation.greetingSocial', p.conversation.greetingSocial, 0, 10000);
+  inRange('conversation.greetingRange', p.conversation.greetingRange, 0, 10);
 }
 
 function checkShape(ref, val, path, errors) {

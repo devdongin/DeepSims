@@ -1,0 +1,3 @@
+NO-GO—one minor edge remains: [interaction.js](/Users/sundongin/WorkSpace/DeepSims/sim/interaction.js:68) initializes `bestAbs = 0`, so a valid non-stranger with affinity `0` is excluded from gossip. Initialize it to `-1` or accept the first eligible sim, then add a regression test.
+
+Otherwise verified: the amended event convention is consistent, the 20k full-sim budget is appropriate, tests/build/bench pass, and all 12 client-only assets render with resync deduplication.

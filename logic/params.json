@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 3,
+  "logicSchemaVersion": 4,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -169,5 +169,18 @@
     "transferAffinityDiv": 20,
     "transferTfDiv": 5,
     "announceMaxHours": 48
+  },
+  "conversation": {
+    "lineInterval": 15,
+    "topicWeights": {
+      "food": 20,
+      "gossip": 30,
+      "memory_share": 20,
+      "weather": 10,
+      "work_gripe": 20
+    },
+    "greetingAffinity": 15,
+    "greetingSocial": 100,
+    "greetingRange": 1
   }
 }

@@ -81,6 +81,7 @@ export function learnToken(sim, token, t, L) {
 // 페어 내 전파 (2b단계, 그 틱 호감도 변동 **이전** 값 사용, 토큰당 정확히 1드로우) (PLAN §F)
 export function transferTokens(world, a, b, t, emit) {
   const L = world.logic;
+  let transferred = 0;
   const union = [...new Set([...a.knownTokens, ...b.knownTokens])].sort((x, y) => x - y);
   for (const tokenId of union) {
     const token = world.tokens.find((tk) => tk.tokenId === tokenId);
@@ -96,8 +97,9 @@ export function transferTokens(world, a, b, t, emit) {
       + floorDiv(receiver.traits.mbti.TF, L.diffusion.transferTfDiv),
       50, 950);
     const roll = rngInt(world.rngSim, 1000); // 성공 여부와 무관하게 정확히 1드로우
-    if (roll < threshold) learnToken(receiver, token, t, L);
+    if (roll < threshold) { learnToken(receiver, token, t, L); transferred++; }
   }
+  return transferred;
 }
 
 // 만료·모임 판정 (4단계): scheduledTick 도달 시 창발 참석자 수 집계 (PLAN §F)

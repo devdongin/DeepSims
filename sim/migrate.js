@@ -36,10 +36,14 @@ export function migrateWorld(world) {
     world.tokens ??= [];
     world.tokenCounter ??= 0;
   }
+  if (from < 5) {
+    // D9: 인사 가드 매트릭스
+    world.lastGreetDay ??= world.sims.map(() => new Array(world.sims.length).fill(-1));
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 4;
+  world.schemaVersion = 5;
   return world;
 }

@@ -51,9 +51,10 @@ export function createWorld(seed) {
 
   const affinity = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
   const interactions = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
+  const lastGreetDay = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(-1));
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),
@@ -62,6 +63,7 @@ export function createWorld(seed) {
     sims,
     affinity,
     interactions, // 페어링 틱 카운트 (대칭, PLAN §12.1 D3)
+    lastGreetDay, // 인사 하루 1회 가드 (대칭, D9)
     reservations: {}, // "facilityId:resourceId" -> simId
     tokens: [],       // 활성 정보 토큰 (PLAN §F)
     tokenCounter: 0,

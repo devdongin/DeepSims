@@ -10,6 +10,7 @@ import { validateLogic, logicHash } from './logic.js';
 import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
+import { maybeConverse, processGreetings } from './interaction.js';
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -240,6 +241,8 @@ function applyCreatePlayer(world, inp, t, emit) {
   world.affinity.push(new Array(world.sims.length).fill(0));
   for (const row of world.interactions) row.push(0);
   world.interactions.push(new Array(world.sims.length).fill(0));
+  for (const row of world.lastGreetDay) row.push(-1);
+  world.lastGreetDay.push(new Array(world.sims.length).fill(-1));
   emit('player_created', id, { name, occupation: traits.occupation, homeId: home.id });
 }
 
@@ -321,6 +324,9 @@ export function tick(world, inputsForThisTick = []) {
     }
   }
 
+  // 2a-2) 스쳐 지나가는 인사 (D9) — 전파(2b)보다 먼저: 같은 틱 전파는 인사 후 호감도를 본다
+  processGreetings(world, t, emit);
+
   // 2b) socialize 페어링: 시설별, id 오름차순 2명씩. 호감도는 비대칭(각자 TF 계수) (PLAN §12.1)
   const pairedThisTick = new Set();
   {
@@ -340,7 +346,9 @@ export function tick(world, inputsForThisTick = []) {
         pairedThisTick.add(a.id); pairedThisTick.add(b.id);
         a.state.pairedTicks++; b.state.pairedTicks++;
         // D5: 토큰 전파 — 그 틱 호감도 변동 **이전** (발신자→수신자 방향 호감도 사용)
-        transferTokens(world, a, b, t, emit);
+        const transferred = transferTokens(world, a, b, t, emit);
+        // D8: 대화 — 발화 간격마다 구조화 주제 이벤트 (전파 성공 시 party_invite 우선)
+        maybeConverse(world, a, b, facId, t, transferred > 0, emit);
         // D3: 상호작용 카운트 (대칭, 포화 캡)
         const IC = 1000000;
         world.interactions[a.id][b.id] = Math.min(IC, world.interactions[a.id][b.id] + 1);

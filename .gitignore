@@ -7,3 +7,4 @@ dist/
 *.lock.pid
 .codex_review_session
 client/public/sprites/raw/
+client/public/props/raw/

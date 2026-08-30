@@ -23,7 +23,51 @@ class TownScene extends Phaser.Scene {
     // 도트 캐릭터 스프라이트 (Codex imagegen). 없으면 색 원 폴백.
     for (let i = 0; i < 10; i++) this.load.image(`sim${i}`, `./sprites/sim${i}.png`);
     this.load.image('player', './sprites/player.png');
+    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat']) {
+      this.load.image(p, `./props/${p}.png`);
+    }
     this.load.on('loaderror', () => { /* 폴백이 처리 */ });
+  }
+
+  // 소품 배치 (Codex imagegen 에셋) — 시설 자원·맵 지형에서 위치 유도.
+  // resync 재호출 시 중복 방지를 위해 기존 소품을 지우고 다시 그린다.
+  drawProps() {
+    if (this.propSprites) for (const p of this.propSprites) p.destroy();
+    this.propSprites = [];
+    const put = (key, x, y, h = 26, dy = -4) => {
+      if (!this.textures.exists(key)) return;
+      const img = this.add.image(isoX(x, y), isoY(x, y) + dy, key).setOrigin(0.5, 1);
+      img.setScale(h / img.height);
+      img.setDepth(1000 + x + y - 0.5); // 같은 타일의 심보다 살짝 뒤
+      this.propSprites.push(img);
+    };
+    const { map } = world;
+    // 나무 타일 → 나무 스프라이트
+    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+      if (map.tiles[y * map.w + x] === 4) put('tree', x, y, 42, 4);
+    }
+    for (const fac of map.facilities) {
+      if (fac.type === 'house') {
+        for (const r of fac.resources) put('bed', r.x, r.y, 24);
+        put('mailbox', fac.door.x + 1, fac.door.y + 1, 20);
+      } else if (fac.type === 'cafe') {
+        for (const r of fac.resources) put('cafe_table', r.x, r.y, 24);
+      } else if (fac.type === 'office') {
+        for (const r of fac.resources) put('desk', r.x, r.y, 24);
+      } else if (fac.type === 'park') {
+        fac.resources.forEach((r, i) => {
+          if (i < 4) put('bench', r.x, r.y, 22);
+          else if (i === 8) put('slide', r.x, r.y, 30);
+        });
+        put('fountain', fac.x + 8, fac.y + 5, 34);
+        put('flowerbed', fac.x + 2, fac.y + 8, 18);
+        put('flowerbed', fac.x + 13, fac.y + 2, 18);
+      }
+    }
+    // 가로등: 도로 교차 지점, 덤불: 공터, 고양이: 카페 앞 단골
+    for (const [lx, ly] of [[22, 9], [25, 22], [22, 40], [45, 24], [10, 22], [25, 38]]) put('streetlamp', lx, ly, 38, 2);
+    for (const [bx, by] of [[8, 12], [16, 16], [40, 6], [6, 28], [44, 36], [18, 44]]) put('bush', bx, by, 18);
+    put('cat', 16, 31, 14);
   }
 
   create() {
@@ -71,11 +115,14 @@ class TownScene extends Phaser.Scene {
   drawWorld() {
     const g = this.mapLayer; g.clear();
     const { map } = world;
+    const hasTreeSprite = this.textures.exists('tree');
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       const t = map.tiles[y * map.w + x];
+      if (t === 4 && hasTreeSprite) { this.drawTile(g, x, y, TILE_COLORS[0], 0); continue; } // 나무는 스프라이트로
       const lift = (t === 3 || t === 4) ? 10 : 0; // 벽·나무는 살짝 올림
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
+    this.drawProps();
     for (const fac of map.facilities) {
       const label = { house: '집', office: '직장', cafe: '카페', park: '공원' }[fac.type];
       const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - 24;
@@ -118,6 +165,79 @@ new Phaser.Game({
   scene: TownScene,
   banner: false,
 });
+
+// ---- 말풍선·이모트 (D10: 기존 이벤트에서 파생되는 순수 시각 효과) ----
+const bubbles = new Map(); // simId -> {container, timer}
+
+function showBubble(simId, text, ms = 4000) {
+  if (!scene) return;
+  const sp = simSprites.get(simId);
+  if (!sp) return;
+  const old = bubbles.get(simId);
+  if (old) { old.container.destroy(); clearTimeout(old.timer); }
+  const label = scene.add.text(0, 0, text, {
+    fontSize: '11px', color: '#14121a', backgroundColor: '#f5efdf',
+    padding: { x: 6, y: 3 }, wordWrap: { width: 150 },
+  }).setOrigin(0.5, 1);
+  const c = scene.add.container(sp.x, sp.y - 34, [label]).setDepth(99999);
+  const timer = setTimeout(() => { c.destroy(); bubbles.delete(simId); }, ms);
+  bubbles.set(simId, { container: c, timer });
+}
+
+function showEmoteAt(x, y, text, ms = 3000) {
+  if (!scene) return;
+  const t = scene.add.text(x, y, text, { fontSize: '18px' }).setOrigin(0.5, 1).setDepth(99999);
+  scene.tweens.add({ targets: t, y: y - 14, alpha: 0.2, duration: ms, onComplete: () => t.destroy() });
+}
+
+const CONV_LINES = {
+  food: ['여기 커피 진짜 맛있지 않아?', '요즘 뭐 맛있는 거 먹었어?', '배고프다… 뭐 먹지?'],
+  gossip: (about) => [`${about} 얘기 들었어?`, `${about} 요즘 좀 달라진 것 같지 않아?`],
+  work_gripe: ['일이 너무 많아…', '월급날만 기다린다', '오늘도 야근각이야'],
+  memory_share: (about) => about ? [`오늘 ${about}랑 있었던 일 있잖아…`] : ['오늘 진짜 별일 다 있었어'],
+  weather: ['날씨 좋다~', '슬슬 쌀쌀해지네', '이런 날엔 공원이지'],
+  party_invite: ['모임 얘기 들었어? 같이 가자!', '이번 모임 올 거지?'],
+};
+const REPLIES = ['응응!', '진짜?', 'ㅋㅋㅋ', '그러게 말이야'];
+
+function conversationLine(e) {
+  const about = e.payload.aboutSimId !== null && e.payload.aboutSimId !== undefined
+    ? simName(e.payload.aboutSimId) : null;
+  let lines = CONV_LINES[e.payload.topic] ?? CONV_LINES.weather;
+  if (typeof lines === 'function') lines = lines(about);
+  return lines[e.tick % lines.length];
+}
+
+function handleVisualEvent(e) {
+  const sp = (id) => simSprites.get(id);
+  switch (e.type) {
+    case 'conversation': {
+      const line = conversationLine(e);
+      showBubble(e.simId, line);
+      if (sp(e.payload.withSimId)) {
+        setTimeout(() => showBubble(e.payload.withSimId, REPLIES[e.tick % REPLIES.length], 2500), 1200);
+      }
+      break;
+    }
+    case 'greeting':
+      showBubble(e.simId, '👋', 2000);
+      showBubble(e.payload.withSimId, '👋', 2000);
+      break;
+    case 'argument':
+      showBubble(e.simId, '💢', 2500);
+      showBubble(e.payload.withSimId, '💢', 2500);
+      break;
+    case 'lonely': showBubble(e.simId, '💧…', 2500); break;
+    case 'starving': showBubble(e.simId, '🍚…!', 3000); break;
+    case 'gathering': {
+      const fac = world?.map.facilities.find((f) => f.id === e.payload.placeId);
+      if (fac && e.payload.count > 0) {
+        showEmoteAt(isoX(fac.x + fac.w / 2, fac.y + fac.h / 2), isoY(fac.x + fac.w / 2, fac.y + fac.h / 2) - 20, `🎉×${e.payload.count}`);
+      }
+      break;
+    }
+  }
+}
 
 // ---- UI ----
 const $ = (id) => document.getElementById(id);
@@ -178,6 +298,8 @@ function eventText(e) {
       const place = e.payload.placeId === 'cafe' ? '카페' : '공원';
       return `🎉 ${place} 모임에 ${e.payload.count}명이 모였습니다!`;
     }
+    case 'conversation': return `💬 ${n} → ${simName(e.payload.withSimId)}: "${conversationLine(e)}"`;
+    case 'greeting': return `👋 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 지나가며 인사했습니다`;
     default: return null;
   }
 }
@@ -354,7 +476,7 @@ function connect() {
         world.worldTick = msg.toTick;
         world.sims = msg.sims;
         $('clock').textContent = fmtClock(world.worldTick);
-        for (const e of msg.events) pushFeed(e);
+        for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }
         if (msg.events.some((e) => e.type === 'player_created')) maybeShowOnboarding();
         if (scene) scene.syncSims();
         renderPanel();
