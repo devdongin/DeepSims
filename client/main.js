@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c };
-const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8 };
+const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8 };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
 
 let world = null;
@@ -23,7 +23,7 @@ class TownScene extends Phaser.Scene {
     // 도트 캐릭터 스프라이트 (Codex imagegen). 없으면 색 원 폴백.
     for (let i = 0; i < 10; i++) this.load.image(`sim${i}`, `./sprites/sim${i}.png`);
     this.load.image('player', './sprites/player.png');
-    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell']) {
+    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign']) {
       this.load.image(p, `./props/${p}.png`);
     }
     this.load.on('loaderror', () => { /* 폴백이 처리 */ });
@@ -57,6 +57,13 @@ class TownScene extends Phaser.Scene {
       } else if (fac.type === 'bar') {
         put('bar_counter', fac.x + 3, fac.y + 3, 30);
         for (const r of fac.resources) put('beer', r.x, r.y, 16);
+      } else if (fac.type === 'library') {
+        for (const r of fac.resources) put('bookshelf', r.x, r.y, 26);
+        put('umbrella_stand', fac.door.x + 1, fac.door.y + 1, 20);
+      } else if (fac.type === 'market') {
+        for (const r of fac.resources) put('market_stall', r.x, r.y, 28);
+      } else if (fac.type === 'pond') {
+        put('fishing_sign', fac.door.x - 1, fac.door.y, 24);
       } else if (fac.type === 'park') {
         fac.resources.forEach((r, i) => {
           if (i < 4) put('bench', r.x, r.y, 22);
@@ -66,6 +73,15 @@ class TownScene extends Phaser.Scene {
         put('fountain', fac.x + 8, fac.y + 5, 34);
         put('flowerbed', fac.x + 2, fac.y + 8, 18);
         put('flowerbed', fac.x + 13, fac.y + 2, 18);
+      }
+    }
+    // §16.5: 공터 표지판·공사 현장
+    for (const p of (world.plots ?? [])) {
+      if (p.used) continue;
+      if (world.project && world.project.plotId === p.plotId) {
+        put('construction', p.x + 3, p.y + 2, 34);
+      } else {
+        put('plot_sign', p.x + 3, p.y + 2, 20);
       }
     }
     // 가로등: 도로 교차 지점, 덤불: 공터, 고양이: 카페 앞 단골
@@ -78,8 +94,8 @@ class TownScene extends Phaser.Scene {
     scene = this;
     this.cameras.main.setBackgroundColor('#14121a');
     this.mapLayer = this.add.graphics();
-    const center = () => this.cameras.main.centerOn(isoX(24, 24), isoY(24, 24)); // = (0, 384)
-    this.cameras.main.setZoom(0.85);
+    const center = () => this.cameras.main.centerOn(isoX(30, 30), isoY(30, 30)); // 64맵 중심부
+    this.cameras.main.setZoom(0.7);
     center();
     this.scale.on('resize', center); // RESIZE 모드가 뷰포트를 갱신한 뒤 재센터
     this.input.on('wheel', (_p, _o, _dx, dy) => {
@@ -128,7 +144,7 @@ class TownScene extends Phaser.Scene {
     }
     this.drawProps();
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집' }[fac.type];
+      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터' }[fac.type];
       const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - 24;
       this.add.text(tx, ty, label, { fontSize: '11px', color: '#ffd97a', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
       g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
@@ -170,6 +186,36 @@ new Phaser.Game({
   banner: false,
 });
 
+// ---- 동적 오브젝트: 분실 동전 (§16.C) ----
+const itemSprites = new Map();
+function syncItems() {
+  if (!scene || !world?.lostItems) return;
+  const alive = new Set(world.lostItems.map((it) => it.itemId));
+  for (const [id, sp] of itemSprites) {
+    if (!alive.has(id)) { sp.destroy(); itemSprites.delete(id); }
+  }
+  for (const it of world.lostItems) {
+    if (itemSprites.has(it.itemId)) continue;
+    if (!scene.textures.exists('coin')) continue;
+    const img = scene.add.image(isoX(it.x, it.y), isoY(it.x, it.y) - 2, 'coin').setOrigin(0.5, 1);
+    img.setScale(14 / img.height);
+    img.setDepth(1000 + it.x + it.y - 0.6);
+    scene.tweens.add({ targets: img, y: img.y - 3, duration: 600, yoyo: true, repeat: -1 });
+    itemSprites.set(it.itemId, img);
+  }
+}
+
+// ---- 날씨 시각화 (§16.D) ----
+function applyWeather() {
+  const kind = world?.weather?.kind ?? 'sunny';
+  const icon = { sunny: '☀️', cloudy: '☁️', rain: '🌧️' }[kind];
+  const el = document.getElementById('weather');
+  if (el) el.textContent = icon;
+  const fx = document.getElementById('rainfx');
+  if (fx) fx.style.display = kind === 'rain' ? 'block' : 'none';
+  if (scene) scene.cameras.main.setBackgroundColor(kind === 'rain' ? '#0e1018' : kind === 'cloudy' ? '#121219' : '#14121a');
+}
+
 // ---- 말풍선·이모트 (D10: 기존 이벤트에서 파생되는 순수 시각 효과) ----
 const bubbles = new Map(); // simId -> {container, timer}
 
@@ -194,22 +240,97 @@ function showEmoteAt(x, y, text, ms = 3000) {
   scene.tweens.add({ targets: t, y: y - 14, alpha: 0.2, duration: ms, onComplete: () => t.destroy() });
 }
 
-const CONV_LINES = {
-  food: ['여기 커피 진짜 맛있지 않아?', '요즘 뭐 맛있는 거 먹었어?', '배고프다… 뭐 먹지?'],
-  gossip: (about) => [`${about} 얘기 들었어?`, `${about} 요즘 좀 달라진 것 같지 않아?`],
-  work_gripe: ['일이 너무 많아…', '월급날만 기다린다', '오늘도 야근각이야'],
-  memory_share: (about) => about ? [`오늘 ${about}랑 있었던 일 있잖아…`] : ['오늘 진짜 별일 다 있었어'],
-  weather: ['날씨 좋다~', '슬슬 쌀쌀해지네', '이런 날엔 공원이지'],
-  party_invite: ['모임 얘기 들었어? 같이 가자!', '이번 모임 올 거지?'],
-};
-const REPLIES = ['응응!', '진짜?', 'ㅋㅋㅋ', '그러게 말이야'];
+const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터' };
+function placeKo(id) {
+  if (!id) return '동네';
+  if (id.startsWith('house')) return '집';
+  return PLACE_KO[id] ?? id;
+}
+
+// 대화 문장 생성 — 구조화 payload(detail)의 실제 데이터로 구체적인 말을 만든다 (§16 강화).
+// 변형 선택은 tick 기반(코스메틱): 같은 이벤트는 항상 같은 문장.
+function pick(arr, t) { return arr[t % arr.length]; }
 
 function conversationLine(e) {
+  const t = e.tick;
+  const d = e.payload.detail ?? {};
   const about = e.payload.aboutSimId !== null && e.payload.aboutSimId !== undefined
     ? simName(e.payload.aboutSimId) : null;
-  let lines = CONV_LINES[e.payload.topic] ?? CONV_LINES.weather;
-  if (typeof lines === 'function') lines = lines(about);
-  return lines[e.tick % lines.length];
+  switch (e.payload.topic) {
+    case 'party_invite': {
+      const when = d.scheduledTick ? fmtClock(d.scheduledTick) : '곧';
+      return pick([
+        `${when}에 ${placeKo(d.placeId)}에서 모인대! 같이 가자!`,
+        `${placeKo(d.placeId)} 모임 얘기 들었어? ${when}이래. 올 거지?`,
+      ], t);
+    }
+    case 'gossip': {
+      if (d.sentiment > 0) {
+        return pick([
+          `${about}랑 요즘 진짜 친해졌어. 좋은 사람이야`,
+          `${about} 알지? 어제도 같이 놀았는데 완전 잘 맞아`,
+          `${about}${d.tier === 'friend' ? '는 진짜 베프야' : '이랑 요즘 자주 봐'}`,
+        ], t);
+      }
+      return pick([
+        `${about} 때문에 요즘 좀 스트레스야…`,
+        `${about}랑 지난번에 좀 틀어졌거든… 어색해`,
+        `${about} 걔는 왜 그러는지 모르겠어`,
+      ], t);
+    }
+    case 'memory_share': {
+      const place = placeKo(d.placeId);
+      switch (d.kind) {
+        case 'argument': return about ? `오늘 ${place}에서 ${about}랑 말다툼했어… 아직도 속상해` : `오늘 ${place}에서 크게 싸웠어…`;
+        case 'fishing': return pick([`오늘 낚시터에서 손맛 좀 봤지~`, `아까 낚시하는데 월척인 줄 알았다니까`], t);
+        case 'drank': return `어제 술집에서 좀 달렸더니 아직도 어질어질해`;
+        case 'workout': return `오늘 공원에서 운동했는데 개운하다!`;
+        case 'work_done': return pick([`오늘 일 진짜 많았어…`, `드디어 오늘치 일 끝냈다`], t);
+        case 'meal': return `아까 ${place}에서 먹은 거 괜찮더라`;
+        case 'home_meal': return `요즘 집밥 해먹는데 생각보다 할 만해`;
+        case 'starving': return `오늘 하루종일 쫄쫄 굶었어… 죽는 줄`;
+        case 'lonely': return `아까 ${place}에서 혼자 뻘쭘하게 있었잖아…`;
+        case 'party_info': return `요즘 ${place} 모임 얘기가 돌던데?`;
+        case 'found_item': return `오늘 길에서 돈 주웠다? 완전 럭키`;
+        case 'built_bed': return `집에 침대 하나 새로 만들었어. 뿌듯해`;
+        case 'relationship_changed': return about ? `${about}랑 요즘 사이가 달라진 것 같아` : `요즘 인간관계가 좀 변했어`;
+        default: return `오늘 ${place}에서 별일이 다 있었어`;
+      }
+    }
+    case 'work_gripe': {
+      const occ = d.occupation;
+      return pick({
+        office_worker: ['회사 일이 끝이 없다 끝이 없어…', '오늘도 야근각이야', '월급날만 기다린다'],
+        barista: ['오늘 카페 손님 미쳤었어…', '원두 냄새가 꿈에 나올 지경이야'],
+        freelancer: ['일감이 들쭉날쭉해서 불안해', '마감이 코앞인데 잠이 온다'],
+        student: ['과제가 산더미야…', '시험 기간 진짜 싫다'],
+      }[occ] ?? ['일이 너무 많아…'], t);
+    }
+    case 'food': {
+      return d.hungry
+        ? pick(['배고파 죽겠어… 뭐라도 먹자', '아 오늘 제대로 못 먹었더니 어지러워'], t)
+        : pick(['여기 커피 진짜 맛있지 않아?', '요즘 뭐 맛있는 거 먹었어?', '시장에서 장 봐다 해먹는 것도 좋더라'], t);
+    }
+    case 'weather': {
+      return pick({
+        sunny: ['날씨 진짜 좋다~', '이런 날엔 공원이지', '햇살 봐, 나가길 잘했어'],
+        cloudy: ['날이 꾸물꾸물하네', '흐린 날엔 괜히 기분도 가라앉아'],
+        rain: ['비 오는 소리 좋다…', '우산 챙겨왔어? 밖에 비 많이 와', '이런 날엔 실내가 최고야'],
+      }[d.kind ?? 'sunny'] ?? ['날씨가 애매하네'], t);
+    }
+    default: return '요즘 어떻게 지내?';
+  }
+}
+
+// 청자 반응 — 화자에 대한 호감(listenerWarmth)과 주제로 온도를 정한다
+function replyLine(e) {
+  const t = e.tick;
+  const warm = e.payload.listenerWarmth ?? 0;
+  if (e.payload.topic === 'party_invite') return warm >= 0 ? pick(['갈래갈래!', '오 좋아, 시간 비워둘게'], t) : pick(['음… 생각해볼게', '가면 보고'], t);
+  if (e.payload.topic === 'gossip') return warm >= 0 ? pick(['헐 진짜?', '그니까 말이야', '더 얘기해봐'], t) : pick(['글쎄…', '남 얘긴 그만하자'], t);
+  if (warm > 0) return pick(['응응!', '완전 공감해', 'ㅋㅋㅋ 맞아'], t);
+  if (warm < 0) return pick(['아 그래…', '흠…', '그렇구나'], t);
+  return pick(['응응', '오 그래?', 'ㅋㅋ'], t);
 }
 
 function handleVisualEvent(e) {
@@ -217,9 +338,9 @@ function handleVisualEvent(e) {
   switch (e.type) {
     case 'conversation': {
       const line = conversationLine(e);
-      showBubble(e.simId, line);
+      showBubble(e.simId, line, 4500);
       if (sp(e.payload.withSimId)) {
-        setTimeout(() => showBubble(e.payload.withSimId, REPLIES[e.tick % REPLIES.length], 2500), 1200);
+        setTimeout(() => showBubble(e.payload.withSimId, replyLine(e), 2800), 1600);
       }
       break;
     }
@@ -259,6 +380,7 @@ function fmtClock(tick) {
 const ACTION_KO = {
   eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기',
   drink: '술 한잔', binge_eat: '폭식', hole_up: '은둔', exercise: '운동', build: '침대 만들기',
+  read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기',
 };
 const BLOCK_KO = {
   no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
@@ -319,6 +441,19 @@ function eventText(e) {
     }
     case 'conversation': return `💬 ${n} → ${simName(e.payload.withSimId)}: "${conversationLine(e)}"`;
     case 'hangover': return `🥴 ${n}이(가) 과음했습니다… 내일이 걱정입니다`;
+    case 'weather_changed': return { sunny: '☀️ 화창한 아침입니다', cloudy: '☁️ 날이 흐립니다', rain: '🌧️ 비가 내리기 시작했습니다' }[e.payload.kind];
+    case 'item_spawned': return null; // 어디 떨어졌는지는 비밀 — 발견의 재미
+    case 'item_found': return `✨ ${n}이(가) 길에서 ${e.payload.amount}원을 주웠습니다!`;
+    case 'fish_caught': return `🎣 ${n}이(가) ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
+    case 'project_started': {
+      const tp = { house: '새 집', cafe: '새 카페', park: '새 공원' }[e.payload.type];
+      return `🏗️ 마을에 ${tp} 공사가 시작됐습니다! 심들이 힘을 보탭니다`;
+    }
+    case 'facility_built': {
+      const tp = { house: '집', cafe: '카페', park: '공원' }[e.payload.type];
+      return `🎊 ${tp}이(가) 완공됐습니다! 마을이 넓어졌어요`;
+    }
+    case 'moved_home': return `📦 ${n}이(가) 새 집으로 이사했습니다`;
     case 'road_formed': return `🛤️ 많이 다니던 길이 도로가 되었습니다 (${e.payload.x}, ${e.payload.y})`;
     case 'bed_built': return `🛏️ ${n}이(가) 집에 침대를 새로 만들었습니다!`;
     case 'greeting': return `👋 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 지나가며 인사했습니다`;
@@ -464,9 +599,11 @@ async function showReport() {
 }
 
 // ---- WebSocket ----
+let wsRef = null;
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  wsRef = ws;
   lastSeq = -1;
 
   ws.onmessage = (raw) => {
@@ -492,6 +629,8 @@ function connect() {
         showReport();
         maybeShowOnboarding();
         renderPanel();
+        syncItems();
+        applyWeather();
         break;
       case 'tickBatch':
         if (!world) return;
@@ -513,6 +652,20 @@ function connect() {
             mapDirty = true;
           }
         }
+        for (const e of msg.events) {
+          if (e.type === 'item_spawned' && world) {
+            world.lostItems = world.lostItems ?? [];
+            world.lostItems.push({ itemId: e.payload.itemId, x: e.payload.x, y: e.payload.y });
+          } else if (e.type === 'item_found' && world?.lostItems) {
+            world.lostItems = world.lostItems.filter((it) => it.itemId !== e.payload.itemId);
+          } else if (e.type === 'facility_built' || e.type === 'project_started') {
+            wsRef?.send(JSON.stringify({ type: 'resync' })); // 맵 대변형 — 새 스냅샷으로 재동기화
+          } else if (e.type === 'weather_changed' && world) {
+            world.weather = { day: e.payload.day, kind: e.payload.kind };
+            applyWeather();
+          }
+        }
+        syncItems();
         if (mapDirty && scene) scene.drawWorld();
         if (msg.events.some((e) => e.type === 'player_created')) maybeShowOnboarding();
         if (scene) scene.syncSims();

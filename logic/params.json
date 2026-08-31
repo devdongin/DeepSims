@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 5,
+  "logicSchemaVersion": 7,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -64,6 +64,31 @@
     "build": {
       "duration": 240,
       "cost": 3000
+    },
+    "read": {
+      "duration": 40,
+      "recoverPerTick": 120,
+      "moodPerTick": 5
+    },
+    "shop": {
+      "duration": 15,
+      "cost": 600,
+      "groceriesGain": 3
+    },
+    "fish": {
+      "duration": 90,
+      "recoverPerTick": 60,
+      "moodPerTick": 12,
+      "catchSpan": 400,
+      "missMood": 100
+    },
+    "cook_eat": {
+      "duration": 25,
+      "recoverPerTick": 350,
+      "moodPerTick": 8
+    },
+    "construct": {
+      "duration": 60
     }
   },
   "occupations": {
@@ -141,7 +166,13 @@
       "binge": 3,
       "hole_up": 2,
       "workout": 3,
-      "built_bed": 5
+      "built_bed": 5,
+      "read_time": 2,
+      "shopping": 1,
+      "home_meal": 2,
+      "fishing": 3,
+      "found_item": 2,
+      "construct_work": 4
     },
     "recencyLut": [
       1000,
@@ -226,5 +257,29 @@
     "wearThreshold": 400,
     "maxExtraBeds": 2,
     "deficit": 5000
+  },
+  "weather": {
+    "sunnyW": 50,
+    "cloudyW": 30,
+    "rainW": 20,
+    "outdoorRainFactor": 60
+  },
+  "items": {
+    "spawnInterval": 720,
+    "spawnTries": 8,
+    "amountMin": 50,
+    "amountSpan": 201,
+    "expireTicks": 2880,
+    "pickupMood": 100
+  },
+  "market": {
+    "maxGroceries": 6
+  },
+  "construct": {
+    "laborRequired": 600,
+    "deficit": 4000,
+    "persJDiv": 4,
+    "cafeRatio": 2,
+    "parkRatio": 1
   }
 }

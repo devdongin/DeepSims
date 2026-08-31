@@ -34,8 +34,9 @@ test('P2-2. persFactor 방향: 극단 E가 극단 I보다 socialize를 선호', 
   i.traits = { ...i.traits, mbti: { EI: 100, SN: 50, TF: 50, JP: 50 }, occupation: 'freelancer', age: 40 };
   for (const s of [e, i]) { s.needs = { hunger: 9000, energy: 9000, social: 6000, fun: 6000 }; s.money = 10000; s.mood = 0; } // 돈 걱정 제거
   for (const s of w.sims.slice(2)) s.state = { kind: 'performing', action: 'idle', facilityId: null, resourceId: null, path: [], ticksLeft: 99, pairedTicks: 0 };
-  // 같은 위치에서 비교
-  i.x = e.x; i.y = e.y;
+  // 같은 위치(공원 내부 — socialize/play가 같은 스팟을 두고 등거리 경쟁)에서 비교.
+  // §16에서 도서관 등 근접 시설이 생겨, 임의 위치에선 근접성이 성향을 이길 수 있다.
+  e.x = 30; e.y = 15; i.x = 30; i.y = 15;
   tick(w, []);
   assert.equal(e.state.action, 'socialize', 'E는 수다');
   assert.equal(i.state.action, 'play', 'I는 혼자 놀기');
@@ -178,7 +179,7 @@ test('P2-9. v1 스냅샷 마이그레이션: traits/mood/logic 설치, 결정적
   const m1 = migrateWorld(deserialize(serialize(v1world)));
   const m2 = migrateWorld(deserialize(serialize(v1world)));
   assert.equal(hashWorld(m1), hashWorld(m2), '마이그레이션 결정적');
-  assert.equal(m1.schemaVersion, 6);
+  assert.equal(m1.schemaVersion, 8);
   assert.ok(m1.logic);
   for (const s of m1.sims) { assert.ok(s.traits); assert.equal(s.mood, 0); }
   // 마이그레이션 직후 첫 틱 정상 동작
@@ -264,9 +265,9 @@ test('P2-14. 마이그레이션 시 meta 영속화 (schemaVersion·behaviorVersi
   st.close();
   st = new Storage(dbPath);
   const loaded = st.loadOrCreate({ seed: SEED, nowUtcMs: 2000 });
-  assert.equal(loaded.world.schemaVersion, 6);
-  assert.equal(st.getMetaInt('schemaVersion'), 6);
-  assert.equal(st.getMetaInt('behaviorVersion'), 6);
+  assert.equal(loaded.world.schemaVersion, 8);
+  assert.equal(st.getMetaInt('schemaVersion'), 8);
+  assert.equal(st.getMetaInt('behaviorVersion'), 8);
   // 스냅샷도 마이그레이션된 상태로 재저장됨
   const snap = deserialize(st.db.prepare('SELECT state FROM snapshot WHERE id = 1').get().state);
   assert.ok(snap.logic);

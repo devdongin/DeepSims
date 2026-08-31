@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 5,
+  logicSchemaVersion: 7,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -21,6 +21,12 @@ export const DEFAULT_LOGIC = {
     exercise: { duration: 60, moodPerTick: 15, funPerTick: 80, completeMoodBonus: 100 },
     // 건설 (§15.1.B)
     build: { duration: 240, cost: 3000 },
+    // 세계관 확장 (§16.B)
+    read: { duration: 40, recoverPerTick: 120, moodPerTick: 5 },
+    shop: { duration: 15, cost: 600, groceriesGain: 3 },
+    fish: { duration: 90, recoverPerTick: 60, moodPerTick: 12, catchSpan: 400, missMood: 100 },
+    cook_eat: { duration: 25, recoverPerTick: 350, moodPerTick: 8 },
+    construct: { duration: 60 }, // §16.5 스틴트
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000 },
@@ -46,6 +52,7 @@ export const DEFAULT_LOGIC = {
       argument: 8, starving: 8, party_info: 7, relationship_changed: 6,
       lonely: 4, work_done: 3, meal: 2, small_talk: 1, play_time: 1,
       drank: 3, binge: 3, hole_up: 2, workout: 3, built_bed: 5,
+      read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
     },
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
@@ -101,6 +108,26 @@ export const DEFAULT_LOGIC = {
     wearThreshold: 400,        // GRASS 밟힘 누적 → ROAD 전환
     maxExtraBeds: 2,           // 집당 증축 침대 상한
     deficit: 5000,             // build 후보의 고정 deficit
+  },
+  // 세계관 확장 (§16, logicSchemaVersion 6)
+  weather: {
+    sunnyW: 50, cloudyW: 30, rainW: 20,
+    outdoorRainFactor: 60, // 비 오는 날 야외 시설 점수 ×60% (§G 곱셈 체인: base×pers×plan×weather)
+  },
+  items: {
+    spawnInterval: 720,   // 12게임시간마다 스폰 시도
+    spawnTries: 8,
+    amountMin: 50, amountSpan: 201,
+    expireTicks: 2880,
+    pickupMood: 100,
+  },
+  market: { maxGroceries: 6 },
+  construct: {
+    laborRequired: 600,  // 완공까지 누적 수행 틱
+    deficit: 4000,       // needValue = NEED_MAX - deficit (고정 급함)
+    persJDiv: 4,         // persFactor = 100 + floorDiv(100 - JP, persJDiv)
+    cafeRatio: 2,        // 심 수 > 좌석합×ratio → cafe 프로젝트
+    parkRatio: 1,        // 심 수 > 스팟합×ratio → park 프로젝트
   },
 };
 
@@ -262,6 +289,30 @@ function checkRanges(p, errors) {
   inRange('build.wearThreshold', p.build.wearThreshold, 1, 1000000);
   inRange('build.maxExtraBeds', p.build.maxExtraBeds, 0, 10);
   inRange('build.deficit', p.build.deficit, 0, 10000);
+  // §16
+  for (const a of ['read', 'shop', 'fish', 'cook_eat']) {
+    for (const [k, v] of Object.entries(p.actions[a])) {
+      inRange(`actions.${a}.${k}`, v, k === 'duration' ? 1 : 0, 1000000);
+    }
+  }
+  inRange('weather.sunnyW', p.weather.sunnyW, 0, 1000);
+  inRange('weather.cloudyW', p.weather.cloudyW, 0, 1000);
+  inRange('weather.rainW', p.weather.rainW, 0, 1000);
+  if (p.weather.sunnyW + p.weather.cloudyW + p.weather.rainW <= 0) errors.push('weather 가중 합 0');
+  inRange('weather.outdoorRainFactor', p.weather.outdoorRainFactor, 0, 100); // 축소만 허용 — §G 상한 보존
+  inRange('items.spawnInterval', p.items.spawnInterval, 1, 1000000);
+  inRange('items.spawnTries', p.items.spawnTries, 1, 64);
+  inRange('items.amountMin', p.items.amountMin, 0, 1000000);
+  inRange('items.amountSpan', p.items.amountSpan, 1, 1000000);
+  inRange('items.expireTicks', p.items.expireTicks, 1, 1000000);
+  inRange('items.pickupMood', p.items.pickupMood, 0, 10000);
+  inRange('market.maxGroceries', p.market.maxGroceries, 1, 100);
+  inRange('actions.construct.duration', p.actions.construct.duration, 1, 10000);
+  inRange('construct.laborRequired', p.construct.laborRequired, 1, 1000000);
+  inRange('construct.deficit', p.construct.deficit, 0, 10000);
+  inRange('construct.persJDiv', p.construct.persJDiv, 1, 100);
+  inRange('construct.cafeRatio', p.construct.cafeRatio, 1, 100);
+  inRange('construct.parkRatio', p.construct.parkRatio, 1, 100);
 }
 
 function checkShape(ref, val, path, errors) {

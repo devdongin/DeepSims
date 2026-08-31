@@ -22,8 +22,13 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
 
   let topic = null;
   let aboutSimId = null;
+  let detail = null; // 발화의 구체 내용 (구조화 — 문장화는 클라이언트)
   if (transferHappened) {
     topic = 'party_invite';
+    // 방금 전파된 토큰의 구체 정보: 수신자가 새로 알게 된 것 중 tokenId 최대
+    const known = [...a.knownTokens, ...b.knownTokens];
+    const tok = world.tokens.filter((tk) => known.includes(tk.tokenId)).sort((x, y) => y.tokenId - x.tokenId)[0];
+    if (tok) detail = { placeId: tok.placeId, scheduledTick: tok.scheduledTick };
   } else {
     // 문맥 필터링된 가중 테이블 (키 사전순 고정 순회, 1드로우)
     const day = floorDiv(t, 1440);
@@ -36,30 +41,54 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
       if (key === 'gossip') {
         const third = pickGossipTarget(world, speaker, listener);
         if (third === null) continue;
-        candidates.push({ key, w, about: third });
+        candidates.push({
+          key, w, about: third,
+          detail: { // 관계·감정의 구체 (§16 대화 내용 강화)
+            tier: speaker.relTiers[third] ?? 'stranger',
+            sentiment: Math.sign(world.affinity[speaker.id][third]),
+          },
+        });
         continue;
       }
       if (key === 'memory_share') {
         const mem = topMemoryOfDay(speaker, day);
         if (!mem) continue;
-        candidates.push({ key, w, about: mem.subjectSimId ?? null });
+        candidates.push({
+          key, w, about: mem.subjectSimId ?? null,
+          detail: { kind: mem.kind, placeId: mem.placeId }, // 무슨 일이 있었는지
+        });
+        continue;
+      }
+      if (key === 'work_gripe') {
+        candidates.push({ key, w, about: null, detail: { occupation: speaker.traits.occupation } });
+        continue;
+      }
+      if (key === 'weather') {
+        candidates.push({ key, w, about: null, detail: { kind: world.weather?.kind ?? 'sunny' } });
+        continue;
+      }
+      if (key === 'food') {
+        candidates.push({ key, w, about: null, detail: { hungry: speaker.needs.hunger < 4000 } });
         continue;
       }
       candidates.push({ key, w, about: null });
     }
     if (candidates.length === 0) {
       topic = 'weather'; // 폴백 보장 — 문맥 필터로 전부 제외돼도 발화는 나간다 (드로우 없음)
+      detail = { kind: world.weather?.kind ?? 'sunny' };
     } else {
       const total = candidates.reduce((s, c) => s + c.w, 0);
       let roll = rngInt(world.rngSim, total);
       for (const c of candidates) {
-        if (roll < c.w) { topic = c.key; aboutSimId = c.about; break; }
+        if (roll < c.w) { topic = c.key; aboutSimId = c.about; detail = c.detail ?? null; break; }
         roll -= c.w;
       }
     }
   }
   emit('conversation', speaker.id, {
-    withSimId: listener.id, topic, aboutSimId, placeId: facId,
+    withSimId: listener.id, topic, aboutSimId, placeId: facId, detail,
+    // 청자 반응의 구체: 청자→화자 호감도 부호 (클라가 반응 온도를 정함)
+    listenerWarmth: Math.sign(world.affinity[listener.id][speaker.id]),
   });
 }
 

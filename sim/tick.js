@@ -3,9 +3,9 @@
 import {
   ACTIONS, ACTION_FACILITY, NEED_OF_ACTION, NEED_MAX,
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
-  COPING_ACTIONS, HOME_ONLY_ACTIONS,
+  COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE } from './map.js';
+import { TILE, addBuilding } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { validateLogic, logicHash } from './logic.js';
@@ -23,6 +23,8 @@ function needValueFor(sim, action, L) {
   // coping: 기분이 나쁠수록 급함 — deficit = -mood (게이트로 mood < 0 보장, §15.1.A)
   if (COPING_ACTIONS.includes(action)) return NEED_MAX + sim.mood;
   if (action === 'build') return NEED_MAX - L.build.deficit; // 고정 중간 급함 (§15.1.B)
+  if (action === 'shop') return sim.needs.hunger; // 배고픈데 장이 비면 급함 (§16.B, Codex 22차 항목 5)
+  if (action === 'construct') return NEED_MAX - L.construct.deficit; // §16.5 고정 급함
   return sim.needs[NEED_OF_ACTION[action]];
 }
 
@@ -38,6 +40,10 @@ function persFactorFor(sim, action, L) {
   else if (action === 'binge_eat') f = 100 + (m.TF - 50);
   else if (action === 'hole_up') f = 100 + (m.EI - 50);
   else if (action === 'exercise') f = 100 + (50 - m.TF);
+  // §16.B: N·I는 독서, I는 낚시 선호
+  else if (action === 'read') f = 100 + (m.SN - 50) + floorDiv(m.EI - 50, 2);
+  else if (action === 'fish') f = 100 + (m.EI - 50);
+  else if (action === 'construct') f = 100 + floorDiv(100 - m.JP, L.construct.persJDiv); // J형이 부지런 (§16.5)
   return clamp(f, 50, 200);
 }
 
@@ -81,6 +87,11 @@ function actionBlockReason(world, sim, action, t) {
     if (tod < occ.workStart || tod >= occ.workEnd) return 'off_hours';
   }
   if (COPING_ACTIONS.includes(action) && sim.mood >= L.coping.threshold) return 'not_coping';
+  if (action === 'shop' && (sim.groceries > 0 || sim.money < L.actions.shop.cost)) {
+    return sim.money < L.actions.shop.cost ? 'no_money' : 'not_needed'; // 장바구니 차 있으면 불필요 (§16.B)
+  }
+  if (action === 'cook_eat' && sim.groceries < 1) return 'no_groceries';
+  if (action === 'construct' && !world.project) return 'no_project';
   if (action === 'build') {
     const home = world.map.facilities.find((f) => f.id === sim.homeId);
     const residents = world.sims.reduce((n, x) => n + (x.homeId === sim.homeId ? 1 : 0), 0);
@@ -101,6 +112,31 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
   for (const action of actions) {
     if (action === 'idle') continue;
     if (!actionAllowed(world, sim, action, t)) continue;
+    // §16.5.B: construct는 가상 현장(site) — 활성 프로젝트 plot 모서리 4 작업 스팟
+    if (action === 'construct') {
+      const pr = world.project;
+      const plot = world.plots.find((p) => p.plotId === pr.plotId);
+      const spots = [
+        { id: `p${pr.plotId}:spot0`, x: plot.x + 1, y: plot.y + 1 },
+        { id: `p${pr.plotId}:spot1`, x: plot.x + 5, y: plot.y + 1 },
+        { id: `p${pr.plotId}:spot2`, x: plot.x + 1, y: plot.y + 3 },
+        { id: `p${pr.plotId}:spot3`, x: plot.x + 5, y: plot.y + 3 },
+      ];
+      for (const res of spots) {
+        const holder = world.reservations[resKey('site', res.id)];
+        if (holder !== undefined && holder !== sim.id) continue;
+        const sc = scoreCandidate(sim, action, res, L);
+        const cand = {
+          action, facilityId: 'site', resourceId: res.id, res,
+          ...sc, planFactor: 100, partyPull: false, weatherFactor: 100,
+          score: floorDiv(sc.core * 100, 100) + sc.moodMod,
+          memoryMod: 0, stateMod: 0, habitMod: 0, cited: [],
+        };
+        if (cand.score <= 0 && !includeZeroScore) continue;
+        out.push(cand);
+      }
+      continue;
+    }
     for (const ftype of ACTION_FACILITY[action]) {
       for (const fac of world.map.facilities) {
         if (fac.type !== ftype) continue;
@@ -113,10 +149,13 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
           const pl = (ctx && ctx.urgency)
             ? { factor: 100, partyPull: false }
             : planFactorFor(world, sim, action, fac.id, t, L);
+          // §16.D: 우천 야외 축소 계수 — §G 곱셈 체인 확장 (base×pers×plan×weather, 축소만이라 경계 보존)
+          const weatherFactor = (world.weather?.kind === 'rain' && OUTDOOR_FACILITIES.includes(ftype))
+            ? L.weather.outdoorRainFactor : 100;
           const cand = {
             action, facilityId: fac.id, resourceId: res.id, res, ...sc,
-            planFactor: pl.factor, partyPull: pl.partyPull,
-            score: floorDiv(sc.core * pl.factor, 100) + sc.moodMod,
+            planFactor: pl.factor, partyPull: pl.partyPull, weatherFactor,
+            score: floorDiv(floorDiv(sc.core * pl.factor, 100) * weatherFactor, 100) + sc.moodMod,
             memoryMod: 0, stateMod: 0, habitMod: 0, cited: [],
           };
           if (ctx) {
@@ -354,6 +393,20 @@ export function tick(world, inputsForThisTick = []) {
         emit('road_formed', sim.id, { x: sim.x, y: sim.y });
       }
     }
+    // §16.C: 분실물 습득 — 현재 좌표의 아이템(itemId 오름차순 첫 번째)
+    if (world.lostItems.length > 0) {
+      // 인접(맨해튼 ≤1)까지 습득 — 정확히 밟을 확률만으론 죽은 콘텐츠 (itemId asc 첫 번째)
+      const idx = world.lostItems.findIndex((it) => Math.abs(it.x - sim.x) + Math.abs(it.y - sim.y) <= 1);
+      if (idx !== -1) {
+        const it = world.lostItems[idx];
+        world.lostItems.splice(idx, 1);
+        sim.money += it.amount;
+        applyMood(sim, world.logic.items.pickupMood);
+        emit('item_found', sim.id, { itemId: it.itemId, amount: it.amount, x: it.x, y: it.y });
+        emit('money_changed', sim.id, { delta: it.amount, balance: sim.money, action: 'found' });
+        recordFact(sim, t, world.logic, 'found_item', { tags: ['luck'] });
+      }
+    }
     if (s.path.length === 0) {
       s.kind = 'performing';
       // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
@@ -423,6 +476,11 @@ export function tick(world, inputsForThisTick = []) {
       const recovers = s.action !== 'socialize' || pairedThisTick.has(sim.id);
       if (recovers) sim.needs[need] = Math.min(NEED_MAX, sim.needs[need] + def.recoverPerTick);
     }
+    // §16.5: 건설 노동 — 현재 프로젝트와 같은 plot의 현장 수행만 기여
+    if (s.action === 'construct' && world.project
+      && s.resourceId.startsWith(`p${world.project.plotId}:`)) {
+      world.project.progress++;
+    }
     // 대처 행동의 틱당 효과 (§15.1.A): 기분 직접 회복 + 부수 욕구
     if (def.moodPerTick) applyMood(sim, def.moodPerTick);
     if (def.funPerTick) sim.needs.fun = Math.min(NEED_MAX, sim.needs.fun + def.funPerTick);
@@ -446,6 +504,23 @@ export function tick(world, inputsForThisTick = []) {
       if (s.action === 'binge_eat') applyMood(sim, -L.actions.binge_eat.regretMood); // 후회
     } else if (s.action === 'exercise') {
       applyMood(sim, L.actions.exercise.completeMoodBonus);
+    } else if (s.action === 'fish') {
+      // §16.B: 완료 시 단 1드로우 (중단 시 정산 미도달 → 드로우 없음). 서브순서:
+      // 드로우 → (성공 시) money+이벤트 / (허탕) mood 감점 → 이후 공통 완료 경로 (Codex 22차 항목 4)
+      const catchAmt = rngInt(world.rngSim, L.actions.fish.catchSpan);
+      if (catchAmt > 0) {
+        sim.money += catchAmt;
+        emit('fish_caught', sim.id, { amount: catchAmt });
+        emit('money_changed', sim.id, { delta: catchAmt, balance: sim.money, action: 'fish' });
+      } else {
+        applyMood(sim, -L.actions.fish.missMood);
+      }
+    } else if (s.action === 'shop') {
+      sim.money -= L.actions.shop.cost;
+      emit('money_changed', sim.id, { delta: -L.actions.shop.cost, balance: sim.money, action: 'shop' });
+      sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.shop.groceriesGain);
+    } else if (s.action === 'cook_eat') {
+      sim.groceries = Math.max(0, sim.groceries - 1);
     } else if (s.action === 'build') {
       // 완료 시 게이트 재검증 (같은 집 동시 건설 초과 방지, Codex 20차 항목 3)
       const home = world.map.facilities.find((f) => f.id === s.facilityId);
@@ -478,6 +553,7 @@ export function tick(world, inputsForThisTick = []) {
       const kind = {
         eat: 'meal', work: 'work_done', socialize: 'small_talk', play: 'play_time',
         drink: 'drank', binge_eat: 'binge', hole_up: 'hole_up', exercise: 'workout', build: 'built_bed',
+        read: 'read_time', shop: 'shopping', fish: 'fishing', cook_eat: 'home_meal', construct: 'construct_work',
       }[s.action];
       if (kind) {
         recordFact(sim, t, L, kind, { placeId: s.facilityId, tags: [s.action, `facility:${s.facilityId}`] });
@@ -521,9 +597,97 @@ export function tick(world, inputsForThisTick = []) {
     else if (sim.mood < 0) sim.mood = Math.min(0, sim.mood + dm);
   }
 
-  // 4b) 토큰: 모임 판정 → 만료 → 생성 (고정 순서, D5) (PLAN §F)
+  // 4b) 고정 서브순서 (§16.D): 날씨 → 모임 판정 → 토큰 만료 → 토큰 생성 → 아이템 만료/스폰
+  {
+    const day = floorDiv(t, 1440);
+    if (world.weather.day !== day) {
+      const W = L.weather;
+      const total = W.sunnyW + W.cloudyW + W.rainW;
+      const roll = rngInt(world.rngSim, total);
+      const kind = roll < W.sunnyW ? 'sunny' : roll < W.sunnyW + W.cloudyW ? 'cloudy' : 'rain';
+      world.weather = { day, kind };
+      emit('weather_changed', null, { kind, day });
+    }
+  }
   expireAndMeasureTokens(world, t, emit);
   maybeGenerateToken(world, t, emit);
+  {
+    // §16.C: 만료 → 스폰. 수락 기준: ROAD 타일 && 같은 좌표에 기존 아이템 없음.
+    // 드로우 순서: (x,y) 시도들(성공 시 조기 중단) → amount → itemId 부여 (Codex 22차 항목 2)
+    world.lostItems = world.lostItems.filter((it) => t <= it.expiresTick);
+    const I = L.items;
+    if (t % I.spawnInterval === 0) {
+      for (let attempt = 0; attempt < I.spawnTries; attempt++) {
+        const x = rngInt(world.rngSim, world.map.w);
+        const y = rngInt(world.rngSim, world.map.h);
+        const tile = world.map.tiles[y * world.map.w + x];
+        // ROAD에만 스폰 — 사람이 다니는 곳에 떨어지고, 다니는 사람이 줍는다 (§16.C 개정)
+        if (tile === TILE.ROAD
+          && !world.lostItems.some((it) => it.x === x && it.y === y)) {
+          const amount = I.amountMin + rngInt(world.rngSim, I.amountSpan);
+          const item = { itemId: world.itemCounter++, x, y, amount, expiresTick: t + I.expireTicks };
+          world.lostItems.push(item);
+          emit('item_spawned', null, { itemId: item.itemId, x, y });
+          break;
+        }
+      }
+    }
+  }
+
+  // 4c) §16.5: 완공 판정(매 틱) → 일일 도시계획 트리거 (서브순서 맨 끝).
+  // 의도된 순서: 완공 틱의 facility_built/moved_home은 잔여 노동자들의 action_completed보다
+  // 먼저 나온다 (완공은 4단계, 노동 정산은 각자 스틴트가 끝나는 틱의 3단계 — Codex 24차 항목 2 문서화)
+  {
+    const pr = world.project;
+    // required는 프로젝트 시작 시점에 스냅샷 — 진행 중 logic_update가 완공 시점을 흔들지 못함 (PLAN §16.5)
+    if (pr && pr.progress >= pr.required) {
+      const plot = world.plots.find((p) => p.plotId === pr.plotId);
+      const fac = addBuilding(world.map, pr.type, plot);
+      plot.used = true;
+      world.project = null;
+      emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
+      if (fac.type === 'house') {
+        // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
+        let worst = null, worstOver = 0;
+        for (const h of world.map.facilities) {
+          if (h.type !== 'house' || h.id === fac.id) continue;
+          const res = world.sims.filter((x) => x.homeId === h.id).length;
+          const over = res - h.resources.length;
+          if (over > worstOver || (over === worstOver && worst && h.id < worst.id)) {
+            if (over > 0) { worst = h; worstOver = over; }
+          }
+        }
+        if (worst) {
+          const mover = world.sims.filter((x) => x.homeId === worst.id).sort((a, b) => b.id - a.id)[0];
+          mover.homeId = fac.id;
+          emit('moved_home', mover.id, { from: worst.id, to: fac.id });
+          recordFact(mover, t, L, 'built_bed', { placeId: fac.id, tags: ['home'] });
+        }
+      }
+    }
+    const day = floorDiv(t, 1440);
+    if (!world.project && world.lastPlanDay !== day) {
+      world.lastPlanDay = day;
+      const freePlot = world.plots.find((p) => !p.used);
+      if (freePlot) {
+        const beds = world.map.facilities.filter((f) => f.type === 'house')
+          .reduce((n, f) => n + f.resources.length, 0);
+        const cafeSeats = world.map.facilities.filter((f) => f.type === 'cafe')
+          .reduce((n, f) => n + f.resources.length, 0);
+        const parkSpots = world.map.facilities.filter((f) => f.type === 'park')
+          .reduce((n, f) => n + f.resources.length, 0);
+        const pop = world.sims.length;
+        let type = null;
+        if (pop > beds) type = 'house';
+        else if (pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
+        else if (pop > parkSpots * L.construct.parkRatio) type = 'park';
+        if (type) {
+          world.project = { plotId: freePlot.plotId, type, progress: 0, required: L.construct.laborRequired };
+          emit('project_started', null, { plotId: freePlot.plotId, type, x: freePlot.x, y: freePlot.y, required: L.construct.laborRequired });
+        }
+      }
+    }
+  }
 
   // 5) idle 심 결정 (id 오름차순, world.reservations = 틱-로컬 원장)
   for (const sim of world.sims) {

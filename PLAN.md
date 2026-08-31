@@ -527,3 +527,99 @@ traits: {
 - ✅ **문제 해결 과정 추적**: 목표가 막혔을 때(돈 없음·시설 만석) 대안 탐색 체인을 reason에
   기록 — "카페 만석 → 집 식사 시도 → 재료 없음 → 일단 일하러" 같은 사고 흐름의 로그화.
 - 각 항목은 §14 이슈 루프로 우선순위를 정하고 §12.1처럼 정수 테이블 스펙 확정 후 구현.
+
+## 16. 세계관 확장 — 해솔마을 (v0.4)
+
+마을 이름 **해솔마을** 확정 (목업의 행정사무소 간판에서 유래). 목표: 세계가 플레이 중에도
+변하고 자란다 — 새 시설, 새 경제 루프, 동적 오브젝트, 날씨.
+
+### A. 신규 시설 3곳 (addVenuesTo 단일 권위 — 신규/마이그레이션 공유, §15.1 방식)
+| 시설 | 위치 | 자원 | 행동 |
+|---|---|---|---|
+| library(도서관) | (3,10) 7×5, 문 (6,14) | 좌석 4 | read |
+| market(시장) | (12,10) 7×5, 문 (15,14) | 계산대 2 | shop |
+| pond(낚시터) | (38,42) 8×5 — 내부 3×2 WATER, 둘레 잔디 | 낚시 스팟 4 (물가) | fish |
+
+### B. 신규 행동 (enum 뒤 append: read, shop, fish, cook_eat)
+- **read**(도서관, 40틱): fun +120/틱, mood +5/틱. persFactor = 100 + (SN-50) + floorDiv(EI-50, 2)
+  (N·I가 선호) — [50,200] 클램프.
+- **shop**(시장, 15틱, cost 600): 완료 시 groceries +3 (심 인벤토리, 상한 6). 후보 조건(하드):
+  groceries == 0 && money ≥ cost. needValue = hunger (배고픈데 장도 비면 급함).
+- **cook_eat**(자기 집, 25틱): 후보 조건 groceries ≥ 1. hunger +350/틱, mood +8/틱(집밥),
+  완료 시 groceries -1. **비용 0** — 장만 봐두면 카페(200원)보다 싸다: 집밥 경제 루프.
+  eat과 같은 hunger 욕구로 경쟁 (거리·비용·성향이 가른다).
+- **fish**(낚시터, 90틱): fun +60/틱, mood +12/틱. 완료 시 **rngSim 1드로우**:
+  catch = rngInt(fishCatchSpan(400)) — 0이면 '허탕'(mood -100), >0이면 money += catch,
+  'fish_caught' 이벤트. persFactor = 100 + (EI-50)/1 + (JP-50)/2 → 정수식: 100 + (EI-50) (I 선호).
+- 기억 kind: read_time(2)/shopping(1)/home_meal(2)/fishing(3) — 습관 루프 편입(HABIT_KINDS).
+
+### C. 동적 오브젝트 — 분실 동전 (플레이 중 "새 오브젝트가 생긴다")
+- world.lostItems: [{itemId, x, y, amount, expiresTick}]. itemId 단조 카운터(world.itemCounter).
+- 스폰: t % itemSpawnInterval(720) == itemSpawnAtTod(0 오프셋) 에서 rngSim로 위치 시도 최대 8회
+  (x=rngInt(w), y=rngInt(h), **ROAD면** 확정 — 구현 중 개정: 잔디 스폰은 아무도 못 주워 죽은 콘텐츠 — 8회 모두 실패 시 스폰 없음, 드로우 수는
+  항상 시도 횟수만큼 소비… 아니, **성공 시 즉시 중단**: 드로우 수가 상태에 의존하지만 맵도 상태이므로
+  결정적). amount = itemAmountMin(50) + rngInt(itemAmountSpan(201)). expires = t + itemExpire(2880).
+  'item_spawned' 이벤트.
+- 습득: 2a 이동 직후(마모 처리 다음), 심 id 오름차순으로 현재 좌표의 아이템 검사(itemId 오름차순) →
+  money += amount, mood +pickupMood(100), 'item_found' 이벤트, found_item(2) 기억, 목록에서 제거.
+- 만료: 4단계에서 제거('item_expired' 없음 — 조용히). 클라이언트: 반짝이 코인 프롭 표시/제거.
+
+### D. 날씨 (하루 단위, 결정적)
+- world.weather = { day, kind: 'sunny'|'cloudy'|'rain' }. 4단계 서두(고정 순서: **날씨 → 모임 판정 →
+  만료 → 토큰 생성 → 아이템 스폰**)에서 transitionDay ≠ weather.day면 rngSim 1드로우로 가중 추첨
+  (sunny 50 / cloudy 30 / rain 20), 'weather_changed' 이벤트.
+- 효과(구현 중 개정): stateMod 가산은 전형 점수(~3e12) 대비 클램프(±2.5e11)가 3%라 무력 →
+  **곱셈 weatherFactor**로 §G 체인 확장: score = base×pers×plan×**weather**(우천 야외 60%, [0,100]
+  축소만 허용 — 상한 증가 없음, 경계 증명 불변). 실내 100. 대화 weather 문장은 실제 날씨 반영(클라).
+- 클라: 비 오버레이(파티클/틴트), 상단에 날씨 아이콘.
+
+### 스키마
+- 세이브 v7: world.weather/lostItems/itemCounter, sim.groceries(0), 신규 시설 주입(addVenuesTo).
+- 로직 v6: weather{sunnyW,cloudyW,rainW,outdoorRainFactor(곱셈, [0,100])}, items{spawnInterval, amountMin,
+  amountSpan, expireTicks, pickupMood, spawnTries}, 신규 행동 수치는 actions에.
+- 클라 타이틀·README에 해솔마을 반영.
+
+## 16.5 자율 세계 확장 — 빈 땅과 마을 건설 (사용자 지시: 심이 세계관을 스스로 넓힌다)
+
+### A. 맵 확장 48×48 → 64×64
+- 동쪽 +16열, 남쪽 +16행의 **빈 땅**. 기존 좌표 전부 불변(원점 유지). 옛 외곽 물(x=47/y=47)은
+  잔디로 개방, 새 외곽(x=63/y=63, x=0/y=0 유지)이 물 테두리. 중앙 가로(y23-24)·세로(x23-24)
+  도로를 새 땅 끝까지 연장.
+- 단일 권위 `expandMapTo64(map, wear)`: buildMap(신규)과 v7→v8 마이그레이션이 공유.
+  wear 배열은 좌표 보존 재배치(신규 칸 0).
+- **공터(plots) 8곳** (7×5, 사용 순서 = 배열 순서): 동측 (50,4)(50,14)(50,30)(50,42),
+  남측 (4,50)(14,50)(30,50)(42,50). world.plots = [{plotId, x, y, used}].
+
+### B. 마을 건설 프로젝트 (결정적 도시계획)
+- 하루 1회(4단계 서브순서 맨 끝, 날씨 다음 날 경계에서) 트리거 평가 — **활성 프로젝트는 최대 1개**:
+  1) 총 침대 < 심 수 → house
+  2) 심 수 > 카페 좌석 합 × cafeRatio(2) → cafe
+  3) 심 수 > 공원 스팟 합 → park (사실상 비활성 기본값)
+  우선순위 house > cafe > park. 트리거 시 미사용 plot 첫 번째 배정, 'project_started' 이벤트.
+- world.project = { type, plotId, progress, required(laborRequired 600) } | null.
+- **construct 행동** (enum append, 시설 아님 — 프로젝트 현장): 후보 조건 = 프로젝트 활성.
+  가상 시설 'site'로 취급: 현장 4 작업 스팟(plot 모서리). needValue = NEED_MAX - constructDeficit
+  (4000) 고정. persFactor = 100 + floorDiv(100 - JP, 4) (J형이 부지런). stint 60틱,
+  수행 틱마다 project.progress += 현장 수행 중 심 수 1(자기 몫).
+- 완공: 4단계에서 progress ≥ required → 건물 축조(addBuilding: 타입별 벽/바닥/문/자원 —
+  house 침대2+예비2, cafe 좌석4, park 스팟8 나무테두리 없음), facility id = `${type}${타입별 순번}`,
+  plot.used = true, project = null, 'facility_built' 이벤트. **이주**: house 완공 시 가장 과밀한
+  집(잔여=거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자가 새 집으로 homeId 변경
+  ('moved_home' 이벤트).
+- 진행 중 현장은 클라가 공사 프롭 표시. 이벤트: project_started/facility_built/moved_home.
+- **완공 레이스 규칙** (Codex 23차 항목 2): progress는 2c에서 수행 심 수만큼 가산(합산이라 순서
+  무관). 완공 판정은 4단계 전용 — 즉시 건물 축조·project=null. 잔여 수행자는 스틴트를 무해하게
+  마저 수행(수행 자원 id에 plotId 포함 — 옛 현장 수행자는 새 프로젝트에 기여 불가). 정산은 일반
+  완료 경로(construct_work 기억)만.
+- **addBuilding 좌표 확정** (항목 3): house 6×5 문(x+2,y+4) 침대(x+1,y+1)(x+4,y+1) 예비
+  (x+2,y+2)(x+3,y+2) / cafe 7×5 문(x+3,y+4) 좌석(x+1,y+1)(x+4,y+1)(x+1,y+3)(x+4,y+3) /
+  park 7×5 무벽 스팟 6곳 (x+1+2k, y+1+2j) k<3,j<2. id = type + (기존 동타입 시설 수) —
+  축조가 시뮬레이션 전이이므로 신규/마이그레이션 월드 모두 동일 규칙으로 동일 id.
+- **마이그레이션 경계 변환** (항목 4): 구 x=47 열·y=47 행의 WATER(코너 포함)는 전부 GRASS로
+  개방. x=0 열·y=0 행은 유지. 확장 후 모든 시설 자원 BFS 도달성 테스트 필수(연못 WATER 영구 차단).
+- **정산 시점 로직 규칙** (항목 6, 일반 원칙): 모든 완료 정산은 정산 틱의 world.logic을 쓴다
+  (§14.1 "같은 틱부터 새 로직"의 자연 귀결) — maxGroceries 축소 시 완료 시점 클램프 등.
+
+### 스키마
+- 세이브 v8: 맵 64×64 확장, world.plots/project. 로직 v7: construct{laborRequired, stintTicks,
+  deficit, cafeRatio, parkRatio, persJDiv}.

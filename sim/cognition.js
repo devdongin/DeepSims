@@ -115,6 +115,7 @@ export function computeTier(affinityVal, interactionCount, L) {
 const HABIT_KINDS = {
   meal: 'eat', work_done: 'work', small_talk: 'socialize', play_time: 'play',
   drank: 'drink', binge: 'binge_eat', hole_up: 'hole_up', workout: 'exercise',
+  read_time: 'read', shopping: 'shop', home_meal: 'cook_eat', fishing: 'fish',
 };
 
 // 회고 (onEnterPerforming(sleep) 훅, PLAN §2.5.E). 멱등: lastReflectedDay + memorySeq 커서.

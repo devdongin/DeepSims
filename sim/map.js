@@ -1,8 +1,10 @@
 // 고정 저작 맵 48×48 (PLAN §2). rng를 쓰지 않는 순수 상수 데이터 생성.
 // 타일: 0=grass(가능) 1=road(가능) 2=floor(가능,실내) 3=wall(불가) 4=tree(불가) 5=water(불가)
 
-export const MAP_W = 48;
+export const MAP_W = 48;          // 기본 저작 영역 (§2)
+export const MAP_W2 = 64;         // §16.5 확장 후 크기
 export const MAP_H = 48;
+export const MAP_H2 = 64;
 export const TILE = { GRASS: 0, ROAD: 1, FLOOR: 2, WALL: 3, TREE: 4, WATER: 5 };
 
 function rect(tiles, x, y, w, h, v) {
@@ -31,6 +33,44 @@ export function addBarTo(tiles, facilities) {
       { id: 'seat3', kind: 'seat', x: 35, y: 44 },
     ],
   });
+}
+
+// 세계관 확장 시설 (§16.A) — 신규/마이그레이션 단일 권위. facilities 끝에 append (bar 방식).
+export function addVenuesTo(tiles, facilities) {
+  if (!facilities.some((f) => f.id === 'library')) {
+    building(tiles, 3, 10, 7, 5, 6, 14);
+    facilities.push({
+      id: 'library', type: 'library', x: 3, y: 10, w: 7, h: 5,
+      door: { x: 6, y: 14 },
+      resources: [0, 1, 2, 3].map((k) => ({
+        id: `seat${k}`, kind: 'seat', x: 4 + (k % 2) * 4, y: 11 + Math.floor(k / 2) * 2,
+      })),
+    });
+  }
+  if (!facilities.some((f) => f.id === 'market')) {
+    building(tiles, 12, 10, 7, 5, 15, 14);
+    facilities.push({
+      id: 'market', type: 'market', x: 12, y: 10, w: 7, h: 5,
+      door: { x: 15, y: 14 },
+      resources: [0, 1].map((k) => ({
+        id: `till${k}`, kind: 'till', x: 13 + k * 4, y: 12,
+      })),
+    });
+  }
+  if (!facilities.some((f) => f.id === 'pond')) {
+    // 낚시터: 내부 3×2 물 + 둘레 잔디, 물가 스팟 4
+    rect(tiles, 40, 43, 3, 2, TILE.WATER);
+    facilities.push({
+      id: 'pond', type: 'pond', x: 38, y: 42, w: 8, h: 5,
+      door: { x: 39, y: 44 },
+      resources: [
+        { id: 'spot0', kind: 'spot', x: 39, y: 43 },
+        { id: 'spot1', kind: 'spot', x: 43, y: 43 },
+        { id: 'spot2', kind: 'spot', x: 39, y: 45 },  // 물 남쪽 잔디
+        { id: 'spot3', kind: 'spot', x: 43, y: 45 },
+      ],
+    });
+  }
 }
 
 export function buildMap() {
@@ -101,10 +141,93 @@ export function buildMap() {
     })),
   });
 
-  // 술집 — facilities 맨 끝 append (마이그레이션과 삽입 순서 동일, Codex 20차 항목 1)
+  // 술집·확장 시설 — facilities 맨 끝 append (마이그레이션과 삽입 순서 동일)
   addBarTo(tiles, facilities);
+  addVenuesTo(tiles, facilities);
 
-  return { w: MAP_W, h: MAP_H, tiles, facilities };
+  // §16.5: 64×64 확장 (신규 월드도 마이그레이션과 같은 헬퍼)
+  const map = { w: MAP_W, h: MAP_H, tiles, facilities };
+  expandMapTo64(map, null);
+  return map;
+}
+
+// §16.5.A: 48×48 → 64×64 확장 — buildMap(신규)과 v7→v8 마이그레이션의 단일 권위.
+// 좌표 보존, 옛 외곽 물(x=47열·y=47행, 코너 포함) 개방, 새 외곽 물 테두리, 주 도로 연장.
+export function expandMapTo64(map, wear) {
+  if (map.w >= MAP_W2) return { map, wear };
+  const W = MAP_W2, H = MAP_H2;
+  const tiles = new Array(W * H).fill(TILE.GRASS);
+  const newWear = new Array(W * H).fill(0);
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      tiles[y * W + x] = map.tiles[y * map.w + x];
+      newWear[y * W + x] = wear ? wear[y * map.w + x] : 0;
+    }
+  }
+  // 옛 동·남 경계 물 개방 (코너 포함)
+  for (let y = 0; y < map.h; y++) if (tiles[y * W + 47] === TILE.WATER) tiles[y * W + 47] = TILE.GRASS;
+  for (let x = 0; x < map.w; x++) if (tiles[47 * W + x] === TILE.WATER) tiles[47 * W + x] = TILE.GRASS;
+  // 새 외곽 물
+  for (let x = 0; x < W; x++) { tiles[0 * W + x] = TILE.WATER; tiles[(H - 1) * W + x] = TILE.WATER; }
+  for (let y = 0; y < H; y++) { tiles[y * W + 0] = TILE.WATER; tiles[y * W + (W - 1)] = TILE.WATER; }
+  // 주 도로 연장 (중앙 가로 y23-24 → x62, 중앙 세로 x23-24 → y62)
+  for (let x = 46; x < W - 1; x++) { tiles[23 * W + x] = TILE.ROAD; tiles[24 * W + x] = TILE.ROAD; }
+  for (let y = 46; y < H - 1; y++) { tiles[y * W + 23] = TILE.ROAD; tiles[y * W + 24] = TILE.ROAD; }
+  map.w = W; map.h = H; map.tiles = tiles;
+  return { map, wear: newWear };
+}
+
+// §16.5.A: 공터 8곳 (7×5) — 사용 순서 = 배열 순서
+export function defaultPlots() {
+  return [
+    [50, 4], [50, 14], [50, 30], [50, 42],
+    [4, 50], [14, 50], [30, 50], [42, 50],
+  ].map(([x, y], i) => ({ plotId: i, x, y, used: false }));
+}
+
+// §16.5.B: 완공 축조 — 좌표·id 규칙은 PLAN §16.5 확정 명세 그대로 (신규/마이그레이션 동일)
+export function addBuilding(map, type, plot) {
+  const { x, y } = plot;
+  const count = map.facilities.filter((f) => f.type === type).length;
+  const id = `${type}${count}`;
+  const W = map.w;
+  const bld = (bx, by, bw, bh, dx, dy) => {
+    for (let j = by; j < by + bh; j++) for (let i = bx; i < bx + bw; i++) map.tiles[j * W + i] = TILE.WALL;
+    for (let j = by + 1; j < by + bh - 1; j++) for (let i = bx + 1; i < bx + bw - 1; i++) map.tiles[j * W + i] = TILE.FLOOR;
+    map.tiles[dy * W + dx] = TILE.FLOOR;
+  };
+  let fac;
+  if (type === 'house') {
+    bld(x, y, 6, 5, x + 2, y + 4);
+    fac = {
+      id, type, x, y, w: 6, h: 5, door: { x: x + 2, y: y + 4 },
+      resources: [
+        { id: 'bed0', kind: 'bed', x: x + 1, y: y + 1 },
+        { id: 'bed1', kind: 'bed', x: x + 4, y: y + 1 },
+      ],
+      extraBedSlots: [{ x: x + 2, y: y + 2 }, { x: x + 3, y: y + 2 }],
+    };
+  } else if (type === 'cafe') {
+    bld(x, y, 7, 5, x + 3, y + 4);
+    fac = {
+      id, type, x, y, w: 7, h: 5, door: { x: x + 3, y: y + 4 },
+      resources: [
+        { id: 'seat0', kind: 'seat', x: x + 1, y: y + 1 },
+        { id: 'seat1', kind: 'seat', x: x + 4, y: y + 1 },
+        { id: 'seat2', kind: 'seat', x: x + 1, y: y + 3 },
+        { id: 'seat3', kind: 'seat', x: x + 4, y: y + 3 },
+      ],
+    };
+  } else { // park: 무벽 스팟 6
+    fac = {
+      id, type: 'park', x, y, w: 7, h: 5, door: { x, y: y + 2 },
+      resources: Array.from({ length: 6 }, (_, k) => ({
+        id: `spot${k}`, kind: 'spot', x: x + 1 + (k % 3) * 2, y: y + 1 + Math.floor(k / 3) * 2,
+      })),
+    };
+  }
+  map.facilities.push(fac);
+  return fac;
 }
 
 export function isWalkable(map, x, y) {

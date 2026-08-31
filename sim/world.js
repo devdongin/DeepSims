@@ -1,6 +1,6 @@
 // 월드 생성 — rngWorldgen만 사용, 이후 런타임은 rngSim (PLAN §2 네임드 스트림).
 // schemaVersion 2: traits(성별·나이·MBTI·직업)·mood·world.logic 포함 (PLAN §12.1).
-import { buildMap } from './map.js';
+import { buildMap, defaultPlots } from './map.js';
 import { makeRng, rngNext, rngInt } from './prng.js';
 import { generateTraits } from './traits.js';
 import { DEFAULT_LOGIC } from './logic.js';
@@ -47,6 +47,7 @@ export function createWorld(seed) {
       plan: null,
       lastPlannedDay: -1,
       hangoverUntil: -1, // §15.1.A: t < hangoverUntil 동안 숙취
+      groceries: 0,      // §16.B 장바구니 (집밥 재료)
     });
   }
 
@@ -55,7 +56,7 @@ export function createWorld(seed) {
   const lastGreetDay = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(-1));
 
   return {
-    schemaVersion: 6,
+    schemaVersion: 8,
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),
@@ -66,6 +67,12 @@ export function createWorld(seed) {
     interactions, // 페어링 틱 카운트 (대칭, PLAN §12.1 D3)
     lastGreetDay, // 인사 하루 1회 가드 (대칭, D9)
     wear: new Array(map.w * map.h).fill(0), // 경로 마모 → 도로화 (§15.1.B)
+    weather: { day: 0, kind: 'sunny' }, // §16.D — day 0은 드로우 없이 sunny 고정 (Codex 22차 항목 1)
+    lostItems: [],   // §16.C 동적 오브젝트
+    itemCounter: 0,
+    plots: defaultPlots(), // §16.5 공터
+    project: null,         // 활성 건설 프로젝트 (최대 1)
+    lastPlanDay: -1,       // 도시계획 트리거 일일 가드
     reservations: {}, // "facilityId:resourceId" -> simId
     tokens: [],       // 활성 정보 토큰 (PLAN §F)
     tokenCounter: 0,

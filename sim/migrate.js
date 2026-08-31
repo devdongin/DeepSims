@@ -2,7 +2,7 @@
 // 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
-import { addBarTo } from './map.js';
+import { addBarTo, addVenuesTo, expandMapTo64, defaultPlots } from './map.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -52,10 +52,28 @@ export function migrateWorld(world) {
     world.wear ??= new Array(world.map.w * world.map.h).fill(0);
     for (const sim of world.sims) sim.hangoverUntil ??= -1;
   }
+  if (from < 7) {
+    // §16: 신규 시설 주입 — footprint 타일은 무조건 덮어씀 (v6에서 형성된 도로도 건물이 우선,
+    // 결정적. wear 값은 남지만 GRASS가 아니게 되어 무해). WATER는 영구 비보행 (Codex 22차 항목 3).
+    addVenuesTo(world.map.tiles, world.map.facilities);
+    world.weather ??= { day: 0, kind: 'sunny' }; // 신규 월드와 동일 초기값 — 첫 드로우는 day 경계에서
+    world.lostItems ??= [];
+    world.itemCounter ??= 0;
+    for (const sim of world.sims) sim.groceries ??= 0;
+  }
+  if (from < 8) {
+    // §16.5: 맵 64 확장(좌표 보존·경계 개방·도로 연장 — 신규 월드와 단일 헬퍼) + 공터
+    const r = expandMapTo64(world.map, world.wear);
+    world.wear = r.wear;
+    world.plots ??= defaultPlots();
+    if (world.project === undefined) world.project = null;
+    if (world.project && world.project.required === undefined) world.project.required = 600;
+    world.lastPlanDay ??= -1;
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 6;
+  world.schemaVersion = 8;
   return world;
 }

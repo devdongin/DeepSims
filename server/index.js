@@ -122,6 +122,10 @@ function sendSnapshot(ws) {
     map: engine.world.map,
     sims: engine.world.sims,
     affinity: engine.world.affinity,
+    weather: engine.world.weather,
+    lostItems: engine.world.lostItems,
+    plots: engine.world.plots,
+    project: engine.world.project,
   } });
 }
 

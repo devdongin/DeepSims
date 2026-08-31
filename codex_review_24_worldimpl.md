@@ -1,0 +1,5 @@
+1. **Major — project requirement is not snapshotted:** [tick.js:639](/Users/sundongin/WorkSpace/DeepSims/sim/tick.js:639) completes using the current `L.construct.laborRequired`, while PLAN defines `world.project.required`. A mid-project `logic_update` can change completion timing. Store `required: L.construct.laborRequired` in `project_started` and complete against that value.
+
+2. **Minor — construction completion event ordering:** When completion occurs in 4c, `facility_built`/`moved_home` can precede `action_completed` for construct workers (which settle in the next stage-3 tick). Document this intentional ordering or emit a project-completion settlement event consistently.
+
+Everything else checked out: weather initializes identically, weather is drawn first in stage 4, fish uses one stage-3 sim-id-ordered draw, item early-stop/ROAD/non-overlap ordering is deterministic, migration expands identically, pond WATER remains non-walkable, economy gates are coherent, enum append order is preserved, and §G bounds remain safe. Tests pass and the ~37–41k bench exceeds budget. **NO-GO until finding 1 is fixed.**

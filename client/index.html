@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DeepSims</title>
+  <title>DeepSims — 해솔마을</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Apple SD Gothic Neo', Pretendard, sans-serif; background: #14121a; color: #e8e2d8; overflow: hidden; }
@@ -41,8 +41,9 @@
 <body>
   <div id="app">
     <div id="topbar">
-      <h1>DeepSims</h1>
+      <h1>DeepSims <span style="font-size:12px;color:#8a8498">해솔마을</span></h1>
       <div id="clock">Day 0 00:00</div>
+      <div id="weather" style="font-size:16px">☀️</div>
       <div id="announce" style="display:none;align-items:center;gap:6px;font-size:12px">
         <select id="an-place" style="padding:3px;background:#14121a;border:1px solid #35304a;color:#e8e2d8;border-radius:4px">
           <option value="park">공원</option><option value="cafe">카페</option></select>
@@ -53,6 +54,8 @@
       <div id="status">접속 중…</div>
     </div>
     <div id="game">
+      <div id="rainfx" style="display:none;position:absolute;inset:0;pointer-events:none;z-index:5;background:repeating-linear-gradient(105deg, transparent 0 6px, rgba(140,170,220,.18) 6px 7px);animation:rainmove .35s linear infinite"></div>
+      <style>@keyframes rainmove { from { background-position: 0 0; } to { background-position: -14px 40px; } }</style>
       <div id="simpanel">
         <h3 id="simname"></h3>
         <div class="bar"><span class="label">배고픔</span><div class="track"><div class="fill" id="b-hunger" style="background:#e8a94e"></div></div></div>
