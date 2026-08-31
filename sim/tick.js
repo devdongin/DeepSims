@@ -5,7 +5,7 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding, plotBuildable, zoneFootprint } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
@@ -365,7 +365,7 @@ function applyCreatePlayer(world, inp, t, emit) {
   if (traitErr) return reject(`invalid_traits: ${traitErr}`);
 
   // 홈: 거주자 최소 집, 동수면 facilityId 오름차순 (결정적)
-  const houses = world.map.facilities.filter((f) => f.type === 'house');
+  const houses = world.map.facilities.filter(isResidence); // §18.T3 아파트 포함
   const counts = new Map(houses.map((h) => [h.id, 0]));
   for (const s of world.sims) if (counts.has(s.homeId)) counts.set(s.homeId, counts.get(s.homeId) + 1);
   const home = [...houses].sort((a, b) => (counts.get(a.id) - counts.get(b.id)) || (a.id < b.id ? -1 : 1))[0];
@@ -794,7 +794,7 @@ export function tick(world, inputsForThisTick = []) {
       plot.used = true;
       world.project = null;
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
-      if (fac.type === 'house') {
+      if (isResidence(fac)) { // §18.T3: 아파트 완공도 과밀 이사 대상
         // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
         let worst = null, worstOver = 0;
         for (const h of world.map.facilities) {
@@ -860,7 +860,7 @@ export function tick(world, inputsForThisTick = []) {
       world.lastPlanDay = day;
       const freePlot = world.plots.find((p) => !p.used && plotBuildable(world.map, p)); // §17.23 침범 방지
       if (freePlot) {
-        const beds = world.map.facilities.filter((f) => f.type === 'house')
+        const beds = world.map.facilities.filter(isResidence)
           .reduce((n, f) => n + f.resources.length, 0);
         const cafeSeats = world.map.facilities.filter((f) => f.type === 'cafe')
           .reduce((n, f) => n + f.resources.length, 0);
