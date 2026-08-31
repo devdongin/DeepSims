@@ -87,11 +87,32 @@ class TownScene extends Phaser.Scene {
 
   // 소품 배치 (Codex imagegen 에셋) — 시설 자원·맵 지형에서 위치 유도.
   // resync 재호출 시 중복 방지를 위해 기존 소품을 지우고 다시 그린다.
+  // 시설 렌더 모드: 'ext' 외형 스프라이트 / 'int' 컷어웨이 / 'tile' 타일 폴백 (이슈 #15)
+  computeFacModes() {
+    this.facMode = new Map();
+    let hi = 0;
+    for (const fac of world.map.facilities) {
+      if (!fac.w) continue;
+      let ext = fac.type === 'house' ? `bld_house_${'abc'[hi++ % 3]}` : BLD_OF_FACILITY[fac.type];
+      const intKey = fac.type === 'house' ? 'bld_house_int' : `${BLD_OF_FACILITY[fac.type]}_int`;
+      if (interiorOpen.has(fac.id)) {
+        this.facMode.set(fac.id, this.textures.exists(intKey) ? 'int' : 'tile');
+      } else {
+        this.facMode.set(fac.id, ext && this.textures.exists(ext) ? 'ext' : 'tile');
+      }
+    }
+  }
+
   drawProps() {
     if (this.propSprites) for (const p of this.propSprites) p.destroy();
     this.propSprites = [];
+    // 스프라이트/컷어웨이로 그려지는 발자국 안의 프롭은 생략 — 지붕·가구 이중 렌더 방지 (이슈 #15)
+    const coveredBy = (x, y) => world.map.facilities.find((f) => f.w
+      && x >= f.x && x < f.x + f.w && y >= f.y && y < f.y + f.h
+      && this.facMode.get(f.id) !== 'tile' && f.type !== 'park' && f.type !== 'pond');
     const put = (key, x, y, h = 26, dy = -4) => {
       if (!this.textures.exists(key)) return;
+      if (coveredBy(x, y)) return;
       const img = this.add.image(isoX(x, y), isoY(x, y) + dy, key).setOrigin(0.5, 1);
       img.setScale(h / img.height);
       img.setDepth(1000 + x + y - 0.5); // 같은 타일의 심보다 살짝 뒤
@@ -267,28 +288,28 @@ class TownScene extends Phaser.Scene {
       const lift = (t === 3 || t === 4) ? 10 : 0; // 벽·나무는 살짝 올림
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
+    this.computeFacModes();
     this.drawProps();
     let houseIdx = 0;
     for (const fac of map.facilities) {
       const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서' }[fac.type];
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
-      let bldKey = fac.type === 'house' ? `bld_house_${'abc'[houseIdx++ % 3]}` : BLD_OF_FACILITY[fac.type];
-      // §17.19 내부 모드: 컷어웨이 텍스처로 교체(없으면 스프라이트 생략 → 타일 내부 노출)
+      const mode = this.facMode.get(fac.id) ?? 'tile';
       const opened = interiorOpen.has(fac.id);
-      if (opened) {
-        const intKey = fac.type === 'house' ? 'bld_house_int' : `${BLD_OF_FACILITY[fac.type]}_int`;
-        bldKey = this.textures.exists(intKey) ? intKey : null;
-      } else {
+      let bldKey = null;
+      if (mode === 'int') {
+        bldKey = fac.type === 'house' ? 'bld_house_int' : `${BLD_OF_FACILITY[fac.type]}_int`;
+      } else if (mode === 'ext') {
+        bldKey = fac.type === 'house' ? `bld_house_${'abc'[houseIdx++ % 3]}` : BLD_OF_FACILITY[fac.type];
         // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
         const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
-        if (bldKey && (hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
-      }
-      if (bldKey && !this.textures.exists(bldKey)) bldKey = null;
+        if ((hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
+      } else if (fac.type === 'house') houseIdx++; // 변형 인덱스 일관성
       if (bldKey) {
         const cx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
         const cy = isoY(fac.x + fac.w / 2, fac.y + fac.h / 2);
         const img = this.add.image(cx, cy + TH, bldKey).setOrigin(0.5, 1);
-        const wpx = (fac.w + fac.h) / 2 * TW * 1.02; // 발자국 대각 폭에 맞춤
+        const wpx = (fac.w + fac.h) / 2 * TW; // 발자국 대각 폭 = 트림된 내용 폭 (이슈 #15)
         img.setScale(wpx / img.width);
         // 내부 모드는 북쪽 모서리 깊이 → 안의 심·가구가 위에 그려짐
         img.setDepth(opened ? 1000 + fac.x + fac.y : 1000 + fac.x + fac.w + fac.y + fac.h - 1);
