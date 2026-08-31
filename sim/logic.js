@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 17,
+  logicSchemaVersion: 18,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -31,8 +31,8 @@ export const DEFAULT_LOGIC = {
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
-    barista: { workStart: 420, workEnd: 960, wagePct: 90, startMoney: 1000 },
-    freelancer: { workStart: 300, workEnd: 1260, wagePct: 80, startMoney: 1000, flex: true },
+    barista: { workStart: 420, workEnd: 960, wagePct: 90, startMoney: 1000, weekendWork: true }, // 카페는 주말도 연다
+    freelancer: { workStart: 300, workEnd: 1260, wagePct: 80, startMoney: 1000, flex: true, weekendWork: true },
     student: { workStart: 840, workEnd: 1200, wagePct: 50, startMoney: 500 },
     retired: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 3000 },
     // §17.2 신규 직업 — 근무지는 workplace 매핑

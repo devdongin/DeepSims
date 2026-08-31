@@ -29,11 +29,15 @@ function chronoOffset(traits, L) {
   return floorDiv((chronoValue(traits) - 50) * L.chrono.maxShiftMin, 50);
 }
 
-// 개인 근무 창 { from, to } — to > 1440 은 자정 랩. wagePct 0(은퇴)은 null.
+// §17.17 주중/주말: day%7 — 0..4 주중, 5..6 주말. 교대 직업·프리랜서는 주말에도 근무(현실 반영).
+export function isWeekend(day) { return day % 7 >= 5; }
+
+// 개인 근무 창 { from, to } — to > 1440 은 자정 랩. wagePct 0(은퇴)·주말 비근무 직업은 null.
 // day 의존(필수 인자): 야근 여부가 일별 의사확률(J 성향 가중) — '오늘은 야근, 내일은 칼퇴'.
 export function workWindowFor(sim, L, day) {
   const occ = L.occupations[sim.traits.occupation];
   if (!occ || occ.wagePct === 0) return null;
+  if (isWeekend(day) && occ.shift !== 'rotating' && !occ.weekendWork) return null; // §17.17 주말 휴무
   if (occ.shift === 'rotating') {
     // 교대: 조 = id 짝홀 (결정적). A조 주간, B조 야간(랩).
     return sim.id % 2 === 0
