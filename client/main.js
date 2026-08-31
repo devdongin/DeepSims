@@ -302,7 +302,8 @@ function updateStats() {
   const couples = Object.keys(world.partners ?? {}).length / 2;
   const married = Object.values(world.partnerStage ?? {}).filter((s) => s === 'married').length / 2;
   const mayor = world.mayorId !== null && world.mayorId !== undefined ? simName(world.mayorId) : '없음';
-  el.textContent = `👥${world.sims.length} 💑${Math.floor(couples)} 💍${Math.floor(married)} 👑${mayor}`;
+  const tre = world.treasury ?? 0;
+  el.textContent = `👥${world.sims.length} 💑${Math.floor(couples)} 💍${Math.floor(married)} 👑${mayor} 🏛️${tre.toLocaleString()}원`;
 }
 
 function applyWeather() {
@@ -557,7 +558,8 @@ function eventText(e) {
     case 'action_started': return e.payload.action === 'idle' ? null : `${n}: ${ACTION_KO[e.payload.action]} 시작${reasonText(e.payload.reason)}`;
     case 'action_completed': return `${n}: ${ACTION_KO[e.payload.action]} 완료`;
     case 'action_failed': return `${n}: 행동 실패 (${e.payload.reason})`;
-    case 'money_changed': return `${n}: ${e.payload.delta > 0 ? '+' : ''}${e.payload.delta}원 (잔액 ${e.payload.balance})`;
+    case 'money_changed': return `${n}: ${e.payload.delta > 0 ? '+' : ''}${e.payload.delta}원${e.payload.tax ? ` (세금 ${e.payload.tax}원)` : ''} (잔액 ${e.payload.balance})`;
+    case 'welfare_paid': return `🏛️ 정부가 ${n}에게 생계 지원 +${e.payload.amount}원 (국고 ${e.payload.treasury}원)`;
     case 'starving': return `⚠️ ${n}이(가) 굶고 있습니다!`;
     case 'lonely': return `${n}이(가) 혼자 시간을 보냈습니다…`;
     case 'argument': return `💢 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 말다툼했습니다`;
@@ -793,6 +795,7 @@ function connect() {
         if (!world) return;
         world.worldTick = msg.toTick;
         world.sims = msg.sims;
+        if (msg.treasury !== undefined) world.treasury = msg.treasury;
         $('clock').textContent = fmtClock(world.worldTick);
         for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영

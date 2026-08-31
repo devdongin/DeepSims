@@ -815,3 +815,14 @@ traits: {
   프레임별 bbox 공통 셀 하단-중앙 정렬 = 발끝 기준선 고정) → walk{N}_{0..3}.png.
 - 클라: Phaser anims(8fps 루프) 이동 중 재생·정지 시 frame 0, dx 부호로 flipX(↘ 반전),
   발밑 타원 그림자. 프레임 미존재 원형은 구 정적 이미지 → 색 원 폴백 체인 유지. 시뮬 코어 무변경.
+
+### 17.15 라운드 7 — 경제 순환: 소득세·국고·복지 (닫힌 내수 탈피 1단계)
+- world.treasury(국고, 정수, 초기 0) — 세이브 v16. 로직 v16 economy{taxPct 15, welfareThreshold
+  300, welfareAmount 200, welfareDailyCap 5}.
+- 소득세: work 정산에서 원천징수 — net=floorDiv(wage×(100−taxPct),100), 세금은 국고.
+  money_changed payload에 tax 필드(이벤트 수 불변).
+- 시장 수당 국고화: min(수당, 국고)만 지급, 국고 0이면 미지급·무이벤트(재정난 창발).
+- 복지: 일일 평가에서 수당 다음(서브순서 고정) — 잔고<threshold 심 id asc, 국고 한도 +
+  일일 캡. 'welfare_paid' 이벤트(EVENT_TYPES 신규).
+- 보존: 임금 민트 유지(고용주=추상 외부), 소비 비용 소멸 유지 — 완전 폐쇄(기업 임금기금)는
+  후속. WS 스냅샷·tickBatch에 treasury 동봉, 상단바 🏛️ 표시.

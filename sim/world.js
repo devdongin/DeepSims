@@ -62,6 +62,7 @@ export function createWorld(seed) {
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    treasury: 0, // §17.15 국고 (세금 유입 → 복지·수당 유출)
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),

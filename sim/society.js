@@ -218,8 +218,26 @@ export function mayorStipend(world, t, emit) {
   if (world.mayorId === null) return;
   const mayor = world.sims.find((s) => s.id === world.mayorId);
   if (!mayor) return;
-  mayor.money += world.logic.election.mayorStipend;
-  emit('money_changed', mayor.id, { delta: world.logic.election.mayorStipend, balance: mayor.money, action: 'mayor' });
+  // §17.15 수당은 국고 지출 — 잔고 내에서만 (재정난이면 미지급, 이벤트 없음)
+  const pay = Math.min(world.logic.election.mayorStipend, world.treasury);
+  if (pay <= 0) return;
+  world.treasury -= pay;
+  mayor.money += pay;
+  emit('money_changed', mayor.id, { delta: pay, balance: mayor.money, action: 'mayor' });
+}
+
+// §17.15 복지: 일일 평가(수당 다음) — 잔고 < threshold 심에게 id asc, 국고 한도 + 일일 인원 캡
+export function applyWelfare(world, t, emit) {
+  const E = world.logic.economy;
+  let paid = 0;
+  for (const sim of world.sims) {
+    if (paid >= E.welfareDailyCap || world.treasury < E.welfareAmount) break;
+    if (sim.money >= E.welfareThreshold) continue;
+    world.treasury -= E.welfareAmount;
+    sim.money += E.welfareAmount;
+    paid++;
+    emit('welfare_paid', sim.id, { amount: E.welfareAmount, balance: sim.money, treasury: world.treasury });
+  }
 }
 
 // ---- §17.1 이민 ----

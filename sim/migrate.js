@@ -116,10 +116,13 @@ export function migrateWorld(world) {
     // §17.13: 치안·소방 시설 주입 (신규 월드는 buildMap 체인과 동일 헬퍼)
     addCivicVenuesTo(world.map.tiles, world.map.facilities, world.map.w);
   }
+  if (from < 16) {
+    world.treasury ??= 0; // §17.15 국고
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 15;
+  world.schemaVersion = 16;
   return world;
 }
