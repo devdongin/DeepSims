@@ -29,6 +29,15 @@ for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
   WALK_KEYS.push([`walk${i}_${f}`, `./sprites/walk${i}_${f}.png`]);
 }
 for (let f = 0; f < 4; f++) WALK_KEYS.push([`walkp_${f}`, `./sprites/walkp_${f}.png`]); // 플레이어
+for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
+  WALK_KEYS.push([`walkup${i}_${f}`, `./sprites/walkup${i}_${f}.png`]);   // 후면 걷기
+}
+for (let f = 0; f < 4; f++) WALK_KEYS.push([`walkupp_${f}`, `./sprites/walkupp_${f}.png`]);
+for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
+  WALK_KEYS.push([`pose${i}_${f}`, `./sprites/pose${i}_${f}.png`]);       // 서기↙·앉기↙·서기↖·앉기↖
+}
+for (let f = 0; f < 4; f++) WALK_KEYS.push([`posep_${f}`, `./sprites/posep_${f}.png`]);
+const SIT_ACTIONS = ['eat', 'read', 'work', 'drink', 'cook_eat', 'see_doctor', 'binge_eat'];
 // §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
 const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
@@ -239,14 +248,22 @@ class TownScene extends Phaser.Scene {
     this.syncSims();
   }
 
-  // 원형별 걷기 애니메이션 등록 (프레임이 전부 로드된 원형만)
-  ensureWalkAnim(arch) {
-    const key = `walkanim${arch}`;
+  // 원형·방향별 걷기 애니메이션 등록 (프레임이 전부 로드된 것만). dir: '' 정면 ↙, 'up' 후면 ↖
+  ensureWalkAnim(arch, dir = '') {
+    const key = `walk${dir}anim${arch}`;
     if (this.anims.exists(key)) return key;
-    const frames = [0, 1, 2, 3].map((f) => ({ key: `walk${arch}_${f}` }));
+    const frames = [0, 1, 2, 3].map((f) => ({ key: `walk${dir}${arch}_${f}` }));
     if (!frames.every((fr) => this.textures.exists(fr.key))) return null;
     this.anims.create({ key, frames, frameRate: 8, repeat: -1 });
     return key;
+  }
+
+  // 정지 포즈 텍스처: pose 시트 [0 서↙, 1 앉↙, 2 서↖, 3 앉↖] — 없으면 걷기 frame 0 폴백
+  poseTexture(arch, sitting, back) {
+    const idx = (back ? 2 : 0) + (sitting ? 1 : 0);
+    const key = `pose${arch}_${idx}`;
+    if (this.textures.exists(key)) return key;
+    return this.textures.exists(`walk${arch}_0`) ? `walk${arch}_0` : null;
   }
 
   syncSims() {
@@ -272,18 +289,32 @@ class TownScene extends Phaser.Scene {
         c.bodyRef = body; c.animKey = animKey;
         sp = c; simSprites.set(sim.id, sp);
       }
+      const arch = sim.isPlayer ? 'p' : sim.id % 10;
+      // 타일 델타로 4방향: 정/후면 = sign(ddx+ddy), 좌/우 = 화면 dx 부호(flipX)
+      const prev = sp.lastTile ?? { x: sim.x, y: sim.y };
+      const ddx = sim.x - prev.x, ddy = sim.y - prev.y;
+      sp.lastTile = { x: sim.x, y: sim.y };
       const dx = tx - sp.x;
       const moving = Math.abs(dx) + Math.abs(ty - sp.y) > 1;
       const body = sp.bodyRef;
       if (body && sp.animKey) {
         if (moving) {
-          if (dx !== 0) body.setFlipX(dx > 0); // 원본 ↙ — 오른쪽 이동 시 반전
-          body.anims.play(sp.animKey, true);
+          const back = (ddx + ddy) < 0; // 북쪽(카메라 반대)으로 이동 → 후면
+          const animKey = (back && this.ensureWalkAnim(arch, 'up')) || this.ensureWalkAnim(arch);
+          if (dx !== 0) body.setFlipX(dx > 0); // 원본 ↙/↖ — 오른쪽 이동 시 반전
+          body.anims.play(animKey, true);
+          sp.lastBack = back && this.ensureWalkAnim(arch, 'up') !== null;
           if (sp.stopTimer) { sp.stopTimer.remove(); }
           sp.stopTimer = this.time.delayedCall(950, () => {
             body.anims.stop();
-            body.setTexture(`walk${sim.isPlayer ? 'p' : sim.id % 10}_0`);
+            const sitting = sim.state?.kind === 'performing' && SIT_ACTIONS.includes(sim.state.action);
+            body.setTexture(this.poseTexture(arch, sitting, sp.lastBack) ?? `walk${arch}_0`);
           });
+        } else if (sim.state?.kind === 'performing') {
+          // 정지 수행 중: 착석 행동이면 앉기 포즈 유지
+          const sitting = SIT_ACTIONS.includes(sim.state.action);
+          const tex = this.poseTexture(arch, sitting, sp.lastBack);
+          if (tex && !body.anims.isPlaying && body.texture.key !== tex) body.setTexture(tex);
         }
       }
       this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
