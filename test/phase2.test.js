@@ -179,7 +179,7 @@ test('P2-9. v1 스냅샷 마이그레이션: traits/mood/logic 설치, 결정적
   const m1 = migrateWorld(deserialize(serialize(v1world)));
   const m2 = migrateWorld(deserialize(serialize(v1world)));
   assert.equal(hashWorld(m1), hashWorld(m2), '마이그레이션 결정적');
-  assert.equal(m1.schemaVersion, 10);
+  assert.equal(m1.schemaVersion, 11);
   assert.ok(m1.logic);
   for (const s of m1.sims) { assert.ok(s.traits); assert.equal(s.mood, 0); }
   // 마이그레이션 직후 첫 틱 정상 동작
@@ -265,9 +265,9 @@ test('P2-14. 마이그레이션 시 meta 영속화 (schemaVersion·behaviorVersi
   st.close();
   st = new Storage(dbPath);
   const loaded = st.loadOrCreate({ seed: SEED, nowUtcMs: 2000 });
-  assert.equal(loaded.world.schemaVersion, 10);
-  assert.equal(st.getMetaInt('schemaVersion'), 10);
-  assert.equal(st.getMetaInt('behaviorVersion'), 10);
+  assert.equal(loaded.world.schemaVersion, 11);
+  assert.equal(st.getMetaInt('schemaVersion'), 11);
+  assert.equal(st.getMetaInt('behaviorVersion'), 11);
   // 스냅샷도 마이그레이션된 상태로 재저장됨
   const snap = deserialize(st.db.prepare('SELECT state FROM snapshot WHERE id = 1').get().state);
   assert.ok(snap.logic);

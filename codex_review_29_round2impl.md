@@ -1,0 +1,1 @@
+GO — §17.9 implementation matches the clarified deterministic contracts; 103/103 tests and benchmark results are sufficient for commit.

@@ -31,6 +31,10 @@ export function planFactorFor(world, sim, action, facilityId, t, L) {
       }
     }
   }
+  // §17.9 유세: 후보는 사교가 곧 선거운동 (파티 끌림 다음 우선순위)
+  if (action === 'socialize' && world.campaigners.includes(sim.id)) {
+    return { factor: L.election.campaignPull, partyPull: false, campaign: true };
+  }
   const slots = sim.plan;
   if (Array.isArray(slots)) {
     const tod = t % 1440;

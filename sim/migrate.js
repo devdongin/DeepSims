@@ -97,10 +97,14 @@ export function migrateWorld(world) {
     world.immigrantCounter ??= 0;
     world.lastDailyDay ??= -1;
   }
+  if (from < 11) {
+    world.campaigners ??= [];
+    world.recentCouples ??= [];
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 10;
+  world.schemaVersion = 11;
   return world;
 }

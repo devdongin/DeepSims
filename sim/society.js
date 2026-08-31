@@ -4,6 +4,13 @@ import { recordFact } from './cognition.js';
 import { generateTraits } from './traits.js';
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
+import { learnToken as learnTokenRef } from './planning.js';
+
+// §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
+function pushRecentCouple(world, a, b, t, kind) {
+  world.recentCouples.push({ a: Math.min(a, b), b: Math.max(a, b), day: Math.floor(t / 1440), kind });
+  while (world.recentCouples.length > 8) world.recentCouples.shift();
+}
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -89,6 +96,41 @@ export function maybeElection(world, t, day, emit) {
   }
 }
 
+// §17.9 유세: D-campaignDays에 선거 규칙과 동일한 상위 2 계산·캐시, 선거 당일 직전 클리어
+export function updateCampaigners(world, day) {
+  const E = world.logic.election;
+  const next = Math.ceil(day / E.intervalDays) * E.intervalDays;
+  if (day % E.intervalDays === 0) { world.campaigners = []; return; } // 선거일: 클리어 (선거는 이후 실행)
+  if (next - day <= E.campaignDays && next - day >= 1) {
+    if (world.campaigners.length === 0) {
+      const pops = world.sims.map((s) => ({
+        id: s.id,
+        pop: world.sims.reduce((sum, o) => o.id === s.id ? sum : sum + Math.max(0, world.affinity[o.id][s.id]), 0),
+      })).filter((x) => x.pop > 0).sort((a, b) => (b.pop - a.pop) || (a.id - b.id));
+      world.campaigners = pops.slice(0, 2).map((x) => x.id);
+    }
+  } else if (world.campaigners.length > 0) {
+    world.campaigners = [];
+  }
+}
+
+// §17.9 새해: 전원 age+1, 생애 주기 전직 (일일 평가 이민 다음 — 당일 이민자도 함께 나이 먹음)
+export function maybeNewYear(world, t, day, emit) {
+  const S = world.logic.society;
+  if (day === 0 || day % S.yearDays !== 0) return;
+  emit('new_year', null, { year: floorDiv(day, S.yearDays) });
+  for (const sim of world.sims) {
+    sim.traits.age = Math.min(90, sim.traits.age + 1);
+    if (sim.traits.occupation === 'student' && sim.traits.age >= S.graduateAge) {
+      sim.traits.occupation = 'office_worker';
+      emit('graduated', sim.id, {});
+    } else if (sim.traits.occupation !== 'retired' && sim.traits.age >= S.retireAge) {
+      sim.traits.occupation = 'retired';
+      emit('retired_now', sim.id, {});
+    }
+  }
+}
+
 export function mayorStipend(world, t, emit) {
   if (world.mayorId === null) return;
   const mayor = world.sims.find((s) => s.id === world.mayorId);
@@ -168,6 +210,28 @@ export function applyRomance(world, sim, t, emit) {
       const other = world.sims.find((s) => s.id === partner);
       recordFact(sim, t, world.logic, 'wedding', { subjectSimId: partner, tags: [`sim:${partner}`, 'love'] });
       recordFact(other, t, world.logic, 'wedding', { subjectSimId: sim.id, tags: [`sim:${sim.id}`, 'love'] });
+      pushRecentCouple(world, sim.id, partner, t, 'married');
+      // §17.9 결혼식 잔치 — 회고 중 즉시 생성 (tokenCounter는 전역 단조·파이프라인 순서로 결정적)
+      const day0 = floorDiv(t, 1440);
+      const wtoken = {
+        tokenId: world.tokenCounter++,
+        topic: 'wedding',
+        originTick: t,
+        scheduledTick: (day0 + 1) * 1440 + 1140,
+        placeId: 'park',
+        expiresTick: (day0 + 1) * 1440 + 1140 + 120,
+      };
+      world.tokens.push(wtoken);
+      emit('token_created', sim.id, { tokenId: wtoken.tokenId, placeId: 'park', scheduledTick: wtoken.scheduledTick, wedding: true });
+      // 부부 + 각자의 friend 티어에게 즉시 인지 (id 오름차순)
+      const invitees = new Set([sim.id, partner]);
+      for (const s2 of world.sims) {
+        if (sim.relTiers[s2.id] === 'friend' || other.relTiers[s2.id] === 'friend') invitees.add(s2.id);
+      }
+      for (const id of [...invitees].sort((a, b) => a - b)) {
+        const guest = world.sims.find((s2) => s2.id === id);
+        if (guest) learnTokenRef(guest, wtoken, t, world.logic);
+      }
       // 이주: id 높은 쪽이 낮은 쪽 집으로 (빈 침대 있을 때만 — 없으면 건설 수요로 해소될 때까지 대기)
       const [lo, hi] = sim.id < partner ? [sim, other] : [other, sim];
       const loHome = world.map.facilities.find((f) => f.id === lo.homeId);
@@ -195,6 +259,7 @@ export function applyRomance(world, sim, t, emit) {
       world.partners[sim.id] = best.id; world.partners[best.id] = sim.id;
       world.partnerStage[sim.id] = 'dating'; world.partnerStage[best.id] = 'dating';
       emit('started_dating', sim.id, { withSimId: best.id });
+      pushRecentCouple(world, sim.id, best.id, t, 'dating');
       recordFact(sim, t, world.logic, 'love', { subjectSimId: best.id, tags: [`sim:${best.id}`, 'love'] });
       recordFact(best, t, world.logic, 'love', { subjectSimId: sim.id, tags: [`sim:${sim.id}`, 'love'] });
     }

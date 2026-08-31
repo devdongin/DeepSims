@@ -64,6 +64,32 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
         candidates.push({ key, w, about: null, detail: { occupation: speaker.traits.occupation } });
         continue;
       }
+      if (key === 'politics') {
+        // §17.9: 선거 주간(D-3~당일) + 당선 후 3일 (경계 포함)
+        const E = L.election;
+        const next = Math.ceil(day / E.intervalDays) * E.intervalDays;
+        const pre = next - day <= E.campaignDays && next - day >= 0;
+        const post = world.lastElectionDay > 0 && day - world.lastElectionDay <= 3 && day >= world.lastElectionDay;
+        if (!pre && !post) continue;
+        const about = pre
+          ? (world.campaigners[0] ?? world.mayorId)
+          : world.mayorId;
+        if (about === null || about === undefined) continue;
+        candidates.push({ key, w, about, detail: { phase: pre ? 'campaign' : 'aftermath', mayorId: world.mayorId } });
+        continue;
+      }
+      if (key === 'couple_news') {
+        // §17.9: 최근 7일 내 커플 (링 뒤에서부터 최신 우선, 경계 포함 0..7)
+        let found = null;
+        for (let i = world.recentCouples.length - 1; i >= 0; i--) {
+          const rc = world.recentCouples[i];
+          if (day - rc.day <= 7 && rc.a !== speaker.id && rc.b !== speaker.id
+            && rc.a !== listener.id && rc.b !== listener.id) { found = rc; break; }
+        }
+        if (!found) continue;
+        candidates.push({ key, w, about: found.a, detail: { otherId: found.b, kind: found.kind } });
+        continue;
+      }
       if (key === 'weather') {
         candidates.push({ key, w, about: null, detail: { kind: world.weather?.kind ?? 'sunny' } });
         continue;

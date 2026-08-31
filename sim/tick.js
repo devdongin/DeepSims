@@ -16,6 +16,7 @@ import { maybeConverse, processGreetings } from './interaction.js';
 import {
   dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
+  updateCampaigners, maybeNewYear,
 } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
@@ -705,9 +706,11 @@ export function tick(world, inputsForThisTick = []) {
       if (world.lastDailyDay !== day) {
         world.lastDailyDay = day;
         dailyDiseaseDraws(world, t, emit);
+        updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
         mayorStipend(world, t, emit);
         maybeImmigration(world, t, day, emit);
+        maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)
       }
     }
     const day = floorDiv(t, 1440);

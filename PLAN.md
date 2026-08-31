@@ -731,3 +731,20 @@ traits: {
 - **반올림·클램프**: 질병 감쇠 가산 d += floorDiv(d,2); 파트너 stateMod 보너스는 2배 후 기존
   클램프; 동아리/달콤한말/험담 델타는 부호보존 스케일 + AFFINITY 클램프; 시장 효과
   required = floorDiv(laborRequired × mayorLaborPct, 100) (프로젝트 시작 스냅샷 규칙 유지).
+
+### 17.9 사회 라운드 2 (같은 원칙: 결정적·기존 시스템 재사용)
+- **결혼식 잔치**: married 이벤트 시 공원 토큰 자동 생성(다음날 19:00, expire +120) — 부부 +
+  각자의 friend 티어 심들에게 즉시 인지(learnToken), 나머지는 입소문. 결혼이 마을 행사가 된다.
+- **선거 유세**: 선거일 D-3~D-1, 현재 인기 상위 2명은 socialize planFactor에 campaignPull(140)
+  적용(파티 끌림과 같은 슬롯 우선순위: party > campaign > slot). 유세가 상호작용을 낳고
+  상호작용이 표가 된다.
+- **대화 주제 추가**: politics(선거 D-3~당일 + 당선 후 3일, 시장/후보 실명), couple_news(마을의
+  최신 커플/부부를 실명 험담 — started_dating/married 이후 7일간 화제). 문맥 필터로만 추가,
+  가중치는 logic.conversation.topicWeights에 신규 키.
+- **새해**: day % 360 == 0 (day>0) 일일 평가 마지막에 전원 age+1 ('new_year' 이벤트 1건).
+  age>25가 된 student는 office_worker로 전직('graduated', 근무지 매핑 자동 변경).
+  퇴직: age 65 도달한 비-retired는 retired로 전직('retired_now') — 현실의 생애 주기.
+- **마을 통계 표시**(클라 전용): 상단바에 인구·커플 수·시장 이름.
+- 스키마 불변(신규 상태 없음 — 토큰·plan·traits 재사용), logic v10: conversation.topicWeights에
+  politics(25)/couple_news(25), election.campaignPull(140)·campaignDays(3), society.yearDays(360)·
+  retireAge(65)·graduateAge(26).

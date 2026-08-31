@@ -235,3 +235,55 @@ test('S-10. 전 사회 기능 분할 불변성 (30일) + 결정성', () => {
   for (const n of [10000, 1, 20000, 13199]) advance(b, {}, n); // 합 43200
   assert.equal(hashWorld(a), hashWorld(b));
 });
+
+test('S-11. §17.9: 결혼식 잔치 토큰·유세·새해 (결정적)', () => {
+  // 결혼식: S-6과 같은 세팅으로 married 유발 → 잔치 토큰이 친구들에게 인지되는지
+  const w = createWorld(SEED);
+  const [a, b] = w.sims;
+  w.partners[0] = 1; w.partners[1] = 0;
+  w.partnerStage[0] = 'dating'; w.partnerStage[1] = 'dating';
+  w.affinity[0][1] = 9500; w.affinity[1][0] = 9500;
+  w.interactions[0][1] = 400; w.interactions[1][0] = 400;
+  // 하객: 티어는 회고가 원천에서 재계산하므로 원천을 설정 (aff≥3000 && inter≥60 → friend)
+  w.affinity[0][4] = 5000; w.interactions[0][4] = 100;
+  idleAll(w, []);
+  const home = w.map.facilities.find((f) => f.id === a.homeId);
+  a.state = { kind: 'walking', action: 'sleep', facilityId: a.homeId, resourceId: 'bed0', path: [{ x: home.resources[0].x, y: home.resources[0].y }], ticksLeft: 5, pairedTicks: 0 };
+  a.x = home.resources[0].x - 1; a.y = home.resources[0].y;
+  w.reservations[`${a.homeId}:bed0`] = 0;
+  a.lastReflectedDay = -1;
+  const evs = tick(w, []);
+  assert.ok(evs.some((e) => e.type === 'married'));
+  const tok = evs.find((e) => e.type === 'token_created' && e.payload.wedding);
+  assert.ok(tok, '잔치 토큰');
+  assert.ok(w.sims[4].knownTokens.includes(tok.payload.tokenId), '하객 즉시 인지');
+  assert.equal(w.recentCouples[w.recentCouples.length - 1].kind, 'married');
+
+  // 유세: D-3에 캐시, 선거일에 클리어 후 선거
+  const w2 = createWorld(SEED);
+  for (const o of w2.sims) if (o.id !== 3) w2.affinity[o.id][3] = 8000;
+  idleAll(w2, []);
+  w2.worldTick = 27 * 1440 - 1; // day 27 = D-3
+  w2.weather.day = 27;
+  tick(w2, []);
+  assert.ok(w2.campaigners.includes(3), '유세 시작');
+  w2.worldTick = 30 * 1440 - 1;
+  w2.weather.day = 30; w2.lastDailyDay = 29;
+  const evs2 = tick(w2, []);
+  assert.ok(evs2.some((e) => e.type === 'election'));
+  assert.deepEqual(w2.campaigners, [], '선거일 클리어');
+
+  // 새해: 나이·졸업·은퇴
+  const w3 = createWorld(SEED);
+  w3.sims[0].traits = { ...w3.sims[0].traits, age: 25, occupation: 'student' };
+  w3.sims[1].traits = { ...w3.sims[1].traits, age: 64, occupation: 'office_worker' };
+  idleAll(w3, []);
+  w3.worldTick = 360 * 1440 - 1;
+  w3.weather.day = 360;
+  const evs3 = tick(w3, []);
+  assert.ok(evs3.some((e) => e.type === 'new_year'));
+  assert.ok(evs3.some((e) => e.type === 'graduated' && e.simId === 0));
+  assert.ok(evs3.some((e) => e.type === 'retired_now' && e.simId === 1));
+  assert.equal(w3.sims[0].traits.occupation, 'office_worker');
+  assert.equal(w3.sims[1].traits.occupation, 'retired');
+});

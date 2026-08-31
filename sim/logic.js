@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 9,
+  logicSchemaVersion: 10,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -104,7 +104,7 @@ export const DEFAULT_LOGIC = {
   // 대화·상호작용 (logicSchemaVersion 4): D8~D10
   conversation: {
     lineInterval: 15,          // socialize 페어의 발화 간격 (pairedTicks % interval == 1)
-    topicWeights: { food: 20, gossip: 30, memory_share: 20, weather: 10, work_gripe: 20 },
+    topicWeights: { couple_news: 25, food: 20, gossip: 30, memory_share: 20, politics: 25, weather: 10, work_gripe: 20 },
     greetingAffinity: 15,      // 인사 시 호감도(부호 보존 TF 스케일 적용 전 기본값)
     greetingSocial: 100,       // 인사 시 사교 회복
     greetingRange: 1,          // 맨해튼 거리 임계
@@ -145,6 +145,9 @@ export const DEFAULT_LOGIC = {
   // §17 사회 (logicSchemaVersion 9)
   society: {
     immigrationIntervalDays: 7,
+    yearDays: 360,           // §17.9 새해 주기 (전원 age+1)
+    graduateAge: 26,         // student → office_worker
+    retireAge: 65,           // → retired
   },
   disease: {
     basePermille: 5, starvingBonus: 30, rainBonus: 10, lowEnergyBonus: 20,
@@ -158,6 +161,8 @@ export const DEFAULT_LOGIC = {
     intervalDays: 30,
     mayorLaborPct: 90,       // 시장 재임 중 시작되는 프로젝트 노동량 ×90%
     mayorStipend: 200,       // 일일 수당
+    campaignPull: 140,       // §17.9 유세: 후보의 socialize planFactor
+    campaignDays: 3,         // 선거 D-3부터
   },
   romance: {
     datingMin: 6000, datingInteractions: 100,
@@ -367,6 +372,11 @@ function checkRanges(p, errors) {
     if (typeof w !== 'string') errors.push(`workplace.${o} 문자열 아님`);
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
+  inRange('society.yearDays', p.society.yearDays, 30, 100000);
+  inRange('society.graduateAge', p.society.graduateAge, 15, 90);
+  inRange('society.retireAge', p.society.retireAge, 15, 91);
+  inRange('election.campaignPull', p.election.campaignPull, 100, 150);
+  inRange('election.campaignDays', p.election.campaignDays, 0, 29);
   for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {
     inRange(`disease.${k}`, p.disease[k], 0, 1000);
   }

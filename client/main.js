@@ -23,7 +23,7 @@ class TownScene extends Phaser.Scene {
     // 도트 캐릭터 스프라이트 (Codex imagegen). 없으면 색 원 폴백.
     for (let i = 0; i < 10; i++) this.load.image(`sim${i}`, `./sprites/sim${i}.png`);
     this.load.image('player', './sprites/player.png');
-    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard']) {
+    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner']) {
       this.load.image(p, `./props/${p}.png`);
     }
     this.load.on('loaderror', () => { /* 폴백이 처리 */ });
@@ -99,6 +99,8 @@ class TownScene extends Phaser.Scene {
     for (const [lx, ly] of [[22, 9], [25, 22], [22, 40], [45, 24], [10, 22], [25, 38]]) put('streetlamp', lx, ly, 38, 2);
     for (const [bx, by] of [[8, 12], [16, 16], [40, 6], [6, 28], [44, 36], [18, 44]]) put('bush', bx, by, 18);
     put('cat', 16, 31, 14);
+    put('bus_stop', 3, 22, 26); // §17.1 이민자가 내리는 곳
+    if ((world.campaigners ?? []).length > 0) put('campaign_banner', 24, 21, 26); // 유세 중
     put('dog', 27, 26, 15);
     put('wedding_arch', 36, 20, 30); // 공원 결혼식 자리
   }
@@ -229,6 +231,15 @@ function syncItems() {
 }
 
 // ---- 날씨 시각화 (§16.D) ----
+function updateStats() {
+  const el = document.getElementById('stats');
+  if (!el || !world) return;
+  const couples = Object.keys(world.partners ?? {}).length / 2;
+  const married = Object.values(world.partnerStage ?? {}).filter((s) => s === 'married').length / 2;
+  const mayor = world.mayorId !== null && world.mayorId !== undefined ? simName(world.mayorId) : '없음';
+  el.textContent = `👥${world.sims.length} 💑${Math.floor(couples)} 💍${Math.floor(married)} 👑${mayor}`;
+}
+
 function applyWeather() {
   const kind = world?.weather?.kind ?? 'sunny';
   const icon = { sunny: '☀️', cloudy: '☁️', rain: '🌧️' }[kind];
@@ -342,6 +353,18 @@ function conversationLine(e) {
     case 'club_talk': {
       const cn = { book_club: '이번 책', fishing_club: '요즘 입질', fitness_club: '운동 루틴', drinking_pals: '오늘 한잔' }[d.clubId] ?? '모임';
       return pick([`${cn} 얘기 좀 하자`, `다음 모임 언제더라?`, `${cn} 어땠어?`], t);
+    }
+    case 'politics': {
+      if (d.phase === 'campaign') {
+        return pick([`이번 선거, ${about} 어때? 나쁘지 않던데`, `${about}이(가) 요즘 인사를 그렇게 하고 다닌대`, '이번엔 투표 꼭 하자'], t);
+      }
+      return pick([`${simName(d.mayorId)} 시장, 일 잘할까?`, '새 시장 됐다며? 공사가 빨라진대', '시장님 공약 기억하지?'], t);
+    }
+    case 'couple_news': {
+      const other = simName(d.otherId);
+      return d.kind === 'married'
+        ? pick([`${about}랑 ${other} 결혼했대!! 대박`, `${about}네 결혼식 얘기 들었어?`], t)
+        : pick([`${about}랑 ${other} 사귄대!`, `${about}이(가) 요즘 ${other}만 만난다?`], t);
     }
     case 'weather': {
       return pick({
@@ -498,6 +521,9 @@ function eventText(e) {
     case 'started_dating': return `💕 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 사귀기 시작했습니다!`;
     case 'married': return `💒 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 결혼했습니다! 🎉`;
     case 'broke_up': return `💔 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 헤어졌습니다…`;
+    case 'new_year': return `🎆 해솔마을의 새해가 밝았습니다! (${e.payload.year}년차)`;
+    case 'graduated': return `🎓 ${n}이(가) 학교를 졸업하고 취직했습니다`;
+    case 'retired_now': return `🌅 ${n}이(가) 은퇴했습니다. 수고하셨습니다`;
     case 'joined_club': {
       const cn = { book_club: '독서회', fishing_club: '낚시회', fitness_club: '운동모임', drinking_pals: '술벗' }[e.payload.clubId];
       return `🎪 ${n}이(가) ${cn}에 가입했습니다`;
@@ -684,6 +710,7 @@ function connect() {
         renderPanel();
         syncItems();
         applyWeather();
+        updateStats();
         break;
       case 'tickBatch':
         if (!world) return;
@@ -721,6 +748,9 @@ function connect() {
         syncItems();
         if (mapDirty && scene) scene.drawWorld();
         if (msg.events.some((e) => e.type === 'player_created')) maybeShowOnboarding();
+        if (msg.events.some((e) => ['immigrated', 'started_dating', 'married', 'broke_up', 'election'].includes(e.type))) {
+          wsRef?.send(JSON.stringify({ type: 'resync' })); // 사회 상태(파트너·시장·인구) 갱신
+        }
         if (scene) scene.syncSims();
         renderPanel();
         lsSet('deepsims.lastSeenTick', String(world.worldTick));
