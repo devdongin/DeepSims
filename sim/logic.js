@@ -163,9 +163,10 @@ export const DEFAULT_LOGIC = {
   },
   // §17.13 생활 리듬 — 크로노타입·교대·야근 (전부 분 단위 tod, 무드로우)
   chrono: {
-    earlyMax: 20, owlMin: 70,            // (EI*3+JP*5+age*7)%100 구간
-    earlyShiftMin: 90, owlShiftMin: 120, // flex 직업 근무·수면 이동량
-    overtimeJpMax: 40, overtimeMin: 120, // J형(JP≤40) 야근 +2h, 그 외 칼퇴
+    earlyMax: 20, owlMin: 70,            // 라벨 구간 (표시용 — 로직은 연속 오프셋)
+    maxShiftMin: 120,                    // 연속 크로노 오프셋 ±상한 (v 0..99 선형)
+    overtimeProbPct: 70,                 // 야근 의사확률 상한: p=(100-JP)×70/100 (일별 dayHash)
+    overtimeMinBase: 60, overtimeMinSpan: 90, // 야근 길이 60 + (100-JP)×90/100 그라데이션
     dayShiftStart: 540, dayShiftEnd: 1080,
     nightShiftStart: 1320, nightShiftEnd: 1800,  // 자정 랩 (to>1440)
     sleepStart: 1350, sleepLenMin: 450,
@@ -397,10 +398,10 @@ function checkRanges(p, errors) {
   inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);
   inRange('chrono.earlyMax', p.chrono.earlyMax, 0, 100);
   inRange('chrono.owlMin', p.chrono.owlMin, 0, 100);
-  inRange('chrono.earlyShiftMin', p.chrono.earlyShiftMin, 0, 480);
-  inRange('chrono.owlShiftMin', p.chrono.owlShiftMin, 0, 480);
-  inRange('chrono.overtimeJpMax', p.chrono.overtimeJpMax, 0, 100);
-  inRange('chrono.overtimeMin', p.chrono.overtimeMin, 0, 480);
+  inRange('chrono.maxShiftMin', p.chrono.maxShiftMin, 0, 480);
+  inRange('chrono.overtimeProbPct', p.chrono.overtimeProbPct, 0, 100);
+  inRange('chrono.overtimeMinBase', p.chrono.overtimeMinBase, 0, 480);
+  inRange('chrono.overtimeMinSpan', p.chrono.overtimeMinSpan, 0, 480);
   inRange('chrono.dayShiftStart', p.chrono.dayShiftStart, 0, 1439);
   inRange('chrono.dayShiftEnd', p.chrono.dayShiftEnd, 1, 1440);
   inRange('chrono.nightShiftStart', p.chrono.nightShiftStart, 0, 1439);

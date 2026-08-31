@@ -5,7 +5,8 @@ import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
 import { applyRomance } from '../sim/society.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
-import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronotypeOf as chronotypeOfRef } from '../sim/chrono.js';
+import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronoValue as chronoValueRef } from '../sim/chrono.js';
+import { buildDailyPlan as buildDailyPlanRef } from '../sim/planning.js';
 
 const SEED = 7777;
 
@@ -31,7 +32,7 @@ function pairAt(w, ids, facId = 'park', ticks = 200) {
 test('S-1. 질병: 위험 인자에 따른 발병 + 전염 + 자연 치유, 전부 결정적', () => {
   const run = () => {
     const w = createWorld(SEED);
-    const evs = advance(w, {}, 20 * 1440);
+    const evs = advance(w, {}, 40 * 1440); // 일정 개인화로 위험 인자가 줄어 20일론 부족 (§17.13)
     return {
       sick: evs.filter((e) => e.type === 'fell_sick').map((e) => `${e.tick}:${e.simId}`).join(','),
       rec: evs.filter((e) => e.type === 'recovered').length,
@@ -431,35 +432,51 @@ test('S-16. v14+ 마이그레이션: required 없는 진행 중 프로젝트 백
   assert.equal(m.project, null);
 });
 
-test('S-17. §17.13 생활 리듬: 크로노타입·야근·교대·수면 슬롯·월간 자녀', () => {
+test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수면 정규화·월간 자녀·연 노화', () => {
   const w = createWorld(SEED);
   const L = w.logic;
-  // 신규 시설 존재
   assert.ok(w.map.facilities.some((f) => f.id === 'police_station'), '경찰서');
   assert.ok(w.map.facilities.some((f) => f.id === 'fire_station'), '소방서');
-  // flex + J형(JP≤40) → 야근 +overtimeMin
+  // 야근 의사확률: J(JP=0)가 P(JP=100)보다 확실히 잦다 + 길이는 그라데이션 (이분 컷 금지)
   const s = w.sims[0];
-  s.traits = { ...s.traits, age: 30, occupation: 'office_worker', mbti: { ...s.traits.mbti, EI: 50, JP: 20 } };
-  const ww = workWindowForRef(s, L);
   const base = L.occupations.office_worker;
-  const chronoV = (50 * 3 + 20 * 5 + 30 * 7) % 100; // 60 → normal (오프셋 0)
-  assert.ok(chronoV >= L.chrono.earlyMax && chronoV < L.chrono.owlMin, '전제: normal');
-  assert.equal(ww.to, base.workEnd + L.chrono.overtimeMin, 'J형 야근');
-  // P형(JP 80) → 칼퇴
-  s.traits.mbti.JP = 80; // v = 60+300+... 재계산되지만 to는 overtime 없이
-  const ww2 = workWindowForRef(s, L);
-  assert.ok(ww2.to === base.workEnd + (chronotypeOfRef(s.traits, L) === 'owl' ? L.chrono.owlShiftMin : chronotypeOfRef(s.traits, L) === 'early' ? -L.chrono.earlyShiftMin : 0), '칼퇴(크로노 오프셋만)');
-  // 교대: police 홀수 id → 야간 랩 창
+  let jDays = 0; let pDays = 0;
+  for (let d = 0; d < 60; d++) {
+    s.traits = { ...s.traits, age: 30, occupation: 'office_worker', mbti: { ...s.traits.mbti, EI: 50, JP: 0 } };
+    const wwJ = workWindowForRef(s, L, d);
+    const offJ = Math.floor((chronoValueRef(s.traits) - 50) * L.chrono.maxShiftMin / 50);
+    if (wwJ.to - (base.workEnd + offJ) > 0) {
+      jDays++;
+      assert.equal(wwJ.to - (base.workEnd + offJ), L.chrono.overtimeMinBase + L.chrono.overtimeMinSpan, 'JP=0 야근 길이');
+    }
+    s.traits.mbti.JP = 100;
+    const wwP = workWindowForRef(s, L, d);
+    const offP = Math.floor((chronoValueRef(s.traits) - 50) * L.chrono.maxShiftMin / 50);
+    if (wwP.to - (base.workEnd + offP) > 0) pDays++;
+  }
+  assert.ok(jDays >= 25, `J형 야근 일수 (${jDays}/60)`);
+  assert.equal(pDays, 0, 'JP=100은 야근 확률 0');
+  // 교대 랩 + 야간조 주간 수면 + 수면 창 자정 정규화 (from < 1440 항상)
   const p = w.sims[1];
   p.traits = { ...p.traits, age: 30, occupation: 'police' };
-  const nw = workWindowForRef(p, L);
+  const nw = workWindowForRef(p, L, 0);
   assert.equal(nw.from, L.chrono.nightShiftStart);
   assert.ok(nw.to > 1440, '자정 랩');
   assert.ok(slotMatchesRef(nw, 1400) && slotMatchesRef(nw, 100) && !slotMatchesRef(nw, 600), '랩 매칭');
-  // 야간조 수면 슬롯은 주간
-  const sw = sleepWindowForRef(p, L);
-  assert.equal(sw.from, L.chrono.daySleepStart);
-  // 월간 자녀: day 30 경계에서도 평가 (S-13은 360 — 여기선 30)
+  assert.equal(sleepWindowForRef(p, L).from, L.chrono.daySleepStart, '야간조 주간 수면');
+  for (const sim2 of w.sims) {
+    const sw = sleepWindowForRef({ ...sim2, traits: { ...sim2.traits, occupation: 'office_worker' } }, L);
+    assert.ok(sw.from >= 0 && sw.from < 1440, '수면 창 정규화');
+  }
+  // 여가 의도가 EI 가중 의사확률로 날마다 변주 (이분 고정 금지)
+  const intents = new Set();
+  for (let d = 0; d < 30; d++) {
+    const s3 = { ...w.sims[2], traits: { ...w.sims[2].traits, mbti: { ...w.sims[2].traits.mbti, EI: 50 } } };
+    const plan = buildDailyPlanRef(s3, L, d);
+    intents.add(plan.find((sl) => sl.intent === 'socialize' || sl.intent === 'play').intent);
+  }
+  assert.equal(intents.size, 2, 'EI=50이면 사교/혼자 놀기가 섞여 나온다');
+  // 월간 자녀 + 연 단위 노화 회귀 (Codex 34차 major): day 30엔 나이 불변
   const w2 = createWorld(SEED);
   w2.logic = JSON.parse(JSON.stringify(w2.logic));
   w2.logic.family.childPermille = 1000;
@@ -467,9 +484,13 @@ test('S-17. §17.13 생활 리듬: 크로노타입·야근·교대·수면 슬�
   b2.homeId = a2.homeId;
   w2.partners[0] = 1; w2.partners[1] = 0;
   w2.partnerStage[0] = 'married'; w2.partnerStage[1] = 'married';
+  const agesBefore = w2.sims.map((x) => x.traits.age);
   idleAll(w2, []);
   w2.worldTick = 30 * 1440 - 1;
   w2.weather.day = 30; w2.lastDailyDay = 29; w2.lastPlanDay = 30;
   const evs = tick(w2, []);
   assert.ok(evs.some((e) => e.type === 'child_settled'), '월간 자녀 평가');
+  assert.ok(!evs.some((e) => e.type === 'new_year'), 'day 30엔 새해 아님');
+  w2.sims.slice(0, agesBefore.length).forEach((x, i) => assert.equal(x.traits.age, agesBefore[i], '노화는 연 단위'));
 });
+

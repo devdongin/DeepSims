@@ -90,7 +90,7 @@ function actionBlockReason(world, sim, action, t) {
   const cost = L.actions[action]?.cost ?? 0;
   if (cost > 0 && sim.money < cost) return 'no_money';
   if (action === 'work') {
-    const ww = workWindowFor(sim, L); // §17.13 크로노타입·야근·교대 반영 (단일 권위)
+    const ww = workWindowFor(sim, L, floorDiv(t, 1440)); // §17.13 단일 권위 (일별 야근 포함)
     if (!ww) return 'off_hours';
     if (!slotMatches(ww, t % 1440)) return 'off_hours';
   }
@@ -598,7 +598,7 @@ export function tick(world, inputsForThisTick = []) {
         }
         const day = floorDiv(t, 1440); // 틱 내부 날짜 규약
         if (sim.lastPlannedDay === undefined || sim.lastPlannedDay < day) {
-          sim.plan = buildDailyPlan(sim, L);
+          sim.plan = buildDailyPlan(sim, L, floorDiv(t, 1440));
           sim.lastPlannedDay = day;
         }
       }

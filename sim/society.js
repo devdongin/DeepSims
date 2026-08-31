@@ -117,7 +117,7 @@ export function updateCampaigners(world, day) {
 // §17.9 새해: 전원 age+1, 생애 주기 전직 (일일 평가 이민 다음 — 당일 이민자도 함께 나이 먹음)
 export function maybeNewYear(world, t, day, emit) {
   const S = world.logic.society;
-  if (day === 0 || day % S.childCheckDays !== 0) return; // §17.13 월간 평가 (나이는 새해 유지)
+  if (day === 0 || day % S.yearDays !== 0) return; // §17.9 새해 — 노화·졸업·은퇴는 연 단위 유지
   emit('new_year', null, { year: floorDiv(day, S.yearDays) });
   for (const sim of world.sims) {
     sim.traits.age = Math.min(90, sim.traits.age + 1);
