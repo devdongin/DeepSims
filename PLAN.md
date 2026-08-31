@@ -840,3 +840,8 @@ traits: {
 - 예외: 교대(rotating)·weekendWork 직업(barista, freelancer)은 주말에도 근무 — 현실의 서비스업.
 - 주말 여가 슬롯 확장: 아침 식사 후부터 여가(빠진 근무 자리를 여가가 채움) — 주말 공원·카페가
   붐비는 창발. 로직 v18(occupations.weekendWork).
+
+### 17.18 라운드 10 — 삼각 폐쇄 (논문 로드맵 P2-④)
+- pairDeltaBonus 확장: 양방 'friend'인 공통 친구 수 × perFriendBonus(8), maxCommon(3) 캡.
+  무드로우·그라데이션 — 친구의 친구와는 빨리 가까워진다(Science Advances aax7310).
+- 로직 v19(triad). 기존 커플·가족·동아리 보너스와 합산.
