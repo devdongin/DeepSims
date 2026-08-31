@@ -2,7 +2,7 @@
 // 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
-import { addBarTo, addVenuesTo, addSocietyVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512 } from './map.js';
+import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512 } from './map.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -101,10 +101,13 @@ export function migrateWorld(world) {
     world.campaigners ??= [];
     world.recentCouples ??= [];
   }
+  if (from < 12) {
+    addLeisureVenuesTo(world.map.tiles, world.map.facilities, world.map.w); // §17.10
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 11;
+  world.schemaVersion = 12;
   return world;
 }

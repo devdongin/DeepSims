@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 9,
+  "logicSchemaVersion": 11,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -278,9 +278,11 @@
   "conversation": {
     "lineInterval": 15,
     "topicWeights": {
+      "couple_news": 25,
       "food": 20,
       "gossip": 30,
       "memory_share": 20,
+      "politics": 25,
       "weather": 10,
       "work_gripe": 20
     },
@@ -326,7 +328,11 @@
     "parkRatio": 1
   },
   "society": {
-    "immigrationIntervalDays": 7
+    "immigrationIntervalDays": 7,
+    "yearDays": 360,
+    "graduateAge": 26,
+    "retireAge": 65,
+    "festivalDays": 90
   },
   "disease": {
     "basePermille": 5,
@@ -342,7 +348,9 @@
   "election": {
     "intervalDays": 30,
     "mayorLaborPct": 90,
-    "mayorStipend": 200
+    "mayorStipend": 200,
+    "campaignPull": 140,
+    "campaignDays": 3
   },
   "romance": {
     "datingMin": 6000,

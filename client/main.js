@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c };
-const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a };
+const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a, restaurant: 0xd4885a, gym: 0x5ad4a8, cinema: 0x6a5ad4 };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
 
 let world = null;
@@ -18,16 +18,23 @@ const isoX = (x, y) => (x - y) * (TW / 2);
 const isoY = (x, y) => (x + y) * (TH / 2);
 
 // ---- Phaser ----
+// 에셋 목록 — Phaser 로더가 임베디드 환경에서 32개+ 동시 로드 시 멈추는 문제를 피해
+// 브라우저 네이티브 Image로 직접 프리로드 후 textures.addImage로 주입한다.
+const SPRITE_KEYS = [...Array.from({ length: 10 }, (_, i) => [`sim${i}`, `./sprites/sim${i}.png`]), ['player', './sprites/player.png']];
+const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern']
+  .map((p) => [p, `./props/${p}.png`]);
+
+function loadImagesNative() {
+  const entries = [...SPRITE_KEYS, ...PROP_KEYS];
+  return Promise.all(entries.map(([key, url]) => new Promise((res) => {
+    const img = new Image();
+    img.onload = () => res([key, img]);
+    img.onerror = () => res([key, null]); // 실패 시 폴백(색 도형)
+    img.src = url;
+  })));
+}
+
 class TownScene extends Phaser.Scene {
-  preload() {
-    // 도트 캐릭터 스프라이트 (Codex imagegen). 없으면 색 원 폴백.
-    for (let i = 0; i < 10; i++) this.load.image(`sim${i}`, `./sprites/sim${i}.png`);
-    this.load.image('player', './sprites/player.png');
-    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner']) {
-      this.load.image(p, `./props/${p}.png`);
-    }
-    this.load.on('loaderror', () => { /* 폴백이 처리 */ });
-  }
 
   // 소품 배치 (Codex imagegen 에셋) — 시설 자원·맵 지형에서 위치 유도.
   // resync 재호출 시 중복 방지를 위해 기존 소품을 지우고 다시 그린다.
@@ -75,6 +82,15 @@ class TownScene extends Phaser.Scene {
         for (const r of fac.resources) put('desk', r.x, r.y, 22);
       } else if (fac.type === 'school') {
         for (const r of fac.resources) put('school_desk', r.x, r.y, 22);
+      } else if (fac.type === 'restaurant') {
+        for (const r of fac.resources) put('restaurant_table', r.x, r.y, 24);
+      } else if (fac.type === 'gym') {
+        put('gym_rack', fac.x + 3, fac.y + 2, 24);
+        for (const r of fac.resources) put('dumbbell', r.x, r.y, 16);
+      } else if (fac.type === 'cinema') {
+        put('cinema_screen', fac.x + 4, fac.y + 1, 30);
+        put('popcorn', fac.door.x + 1, fac.door.y + 1, 16);
+        for (const r of fac.resources) put('bench', r.x, r.y, 18);
       } else if (fac.type === 'park') {
         fac.resources.forEach((r, i) => {
           if (i < 4) put('bench', r.x, r.y, 22);
@@ -101,12 +117,23 @@ class TownScene extends Phaser.Scene {
     put('cat', 16, 31, 14);
     put('bus_stop', 3, 22, 26); // §17.1 이민자가 내리는 곳
     if ((world.campaigners ?? []).length > 0) put('campaign_banner', 24, 21, 26); // 유세 중
+    if ((world.tokens ?? []).some((tk) => tk.topic === 'festival')) {
+      put('festival_lantern', 33, 11, 30);
+      put('festival_lantern', 39, 11, 30);
+    }
     put('dog', 27, 26, 15);
     put('wedding_arch', 36, 20, 30); // 공원 결혼식 자리
   }
 
   create() {
     scene = this;
+    // 네이티브 프리로드 결과 주입 (게임 부팅과 병행 — 완료 시 재드로우)
+    loadImagesNative().then((pairs) => {
+      for (const [key, img] of pairs) {
+        if (img && !this.textures.exists(key)) this.textures.addImage(key, img);
+      }
+      if (world) { simSprites.forEach((s) => s.destroy()); simSprites.clear(); this.drawWorld(); }
+    });
     this.cameras.main.setBackgroundColor('#14121a');
     this.mapLayer = this.add.graphics();
     const center = () => this.cameras.main.centerOn(isoX(32, 32), isoY(32, 32)); // 구시가 중심 (128맵)
@@ -169,7 +196,7 @@ class TownScene extends Phaser.Scene {
     }
     this.drawProps();
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교' }[fac.type];
+      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관' }[fac.type];
       const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - 24;
       this.add.text(tx, ty, label, { fontSize: '11px', color: '#ffd97a', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
       g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
@@ -274,7 +301,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
   scene.tweens.add({ targets: t, y: y - 14, alpha: 0.2, duration: ms, onComplete: () => t.destroy() });
 }
 
-const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터' };
+const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', site: '공사장' };
 function placeKo(id) {
   if (!id) return '동네';
   if (id.startsWith('house')) return '집';
@@ -415,6 +442,11 @@ function handleVisualEvent(e) {
     case 'married': showBubble(e.simId, '💒🎉', 4000); showBubble(e.payload.withSimId, '💒🎉', 4000); break;
     case 'broke_up': showBubble(e.simId, '💔', 3500); showBubble(e.payload.withSimId, '💔', 3500); break;
     case 'election': showBubble(e.simId, '🗳️👑', 4000); break;
+    case 'festival': {
+      const park = world?.map.facilities.find((f) => f.type === 'park');
+      if (park) showEmoteAt(isoX(park.x + 8, park.y + 5), isoY(park.x + 8, park.y + 5) - 30, '🏮🎆', 5000);
+      break;
+    }
     case 'starving': showBubble(e.simId, '🍚…!', 3000); break;
     case 'gathering': {
       const fac = world?.map.facilities.find((f) => f.id === e.payload.placeId);
@@ -522,6 +554,7 @@ function eventText(e) {
     case 'married': return `💒 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 결혼했습니다! 🎉`;
     case 'broke_up': return `💔 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 헤어졌습니다…`;
     case 'new_year': return `🎆 해솔마을의 새해가 밝았습니다! (${e.payload.year}년차)`;
+    case 'festival': return `🏮 해솔마을 축제가 오늘 저녁 공원에서 열립니다! 모두 오세요!`;
     case 'graduated': return `🎓 ${n}이(가) 학교를 졸업하고 취직했습니다`;
     case 'retired_now': return `🌅 ${n}이(가) 은퇴했습니다. 수고하셨습니다`;
     case 'joined_club': {

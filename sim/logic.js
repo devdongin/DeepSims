@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 10,
+  logicSchemaVersion: 11,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -148,6 +148,7 @@ export const DEFAULT_LOGIC = {
     yearDays: 360,           // §17.9 새해 주기 (전원 age+1)
     graduateAge: 26,         // student → office_worker
     retireAge: 65,           // → retired
+    festivalDays: 90,        // §17.10 마을 축제 주기
   },
   disease: {
     basePermille: 5, starvingBonus: 30, rainBonus: 10, lowEnergyBonus: 20,
@@ -172,7 +173,7 @@ export const DEFAULT_LOGIC = {
     sweetTalkDelta: 8,       // 파트너 대화 상호 호감 가산(스케일 전)
   },
   club: {
-    habitMin: 20000000000,   // 가입 임계 (habit 값)
+    habitMin: 10000000000,   // 가입 임계 (습관 형성 하루면 충분 — 120일 소크 튜닝)
     pairBonus: 10,           // 동료 페어링 호감 가산(스케일 전)
     talkDelta: 5,
   },
@@ -375,6 +376,7 @@ function checkRanges(p, errors) {
   inRange('society.yearDays', p.society.yearDays, 30, 100000);
   inRange('society.graduateAge', p.society.graduateAge, 15, 90);
   inRange('society.retireAge', p.society.retireAge, 15, 91);
+  inRange('society.festivalDays', p.society.festivalDays, 7, 100000);
   inRange('election.campaignPull', p.election.campaignPull, 100, 150);
   inRange('election.campaignDays', p.election.campaignDays, 0, 29);
   for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {

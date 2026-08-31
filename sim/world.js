@@ -60,7 +60,7 @@ export function createWorld(seed) {
   const lastGreetDay = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(-1));
 
   return {
-    schemaVersion: 11,
+    schemaVersion: 12,
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),

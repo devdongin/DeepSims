@@ -131,6 +131,23 @@ export function maybeNewYear(world, t, day, emit) {
   }
 }
 
+// §17.10 축제: 전 주민이 즉시 아는 마을 행사
+export function maybeFestival(world, t, day, emit) {
+  const S = world.logic.society;
+  if (day === 0 || day % S.festivalDays !== 0) return;
+  const token = {
+    tokenId: world.tokenCounter++,
+    topic: 'festival',
+    originTick: t,
+    scheduledTick: day * 1440 + 1140,
+    placeId: 'park',
+    expiresTick: day * 1440 + 1140 + 180,
+  };
+  world.tokens.push(token);
+  emit('festival', null, { tokenId: token.tokenId, scheduledTick: token.scheduledTick });
+  for (const sim of world.sims) learnTokenRef(sim, token, t, world.logic);
+}
+
 export function mayorStipend(world, t, emit) {
   if (world.mayorId === null) return;
   const mayor = world.sims.find((s) => s.id === world.mayorId);

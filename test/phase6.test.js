@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, DEFAULT_LOGIC } from '../sim/index.js';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { serialize, deserialize } from '../sim/serialize.js';
 import { recordFact, runReflection } from '../sim/cognition.js';
@@ -168,5 +169,5 @@ test('R-D1. 전 기능 통합 분할 불변성 (12일) + 마이그레이션 v5�
   const m2 = migrateWorld(deserialize(serialize(v5)));
   assert.equal(hashWorld(m1), hashWorld(m2));
   assert.ok(m1.map.facilities.some((f) => f.id === 'bar'), '술집 주입');
-  assert.equal(m1.schemaVersion, 11);
+  assert.equal(m1.schemaVersion, SCHEMA_VERSION);
 });

@@ -155,6 +155,7 @@ export function buildMap() {
   expandMapTo128(map, null);
   expandMapTo512(map, null);
   addSocietyVenuesTo(map.tiles, map.facilities, map.w);
+  addLeisureVenuesTo(map.tiles, map.facilities, map.w);
   return map;
 }
 
@@ -257,6 +258,42 @@ export function addSocietyVenuesTo(tiles, facilities, W) {
       id: 'school', type: 'school', x: 44, y: 56, w: 7, h: 5, door: { x: 47, y: 56 },
       resources: [0, 1, 2].map((k) => ({
         id: `slot${k}`, kind: 'slot', x: 45 + k * 2, y: 58,
+      })),
+    });
+  }
+}
+
+// §17.10: 여가 시설 — restaurant/gym/cinema (단일 권위)
+export function addLeisureVenuesTo(tiles, facilities, W) {
+  const bld = (bx, by, bw, bh, dx, dy) => {
+    for (let j = by; j < by + bh; j++) for (let i = bx; i < bx + bw; i++) tiles[j * W + i] = TILE.WALL;
+    for (let j = by + 1; j < by + bh - 1; j++) for (let i = bx + 1; i < bx + bw - 1; i++) tiles[j * W + i] = TILE.FLOOR;
+    tiles[dy * W + dx] = TILE.FLOOR;
+  };
+  if (!facilities.some((f) => f.id === 'restaurant')) {
+    bld(72, 26, 7, 5, 75, 26);
+    facilities.push({
+      id: 'restaurant', type: 'restaurant', x: 72, y: 26, w: 7, h: 5, door: { x: 75, y: 26 },
+      resources: [0, 1, 2, 3].map((k) => ({
+        id: `seat${k}`, kind: 'seat', x: 73 + (k % 2) * 4, y: 27 + Math.floor(k / 2) * 2,
+      })),
+    });
+  }
+  if (!facilities.some((f) => f.id === 'gym')) {
+    bld(72, 34, 7, 5, 75, 34);
+    facilities.push({
+      id: 'gym', type: 'gym', x: 72, y: 34, w: 7, h: 5, door: { x: 75, y: 34 },
+      resources: [0, 1, 2, 3].map((k) => ({
+        id: `spot${k}`, kind: 'spot', x: 73 + (k % 2) * 4, y: 35 + Math.floor(k / 2) * 2,
+      })),
+    });
+  }
+  if (!facilities.some((f) => f.id === 'cinema')) {
+    bld(72, 42, 8, 6, 75, 42);
+    facilities.push({
+      id: 'cinema', type: 'cinema', x: 72, y: 42, w: 8, h: 6, door: { x: 75, y: 42 },
+      resources: [0, 1, 2, 3, 4, 5].map((k) => ({
+        id: `seat${k}`, kind: 'seat', x: 73 + (k % 3) * 2, y: 44 + Math.floor(k / 3) * 2,
       })),
     });
   }

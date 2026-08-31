@@ -748,3 +748,14 @@ traits: {
 - 스키마 불변(신규 상태 없음 — 토큰·plan·traits 재사용), logic v10: conversation.topicWeights에
   politics(25)/couple_news(25), election.campaignPull(140)·campaignDays(3), society.yearDays(360)·
   retireAge(65)·graduateAge(26).
+
+### 17.10 라운드 3 — 실내 여가·축제 (오브젝트 다양화)
+- 신규 시설(addLeisureVenuesTo, 단일 권위): restaurant(70,26) 7×5 좌석4 — eat 제2 시설(인구 수용),
+  gym(70,34) 7×5 스팟4 — exercise 실내 대안(우천 무페널티), cinema(70,44) 8×6 좌석6 — play 실내
+  대안. **enum 불변** — ACTION_FACILITY 확장만: eat:[cafe,restaurant], exercise:[park,gym],
+  play:[park,cinema]. binge_eat도 restaurant 포함.
+- **축제**: day % festivalDays(90) == 0 && day>0 일일 평가 마지막에 공원 토큰(당일 19:00, expire
+  +180) — **전 주민 즉시 인지**(축제는 모두가 안다), 'festival' 이벤트, 클라 🎆.
+- 스키마 불변(신규 상태 없음), 로직 v11: society.festivalDays(90), 시설은 v12 마이그레이션으로 주입.
+  (시설 주입은 맵 상태라 세이브 v12 필요 — 정정.)
+- 에셋: restaurant_table, gym_rack, cinema_screen, popcorn, festival_lantern (5종).

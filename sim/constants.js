@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -19,10 +19,11 @@ export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat']; // 자기 집
 
 // 행동 → 시설 타입 (구조), 행동 → 회복 욕구 (구조)
 export const ACTION_FACILITY = {
-  eat: ['cafe'], sleep: ['house'], work: ['office'],
-  socialize: ['cafe', 'park'], play: ['park'], idle: [],
-  drink: ['bar'], binge_eat: ['cafe'], hole_up: ['house'], exercise: ['park'], build: ['house'],
+  eat: ['cafe', 'restaurant'], sleep: ['house'], work: ['office'],
+  socialize: ['cafe', 'park'], idle: [],
+  drink: ['bar'], binge_eat: ['cafe', 'restaurant'], hole_up: ['house'], exercise: ['park', 'gym'], build: ['house'],
   read: ['library'], shop: ['market'], fish: ['pond'], cook_eat: ['house'],
+  play: ['park', 'cinema'],
   construct: [], // 가상 현장(site) — collectCandidates 특수 경로 (§16.5.B)
   see_doctor: ['hospital'],
 };
@@ -43,7 +44,7 @@ export const EVENT_TYPES = [
   'item_spawned', 'item_found', 'weather_changed', 'fish_caught',
   'project_started', 'facility_built', 'moved_home',
   'immigrated', 'fell_sick', 'recovered', 'election', 'started_dating', 'married', 'broke_up',
-  'joined_club', 'mayor_stipend', 'new_year', 'graduated', 'retired_now',
+  'joined_club', 'mayor_stipend', 'new_year', 'graduated', 'retired_now', 'festival',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce'];

@@ -287,3 +287,31 @@ test('S-11. §17.9: 결혼식 잔치 토큰·유세·새해 (결정적)', () => 
   assert.equal(w3.sims[0].traits.occupation, 'office_worker');
   assert.equal(w3.sims[1].traits.occupation, 'retired');
 });
+
+test('S-12. §17.10: 실내 여가·축제', () => {
+  const w = createWorld(SEED);
+  for (const id of ['restaurant', 'gym', 'cinema']) {
+    assert.ok(w.map.facilities.some((f) => f.id === id), id);
+  }
+  // 비 오는 날: gym에서 exercise 후보가 실내라 무페널티 (play도 cinema 가능)
+  const s = w.sims[0];
+  idleAll(w, []);
+  resetIdle(s);
+  w.reservations = {};
+  s.traits = { ...s.traits, age: 40, occupation: 'freelancer', mbti: { EI: 50, SN: 50, TF: 0, JP: 50 } }; // T형: 운동 성향
+  s.needs = { hunger: 9500, energy: 9500, social: 9500, fun: 9500 };
+  s.money = 10000; s.mood = -8000; // coping → exercise 예상 (T형)
+  w.weather = { day: 0, kind: 'rain' };
+  tick(w, []);
+  assert.equal(s.state.action, 'exercise');
+  // coping은 거리 무시 den=16이라 시설은 타이브레이크: park가 gym보다 facilityId 사전순 뒤 → gym
+  assert.equal(s.state.facilityId, 'gym', `실내 운동 (실제: ${s.state.facilityId})`);
+  // 축제: day 90 경계
+  const w2 = createWorld(SEED);
+  idleAll(w2, []);
+  w2.worldTick = 90 * 1440 - 1;
+  w2.weather.day = 90; w2.lastDailyDay = 89;
+  const evs = tick(w2, []);
+  assert.ok(evs.some((e) => e.type === 'festival'), '축제');
+  assert.ok(w2.sims.every((x) => x.knownTokens.length > 0), '전 주민 인지');
+});

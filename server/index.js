@@ -133,6 +133,8 @@ function sendSnapshot(ws) {
     partnerStage: engine.world.partnerStage,
     mayorId: engine.world.mayorId,
     clubs: engine.world.clubs,
+    campaigners: engine.world.campaigners,
+    tokens: engine.world.tokens,
   } });
 }
 

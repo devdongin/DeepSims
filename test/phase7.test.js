@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { serialize, deserialize } from '../sim/serialize.js';
 
@@ -104,7 +105,7 @@ test('W-6. v6→v7 마이그레이션: 시설 주입·상태 추가·결정성',
   assert.equal(hashWorld(m1), hashWorld(m2));
   assert.ok(m1.map.facilities.some((f) => f.id === 'pond'));
   assert.deepEqual(m1.weather, { day: 0, kind: 'sunny' });
-  assert.equal(m1.schemaVersion, 11);
+  assert.equal(m1.schemaVersion, SCHEMA_VERSION);
   // 마이그레이션 직후 진행 정상
   advance(m1, {}, 100);
 });
