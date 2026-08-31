@@ -38,6 +38,22 @@ for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
 }
 for (let f = 0; f < 4; f++) WALK_KEYS.push([`posep_${f}`, `./sprites/posep_${f}.png`]);
 const SIT_ACTIONS = ['eat', 'read', 'work', 'drink', 'cook_eat', 'see_doctor', 'binge_eat'];
+// 직업 → 스프라이트 원형 (제복 정합): 경찰은 경찰복, 의사·간호사는 가운, 소방관은 소방복
+const ARCH_OF_OCCUPATION = {
+  police: 7, firefighter: 8, doctor: 5, nurse: 5, teacher: 6, student: 3,
+  retired: 4, barista: 2, office_worker: 1, civil_servant: 1, politician: 1, fisher: 9,
+};
+// 심 스프라이트 일괄 폐기 — stopTimer 콜백이 폐기된 body를 만지지 않도록 함께 정리 (Codex 37차)
+function destroySimSprites() {
+  simSprites.forEach((s) => { if (s.stopTimer) s.stopTimer.remove(); s.destroy(); });
+  simSprites.clear();
+}
+
+function archOf(sim) {
+  if (sim.isPlayer) return 'p';
+  const m = ARCH_OF_OCCUPATION[sim.traits?.occupation];
+  return m !== undefined ? m : sim.id % 10;
+}
 // §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
 const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
@@ -275,7 +291,7 @@ class TownScene extends Phaser.Scene {
       let sp = simSprites.get(sim.id);
       const tx = isoX(sim.x, sim.y), ty = isoY(sim.x, sim.y) - 8;
       if (!sp) {
-        const arch = sim.isPlayer ? 'p' : sim.id % 10; // 플레이어 전용 시트, 이민자·자녀는 원형 재사용
+        const arch = archOf(sim); // 직업 제복 우선, 미지정 직업은 id%10
         const animKey = this.ensureWalkAnim(arch);
         let body;
         if (animKey) {
@@ -293,7 +309,7 @@ class TownScene extends Phaser.Scene {
         c.bodyRef = body; c.animKey = animKey;
         sp = c; simSprites.set(sim.id, sp);
       }
-      const arch = sim.isPlayer ? 'p' : sim.id % 10;
+      const arch = archOf(sim);
       // 타일 델타로 4방향: 정/후면 = sign(ddx+ddy), 좌/우 = 화면 dx 부호(flipX)
       const prev = sp.lastTile ?? { x: sim.x, y: sim.y };
       const ddx = sim.x - prev.x, ddy = sim.y - prev.y;
@@ -571,7 +587,7 @@ function applyDaylight(tick) {
   const h = Math.floor((tick % 1440) / 60);
   const night = h >= 19 || h < 6;
   if (lastNightFlag !== null && night !== lastNightFlag && scene) {
-    simSprites.forEach((s) => s.destroy()); simSprites.clear();
+    destroySimSprites();
     scene.drawWorld(); // 점등 변형 스왑
   }
   lastNightFlag = night;
@@ -714,7 +730,7 @@ function renderPanel() {
   const sim = world.sims.find((s) => s.id === selectedSimId);
   panel.style.display = 'block';
   $('simname').textContent = sim.name;
-  $('portrait').src = `./sprites/walk${sim.isPlayer ? 'p' : sim.id % 10}_0.png`; // 도트 초상화 (§17.14)
+  $('portrait').src = `./sprites/walk${archOf(sim)}_0.png`; // 도트 초상화 — 직업 제복 반영 (§17.14)
   for (const k of ['hunger', 'energy', 'social', 'fun']) {
     $(`b-${k}`).style.width = `${sim.needs[k] / 100}%`;
   }
@@ -862,7 +878,7 @@ function connect() {
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
-        if (scene) { simSprites.forEach((s) => s.destroy()); simSprites.clear(); scene.drawWorld(); }
+        if (scene) { destroySimSprites(); scene.drawWorld(); }
         showReport();
         maybeShowOnboarding();
         renderPanel();
