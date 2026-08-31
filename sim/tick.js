@@ -220,6 +220,8 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
           if (holder !== undefined && holder !== sim.id) continue;
           const cool = sim.noPathCool[`${fac.id}:${res.id}`];
           if (cool !== undefined && t < cool) continue; // §17.23 no_path 쿨다운
+          // §18.T3 mall 복합 자원: shop은 계산대(till), play는 좌석(seat)만 (51차 합의 명시)
+          if (fac.type === 'mall' && ((action === 'shop' && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
           const sc = scoreCandidate(sim, action, res, L);
           const pl = memo.pl;
           // §16.D: 우천 야외 축소 계수 — §G 곱셈 체인 확장 (base×pers×plan×weather, 축소만이라 경계 보존)
@@ -822,6 +824,10 @@ export function tick(world, inputsForThisTick = []) {
         maybeElection(world, t, day, emit);
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
+        { // §18.T3 공장 공해 (51차: 복지 다음·이민 전 고정) — 전역 평판 감소
+          const nf = world.map.facilities.filter((f) => f.type === 'factory').length;
+          if (nf > 0) world.reputation = Math.max(0, world.reputation - nf * L.pollution.repPerFactoryPerDay);
+        }
         maybeImmigration(world, t, day, emit);
         maybePromotion(world, t, emit); // §18.T4 (이민 직후·새해 전 — 49차 합의)
         maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)

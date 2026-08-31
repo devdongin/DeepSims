@@ -122,8 +122,12 @@ export function maybeNewYear(world, t, day, emit) {
   for (const sim of world.sims) {
     sim.traits.age = Math.min(90, sim.traits.age + 1);
     if (sim.traits.occupation === 'student' && sim.traits.age >= S.graduateAge) {
-      sim.traits.occupation = 'office_worker';
-      emit('graduated', sim.id, {});
+      // §18.T3: 가중 풀 단일 드로우 (51차 (a)) — 대학 보유 마을은 고급 직업 풀 append
+      const G2 = world.logic.graduation;
+      const hasUni = world.map.facilities.some((f) => f.type === 'university');
+      const pool = hasUni ? [...G2.poolBase, ...G2.poolUni] : G2.poolBase;
+      sim.traits.occupation = pool[rngInt(world.rngSim, pool.length)];
+      emit('graduated', sim.id, { to: sim.traits.occupation, uni: hasUni });
     } else if (sim.traits.occupation !== 'retired' && sim.traits.age >= S.retireAge) {
       sim.traits.occupation = 'retired';
       emit('retired_now', sim.id, {});

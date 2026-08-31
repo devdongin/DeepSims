@@ -6,6 +6,7 @@ export const OCCUPATIONS = [
   'office_worker', 'barista', 'freelancer', 'student', 'retired',
   'doctor', 'civil_servant', 'teacher',            // §17.2 (풀 누락 버그 수리 — §17.13)
   'police', 'firefighter', 'nurse', 'politician',  // §17.13 신규
+  'worker',                                        // §18.T3 공장 노동자 (append-only)
 ];
 export const MBTI_AXES = ['EI', 'SN', 'TF', 'JP'];
 
@@ -32,7 +33,7 @@ export function occupationAllowed(occupation, age) {
   if (occupation === 'retired') return age >= 60;
   if (occupation === 'student') return age <= 25;
   if (occupation === 'doctor' || occupation === 'politician') return age >= 26 && age < 60;
-  if (['police', 'firefighter', 'nurse'].includes(occupation)) return age >= 20 && age < 60;
+  if (['police', 'firefighter', 'nurse', 'worker'].includes(occupation)) return age >= 20 && age < 60;
   return true;
 }
 

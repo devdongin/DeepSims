@@ -22,8 +22,8 @@ export const ACTION_FACILITY = {
   eat: ['cafe', 'restaurant'], sleep: ['house'], work: ['office'],
   socialize: ['cafe', 'park'], idle: [],
   drink: ['bar'], binge_eat: ['cafe', 'restaurant'], hole_up: ['house'], exercise: ['park', 'gym'], build: ['house'],
-  read: ['library'], shop: ['market'], fish: ['pond'], cook_eat: ['house'],
-  play: ['park', 'cinema'],
+  read: ['library'], shop: ['market', 'mall'], fish: ['pond'], cook_eat: ['house'],
+  play: ['park', 'cinema', 'mall'],
   construct: [], // 가상 현장(site) — collectCandidates 특수 경로 (§16.5.B)
   see_doctor: ['hospital'],
 };

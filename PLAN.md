@@ -925,3 +925,14 @@ traits: {
   게이트 tier_locked, 언락됐지만 레시피 미구현은 bad_type(T3에서 해제). 로직 v24(tiers/promotion).
 - checkShape 확장: 객체 배열(tiers) 원소별 형태 재귀 + 문자열 leaf 허용.
 - 클라: 상단 등급 배지(배치 8), 승급 피드 + 폭죽 연출.
+
+### 18.T3 라운드 19 — 시설 티어: 아파트·공장·상가·대학 (Codex 51차 조건부 GO 이행)
+- ZONEABLE·ZONE_DIMS·zone.costs 확장(아파트 7×5 6000 / 공장 8×6 8000 / 상가 8×6 8000 /
+  대학 8×6 10000). 전부 zone 전용(자동 수요 없음 — 시장의 선택), 회전·plotBuildable 동일 계약.
+- 아파트: 침대 8 — 이민·합가 가속의 핵심. 공장: 슬롯 8 + 신규 직업 worker(임금 95%, 이민·졸업
+  풀 참여 — 행동 경계 v25) + **공해**: 일일 블록 복지 다음·이민 전(51차 고정)에서 평판
+  −공장수×repPerFactoryPerDay(3). 상가: till 3(shop 전용)+seat 3(play 전용) — mall 자원 kind
+  분리(51차 명시), groceries 규칙은 market 공유. 대학: 슬롯 4, student 근무지 확장은 후속,
+  **졸업 가중 풀**: 단일 rngInt 유지(51차 (a)) — poolBase(사무·노동·교사·공무원) + 대학 보유 시
+  poolUni(의사·정치인·간호사) append. 졸업 고정 전직(office_worker) → 드로우 1회는 행동 경계.
+- 클라: 지정 모달 2단 버튼(티어 잠금 표시), 신규 색·라벨·스프라이트·내부 매핑, 공장 연기 프롭.

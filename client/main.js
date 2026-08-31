@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c };
-const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a, restaurant: 0xd4885a, gym: 0x5ad4a8, cinema: 0x6a5ad4, police_station: 0x4a5ad4, fire_station: 0xd44a3a };
+const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a, restaurant: 0xd4885a, gym: 0x5ad4a8, cinema: 0x6a5ad4, police_station: 0x4a5ad4, fire_station: 0xd44a3a, apartment: 0xb08a5a, factory: 0x8a8a92, mall: 0xd49ad4, university: 0x5ab0d4 };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
 
 let world = null;
@@ -58,7 +58,7 @@ function archOf(sim) {
   return m !== undefined ? m : sim.id % 10;
 }
 // §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
-const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
+const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 BLD_KEYS.push(['firework', './ui/fx_firework.png']); // §18.T4 승급 연출
@@ -66,11 +66,12 @@ for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/b
 for (const t of ['house_a', 'cafe', 'office']) for (const d of [1, 2, 3]) {
   BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
 }
-for (const t of ['house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
+for (const t of ['apartment', 'factory', 'mall', 'university', 'house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
   'cinema', 'bar', 'library', 'market', 'police', 'fire']) {
   BLD_KEYS.push([`bld_${t}_int`, `./props/bld_${t}_int.png`]); // §17.19 내부 컷어웨이
 }
-const BLD_OF_FACILITY = { cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
+const BLD_OF_FACILITY = { apartment: 'bld_apartment', factory: 'bld_factory', mall: 'bld_mall', university: 'bld_university',
+  cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
   city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
   police_station: 'bld_police', fire_station: 'bld_fire' };
@@ -167,6 +168,12 @@ class TownScene extends Phaser.Scene {
       } else if (fac.type === 'fire_station') {
         put('fire_truck', fac.door.x - 2, fac.door.y - 1, 38); // §17.19 차량
         for (const r of fac.resources) put('desk', r.x, r.y, 22);
+      } else if (fac.type === 'factory') {
+        put('smoke', fac.x + 1, fac.y - 1, 30); // §18.T3 굴뚝 연기
+        for (const r of fac.resources) put('desk', r.x, r.y, 20);
+      } else if (fac.type === 'apartment') {
+        for (const r of fac.resources) put('bed', r.x, r.y, 22);
+        put('mailbox', fac.door.x + 1, fac.door.y + 1, 20);
       } else if (fac.type === 'school') {
         for (const r of fac.resources) put('school_desk', r.x, r.y, 22);
       } else if (fac.type === 'restaurant') {
@@ -310,7 +317,7 @@ class TownScene extends Phaser.Scene {
     this.drawProps();
     let houseIdx = 0;
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서' }[fac.type];
+      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학' }[fac.type];
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
       const mode = this.facMode.get(fac.id) ?? 'tile';
       const opened = interiorOpen.has(fac.id);
@@ -496,7 +503,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
   scene.tweens.add({ targets: t, y: y - 14, alpha: 0.2, duration: ms, onComplete: () => t.destroy() });
 }
 
-const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', site: '공사장' };
+const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', site: '공사장' };
 function placeKo(id) {
   if (!id) return '동네';
   if (id.startsWith('house')) return '집';
@@ -1151,10 +1158,17 @@ setInterval(pushSpark, 5000);
   const modal = document.getElementById('zone-modal');
   if (!modal) return;
   let cur = null; let dir = 0; let type = 'house';
-  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000 };
+  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000 };
+  const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
   const render = () => {
-    document.getElementById('zone-info').textContent = `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원`;
-    for (const b of modal.querySelectorAll('[data-zt]')) b.style.borderColor = b.dataset.zt === type ? '#ffcf6a' : '#6b5638';
+    const need = TIER_NEED[type] ?? 0;
+    const locked = (world?.cityTier ?? 0) < need;
+    document.getElementById('zone-info').textContent = `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원` + (locked ? ` · 🔒${['','읍','시','대도시'][need]} 필요` : '');
+    for (const b of modal.querySelectorAll('[data-zt]')) {
+      const bn = TIER_NEED[b.dataset.zt] ?? 0;
+      b.style.opacity = (world?.cityTier ?? 0) < bn ? 0.4 : 1;
+      b.style.borderColor = b.dataset.zt === type ? '#ffcf6a' : '#6b5638';
+    }
   };
   window.openZoneModal = (plot) => { cur = plot; dir = 0; type = 'house'; modal.style.display = 'flex'; render(); };
   for (const b of modal.querySelectorAll('[data-zt]')) b.addEventListener('click', () => { type = b.dataset.zt; render(); });

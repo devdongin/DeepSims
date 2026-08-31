@@ -5,6 +5,7 @@ import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
 import { applyRomance, pairDeltaBonus as pairDeltaBonusRef } from '../sim/society.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
 import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronoValue as chronoValueRef } from '../sim/chrono.js';
 import { buildDailyPlan as buildDailyPlanRef } from '../sim/planning.js';
 import { circadianEnergyPct as circadianEnergyPctRef } from '../sim/chrono.js';
@@ -298,7 +299,7 @@ test('S-11. §17.9: 결혼식 잔치 토큰·유세·새해 (결정적)', () => 
   assert.ok(evs3.some((e) => e.type === 'new_year'));
   assert.ok(evs3.some((e) => e.type === 'graduated' && e.simId === 0));
   assert.ok(evs3.some((e) => e.type === 'retired_now' && e.simId === 1));
-  assert.equal(w3.sims[0].traits.occupation, 'office_worker');
+  assert.ok(DEFAULT_LOGIC.graduation.poolBase.includes(w3.sims[0].traits.occupation), `졸업 전직 풀 (§18.T3: ${w3.sims[0].traits.occupation})`);
   assert.equal(w3.sims[1].traits.occupation, 'retired');
 });
 
@@ -817,10 +818,48 @@ test('S-28. §18.T4 도시 등급: 승급·축하·웨이브 캡·티어 게이�
   w.treasury = 99999;
   const free = w.plots.find((p) => !p.used && plotBuildableRef(w.map, p));
   const evs2 = tick(w, [{ sequence: 0, command: 'zone', payload: { plotId: free.plotId, type: 'apartment', dir: 0 } }]);
-  assert.ok(evs2.some((e) => e.type === 'input_rejected' && e.payload.reason === 'bad_type'), '읍: 언락됐지만 T3 대기');
+  assert.ok(evs2.some((e) => e.type === 'zoned'), '읍: apartment 언락 지시 성공 (§18.T3)');
   const w2 = createWorld(SEED);
   w2.treasury = 99999;
   const free2 = w2.plots.find((p) => !p.used && plotBuildableRef(w2.map, p));
   const evs3 = tick(w2, [{ sequence: 0, command: 'zone', payload: { plotId: free2.plotId, type: 'apartment', dir: 0 } }]);
   assert.ok(evs3.some((e) => e.type === 'input_rejected' && e.payload.reason === 'tier_locked'), '마을: 잠김');
+});
+
+test('S-29. §18.T3 시설 티어: 레시피·mall 자원 분리·공해·졸업 가중 풀', () => {
+  const w = createWorld(SEED);
+  // 레시피: apartment 침대 8, factory 슬롯 8(회전 검증 8×6), mall till3+seat3
+  const plot = w.plots.find((p) => plotBuildableRef(w.map, p, 8, 6));
+  addBuildingRef(w.map, 'apartment', plot);
+  const ap = w.map.facilities[w.map.facilities.length - 1];
+  assert.equal(ap.resources.filter((r) => r.kind === 'bed').length, 8, '아파트 침대 8');
+  const plot2 = w.plots.find((p) => p !== plot && plotBuildableRef(w.map, p, 8, 6));
+  addBuildingRef(w.map, 'mall', plot2);
+  const ml = w.map.facilities[w.map.facilities.length - 1];
+  assert.equal(ml.resources.filter((r) => r.kind === 'till').length, 3);
+  assert.equal(ml.resources.filter((r) => r.kind === 'seat').length, 3);
+  // 공해: 공장 2개 → 일일 평판 -2×3
+  const w2 = createWorld(SEED);
+  w2.reputation = 100;
+  const pa = w2.plots.find((p) => plotBuildableRef(w2.map, p, 8, 6));
+  addBuildingRef(w2.map, 'factory', pa);
+  const pb = w2.plots.find((p) => p !== pa && plotBuildableRef(w2.map, p, 8, 6));
+  addBuildingRef(w2.map, 'factory', pb);
+  idleAll(w2, []);
+  w2.worldTick = 1440 - 1; w2.weather.day = 1; w2.lastDailyDay = 0; w2.lastPlanDay = 1;
+  tick(w2, []);
+  // 일일 감쇠(×95%)와 공해 순서: 공해(복지 다음) → ... → 감쇠(블록 끝): (100-6)×95/100 = 89
+  assert.equal(w2.reputation, Math.floor((100 - 6) * 95 / 100), '공해 -6 후 감쇠');
+  // 졸업 가중: 대학 있으면 확장 풀에서 나올 수 있음 (풀 멤버십)
+  const w3 = createWorld(SEED);
+  const pc = w3.plots.find((p) => plotBuildableRef(w3.map, p, 8, 6));
+  addBuildingRef(w3.map, 'university', pc);
+  w3.sims[0].traits = { ...w3.sims[0].traits, age: 25, occupation: 'student' };
+  idleAll(w3, []);
+  w3.worldTick = 360 * 1440 - 1; w3.weather.day = 360; w3.lastDailyDay = 359; w3.lastPlanDay = 360;
+  const evs = tick(w3, []);
+  const g = evs.find((e) => e.type === 'graduated' && e.simId === 0);
+  assert.ok(g && g.payload.uni === true, '대학 인지');
+  const pool = [...DEFAULT_LOGIC.graduation.poolBase, ...DEFAULT_LOGIC.graduation.poolUni];
+  assert.ok(pool.includes(g.payload.to), '확장 풀 멤버십');
 });

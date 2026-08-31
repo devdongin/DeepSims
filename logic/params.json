@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 24,
+  "logicSchemaVersion": 25,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -181,6 +181,12 @@
       "wagePct": 125,
       "startMoney": 1500,
       "flex": true
+    },
+    "worker": {
+      "workStart": 540,
+      "workEnd": 1080,
+      "wagePct": 95,
+      "startMoney": 1000
     }
   },
   "workplace": {
@@ -195,7 +201,8 @@
     "police": "police_station",
     "firefighter": "fire_station",
     "nurse": "hospital",
-    "politician": "city_hall"
+    "politician": "city_hall",
+    "worker": "factory"
   },
   "persFactor": {
     "socializeBase": 150,
@@ -448,12 +455,34 @@
     "moodBonus": 1000,
     "repBonus": 100
   },
+  "pollution": {
+    "repPerFactoryPerDay": 3
+  },
+  "graduation": {
+    "poolBase": [
+      "office_worker",
+      "office_worker",
+      "worker",
+      "teacher",
+      "civil_servant"
+    ],
+    "poolUni": [
+      "doctor",
+      "doctor",
+      "politician",
+      "nurse"
+    ]
+  },
   "zone": {
     "costs": {
       "house": 2000,
       "cafe": 3000,
       "office": 3000,
-      "park": 1000
+      "park": 1000,
+      "apartment": 6000,
+      "factory": 8000,
+      "mall": 8000,
+      "university": 10000
     }
   },
   "growth": {
