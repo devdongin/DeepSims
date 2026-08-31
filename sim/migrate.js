@@ -129,11 +129,14 @@ export function migrateWorld(world) {
     for (const sim of world.sims) sim.noPathCool ??= {}; // §17.23
     repairOverlaps(world); // §17.23: 공터-권위 시설 겹침 외과수술 (이슈 #21 라이브 세이브)
   }
+  if (from < 20) {
+    world.policy ??= {}; // §18.T1
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 19;
+  world.schemaVersion = 20;
   return world;
 }
 

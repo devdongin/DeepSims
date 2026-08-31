@@ -717,3 +717,41 @@ test('S-25. §17.23 no_path 실발생 경로: 크래시 없이 쿨다운 기록 
   if (fail) assert.ok(Object.keys(s.noPathCool).length > 0, '쿨다운 기록');
   else assert.ok(true); // 크래시 없음이 회귀의 본질
 });
+
+test('S-26. §18.T1 시정: policy 내구 입력 → 세율·복지 오버라이드 + 납세 불만', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  // 정책 적용
+  const evs0 = tick(w, [{ sequence: 0, command: 'policy', payload: { taxPct: 30, welfareAmount: 400 } }]);
+  const pc = evs0.find((e) => e.type === 'policy_changed');
+  assert.ok(pc, '정책 이벤트');
+  assert.equal(pc.payload.before.taxPct, L.economy.taxPct);
+  assert.equal(w.policy.taxPct, 30);
+  // 화이트리스트 밖·범위 밖 거부
+  const evs1 = tick(w, [{ sequence: 0, command: 'policy', payload: { taxPct: 99 } }]);
+  assert.ok(evs1.some((e) => e.type === 'input_rejected'), '범위 밖 거부');
+  assert.equal(w.policy.taxPct, 30, '거부 시 불변');
+  // 납세 정산: 유효 세율 30% + 납세 불만 mood 델타
+  const s = w.sims.find((x) => L.occupations[x.traits.occupation].wagePct > 0);
+  idleAll(w, []);
+  s.state = { kind: 'performing', action: 'work', facilityId: 'office', resourceId: 'desk0', path: [], ticksLeft: 1, pairedTicks: 0 };
+  const moodBefore = s.mood;
+  const wage = Math.floor(L.actions.work.wageBase * L.occupations[s.traits.occupation].wagePct / 100);
+  const net = Math.floor(wage * 70 / 100);
+  const tax = wage - net;
+  const evs2 = tick(w, []);
+  const mc = evs2.find((e) => e.type === 'money_changed' && e.simId === s.id);
+  assert.equal(mc.payload.tax, tax, '유효 세율 30% 원천징수');
+  assert.ok(s.mood < moodBefore, '납세 불만 (기분 하락)');
+  // 복지 오버라이드
+  const w2 = createWorld(SEED);
+  w2.policy.welfareAmount = 400;
+  w2.treasury = 400;
+  for (const x of w2.sims) x.money = 0;
+  idleAll(w2, []);
+  w2.worldTick = 1440 - 1; w2.weather.day = 1; w2.lastDailyDay = 0; w2.lastPlanDay = 1;
+  const evs3 = tick(w2, []);
+  const wp = evs3.filter((e) => e.type === 'welfare_paid');
+  assert.equal(wp.length, 1, '국고 400 = 1명분(400)');
+  assert.equal(wp[0].payload.amount, 400, '오버라이드 지급액');
+});

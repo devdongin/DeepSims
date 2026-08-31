@@ -9,7 +9,7 @@ import { TILE, addBuilding, plotBuildable } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
-import { validateLogic, logicHash } from './logic.js';
+import { validateLogic, logicHash, validatePolicy } from './logic.js';
 import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
@@ -415,6 +415,23 @@ function applyAnnounce(world, inp, t, emit) {
   emit('token_created', player.id, { tokenId: token.tokenId, placeId: p.placeId, scheduledTick: token.scheduledTick, announced: true });
 }
 
+// §18.T1: 시장 정책 — 화이트리스트 필드만 월드 정책 오버라이드로 병합 (내구 입력, 리플레이 불변)
+function applyPolicy(world, inp, t, emit) {
+  const v = validatePolicy(inp.payload ?? {});
+  if (!v.ok) { emit('input_rejected', null, { command: 'policy', reason: v.error }); return; }
+  const before = {};
+  for (const k of Object.keys(inp.payload)) {
+    before[k] = world.policy[k] ?? world.logic.economy[k];
+    world.policy[k] = inp.payload[k];
+  }
+  emit('policy_changed', null, { changes: inp.payload, before });
+}
+
+// §18.T1: 유효 경제값 — 정책 오버라이드 우선 (읽기 단일 권위)
+function econ(world, key) {
+  return world.policy[key] ?? world.logic.economy[key];
+}
+
 function applyAssign(world, inp, t, emit) {
   const p = inp.payload;
   if (p === null || typeof p !== 'object' || Array.isArray(p)) {
@@ -449,6 +466,7 @@ export function tick(world, inputsForThisTick = []) {
     if (inp.command === 'assign') applyAssign(world, inp, t, emit);
     else if (inp.command === 'create_player') applyCreatePlayer(world, inp, t, emit);
     else if (inp.command === 'announce') applyAnnounce(world, inp, t, emit);
+    else if (inp.command === 'policy') applyPolicy(world, inp, t, emit);
     else emit('input_rejected', null, { reason: 'unknown_command', inputId: inp.id ?? null });
   }
 
@@ -637,12 +655,13 @@ export function tick(world, inputsForThisTick = []) {
     } else if (s.action === 'work') {
       const wage = floorDiv(L.actions.work.wageBase * L.occupations[sim.traits.occupation].wagePct, 100);
       // §17.15 소득세 원천징수: 실수령 = wage×(100-taxPct)/100, 세금은 국고로
-      const net = floorDiv(wage * (100 - L.economy.taxPct), 100);
+      const net = floorDiv(wage * (100 - econ(world, 'taxPct')), 100);
       const tax = wage - net;
       sim.money += net;
       world.treasury += tax;
       emit('money_changed', sim.id, { delta: net, balance: sim.money, action: 'work', tax });
       applyMood(sim, L.mood.moneyGain);
+      if (tax > 0) applyMood(sim, -floorDiv(tax * L.economy.taxMoodPer, 10)); // §18.T1 납세 불만 (그라데이션)
     }
     if (s.action === 'socialize' && s.pairedTicks === 0) {
       emit('lonely', sim.id, { facilityId: s.facilityId });

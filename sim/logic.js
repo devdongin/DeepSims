@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 21,
+  logicSchemaVersion: 22,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -197,6 +197,7 @@ export const DEFAULT_LOGIC = {
     welfareThreshold: 300,  // 이 잔고 미만이면 복지 대상
     welfareAmount: 200,     // 1회 지급액
     welfareDailyCap: 5,     // 하루 최대 수급자 수 (id asc)
+    taxMoodPer: 5,          // §18.T1: 납세 시점 mood 델타 = -floorDiv(tax×taxMoodPer, 10) (그라데이션)
   },
   // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
   circadian: {
@@ -452,6 +453,7 @@ function checkRanges(p, errors) {
   inRange('economy.welfareThreshold', p.economy.welfareThreshold, 0, 100000);
   inRange('economy.welfareAmount', p.economy.welfareAmount, 0, 100000);
   inRange('economy.welfareDailyCap', p.economy.welfareDailyCap, 0, 1000);
+  inRange('economy.taxMoodPer', p.economy.taxMoodPer, 0, 1000);
   if (!Array.isArray(p.circadian?.energyPct) || p.circadian.energyPct.length !== 24) {
     errors.push('circadian.energyPct: 24칸 배열 필요');
   } else {
@@ -525,4 +527,24 @@ function checkShape(ref, val, path, errors) {
   for (const k of valKeys) {
     if (!(k in ref)) errors.push(`미지 키: ${path}${k}`);
   }
+}
+
+// §18.T1: 시장 정책 화이트리스트 — 필드·정수·범위 검증 (서버·시뮬 공유 단일 권위)
+export const POLICY_FIELDS = {
+  taxPct: [5, 30],
+  welfareAmount: [0, 1000],
+  welfareThreshold: [0, 2000],
+};
+export function validatePolicy(p) {
+  if (typeof p !== 'object' || p === null || Array.isArray(p)) return { ok: false, error: '객체 필요' };
+  const keys = Object.keys(p);
+  if (keys.length === 0) return { ok: false, error: '변경 필드 없음' };
+  for (const k of keys) {
+    const range = POLICY_FIELDS[k];
+    if (!range) return { ok: false, error: `허용되지 않은 필드: ${k}` };
+    if (!Number.isSafeInteger(p[k]) || p[k] < range[0] || p[k] > range[1]) {
+      return { ok: false, error: `${k}: ${range[0]}~${range[1]} 정수 필요` };
+    }
+  }
+  return { ok: true };
 }

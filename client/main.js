@@ -753,6 +753,11 @@ function eventText(e) {
     case 'fire_started': return `🔥 ${PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId}에 불이 났다!`;
     case 'fire_out': return e.payload.by === 'self' ? `💨 ${e.payload.facilityId}의 불이 겨우 잦아들었다… (아무도 안 왔다)` : `🚒 ${simName(e.payload.by)}이(가) ${e.payload.facilityId} 화재를 진압했다!`;
     case 'heroic_save': return `🎖️ ${n}: 영웅이 됐다`;
+    case 'policy_changed': {
+      const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
+      const parts = Object.entries(e.payload.changes).map(([k, v2]) => `${ko[k] ?? k} ${e.payload.before[k]}→${v2}${k === 'taxPct' ? '%' : '원'}`);
+      return `🏛️ 시정 발표: ${parts.join(', ')}`;
+    }
     case 'starving': return `⚠️ ${n}이(가) 굶고 있습니다!`;
     case 'lonely': return `${n}이(가) 혼자 시간을 보냈습니다…`;
     case 'argument': return `💢 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 말다툼했습니다`;
@@ -993,6 +998,10 @@ function connect() {
         world.sims = msg.sims;
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
         if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
+        // §18.T1: 정책 변경 이벤트로 클라 상태 동기화 — 슬라이더가 낡은 값을 재전송하지 않도록 (Codex 46차)
+        for (const e of msg.events) {
+          if (e.type === 'policy_changed') world.policy = { ...(world.policy ?? {}), ...e.payload.changes };
+        }
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
         for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }
@@ -1041,3 +1050,39 @@ function connect() {
   };
 }
 connect();
+
+// ---- §18.T1 시정 운영 패널 ----
+(() => {
+  const modal = document.getElementById('policy-modal');
+  const btn = document.getElementById('policy-btn');
+  if (!btn) return;
+  const els = {
+    taxPct: [document.getElementById('pol-tax'), document.getElementById('pol-tax-v'), '%'],
+    welfareAmount: [document.getElementById('pol-amt'), document.getElementById('pol-amt-v'), '원'],
+    welfareThreshold: [document.getElementById('pol-thr'), document.getElementById('pol-thr-v'), '원'],
+  };
+  const DEFAULTS = { taxPct: 15, welfareAmount: 200, welfareThreshold: 300 };
+  for (const [k, [input, label, unit]] of Object.entries(els)) {
+    input.addEventListener('input', () => { label.textContent = input.value + unit; });
+  }
+  btn.addEventListener('click', () => {
+    for (const [k, [input, label, unit]] of Object.entries(els)) {
+      input.value = world?.policy?.[k] ?? DEFAULTS[k];
+      label.textContent = input.value + unit;
+    }
+    document.getElementById('pol-msg').textContent = '';
+    modal.style.display = 'flex';
+  });
+  document.getElementById('pol-close').addEventListener('click', () => { modal.style.display = 'none'; });
+  document.getElementById('pol-apply').addEventListener('click', async () => {
+    const payload = {};
+    for (const [k, [input]] of Object.entries(els)) payload[k] = parseInt(input.value, 10);
+    const res = await fetch('/api/input', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientInputId: `policy:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, command: 'policy', payload }),
+    });
+    const j = await res.json();
+    document.getElementById('pol-msg').textContent = res.ok ? '시행되었습니다. 다음 틱부터 적용됩니다.' : `거부: ${j.error}`;
+    if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
+  });
+})();

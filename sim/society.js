@@ -229,14 +229,17 @@ export function mayorStipend(world, t, emit) {
 // §17.15 복지: 일일 평가(수당 다음) — 잔고 < threshold 심에게 id asc, 국고 한도 + 일일 인원 캡
 export function applyWelfare(world, t, emit) {
   const E = world.logic.economy;
+  // §18.T1: 정책 오버라이드 우선
+  const amount = world.policy.welfareAmount ?? E.welfareAmount;
+  const threshold = world.policy.welfareThreshold ?? E.welfareThreshold;
   let paid = 0;
   for (const sim of world.sims) {
-    if (paid >= E.welfareDailyCap || world.treasury < E.welfareAmount) break;
-    if (sim.money >= E.welfareThreshold) continue;
-    world.treasury -= E.welfareAmount;
-    sim.money += E.welfareAmount;
+    if (paid >= E.welfareDailyCap || world.treasury < amount) break;
+    if (sim.money >= threshold) continue;
+    world.treasury -= amount;
+    sim.money += amount;
     paid++;
-    emit('welfare_paid', sim.id, { amount: E.welfareAmount, balance: sim.money, treasury: world.treasury });
+    emit('welfare_paid', sim.id, { amount, balance: sim.money, treasury: world.treasury });
   }
 }
 

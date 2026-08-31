@@ -895,3 +895,13 @@ traits: {
   (빈 침대 배열 순), 피해 시설 둘레벽·내부·문 재축조. 결정적 순수 함수.
 - 치유: sim.noPathCool — no_path 실패 자원을 noPathCoolTicks(240) 동안 후보 제외(차순위 진행),
   일일 블록에서 만료 청소. 신규 심 생성 4경로 모두 초기화.
+
+### 18.T1 라운드 16 — 시정 운영: 재정 정책 (타이쿤 1단계, Codex 44차 합의안)
+- 신규 내구 커맨드 'policy' (logic_update와 분리 — 44차 합의 (a)): 화이트리스트
+  POLICY_FIELDS{taxPct 5~30, welfareAmount 0~1000, welfareThreshold 0~2000} 정수·범위 검증
+  (validatePolicy — 서버·시뮬 단일 권위). world.policy(세이브 v20)에 병합, 입력 로그 원문 보존.
+- 유효값 규칙: econ(world,key) = policy 오버라이드 ?? logic.economy 기본 — 소득세·복지 지급.
+- 납세 불만(합의 (c) 조건): §G modifier가 아닌 정산 시점 mood 델타 = -floorDiv(tax×taxMoodPer(5),10)
+  — 세율 비례 그라데이션. 세율↑ → 국고↑ vs 기분↓ → 평판·이민 연쇄 (타이쿤 트레이드오프).
+- policy_changed 이벤트(before/changes), 클라 🏛️ 시정 패널(슬라이더 3종), 스냅샷 policy 동봉.
+- 로직 v22(economy.taxMoodPer). 다음 단계(T2 건설 지시+회전)는 완료 후 Codex 재합의.
