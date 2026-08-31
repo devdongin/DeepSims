@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { Storage } from '../db/storage.js';
 import { Engine } from './engine.js';
 import { PROTOCOL_VERSION } from '../sim/constants.js';
-import { DEFAULT_LOGIC } from '../sim/logic.js';
+import { DEFAULT_LOGIC, validatePolicy } from '../sim/logic.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -97,12 +97,16 @@ app.post('/api/input', async (req, res) => {
     || payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
     return res.status(400).json({ error: 'clientInputId(문자열), command(문자열), payload(객체)가 필요합니다' });
   }
-  if (!['assign', 'create_player', 'announce'].includes(command)) {
+  if (!['assign', 'create_player', 'announce', 'policy'].includes(command)) {
     return res.status(400).json({ error: '허용되지 않은 명령입니다' }); // logic_update는 서버 내부 전용
   }
   if (command === 'assign'
     && (typeof payload.simId !== 'number' || typeof payload.actionType !== 'string')) {
     return res.status(400).json({ error: 'assign payload는 {simId: number, actionType: string} 형식입니다' });
+  }
+  if (command === 'policy') {
+    const v = validatePolicy(payload); // §18.T1 화이트리스트·범위 (시뮬과 단일 권위 공유)
+    if (!v.ok) return res.status(400).json({ error: `policy: ${v.error}` });
   }
   const result = await engine.submitInput({ clientInputId, command, payload });
   res.json(result); // insert 커밋 후에만 응답 (PLAN §3)
@@ -134,6 +138,7 @@ function sendSnapshot(ws) {
     mayorId: engine.world.mayorId,
     treasury: engine.world.treasury,
     incidents: engine.world.incidents,
+    policy: engine.world.policy,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,

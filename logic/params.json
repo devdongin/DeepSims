@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 21,
+  "logicSchemaVersion": 22,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -431,7 +431,8 @@
     "taxPct": 15,
     "welfareThreshold": 300,
     "welfareAmount": 200,
-    "welfareDailyCap": 5
+    "welfareDailyCap": 5,
+    "taxMoodPer": 5
   },
   "circadian": {
     "energyPct": [

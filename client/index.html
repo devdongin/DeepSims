@@ -67,6 +67,7 @@
           <option value="2">2시간 뒤</option><option value="6">6시간 뒤</option><option value="12">12시간 뒤</option><option value="24">내일 이 시간</option></select>
         <button id="an-btn" style="padding:3px 10px;background:#ffd97a;color:#14121a;border:0;border-radius:4px;cursor:pointer;font-weight:bold">📣 모임 공지</button>
       </div>
+      <button id="policy-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🏛️ 시정</button>
       <div id="status">접속 중…</div>
     </div>
     <div id="game">
@@ -98,6 +99,23 @@
     <div id="sidebar">
       <h2>이벤트</h2>
       <div id="feed"></div>
+    </div>
+  </div>
+  <div id="policy-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">
+    <div class="box" style="width:360px;background:#241d14;border:2px solid #c9a86a;border-radius:12px;padding:20px">
+      <h2 style="color:#ffcf6a;font-size:16px;margin-bottom:4px">🏛️ 시정 운영</h2>
+      <p style="font-size:11px;color:#9c8a6a;margin-bottom:12px">정책은 마을의 내구 기록으로 남고, 심들의 삶에 실제로 작용합니다.</p>
+      <div style="display:grid;grid-template-columns:88px 1fr 44px;gap:8px;font-size:12px;align-items:center">
+        <label>세율</label><input id="pol-tax" type="range" min="5" max="30" step="1"><span id="pol-tax-v"></span>
+        <label>복지 지급액</label><input id="pol-amt" type="range" min="0" max="1000" step="50"><span id="pol-amt-v"></span>
+        <label>복지 기준</label><input id="pol-thr" type="range" min="0" max="2000" step="100"><span id="pol-thr-v"></span>
+      </div>
+      <p style="font-size:11px;color:#9c8a6a;margin-top:10px">세율을 올리면 국고는 차지만 납세 때마다 주민 기분이 상합니다.</p>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button id="pol-apply" style="padding:6px 14px;background:#ffcf6a;color:#171310;border:0;border-radius:6px;cursor:pointer;font-weight:bold">시행</button>
+        <button id="pol-close" style="padding:6px 14px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer">닫기</button>
+      </div>
+      <div id="pol-msg" style="font-size:11px;color:#b8d49a;margin-top:8px"></div>
     </div>
   </div>
   <div id="modal"><div class="box">
