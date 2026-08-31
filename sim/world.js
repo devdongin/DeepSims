@@ -67,6 +67,7 @@ export function createWorld(seed) {
     reputation: 0, // §17.21 마을 평판 — 행동 이벤트 누적, 이민 웨이브 규모 결정
     incidents: [], // §17.20 사건: { type:'fire', facilityId, sinceTick }
     policy: {},    // §18.T1 시장 정책 오버라이드 (화이트리스트: taxPct, welfareAmount, welfareThreshold)
+    zoneOrders: [], // §18.T2 플레이어 건설 주문 FIFO: { plotId, type, dir }
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),

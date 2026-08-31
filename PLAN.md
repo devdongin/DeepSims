@@ -905,3 +905,13 @@ traits: {
   — 세율 비례 그라데이션. 세율↑ → 국고↑ vs 기분↓ → 평판·이민 연쇄 (타이쿤 트레이드오프).
 - policy_changed 이벤트(before/changes), 클라 🏛️ 시정 패널(슬라이더 3종), 스냅샷 policy 동봉.
 - 로직 v22(economy.taxMoodPer). 다음 단계(T2 건설 지시+회전)는 완료 후 Codex 재합의.
+
+### 18.T2 라운드 17 — 건설 지시 + 건물 회전 (타이쿤 2단계, Codex 47차 합의)
+- 신규 내구 커맨드 'zone' {plotId, type, dir}: 검증(존재·!used·plotBuildable·ZONEABLE·dir 0..3·
+  국고≥zone.costs[type]) → **주문 시 차감**(취소 없음), zoneOrders FIFO, 'zoned' 이벤트.
+- 도시계획: 주문이 자동 수요보다 우선 — 프로젝트 슬롯 빌 때 즉시 착공(일일 게이트 무관).
+  **착공 재검증**(!used·plotBuildable — 그 사이 침범 가능): 실패 주문은 input_rejected(stale_order)
+  결정적 폐기, 환불 없음(합의).
+- 회전: dir 0..3, 90°마다 로컬 (lx,ly)→(h−1−ly, lx), footprint w/h 스왑, 문·자원·예비 슬롯
+  단일 변환. facility.dir(기존 세이브 ??=0 — 마이그레이션 불요). 세이브 v21(zoneOrders), 로직 v23(zone.costs).
+- 클라: 공터 클릭 → 📐 지정 모달(타입 4종·회전·비용), 회전 외형 bld_*_d{1,2,3}(배치 7) 폴백 d0.

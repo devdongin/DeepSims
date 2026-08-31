@@ -5,11 +5,11 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding, plotBuildable } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
-import { validateLogic, logicHash, validatePolicy } from './logic.js';
+import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
@@ -427,6 +427,25 @@ function applyPolicy(world, inp, t, emit) {
   emit('policy_changed', null, { changes: inp.payload, before });
 }
 
+// §18.T2: 건설 지시 — 주문 시 국고 차감·FIFO 적재 (47차 합의: 취소 없음, 착공 시 재검증)
+function applyZone(world, inp, t, emit) {
+  const p = inp.payload ?? {};
+  const L = world.logic;
+  const plot = world.plots.find((pl) => pl.plotId === p.plotId);
+  const cost = L.zone.costs[p.type];
+  let reason = null;
+  if (!plot) reason = 'no_plot';
+  else if (plot.used) reason = 'plot_used';
+  else if (!ZONEABLE.includes(p.type)) reason = 'bad_type';
+  else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
+  else if (!(() => { const fp = zoneFootprint(p.type, p.dir); return plotBuildable(world.map, plot, fp.w, fp.h); })()) reason = 'not_buildable';
+  else if (world.treasury < cost) reason = 'treasury_short';
+  if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
+  world.treasury -= cost;
+  world.zoneOrders.push({ plotId: p.plotId, type: p.type, dir: p.dir });
+  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, treasury: world.treasury });
+}
+
 // §18.T1: 유효 경제값 — 정책 오버라이드 우선 (읽기 단일 권위)
 function econ(world, key) {
   return world.policy[key] ?? world.logic.economy[key];
@@ -467,6 +486,7 @@ export function tick(world, inputsForThisTick = []) {
     else if (inp.command === 'create_player') applyCreatePlayer(world, inp, t, emit);
     else if (inp.command === 'announce') applyAnnounce(world, inp, t, emit);
     else if (inp.command === 'policy') applyPolicy(world, inp, t, emit);
+    else if (inp.command === 'zone') applyZone(world, inp, t, emit);
     else emit('input_rejected', null, { reason: 'unknown_command', inputId: inp.id ?? null });
   }
 
@@ -767,7 +787,7 @@ export function tick(world, inputsForThisTick = []) {
     // required는 프로젝트 시작 시점에 스냅샷 — 진행 중 logic_update가 완공 시점을 흔들지 못함 (PLAN §16.5)
     if (pr && pr.progress >= pr.required) {
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
-      const fac = addBuilding(world.map, pr.type, plot);
+      const fac = addBuilding(world.map, pr.type, plot, pr.dir ?? 0); // §18.T2 회전
       plot.used = true;
       world.project = null;
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
@@ -813,6 +833,21 @@ export function tick(world, inputsForThisTick = []) {
     }
     fireSelfOut(world, t, emit); // §17.20 자연 진화 (매 틱, 4단계)
     const day = floorDiv(t, 1440);
+    // §18.T2: 플레이어 주문이 자동 수요보다 우선 — 프로젝트 슬롯이 비면 즉시(일일 게이트 무관) 착공
+    while (!world.project && world.zoneOrders.length > 0) {
+      const order = world.zoneOrders.shift();
+      const plot = world.plots.find((p) => p.plotId === order.plotId);
+      const fp2 = plot ? zoneFootprint(order.type, order.dir) : null;
+      if (!plot || plot.used || !plotBuildable(world.map, plot, fp2.w, fp2.h)) { // 착공 재검증 — 회전 치수 (Codex 48차)
+        emit('input_rejected', null, { command: 'zone', reason: 'stale_order', plotId: order.plotId });
+        continue;
+      }
+      const required = world.mayorId !== null
+        ? floorDiv(L.construct.laborRequired * L.election.mayorLaborPct, 100)
+        : L.construct.laborRequired;
+      world.project = { plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true };
+      emit('project_started', null, { plotId: order.plotId, type: order.type, dir: order.dir, x: plot.x, y: plot.y, required, zoned: true });
+    }
     if (!world.project && world.lastPlanDay !== day) {
       world.lastPlanDay = day;
       const freePlot = world.plots.find((p) => !p.used && plotBuildable(world.map, p)); // §17.23 침범 방지
