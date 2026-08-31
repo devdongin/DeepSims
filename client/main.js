@@ -220,8 +220,14 @@ class TownScene extends Phaser.Scene {
       // 심이 아니면 건물 토글 (§17.19 내부 모드): 화면→타일 역변환 후 발자국 검사
       const tx2 = (wp.x / (TW / 2) + wp.y / (TH / 2)) / 2;
       const ty2 = (wp.y / (TH / 2) - wp.x / (TW / 2)) / 2;
-      const fac = world.map.facilities.find((f) => f.w
-        && tx2 >= f.x - 3 && tx2 < f.x + f.w && ty2 >= f.y - 3 && ty2 < f.y + f.h); // 지붕 클릭 여유 북서 3타일
+      // 지붕 여유(북서 3타일) 포함 후보 수집 → 발자국 중심 최근접 선택 (겹침 결정적, Codex 38차)
+      let fac = null; let facD = Infinity;
+      for (const f of world.map.facilities) {
+        if (!f.w || tx2 < f.x - 3 || tx2 >= f.x + f.w || ty2 < f.y - 3 || ty2 >= f.y + f.h) continue;
+        const dcx = tx2 - (f.x + f.w / 2); const dcy = ty2 - (f.y + f.h / 2);
+        const d = dcx * dcx + dcy * dcy;
+        if (d < facD) { facD = d; fac = f; }
+      }
       if (fac && fac.type !== 'park' && fac.type !== 'pond') {
         if (interiorOpen.has(fac.id)) interiorOpen.delete(fac.id);
         else interiorOpen.add(fac.id);
@@ -287,7 +293,7 @@ class TownScene extends Phaser.Scene {
         // 내부 모드는 북쪽 모서리 깊이 → 안의 심·가구가 위에 그려짐
         img.setDepth(opened ? 1000 + fac.x + fac.y : 1000 + fac.x + fac.w + fac.y + fac.h - 1);
         this.propSprites.push(img);
-      } else if (!opened) {
+      } else {
         g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
         for (let j = fac.y; j < fac.y + fac.h; j++) for (let i = fac.x; i < fac.x + fac.w; i++) {
           if (map.tiles[j * map.w + i] === 3) this.drawTile(g, i, j, FACILITY_COLORS[fac.type], 10);
