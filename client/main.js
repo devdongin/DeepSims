@@ -42,6 +42,7 @@ const SIT_ACTIONS = ['eat', 'read', 'work', 'drink', 'cook_eat', 'see_doctor', '
 const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
+for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
 const BLD_OF_FACILITY = { cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
   city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
@@ -225,6 +226,9 @@ class TownScene extends Phaser.Scene {
       const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서' }[fac.type];
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
       let bldKey = fac.type === 'house' ? `bld_house_${'abc'[houseIdx++ % 3]}` : BLD_OF_FACILITY[fac.type];
+      // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
+      const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
+      if (bldKey && (hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
       if (bldKey && !this.textures.exists(bldKey)) bldKey = null;
       if (bldKey) {
         const cx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
@@ -560,10 +564,17 @@ function handleVisualEvent(e) {
 const $ = (id) => document.getElementById(id);
 
 // 목업 황혼 톤: 시각별 씬 위 틴트 (§UI). CSS transition이 부드럽게 보간.
+let lastNightFlag = null;
 function applyDaylight(tick) {
   const el = document.getElementById('daynight');
   if (!el) return;
   const h = Math.floor((tick % 1440) / 60);
+  const night = h >= 19 || h < 6;
+  if (lastNightFlag !== null && night !== lastNightFlag && scene) {
+    simSprites.forEach((s) => s.destroy()); simSprites.clear();
+    scene.drawWorld(); // 점등 변형 스왑
+  }
+  lastNightFlag = night;
   let bg = 'transparent';
   if (h >= 21 || h < 5) bg = 'rgba(20, 26, 60, 0.38)';        // 밤
   else if (h >= 19) bg = 'rgba(50, 30, 70, 0.26)';             // 황혼
