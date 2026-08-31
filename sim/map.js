@@ -7,6 +7,8 @@ export const MAP_H = 48;
 export const MAP_H2 = 64;
 export const MAP_W3 = 128;        // §16.6 2차 확장
 export const MAP_H3 = 128;
+export const MAP_W4 = 512;        // §17.0 3차 확장
+export const MAP_H4 = 512;
 export const TILE = { GRASS: 0, ROAD: 1, FLOOR: 2, WALL: 3, TREE: 4, WATER: 5 };
 
 function rect(tiles, x, y, w, h, v) {
@@ -147,10 +149,12 @@ export function buildMap() {
   addBarTo(tiles, facilities);
   addVenuesTo(tiles, facilities);
 
-  // §16.5/§16.6: 확장 체인 (신규 월드도 마이그레이션과 같은 헬퍼·같은 순서)
+  // §16.5/§16.6/§17.0: 확장 체인 (신규 월드도 마이그레이션과 같은 헬퍼·같은 순서)
   const map = { w: MAP_W, h: MAP_H, tiles, facilities };
   expandMapTo64(map, null);
   expandMapTo128(map, null);
+  expandMapTo512(map, null);
+  addSocietyVenuesTo(map.tiles, map.facilities, map.w);
   return map;
 }
 
@@ -194,6 +198,68 @@ export function expandMapTo128(map, wear) {
     for (let y = 2; y < map.h - 1; y++) if (map.tiles[y * W + 70] === TILE.GRASS) map.tiles[y * W + 70] = TILE.ROAD;
   }
   return r;
+}
+
+// §17.0: 512 확장 + 광역 간선 (가로 y=192·384, 세로 x=192·384 — GRASS만 도로화)
+export function expandMapTo512(map, wear) {
+  const r = expandMapTo(map, wear, MAP_W4, MAP_H4);
+  const W = map.w;
+  for (const yb of [192, 384]) {
+    for (let x = 2; x < W - 1; x++) if (map.tiles[yb * W + x] === TILE.GRASS) map.tiles[yb * W + x] = TILE.ROAD;
+  }
+  for (const xb of [192, 384]) {
+    for (let y = 2; y < map.h - 1; y++) if (map.tiles[y * W + xb] === TILE.GRASS) map.tiles[y * W + xb] = TILE.ROAD;
+  }
+  return r;
+}
+
+// §17.0: 추가 공터 64곳 (plotId 32~95) — 광역 간선변 밴드 + 원거리 4. 사용 순서 = 배열 순서.
+export function extraPlots512() {
+  const coords = [];
+  for (const y of [64, 186, 378]) for (let x = 80; x <= 440; x += 40) coords.push([x, y]); // 가로 밴드 30
+  for (const x of [63, 186, 378]) for (let y = 80; y <= 440; y += 40) coords.push([x, y]); // 세로 밴드 30
+  coords.push([300, 300], [340, 340], [420, 420], [460, 460]);                              // 원거리 4
+  return coords.map(([x, y], i) => ({ plotId: 32 + i, x, y, used: false }));
+}
+
+// §17.2: 공공시설 — hospital/city_hall/school (단일 권위, §16.A 방식)
+export function addSocietyVenuesTo(tiles, facilities, W) {
+  const bld = (bx, by, bw, bh, dx, dy) => {
+    for (let j = by; j < by + bh; j++) for (let i = bx; i < bx + bw; i++) tiles[j * W + i] = TILE.WALL;
+    for (let j = by + 1; j < by + bh - 1; j++) for (let i = bx + 1; i < bx + bw - 1; i++) tiles[j * W + i] = TILE.FLOOR;
+    tiles[dy * W + dx] = TILE.FLOOR;
+  };
+  if (!facilities.some((f) => f.id === 'hospital')) {
+    bld(58, 26, 8, 6, 61, 26);
+    facilities.push({
+      id: 'hospital', type: 'hospital', x: 58, y: 26, w: 8, h: 6, door: { x: 61, y: 26 },
+      resources: [
+        { id: 'clinic0', kind: 'clinic', x: 59, y: 28 },
+        { id: 'clinic1', kind: 'clinic', x: 64, y: 28 },
+        { id: 'slot0', kind: 'slot', x: 59, y: 30 },
+        { id: 'slot1', kind: 'slot', x: 61, y: 30 },
+        { id: 'slot2', kind: 'slot', x: 64, y: 30 },
+      ],
+    });
+  }
+  if (!facilities.some((f) => f.id === 'city_hall')) {
+    bld(26, 56, 8, 6, 29, 56);
+    facilities.push({
+      id: 'city_hall', type: 'city_hall', x: 26, y: 56, w: 8, h: 6, door: { x: 29, y: 56 },
+      resources: [0, 1, 2, 3].map((k) => ({
+        id: `slot${k}`, kind: 'slot', x: 27 + (k % 2) * 5, y: 58 + Math.floor(k / 2) * 2,
+      })),
+    });
+  }
+  if (!facilities.some((f) => f.id === 'school')) {
+    bld(44, 56, 7, 5, 47, 56);
+    facilities.push({
+      id: 'school', type: 'school', x: 44, y: 56, w: 7, h: 5, door: { x: 47, y: 56 },
+      resources: [0, 1, 2].map((k) => ({
+        id: `slot${k}`, kind: 'slot', x: 45 + k * 2, y: 58,
+      })),
+    });
+  }
 }
 
 // §16.6: 추가 공터 24곳 (plotId 8~31) — 간선 도로변, 사용 순서 = 배열 순서

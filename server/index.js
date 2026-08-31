@@ -39,6 +39,7 @@ function acquireLock(retry = true) {
   const release = () => { try { fs.unlinkSync(LOCK_PATH); } catch { /* ignore */ } };
   process.on('exit', release);
   process.on('SIGINT', () => process.exit(0));
+  process.on('exit', () => { try { engine.flushLive(); } catch { /* 이미 커밋됨 */ } });
   process.on('SIGTERM', () => process.exit(0));
 }
 
@@ -84,7 +85,9 @@ else app.get('/', (_req, res) => res.status(503).send('클라이언트가 빌드
 
 app.get('/api/report', (req, res) => {
   const cursor = Math.max(0, Number(req.query.cursor || 0));
-  res.json(storage.getReport(cursor, engine.world.worldTick));
+  // §17.8: 리포트는 커밋된 틱까지만 — 30틱 캐던스의 미커밋 상태를 노출하지 않는다
+  const committed = storage.getMetaInt('lastSimulatedTick', 0);
+  res.json(storage.getReport(Math.min(cursor, committed), committed));
 });
 
 app.post('/api/input', async (req, res) => {
@@ -126,6 +129,10 @@ function sendSnapshot(ws) {
     lostItems: engine.world.lostItems,
     plots: engine.world.plots,
     project: engine.world.project,
+    partners: engine.world.partners,
+    partnerStage: engine.world.partnerStage,
+    mayorId: engine.world.mayorId,
+    clubs: engine.world.clubs,
   } });
 }
 

@@ -7,6 +7,7 @@ import { TICKS_PER_DAY } from '../sim/constants.js';
 import { validateLogic, logicHash } from '../sim/logic.js';
 
 const BATCH_TICKS = TICKS_PER_DAY; // 따라잡기 배치 = 게임 1일
+const LIVE_COMMIT_TICKS = 30;      // §17.0: 라이브 커밋 주기 (미커밋 유실은 스냅샷+입력 재생으로 복구)
 
 export class Engine {
   constructor(storage, { seed, now = () => Date.now() }) {
@@ -20,6 +21,9 @@ export class Engine {
     this.catchingUp = false;
     this.catchupPromise = null;
     this.liveTimer = null;
+    this.pendingEvents = [];
+    this.pendingApplied = [];
+    this.uncommittedFrom = undefined;
     this.listeners = new Set(); // ({type, ...}) => void
   }
 
@@ -69,7 +73,39 @@ export class Engine {
     this.storage.commitBatch({
       world: this.world, events, appliedInputIds, epochUtcMs: this.epochUtcMs,
     });
+    this.pendingEvents = [];
+    this.uncommittedFrom = this.world.worldTick;
     return { fromTick, toTick: this.world.worldTick, events };
+  }
+
+  // §17.0 라이브 전용: 커밋 없이 전진, LIVE_COMMIT_TICKS마다(또는 입력 소비 시) 커밋.
+  // 크래시 시 미커밋 구간은 스냅샷+내구 입력 재생으로 결정적 복구 (테스트 8 계약).
+  runLive(n) {
+    const fromTick = this.world.worldTick;
+    const upto = fromTick + n;
+    const inputsByTick = this.storage.getPendingInputs(upto);
+    const events = advance(this.world, inputsByTick, n);
+    const appliedIds = Object.entries(inputsByTick)
+      .filter(([t]) => Number(t) <= this.world.worldTick)
+      .flatMap(([, arr]) => arr.map((i) => i.id));
+    this.pendingEvents.push(...events);
+    this.pendingApplied.push(...appliedIds);
+    this.uncommittedFrom ??= fromTick;
+    const due = this.world.worldTick - this.uncommittedFrom >= LIVE_COMMIT_TICKS
+      || this.pendingApplied.length > 0;
+    if (due) this.flushLive();
+    return { fromTick, toTick: this.world.worldTick, events };
+  }
+
+  flushLive() {
+    if (this.uncommittedFrom === undefined || this.world.worldTick === this.uncommittedFrom) return;
+    this.storage.commitBatch({
+      world: this.world, events: this.pendingEvents, appliedInputIds: this.pendingApplied,
+      epochUtcMs: this.epochUtcMs,
+    });
+    this.pendingEvents = [];
+    this.pendingApplied = [];
+    this.uncommittedFrom = this.world.worldTick;
   }
 
   startLive() {
@@ -83,13 +119,14 @@ export class Engine {
       // 반복당 최대 1일치 — 긴 슬립 후에도 이벤트 루프를 블록하지 않고 다음 반복에서 이어 따라잡음
       const n = Math.min(cap.target - this.world.worldTick, BATCH_TICKS);
       if (n <= 0) return;
-      const batch = this.runBatch(n);
+      const batch = this.runLive(n);
       this.emit({ type: 'tickBatch', ...batch, sims: this.world.sims });
     }, 250);
   }
 
   stopLive() {
     if (this.liveTimer) { clearInterval(this.liveTimer); this.liveTimer = null; }
+    this.flushLive(); // 마지막 퇴장·종료 시 미커밋 플러시
   }
 
   // 입력 접수 — 따라잡기 중엔 target 부여를 완료까지 보류 (PLAN §3)

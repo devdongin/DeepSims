@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -13,7 +13,7 @@ export const NEED_MAX = 10000;
 // 확장은 뒤에 append (기존 타이브레이크 순서 보존). drink~build는 §15.1 로드맵 행동.
 export const ACTIONS = ['eat', 'sleep', 'work', 'socialize', 'play', 'idle',
   'drink', 'binge_eat', 'hole_up', 'exercise', 'build',
-  'read', 'shop', 'fish', 'cook_eat', 'construct'];
+  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor'];
 export const COPING_ACTIONS = ['drink', 'binge_eat', 'hole_up', 'exercise'];
 export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat']; // 자기 집 시설만 후보
 
@@ -24,6 +24,7 @@ export const ACTION_FACILITY = {
   drink: ['bar'], binge_eat: ['cafe'], hole_up: ['house'], exercise: ['park'], build: ['house'],
   read: ['library'], shop: ['market'], fish: ['pond'], cook_eat: ['house'],
   construct: [], // 가상 현장(site) — collectCandidates 특수 경로 (§16.5.B)
+  see_doctor: ['hospital'],
 };
 export const NEED_OF_ACTION = { eat: 'hunger', sleep: 'energy', socialize: 'social', play: 'fun', read: 'fun', fish: 'fun', cook_eat: 'hunger' };
 
@@ -41,8 +42,25 @@ export const EVENT_TYPES = [
   'road_formed', 'bed_built', 'hangover',
   'item_spawned', 'item_found', 'weather_changed', 'fish_caught',
   'project_started', 'facility_built', 'moved_home',
+  'immigrated', 'fell_sick', 'recovered', 'election', 'started_dating', 'married', 'broke_up',
+  'joined_club', 'mayor_stipend',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce'];
 
 export const OUTDOOR_FACILITIES = ['park', 'pond']; // 비 날씨 페널티 대상 (§16.D)
+
+// §17.6 고정 동아리 (구조 — 코드 단일 권위)
+export const CLUBS = [
+  { id: 'book_club', habitKey: 'read:library', name: 'book' },
+  { id: 'fishing_club', habitKey: 'fish:pond', name: 'fishing' },
+  { id: 'fitness_club', habitKey: 'exercise:park', name: 'fitness' },
+  { id: 'drinking_pals', habitKey: 'drink:bar', name: 'drink' },
+];
+// 주간 모임: (dayOfWeek, tod, placeId) — day % 7
+export const CLUB_MEETINGS = {
+  book_club: { dow: 2, tod: 1200, placeId: 'library' },
+  fishing_club: { dow: 6, tod: 600, placeId: 'pond' },
+  fitness_club: { dow: 4, tod: 1140, placeId: 'park' },
+  drinking_pals: { dow: 5, tod: 1260, placeId: 'bar' },
+};

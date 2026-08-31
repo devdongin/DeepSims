@@ -2,7 +2,7 @@
 // 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
-import { addBarTo, addVenuesTo, expandMapTo64, expandMapTo128, defaultPlots, extraPlots128 } from './map.js';
+import { addBarTo, addVenuesTo, addSocietyVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512 } from './map.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -76,10 +76,31 @@ export function migrateWorld(world) {
     world.wear = r.wear;
     if (world.plots.length <= 8) world.plots = [...world.plots, ...extraPlots128()];
   }
+  if (from < 10) {
+    // §17.0: 512 확장 → wear 희소화(>0만 이관, 새 좌표 재매핑은 expandMapTo가 밀집 기준으로 수행)
+    if (Array.isArray(world.wear)) {
+      const r = expandMapTo512(world.map, world.wear);
+      const sparse = {};
+      for (let i = 0; i < r.wear.length; i++) if (r.wear[i] > 0) sparse[i] = r.wear[i];
+      world.wear = sparse;
+    } else {
+      expandMapTo512(world.map, null);
+    }
+    addSocietyVenuesTo(world.map.tiles, world.map.facilities, world.map.w);
+    if (world.plots.length <= 32) world.plots = [...world.plots, ...extraPlots512()];
+    for (const sim of world.sims) sim.sick ??= null;
+    world.partners ??= {};
+    world.partnerStage ??= {};
+    world.clubs ??= { book_club: [], fishing_club: [], fitness_club: [], drinking_pals: [] };
+    if (world.mayorId === undefined) world.mayorId = null;
+    world.lastElectionDay ??= -1;
+    world.immigrantCounter ??= 0;
+    world.lastDailyDay ??= -1;
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 9;
+  world.schemaVersion = 10;
   return world;
 }

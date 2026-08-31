@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c };
-const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8 };
+const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
 
 let world = null;
@@ -23,7 +23,7 @@ class TownScene extends Phaser.Scene {
     // 도트 캐릭터 스프라이트 (Codex imagegen). 없으면 색 원 폴백.
     for (let i = 0; i < 10; i++) this.load.image(`sim${i}`, `./sprites/sim${i}.png`);
     this.load.image('player', './sprites/player.png');
-    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign']) {
+    for (const p of ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard']) {
       this.load.image(p, `./props/${p}.png`);
     }
     this.load.on('loaderror', () => { /* 폴백이 처리 */ });
@@ -64,6 +64,17 @@ class TownScene extends Phaser.Scene {
         for (const r of fac.resources) put('market_stall', r.x, r.y, 28);
       } else if (fac.type === 'pond') {
         put('fishing_sign', fac.door.x - 1, fac.door.y, 24);
+      } else if (fac.type === 'hospital') {
+        put('hospital_cross', fac.door.x + 1, fac.door.y - 1, 26);
+        for (const r of fac.resources.filter((x) => x.kind === 'clinic')) put('pill_bottle', r.x, r.y, 16);
+        for (const r of fac.resources.filter((x) => x.kind === 'slot')) put('desk', r.x, r.y, 22);
+      } else if (fac.type === 'city_hall') {
+        put('flag_pole', fac.door.x - 2, fac.door.y - 1, 36);
+        put('ballot_box', fac.door.x + 2, fac.door.y + 1, 20);
+        put('noticeboard', fac.x + 6, fac.y + 6, 24);
+        for (const r of fac.resources) put('desk', r.x, r.y, 22);
+      } else if (fac.type === 'school') {
+        for (const r of fac.resources) put('school_desk', r.x, r.y, 22);
       } else if (fac.type === 'park') {
         fac.resources.forEach((r, i) => {
           if (i < 4) put('bench', r.x, r.y, 22);
@@ -88,6 +99,8 @@ class TownScene extends Phaser.Scene {
     for (const [lx, ly] of [[22, 9], [25, 22], [22, 40], [45, 24], [10, 22], [25, 38]]) put('streetlamp', lx, ly, 38, 2);
     for (const [bx, by] of [[8, 12], [16, 16], [40, 6], [6, 28], [44, 36], [18, 44]]) put('bush', bx, by, 18);
     put('cat', 16, 31, 14);
+    put('dog', 27, 26, 15);
+    put('wedding_arch', 36, 20, 30); // 공원 결혼식 자리
   }
 
   create() {
@@ -136,15 +149,25 @@ class TownScene extends Phaser.Scene {
     const g = this.mapLayer; g.clear();
     const { map } = world;
     const hasTreeSprite = this.textures.exists('tree');
+    // §17.0: 지면은 거대 다각형 1개(잔디색) — 262k 타일 개별 렌더는 불가
+    g.fillStyle(TILE_COLORS[0], 1);
+    g.beginPath();
+    g.moveTo(isoX(0, 0), isoY(0, 0) - 8);
+    g.lineTo(isoX(map.w, 0), isoY(map.w, 0));
+    g.lineTo(isoX(map.w, map.h), isoY(map.w, map.h) + 8);
+    g.lineTo(isoX(0, map.h), isoY(0, map.h));
+    g.closePath(); g.fillPath();
+    // 비-GRASS 타일만 개별 렌더
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       const t = map.tiles[y * map.w + x];
-      if (t === 4 && hasTreeSprite) { this.drawTile(g, x, y, TILE_COLORS[0], 0); continue; } // 나무는 스프라이트로
+      if (t === 0) continue;
+      if (t === 4 && hasTreeSprite) continue; // 나무는 스프라이트로
       const lift = (t === 3 || t === 4) ? 10 : 0; // 벽·나무는 살짝 올림
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
     this.drawProps();
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터' }[fac.type];
+      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교' }[fac.type];
       const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - 24;
       this.add.text(tx, ty, label, { fontSize: '11px', color: '#ffd97a', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
       g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
@@ -311,6 +334,15 @@ function conversationLine(e) {
         ? pick(['배고파 죽겠어… 뭐라도 먹자', '아 오늘 제대로 못 먹었더니 어지러워'], t)
         : pick(['여기 커피 진짜 맛있지 않아?', '요즘 뭐 맛있는 거 먹었어?', '시장에서 장 봐다 해먹는 것도 좋더라'], t);
     }
+    case 'sweet_talk': {
+      return d.stage === 'married'
+        ? pick(['오늘 저녁 같이 먹을까, 여보?', '요즘 당신 덕에 매일이 좋아', '주말에 공원 데이트 어때?'], t)
+        : pick(['보고 싶었어!', '오늘따라 더 좋아 보인다?', '이따 낚시터에서 볼래?'], t);
+    }
+    case 'club_talk': {
+      const cn = { book_club: '이번 책', fishing_club: '요즘 입질', fitness_club: '운동 루틴', drinking_pals: '오늘 한잔' }[d.clubId] ?? '모임';
+      return pick([`${cn} 얘기 좀 하자`, `다음 모임 언제더라?`, `${cn} 어땠어?`], t);
+    }
     case 'weather': {
       return pick({
         sunny: ['날씨 진짜 좋다~', '이런 날엔 공원이지', '햇살 봐, 나가길 잘했어'],
@@ -355,6 +387,11 @@ function handleVisualEvent(e) {
     case 'lonely': showBubble(e.simId, '💧…', 2500); break;
     case 'hangover': showBubble(e.simId, '🥴', 2500); break;
     case 'bed_built': showBubble(e.simId, '🔨✨', 3000); break;
+    case 'fell_sick': showBubble(e.simId, '🤒', 3000); break;
+    case 'started_dating': showBubble(e.simId, '💕', 3500); showBubble(e.payload.withSimId, '💕', 3500); break;
+    case 'married': showBubble(e.simId, '💒🎉', 4000); showBubble(e.payload.withSimId, '💒🎉', 4000); break;
+    case 'broke_up': showBubble(e.simId, '💔', 3500); showBubble(e.payload.withSimId, '💔', 3500); break;
+    case 'election': showBubble(e.simId, '🗳️👑', 4000); break;
     case 'starving': showBubble(e.simId, '🍚…!', 3000); break;
     case 'gathering': {
       const fac = world?.map.facilities.find((f) => f.id === e.payload.placeId);
@@ -380,7 +417,7 @@ function fmtClock(tick) {
 const ACTION_KO = {
   eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기',
   drink: '술 한잔', binge_eat: '폭식', hole_up: '은둔', exercise: '운동', build: '침대 만들기',
-  read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기',
+  read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기', see_doctor: '병원 진료',
 };
 const BLOCK_KO = {
   no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
@@ -454,6 +491,17 @@ function eventText(e) {
       return `🎊 ${tp}이(가) 완공됐습니다! 마을이 넓어졌어요`;
     }
     case 'moved_home': return `📦 ${n}이(가) 새 집으로 이사했습니다`;
+    case 'immigrated': return `🚌 ${e.payload.name}이(가) 해솔마을로 이사 왔습니다! (${OCC_KO[e.payload.occupation] ?? e.payload.occupation})`;
+    case 'fell_sick': return `🤒 ${n}이(가) 감기에 걸렸습니다`;
+    case 'recovered': return e.payload.how === 'doctor' ? `💊 ${n}이(가) 진료를 받고 나았습니다` : `🌤️ ${n}이(가) 감기에서 회복했습니다`;
+    case 'election': return `🗳️ 선거 결과 — ${n}이(가) 해솔마을 시장이 되었습니다! (득표 ${e.payload.votes.join(':')})`;
+    case 'started_dating': return `💕 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 사귀기 시작했습니다!`;
+    case 'married': return `💒 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 결혼했습니다! 🎉`;
+    case 'broke_up': return `💔 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 헤어졌습니다…`;
+    case 'joined_club': {
+      const cn = { book_club: '독서회', fishing_club: '낚시회', fitness_club: '운동모임', drinking_pals: '술벗' }[e.payload.clubId];
+      return `🎪 ${n}이(가) ${cn}에 가입했습니다`;
+    }
     case 'road_formed': return `🛤️ 많이 다니던 길이 도로가 되었습니다 (${e.payload.x}, ${e.payload.y})`;
     case 'bed_built': return `🛏️ ${n}이(가) 집에 침대를 새로 만들었습니다!`;
     case 'greeting': return `👋 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 지나가며 인사했습니다`;
@@ -493,7 +541,12 @@ function renderPanel() {
     const mbti = (tr.mbti.EI < 50 ? 'E' : 'I') + (tr.mbti.SN < 50 ? 'S' : 'N')
       + (tr.mbti.TF < 50 ? 'T' : 'F') + (tr.mbti.JP < 50 ? 'J' : 'P');
     const g = { F: '여', M: '남', X: '-' }[tr.gender];
-    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${OCC_KO[tr.occupation]}${sim.isPlayer ? ' · ⭐나' : ''}`;
+    let extra = '';
+    const pid = world.partners?.[sim.id];
+    if (pid !== undefined) extra += ` · ${world.partnerStage?.[sim.id] === 'married' ? '💍' : '💕'}${simName(pid)}`;
+    if (world.mayorId === sim.id) extra += ' · 👑시장';
+    if (sim.sick) extra += ' · 🤒';
+    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${OCC_KO[tr.occupation]}${sim.isPlayer ? ' · ⭐나' : ''}${extra}`;
   }
   $('money').textContent = `💰 ${sim.money}원`;
   $('action').textContent = `현재: ${ACTION_KO[sim.state.action] ?? '대기'} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;

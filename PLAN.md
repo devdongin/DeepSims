@@ -633,3 +633,101 @@ traits: {
   원거리 사분면 4.
 - 동전 스폰은 items.spawnAreaW/H(64) 창으로 한정 (logic v8) — 128 전역 스폰은 아무도 못 줍는
   죽은 콘텐츠임을 §16.C 개정에서 확인한 원칙의 연장.
+
+## 17. 사회 시뮬레이션 — 현실에 가까운 세계 (v0.6+, 사용자 지시: 목표를 원대하게)
+
+원칙 불변: 전부 결정적 정수 규칙, 모든 변경은 입력/상태 전이, LLM 루프 개입 없음, Codex 교차 리뷰.
+
+### 17.0 인프라 — 512×512
+- expandMapTo 체인 연장: 48→64→128→**512** (v9→v10). 주 도로(y23-24/x23-24)와 간선(y70/x70)을
+  끝까지 연장 + 광역 간선 추가: y=192·y=384 가로, x=192·x=384 세로 (GRASS만 도로화).
+- 공터 32 → **+64 = 96곳** (plotId 32~95): 광역 간선변 그리드 (x∈{80,120,160,200,240,280,320,360,400,440} × y∈{66,74} 등
+  구체 좌표 배열은 코드 단일 권위, 전부 BFS 도달성 테스트).
+- **성능 계약**:
+  - world.wear를 밀집 배열 → **희소 객체** {tileIdx: count}로 전환 (마이그레이션: 0 초과만 이관).
+  - 라이브 커밋 주기 1틱 → **30틱** (engine 상수): 크래시 시 미커밋 ≤30틱은 스냅샷+내구 입력
+    재생으로 결정적 복구 (기존 테스트 8 계약 그대로).
+  - BFS 스크래치 버퍼 재사용 (모듈 캐시 — 순수성 불변).
+  - 클라: 지면은 거대 다각형 1개 + 비-GRASS 타일만 개별 렌더.
+  - 동전 spawnArea 유지(64) — 다운타운.
+
+### 17.1 이민 (외부에서 오는 사람들)
+- immigrationIntervalDays(7)마다 일일 평가(4c 도시계획 앞): 총 침대 > 인구면 이민자 1명 도착.
+- 특성 rngSim 생성(§12.1 순서), 이름 = 확장 이름 풀[world.immigrantCounter % len] + 필요시 순번,
+  id 단조, 스폰 = 서쪽 도로 끝 (2,23), 홈 = 빈 침대 있는 집 중 facilityId 최소, 'immigrated' 이벤트.
+- 인구 증가 → 침대 부족 → §16.5 건설 수요 → 도시 성장 피드백 루프.
+
+### 17.2 직업·회사 다양화 + 신규 공공시설
+- 신규 시설 (addSocietyVenuesTo, 단일 권위): hospital(58,26) 8×6 병상4+진료슬롯2,
+  city_hall(26,56) 8×6 슬롯4, school(44,56) 7×5 슬롯3.
+- 직업 확장: doctor(hospital, wage 140%), civil_servant(city_hall, 110%), teacher(school, 105%),
+  barista는 이제 **cafe에서 근무**. occupation→근무 시설 타입 매핑 테이블(logic) 도입 —
+  work 후보는 자기 직업의 시설에서만. office_worker→office 유지.
+- 이민자·플레이어는 신규 직업 선택 가능. 기존 심 직업 유지.
+
+### 17.3 질병과 전염
+- sim.sick = null | { kind: 'cold', untilTick }. 걸리면 energy·fun 감쇠 +50%, 😷 이모트.
+- 감염 경로: ① 일일 위험 드로우(4단계 심 id 오름차순, 심당 1드로우): p(‰) = base(5) +
+  starvingBonus(배고픔 0이었던 날 +30) + rainBonus(비 +10) + lowEnergyBonus(energy<2000 +20).
+  ② **전염**: 페어링 틱에 한쪽만 감염 시 1드로우 p=contagion(40‰) — 사교가 병을 옮긴다.
+- 'see_doctor' 행동 (hospital 진료슬롯, cost 800, duration 30): 완료 시 완치 + 'recovered'.
+  자연 치유: untilTick(발병+4320) 경과. 아픈 심은 see_doctor가 위급 후보로 승격(coping류 게이트:
+  sick일 때만 후보). 'fell_sick'/'recovered' 이벤트, 기억 sick(6)/healed(4).
+### 17.4 정부와 투표
+- electionIntervalDays(30)마다 선거일(일일 평가): 후보 = 인기(타 심들의 자신을 향한 양수 호감도 합)
+  상위 2명(동률 id asc). 전원 투표: 자기→후보 호감도 높은 쪽(동률 id 낮은 쪽). 최다 득표가
+  world.mayorId ('election' 이벤트 {votes}). **상호작용이 권력을 만든다.**
+- 시장 효과: 건설 laborRequired ×mayorLaborPct(90%) (프로젝트 시작 시점 스냅샷 규칙 유지),
+  시장 월급 보너스(시청에서 일하지 않아도 매일 +200, 일일 평가에서 지급, money_changed).
+
+### 17.5 연애·결혼 (성별 무관)
+- world.partners = { simId: partnerId } 대칭. 티어 확장: dating, married (relTiers와 별개 전역 상태).
+- 회고에서 결정(무드로우, 결정적): 미혼 심 A가 상호 호감도 ≥ datingMin(6000) && interactions ≥
+  100 && 상대도 미혼인 최고 호감 B 발견 → 'started_dating' (양쪽 기억 love(7)).
+- dating && 상호 호감 ≥ marryMin(9000) && interactions ≥ 300 → 'married' 🎉 — 배우자가 상대
+  집으로 이주(빈 침대 있을 때, 없으면 대기 — 건설 수요와 맞물림). 파혼: dating 중 어느 한쪽
+  호감도 < breakup(2000) → 'broke_up', 양쪽 mood -1500, 기억 heartbreak(8, 부정).
+- 효과: 파트너와 페어링 시 사교 회복 ×150%, 대화 주제 'sweet_talk' 추가(파트너 페어일 때 가중),
+  파트너가 있는 시설로 stateMod 보너스 ×2.
+### 17.6 동아리
+- 고정 동아리 4개: 독서회(library/read), 낚시회(pond/fish), 운동모임(park/exercise), 술벗(bar/drink).
+- 가입: habit['action:facility'] ≥ clubHabitMin(2e10) 회고 시 → 'joined_club', world.clubs[clubId] 멤버 추가.
+- 주간 모임: 클럽별 고정 요일·시각(코드 테이블)에 토큰 자동 생성, **멤버 전원 즉시 인지**(learnToken)
+  — 비멤버는 입소문으로만. 멤버끼리 페어링 시 호감도 델타 +clubBonus(10) 가산.
+- 대화 주제 'club_talk' (같은 클럽 페어 가중).
+
+### 17.7 상호작용 → 행동 영향 (사회적 전파)
+- **험담의 영향**: gossip 대화 시 청자의 대상(C) 호감도가 sentiment × gossipInfluence(30)만큼
+  변동 (청자 TF 부호보존 스케일) — 말이 관계를 바꾸고, 관계가 선택(투표·연애·stateMod)을 바꾼다.
+- sweet_talk/club_talk도 소폭 상호 호감 가산. 모든 변동은 기존 클램프 내.
+
+### 스키마
+- 세이브 v10: 맵 512, wear 희소화, sims.sick, world.partners/clubs/mayorId/immigrantCounter/
+  lastElectionDay, 신규 시설. 로직 v9: society/disease/election/romance/club 섹션 + 신규 직업·행동.
+- 에셋 배치: hospital_cross, pill_bottle, ballot_box, flag_pole, wedding_arch, dog, school_desk,
+  noticeboard (Codex imagegen).
+
+### 17.8 정밀 규칙 확정 (Codex 26차 1~7)
+- **페어링 내 서브순서(고정)**: ① 토큰 전파(토큰별 1드로우) → ② 전염(정확히 한쪽 감염 시 1드로우)
+  → ③ 대화(0~1드로우 + 험담 영향 적용) → ④ 호감도 델타 1드로우(+동아리/파트너 보너스 가산) →
+  다툼 판정. 상호작용 카운트는 기존 위치.
+- **4단계 서브순서(최종)**: 날씨 → 모임 판정 → 토큰 만료 → 토큰 생성 → 아이템 만료/스폰 →
+  완공 판정(매 틱) → **일일 평가**(날 경계에서만): ① 질병 위험 드로우(심 id asc, 심당 1드로우 —
+  이날 도착 예정 이민자는 미포함) → ② 선거(주기 도래 시) → ③ 시장 수당 → ④ 이민(주기 도래 시,
+  신규 심은 다음 틱부터 참여, 질병 드로우는 다음 날부터) → ⑤ 도시계획 트리거.
+  자연 치유(untilTick 경과)는 4단계 감쇠 루프에서 매 틱 무드로우 판정.
+- **연애 단일 실행**: 상태는 world.partners(대칭)+world.partnerStage(대칭 'dating'|'married').
+  전이는 "먼저 회고하는 쪽"이 실행(회고 시각이 결정적이므로 단일 실행 보장). 한 회고 내 순서:
+  파혼 검사 → 결혼 검사 → 새 연애 탐색. 파혼: 어느 한 방향 호감 < breakup. 결혼: 양방향 최소
+  호감 ≥ marryMin && interactions ≥ 300. 연애 시작: 양쪽 미혼, min(양방향) ≥ datingMin &&
+  interactions ≥ 100, 후보 중 min-호감 최대(동률 id asc).
+- **선거 엣지**: 후보 = 인기(양수 호감 합) > 0인 심을 (인기 desc, id asc)로 상위 2. 0명이면 선거
+  무산(현 시장 유지). 1명이면 단독 당선. 득표 동률 → id 낮은 쪽. 재선 허용, 시장 임기 무제한
+  (다음 선거로만 교체).
+- **리포트 경계**: /api/report의 upto·nextCursor는 **커밋된 틱**(meta.lastSimulatedTick)으로
+  클램프 — 30틱 캐던스의 미커밋 상태는 리포트에 노출되지 않는다.
+- **희소 wear 정규형**: 10진 정수 문자열 키, 0 엔트리 저장 금지(증가 전용, ROAD 전환 시 삭제),
+  canonical 정렬은 문자열 사전순(결정적이면 충분). 마이그레이션은 >0만 이관.
+- **반올림·클램프**: 질병 감쇠 가산 d += floorDiv(d,2); 파트너 stateMod 보너스는 2배 후 기존
+  클램프; 동아리/달콤한말/험담 델타는 부호보존 스케일 + AFFINITY 클램프; 시장 효과
+  required = floorDiv(laborRequired × mayorLaborPct, 100) (프로젝트 시작 스냅샷 규칙 유지).

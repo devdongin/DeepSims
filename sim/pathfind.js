@@ -4,10 +4,13 @@ import { isWalkable } from './map.js';
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N, E, S, W
 
 // 경로: 시작 제외, 목적지 포함한 [{x,y}] 배열. 도달 불가면 null.
+let scratch = new Int32Array(0); // §17.0 성능: 호출 간 재사용 (순수성 불변 — 매 호출 초기화)
 export function bfsPath(map, sx, sy, tx, ty) {
   if (sx === tx && sy === ty) return [];
   if (!isWalkable(map, tx, ty)) return null;
-  const prev = new Int32Array(map.w * map.h).fill(-1);
+  if (scratch.length < map.w * map.h) scratch = new Int32Array(map.w * map.h);
+  const prev = scratch;
+  prev.fill(-1, 0, map.w * map.h);
   const start = sy * map.w + sx;
   const goal = ty * map.w + tx;
   prev[start] = start;

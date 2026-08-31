@@ -2,7 +2,8 @@
 // payload 계약(확정): 코드베이스 관례를 따른다 — 이벤트 simId = 화자/발신자, payload.withSimId = 상대.
 // (argument·relationship_changed와 동일 형태. D8 초안의 aSimId/bSimId 표기는 이 관례로 대체.)
 import { rngInt } from './prng.js';
-import { AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
+import { AFFINITY_MIN, AFFINITY_MAX, CLUBS } from './constants.js';
+import { applyGossipInfluence } from './society.js';
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -73,6 +74,17 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
       }
       candidates.push({ key, w, about: null });
     }
+    // §17.5/§17.6: 관계 문맥 주제 (가중치는 기존 weather 가중 재사용 — 구조 변경 없이 문맥 추가)
+    if (world.partners[speaker.id] === listener.id) {
+      candidates.push({ key: 'sweet_talk', w: 60, about: null, detail: { stage: world.partnerStage[speaker.id] } });
+    }
+    for (const club of CLUBS) {
+      const mem = world.clubs[club.id];
+      if (mem.includes(speaker.id) && mem.includes(listener.id)) {
+        candidates.push({ key: 'club_talk', w: 30, about: null, detail: { clubId: club.id } });
+        break;
+      }
+    }
     if (candidates.length === 0) {
       topic = 'weather'; // 폴백 보장 — 문맥 필터로 전부 제외돼도 발화는 나간다 (드로우 없음)
       detail = { kind: world.weather?.kind ?? 'sunny' };
@@ -84,6 +96,10 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
         roll -= c.w;
       }
     }
+  }
+  // §17.7: 험담은 청자의 대상 인식을 실제로 바꾼다 (말 → 관계 → 선택)
+  if (topic === 'gossip' && detail) {
+    applyGossipInfluence(world, listener, aboutSimId, detail.sentiment, emit);
   }
   emit('conversation', speaker.id, {
     withSimId: listener.id, topic, aboutSimId, placeId: facId, detail,

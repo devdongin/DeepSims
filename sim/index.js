@@ -8,3 +8,8 @@ export { computeTarget } from './time.js';
 export { buildMap, isWalkable, TILE, MAP_W, MAP_H } from './map.js';
 export { bfsPath, manhattan } from './pathfind.js';
 export * as constants from './constants.js';
+
+// §17: 회고 훅 바인딩 (순환 import 회피)
+import { bindSocietyHooks } from './cognition.js';
+import { applyRomance, checkClubJoin } from './society.js';
+bindSocietyHooks(applyRomance, checkClubJoin);

@@ -2,6 +2,11 @@
 // 전부 정수 연산, rng 미사용 — 결정적. LLM 없음.
 import { NEGATIVE_MEMORY_KINDS } from './logic.js';
 
+// 순환 import 회피: society가 cognition.recordFact를 쓰므로 훅은 지연 바인딩
+let romanceHook = () => {};
+let clubHook = () => {};
+export function bindSocietyHooks(r, cJoin) { romanceHook = r; clubHook = cJoin; }
+
 const SHORTLIST = 32; // D1: 후보 독립 숏리스트 크기 (Codex 대안 채택)
 const MEMORY_MOD_CLAMP = 500000000000;  // §G memoryMod ±5e11
 const STATE_MOD_CLAMP = 250000000000;   // §G stateMod ±2.5e11
@@ -165,6 +170,10 @@ export function runReflection(world, sim, t, emit) {
     if (n < L.social.habitMinRepeats) continue;
     sim.habit[key] = Math.min(L.social.habitCap, (sim.habit[key] ?? 0) + L.social.habitIncrement);
   }
+
+  // 3.5) §17.5/§17.6: 연애 전이(파혼→결혼→탐색, 먼저 회고하는 쪽이 실행) + 동아리 가입
+  romanceHook(world, sim, t, emit);
+  clubHook(world, sim, t, emit);
 
   // 4) 커서·날짜 갱신 → 하루 1회, 재처리 없음. 회고 파생 기억은 커서 이후 삽입 → 일괄 퇴출 규칙 준수.
   sim.reflectionMemoryCursor = sim.memorySeq;

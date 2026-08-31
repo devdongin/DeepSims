@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 8,
+  logicSchemaVersion: 9,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -27,6 +27,7 @@ export const DEFAULT_LOGIC = {
     fish: { duration: 90, recoverPerTick: 60, moodPerTick: 12, catchSpan: 400, missMood: 100 },
     cook_eat: { duration: 25, recoverPerTick: 350, moodPerTick: 8 },
     construct: { duration: 60 }, // §16.5 스틴트
+    see_doctor: { duration: 30, cost: 800 }, // §17.3 진료
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000 },
@@ -34,6 +35,15 @@ export const DEFAULT_LOGIC = {
     freelancer: { workStart: 0, workEnd: 1440, wagePct: 80, startMoney: 1000 },
     student: { workStart: 840, workEnd: 1200, wagePct: 50, startMoney: 500 },
     retired: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 3000 },
+    // §17.2 신규 직업 — 근무지는 workplace 매핑
+    doctor: { workStart: 480, workEnd: 1140, wagePct: 140, startMoney: 1500 },
+    civil_servant: { workStart: 540, workEnd: 1080, wagePct: 110, startMoney: 1200 },
+    teacher: { workStart: 480, workEnd: 960, wagePct: 105, startMoney: 1100 },
+  },
+  // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
+  workplace: {
+    office_worker: 'office', barista: 'cafe', freelancer: 'office', student: 'school',
+    retired: 'office', doctor: 'hospital', civil_servant: 'city_hall', teacher: 'school',
   },
   persFactor: { socializeBase: 150, playBase: 100, workBase: 150 },
   affinity: {
@@ -53,6 +63,8 @@ export const DEFAULT_LOGIC = {
       lonely: 4, work_done: 3, meal: 2, small_talk: 1, play_time: 1,
       drank: 3, binge: 3, hole_up: 2, workout: 3, built_bed: 5,
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
+      sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2,
+      new_neighbor: 3, club_joined: 4,
     },
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
@@ -130,10 +142,42 @@ export const DEFAULT_LOGIC = {
     cafeRatio: 2,        // 심 수 > 좌석합×ratio → cafe 프로젝트
     parkRatio: 1,        // 심 수 > 스팟합×ratio → park 프로젝트
   },
+  // §17 사회 (logicSchemaVersion 9)
+  society: {
+    immigrationIntervalDays: 7,
+  },
+  disease: {
+    basePermille: 5, starvingBonus: 30, rainBonus: 10, lowEnergyBonus: 20,
+    contagionPermille: 40,
+    durationTicks: 4320,     // 자연 치유 3일
+    decayFactorNum: 1,       // 감쇠 가산 d += floorDiv(d × num, den) → +50%
+    decayFactorDen: 2,
+    doctorDeficit: 8500,     // see_doctor needValue = NEED_MAX - deficit (아플 때 최우선급)
+  },
+  election: {
+    intervalDays: 30,
+    mayorLaborPct: 90,       // 시장 재임 중 시작되는 프로젝트 노동량 ×90%
+    mayorStipend: 200,       // 일일 수당
+  },
+  romance: {
+    datingMin: 6000, datingInteractions: 100,
+    marryMin: 9000, marryInteractions: 300,
+    breakup: 2000, breakupMood: 1500,
+    partnerSocialPct: 150,   // 파트너 페어링 사교 회복 %
+    sweetTalkDelta: 8,       // 파트너 대화 상호 호감 가산(스케일 전)
+  },
+  club: {
+    habitMin: 20000000000,   // 가입 임계 (habit 값)
+    pairBonus: 10,           // 동료 페어링 호감 가산(스케일 전)
+    talkDelta: 5,
+  },
+  influence: {
+    gossipDelta: 30,         // 험담이 청자→대상 호감도에 주는 변동(스케일 전)
+  },
 };
 
 // 부호가 음(불쾌)인 기억 종류 — memoryMod·pendingMood 계산에 사용 (구조, 코드 고정)
-export const NEGATIVE_MEMORY_KINDS = ['argument', 'starving', 'lonely'];
+export const NEGATIVE_MEMORY_KINDS = ['argument', 'starving', 'lonely', 'sick', 'heartbreak'];
 
 // 구버전 world.logic에 새 섹션의 기본값을 결정적으로 병합 (마이그레이션 전용)
 export function mergeLogicDefaults(oldLogic) {
@@ -316,6 +360,35 @@ function checkRanges(p, errors) {
   inRange('construct.persJDiv', p.construct.persJDiv, 1, 100);
   inRange('construct.cafeRatio', p.construct.cafeRatio, 1, 100);
   inRange('construct.parkRatio', p.construct.parkRatio, 1, 100);
+  // §17
+  inRange('actions.see_doctor.duration', p.actions.see_doctor.duration, 1, 10000);
+  inRange('actions.see_doctor.cost', p.actions.see_doctor.cost, 0, 1000000);
+  for (const [o, w] of Object.entries(p.workplace)) {
+    if (typeof w !== 'string') errors.push(`workplace.${o} 문자열 아님`);
+  }
+  inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
+  for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {
+    inRange(`disease.${k}`, p.disease[k], 0, 1000);
+  }
+  inRange('disease.durationTicks', p.disease.durationTicks, 1, 1000000);
+  inRange('disease.decayFactorNum', p.disease.decayFactorNum, 0, 100);
+  inRange('disease.decayFactorDen', p.disease.decayFactorDen, 1, 100);
+  inRange('disease.doctorDeficit', p.disease.doctorDeficit, 0, 10000);
+  inRange('election.intervalDays', p.election.intervalDays, 1, 10000);
+  inRange('election.mayorLaborPct', p.election.mayorLaborPct, 1, 100);
+  inRange('election.mayorStipend', p.election.mayorStipend, 0, 100000);
+  inRange('romance.datingMin', p.romance.datingMin, 0, 10000);
+  inRange('romance.marryMin', p.romance.marryMin, 0, 10000);
+  inRange('romance.breakup', p.romance.breakup, 0, 10000);
+  inRange('romance.datingInteractions', p.romance.datingInteractions, 0, 1000000);
+  inRange('romance.marryInteractions', p.romance.marryInteractions, 0, 1000000);
+  inRange('romance.breakupMood', p.romance.breakupMood, 0, 10000);
+  inRange('romance.partnerSocialPct', p.romance.partnerSocialPct, 100, 500);
+  inRange('romance.sweetTalkDelta', p.romance.sweetTalkDelta, 0, 1000);
+  inRange('club.habitMin', p.club.habitMin, 0, 250000000000);
+  inRange('club.pairBonus', p.club.pairBonus, 0, 1000);
+  inRange('club.talkDelta', p.club.talkDelta, 0, 1000);
+  inRange('influence.gossipDelta', p.influence.gossipDelta, 0, 1000);
 }
 
 function checkShape(ref, val, path, errors) {

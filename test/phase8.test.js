@@ -9,19 +9,21 @@ import { isWalkable, bfsPath } from '../sim/index.js';
 const SEED = 8484;
 const PLAYER = { name: '동', gender: 'X', age: 30, mbti: { EI: 50, SN: 50, TF: 50, JP: 0 }, occupation: 'freelancer' };
 
-test('X-1. 맵 128×128 확장: 좌표 보존·경계 개방·도로 연장·공터 32', () => {
+test('X-1. 맵 512×512 확장: 좌표 보존·경계 개방·도로 연장·공터 96', () => {
   const w = createWorld(SEED);
-  assert.equal(w.map.w, 128);
-  assert.equal(w.map.h, 128);
-  assert.equal(w.plots.length, 32);
+  assert.equal(w.map.w, 512);
+  assert.equal(w.map.h, 512);
+  assert.equal(w.plots.length, 96);
   // 옛 경계들(47, 63) 개방
   assert.ok(isWalkable(w.map, 47, 20), '1차 확장 동쪽 경계 개방');
   assert.ok(isWalkable(w.map, 20, 47), '1차 확장 남쪽 경계 개방');
   assert.ok(isWalkable(w.map, 63, 20), '2차 확장 동쪽 경계 개방');
   assert.ok(isWalkable(w.map, 20, 63), '2차 확장 남쪽 경계 개방');
+  assert.ok(isWalkable(w.map, 127, 20), '3차 확장 동쪽 경계 개방');
+  assert.ok(isWalkable(w.map, 20, 127), '3차 확장 남쪽 경계 개방');
   // 새 경계 물
-  assert.ok(!isWalkable(w.map, 127, 20));
-  assert.ok(!isWalkable(w.map, 20, 127));
+  assert.ok(!isWalkable(w.map, 511, 20));
+  assert.ok(!isWalkable(w.map, 20, 511));
   // 도로 연장로 공터까지 도달 가능
   for (const p of w.plots) {
     assert.ok(bfsPath(w.map, 5, 7, p.x + 1, p.y + 1) !== null, `plot${p.plotId} 도달`);
@@ -52,7 +54,24 @@ test('X-3. 건설 노동 → 완공 → 건물·이주, 결정적', () => {
   assert.deepEqual(a, b, '결정적');
   assert.ok(a.built.length >= 1, `완공 발생 (${JSON.stringify(a.built)})`);
   assert.ok(a.built[0].startsWith('house5'), '새 집 id = house5');
-  assert.ok(a.moved.length >= 1, '이주 발생');
+  // 이주는 §15.1 침대 증축이 과밀을 먼저 해소하면 안 일어날 수 있다(창발적으로 올바름) —
+  // 이주 브랜치 자체는 아래 X-3b에서 통제 검증.
+});
+
+test('X-3b. 이주 브랜치: 완공 시 과밀 집의 최고 id 거주자가 새 집으로', () => {
+  const w = createWorld(SEED);
+  tick(w, [{ sequence: 0, command: 'create_player', payload: PLAYER }]);
+  // 통제: 증축·다른 심의 개입 차단 — 프로젝트를 손으로 완공 직전 상태로
+  for (const s of w.sims) s.state = { kind: 'performing', action: 'idle', facilityId: null, resourceId: null, path: [], ticksLeft: 99999, pairedTicks: 0 };
+  w.reservations = {};
+  w.project = { plotId: 0, type: 'house', progress: 999999, required: 600 };
+  const evs = tick(w, []);
+  const built = evs.find((e) => e.type === 'facility_built');
+  const moved = evs.find((e) => e.type === 'moved_home');
+  assert.ok(built, '완공');
+  assert.ok(moved, '이주');
+  assert.equal(moved.simId, 10, 'house0의 최고 id(플레이어)');
+  assert.equal(moved.payload.to, built.payload.facilityId);
 });
 
 test('X-4. 완공 건물의 자원 도달성 + 후속 프로젝트가 다음 공터 사용', () => {

@@ -13,6 +13,12 @@ import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
+import {
+  dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend,
+  maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
+} from './society.js';
+import { bindSocietyHooks } from './cognition.js';
+bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -25,6 +31,7 @@ function needValueFor(sim, action, L) {
   if (action === 'build') return NEED_MAX - L.build.deficit; // 고정 중간 급함 (§15.1.B)
   if (action === 'shop') return sim.needs.hunger; // 배고픈데 장이 비면 급함 (§16.B, Codex 22차 항목 5)
   if (action === 'construct') return NEED_MAX - L.construct.deficit; // §16.5 고정 급함
+  if (action === 'see_doctor') return NEED_MAX - L.disease.doctorDeficit; // 아플 때 최우선급 (§17.3)
   return sim.needs[NEED_OF_ACTION[action]];
 }
 
@@ -92,6 +99,7 @@ function actionBlockReason(world, sim, action, t) {
   }
   if (action === 'cook_eat' && sim.groceries < 1) return 'no_groceries';
   if (action === 'construct' && !world.project) return 'no_project';
+  if (action === 'see_doctor' && !sim.sick) return 'healthy';
   if (action === 'build') {
     const home = world.map.facilities.find((f) => f.id === sim.homeId);
     const residents = world.sims.reduce((n, x) => n + (x.homeId === sim.homeId ? 1 : 0), 0);
@@ -137,7 +145,11 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
       }
       continue;
     }
-    for (const ftype of ACTION_FACILITY[action]) {
+    // §17.2: work는 자기 직업의 근무 시설에서만
+    const ftypes = action === 'work'
+      ? [L.workplace[sim.traits.occupation]]
+      : ACTION_FACILITY[action];
+    for (const ftype of ftypes) {
       for (const fac of world.map.facilities) {
         if (fac.type !== ftype) continue;
         if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue; // 자기 집만 (§15.1)
@@ -387,9 +399,10 @@ export function tick(world, inputsForThisTick = []) {
     // §15.1.B 도로화: GRASS 밟힘 마모 누적 → 임계 도달 시 ROAD 전환 (rng 미사용)
     const ti = sim.y * world.map.w + sim.x;
     if (world.map.tiles[ti] === TILE.GRASS) {
-      world.wear[ti]++;
+      world.wear[ti] = (world.wear[ti] ?? 0) + 1; // 희소 객체 (§17.0)
       if (world.wear[ti] >= world.logic.build.wearThreshold) {
         world.map.tiles[ti] = TILE.ROAD;
+        delete world.wear[ti]; // 0 엔트리 금지 규칙의 연장 — 도로화된 칸은 제거
         emit('road_formed', sim.id, { x: sim.x, y: sim.y });
       }
     }
@@ -419,6 +432,7 @@ export function tick(world, inputsForThisTick = []) {
 
   // 2b) socialize 페어링: 시설별, id 오름차순 2명씩. 호감도는 비대칭(각자 TF 계수) (PLAN §12.1)
   const pairedThisTick = new Set();
+  const pairedWith = new Map(); // §17.5 파트너 회복 보너스용
   {
     const byFacility = new Map();
     for (const sim of world.sims) {
@@ -434,16 +448,18 @@ export function tick(world, inputsForThisTick = []) {
       for (let i = 0; i + 1 < group.length; i += 2) {
         const a = group[i], b = group[i + 1];
         pairedThisTick.add(a.id); pairedThisTick.add(b.id);
+        pairedWith.set(a.id, b.id); pairedWith.set(b.id, a.id);
         a.state.pairedTicks++; b.state.pairedTicks++;
-        // D5: 토큰 전파 — 그 틱 호감도 변동 **이전** (발신자→수신자 방향 호감도 사용)
+        // §17.8 페어링 서브순서: ① 전파 → ② 전염 → ③ 대화(험담 영향 포함) → ④ 델타
         const transferred = transferTokens(world, a, b, t, emit);
-        // D8: 대화 — 발화 간격마다 구조화 주제 이벤트 (전파 성공 시 party_invite 우선)
+        contagionDraw(world, a, b, t, emit);
         maybeConverse(world, a, b, facId, t, transferred > 0, emit);
         // D3: 상호작용 카운트 (대칭, 포화 캡)
         const IC = 1000000;
         world.interactions[a.id][b.id] = Math.min(IC, world.interactions[a.id][b.id] + 1);
         world.interactions[b.id][a.id] = Math.min(IC, world.interactions[b.id][a.id] + 1);
-        const delta = rngInt(world.rngSim, L.affinity.deltaSpan) + L.affinity.deltaMin; // [-20, 40]
+        const delta = rngInt(world.rngSim, L.affinity.deltaSpan) + L.affinity.deltaMin // [-20, 40]
+          + pairDeltaBonus(world, a, b); // §17: 연인·동아리 동료 보너스
         const fA = L.affinity.tfScaleBase + a.traits.mbti.TF;
         const fB = L.affinity.tfScaleBase + b.traits.mbti.TF;
         const beforeAB = world.affinity[a.id][b.id];
@@ -474,7 +490,14 @@ export function tick(world, inputsForThisTick = []) {
     const need = NEED_OF_ACTION[s.action];
     if (need && def.recoverPerTick) {
       const recovers = s.action !== 'socialize' || pairedThisTick.has(sim.id);
-      if (recovers) sim.needs[need] = Math.min(NEED_MAX, sim.needs[need] + def.recoverPerTick);
+      if (recovers) {
+        let amt = def.recoverPerTick;
+        // §17.5: 연인과의 수다는 더 달콤하다
+        if (s.action === 'socialize' && pairedWith.get(sim.id) === world.partners[sim.id]) {
+          amt = floorDiv(amt * L.romance.partnerSocialPct, 100);
+        }
+        sim.needs[need] = Math.min(NEED_MAX, sim.needs[need] + amt);
+      }
     }
     // §16.5: 건설 노동 — 현재 프로젝트와 같은 plot의 현장 수행만 기여
     if (s.action === 'construct' && world.project
@@ -515,6 +538,13 @@ export function tick(world, inputsForThisTick = []) {
       } else {
         applyMood(sim, -L.actions.fish.missMood);
       }
+    } else if (s.action === 'see_doctor') {
+      sim.money -= L.actions.see_doctor.cost;
+      emit('money_changed', sim.id, { delta: -L.actions.see_doctor.cost, balance: sim.money, action: 'see_doctor' });
+      if (sim.sick) {
+        sim.sick = null;
+        emit('recovered', sim.id, { how: 'doctor' });
+      }
     } else if (s.action === 'shop') {
       sim.money -= L.actions.shop.cost;
       emit('money_changed', sim.id, { delta: -L.actions.shop.cost, balance: sim.money, action: 'shop' });
@@ -554,6 +584,7 @@ export function tick(world, inputsForThisTick = []) {
         eat: 'meal', work: 'work_done', socialize: 'small_talk', play: 'play_time',
         drink: 'drank', binge_eat: 'binge', hole_up: 'hole_up', exercise: 'workout', build: 'built_bed',
         read: 'read_time', shop: 'shopping', fish: 'fishing', cook_eat: 'home_meal', construct: 'construct_work',
+        see_doctor: 'healed',
       }[s.action];
       if (kind) {
         recordFact(sim, t, L, kind, { placeId: s.facilityId, tags: [s.action, `facility:${s.facilityId}`] });
@@ -583,6 +614,7 @@ export function tick(world, inputsForThisTick = []) {
       if (need === 'fun' && age <= L.ageDecay.youngMax) d += L.ageDecay.youngFunAdd;
       if (need === 'energy' && age >= L.ageDecay.oldMin) d += L.ageDecay.oldEnergyAdd;
       if (need === 'energy' && sim.hangoverUntil > t) d += L.coping.hangoverEnergyDecay; // 숙취 (§15.1.A)
+      if (sim.sick && (need === 'energy' || need === 'fun')) d += floorDiv(d * L.disease.decayFactorNum, L.disease.decayFactorDen); // 병 (§17.3)
       const before = sim.needs[need];
       sim.needs[need] = Math.max(0, before - d);
       if (need === 'hunger' && before > 0 && sim.needs[need] === 0) {
@@ -591,6 +623,7 @@ export function tick(world, inputsForThisTick = []) {
         recordFact(sim, t, L, 'starving', { tags: ['eat'] });
       }
     }
+    naturalRecovery(world, sim, t, emit); // §17.3 자연 치유 (무드로우)
     // 기분 감쇠: 0 방향으로 decayPerTick 수렴 — 5단계는 감쇠 후 기분을 읽는다
     const dm = L.mood.decayPerTick;
     if (sim.mood > 0) sim.mood = Math.max(0, sim.mood - dm);
@@ -611,6 +644,7 @@ export function tick(world, inputsForThisTick = []) {
   }
   expireAndMeasureTokens(world, t, emit);
   maybeGenerateToken(world, t, emit);
+  clubMeetingTokens(world, t, emit, learnToken); // §17.6 주간 모임 (멤버 즉시 인지)
   {
     // §16.C: 만료 → 스폰. 수락 기준: ROAD 타일 && 같은 좌표에 기존 아이템 없음.
     // 드로우 순서: (x,y) 시도들(성공 시 조기 중단) → amount → itemId 부여 (Codex 22차 항목 2)
@@ -665,6 +699,17 @@ export function tick(world, inputsForThisTick = []) {
         }
       }
     }
+    // §17.8 일일 평가: 질병 → 선거 → 시장 수당 → 이민 (도시계획 트리거보다 앞)
+    {
+      const day = floorDiv(t, 1440);
+      if (world.lastDailyDay !== day) {
+        world.lastDailyDay = day;
+        dailyDiseaseDraws(world, t, emit);
+        maybeElection(world, t, day, emit);
+        mayorStipend(world, t, emit);
+        maybeImmigration(world, t, day, emit);
+      }
+    }
     const day = floorDiv(t, 1440);
     if (!world.project && world.lastPlanDay !== day) {
       world.lastPlanDay = day;
@@ -682,8 +727,12 @@ export function tick(world, inputsForThisTick = []) {
         else if (pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (pop > parkSpots * L.construct.parkRatio) type = 'park';
         if (type) {
-          world.project = { plotId: freePlot.plotId, type, progress: 0, required: L.construct.laborRequired };
-          emit('project_started', null, { plotId: freePlot.plotId, type, x: freePlot.x, y: freePlot.y, required: L.construct.laborRequired });
+          // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
+          const required = world.mayorId !== null
+            ? floorDiv(L.construct.laborRequired * L.election.mayorLaborPct, 100)
+            : L.construct.laborRequired;
+          world.project = { plotId: freePlot.plotId, type, progress: 0, required };
+          emit('project_started', null, { plotId: freePlot.plotId, type, x: freePlot.x, y: freePlot.y, required });
         }
       }
     }
