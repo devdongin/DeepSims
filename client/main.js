@@ -504,6 +504,19 @@ function handleVisualEvent(e) {
 // ---- UI ----
 const $ = (id) => document.getElementById(id);
 
+// 목업 황혼 톤: 시각별 씬 위 틴트 (§UI). CSS transition이 부드럽게 보간.
+function applyDaylight(tick) {
+  const el = document.getElementById('daynight');
+  if (!el) return;
+  const h = Math.floor((tick % 1440) / 60);
+  let bg = 'transparent';
+  if (h >= 21 || h < 5) bg = 'rgba(20, 26, 60, 0.38)';        // 밤
+  else if (h >= 19) bg = 'rgba(50, 30, 70, 0.26)';             // 황혼
+  else if (h >= 17) bg = 'rgba(255, 140, 60, 0.12)';           // 노을
+  else if (h < 7) bg = 'rgba(90, 110, 170, 0.18)';             // 새벽
+  el.style.background = bg;
+}
+
 function fmtClock(tick) {
   const day = Math.floor(tick / 1440);
   const tod = tick % 1440;
@@ -635,6 +648,7 @@ function renderPanel() {
   const sim = world.sims.find((s) => s.id === selectedSimId);
   panel.style.display = 'block';
   $('simname').textContent = sim.name;
+  $('portrait').src = `./sprites/walk${sim.isPlayer ? 'p' : sim.id % 10}_0.png`; // 도트 초상화 (§17.14)
   for (const k of ['hunger', 'energy', 'social', 'fun']) {
     $(`b-${k}`).style.width = `${sim.needs[k] / 100}%`;
   }
@@ -781,6 +795,7 @@ function connect() {
         world = msg.world;
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
+        applyDaylight(world.worldTick);
         if (scene) { simSprites.forEach((s) => s.destroy()); simSprites.clear(); scene.drawWorld(); }
         showReport();
         maybeShowOnboarding();
@@ -794,6 +809,7 @@ function connect() {
         world.worldTick = msg.toTick;
         world.sims = msg.sims;
         $('clock').textContent = fmtClock(world.worldTick);
+        applyDaylight(world.worldTick);
         for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
         let mapDirty = false;
