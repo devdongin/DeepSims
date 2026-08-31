@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 17,
+  "logicSchemaVersion": 18,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -107,14 +107,16 @@
       "workStart": 420,
       "workEnd": 960,
       "wagePct": 90,
-      "startMoney": 1000
+      "startMoney": 1000,
+      "weekendWork": true
     },
     "freelancer": {
       "workStart": 300,
       "workEnd": 1260,
       "wagePct": 80,
       "startMoney": 1000,
-      "flex": true
+      "flex": true,
+      "weekendWork": true
     },
     "student": {
       "workStart": 840,

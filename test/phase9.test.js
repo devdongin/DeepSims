@@ -444,6 +444,7 @@ test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수�
   const base = L.occupations.office_worker;
   let jDays = 0; let pDays = 0;
   for (let d = 0; d < 60; d++) {
+    if (d % 7 >= 5) continue; // §17.17 주말 휴무 — 근무 창 없음
     s.traits = { ...s.traits, age: 30, occupation: 'office_worker', mbti: { ...s.traits.mbti, EI: 50, JP: 0 } };
     const wwJ = workWindowForRef(s, L, d);
     const offJ = Math.floor((chronoValueRef(s.traits) - 50) * L.chrono.maxShiftMin / 50);
@@ -456,7 +457,7 @@ test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수�
     const offP = Math.floor((chronoValueRef(s.traits) - 50) * L.chrono.maxShiftMin / 50);
     if (wwP.to - (base.workEnd + offP) > 0) pDays++;
   }
-  assert.ok(jDays >= 25, `J형 야근 일수 (${jDays}/60)`);
+  assert.ok(jDays >= 18, `J형 야근 일수 (${jDays}/주중42일)`);
   assert.equal(pDays, 0, 'JP=100은 야근 확률 0');
   // 교대 랩 + 야간조 주간 수면 + 수면 창 자정 정규화 (from < 1440 항상)
   const p = w.sims[1];
@@ -540,4 +541,20 @@ test('S-19. §17.16 서카디언: 밤에 수면 압력↑, 야간조는 위상 �
   // 야간조(홀수 id 교대 직업): 12시간 위상 반전 — 정오 압력이 자정 압력보다 크다
   const n = { ...w.sims[1], id: 1, traits: { ...w.sims[1].traits, occupation: 'police' } };
   assert.ok(circadianEnergyPctRef(n, L, 12 * 60) > circadianEnergyPctRef(n, L, 0), '야간조 위상 반전');
+});
+
+test('S-20. §17.17 주중/주말: 주말 휴무·교대 유지·여가 확장', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const s = { ...w.sims[0], traits: { ...w.sims[0].traits, age: 30, occupation: 'office_worker' } };
+  assert.equal(workWindowForRef(s, L, 5), null, '토요일 휴무');
+  assert.ok(workWindowForRef(s, L, 4) !== null, '금요일 근무');
+  const p = { ...w.sims[1], id: 1, traits: { ...w.sims[1].traits, occupation: 'police' } };
+  assert.ok(workWindowForRef(p, L, 6) !== null, '교대는 일요일도 근무');
+  const b = { ...w.sims[2], traits: { ...w.sims[2].traits, age: 30, occupation: 'barista' } };
+  assert.ok(workWindowForRef(b, L, 5) !== null, '카페는 주말도 연다');
+  const planSat = buildDailyPlanRef(s, L, 5);
+  assert.ok(!planSat.some((sl) => sl.intent === 'work'), '주말 계획에 근무 없음');
+  const leisure = planSat.find((sl) => sl.intent === 'socialize' || sl.intent === 'play');
+  assert.equal(leisure.from, L.plan.mealSlot1End, '주말 여가 확장');
 });
