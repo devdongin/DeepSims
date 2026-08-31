@@ -2,13 +2,25 @@
 import { makeRng, rngInt } from './prng.js';
 
 export const GENDERS = ['F', 'M', 'X'];
-export const OCCUPATIONS = ['office_worker', 'barista', 'freelancer', 'student', 'retired'];
+export const OCCUPATIONS = [
+  'office_worker', 'barista', 'freelancer', 'student', 'retired',
+  'doctor', 'civil_servant', 'teacher',            // §17.2 (풀 누락 버그 수리 — §17.13)
+  'police', 'firefighter', 'nurse', 'politician',  // §17.13 신규
+];
 export const MBTI_AXES = ['EI', 'SN', 'TF', 'JP'];
 
 // rng를 소비하며 특성 생성 (worldgen 또는 마이그레이션 임시 rng)
 export function generateTraits(rng) {
   const gender = GENDERS[rngInt(rng, 3)];
-  const age = 15 + rngInt(rng, 76); // 15~90
+  // §17.13 현실적 연령 피라미드 (드로우 2회 고정: 구간 → 오프셋): 15-25 15% / 26-45 45% /
+  // 46-64 25% / 65-90 15% — 균등 15~90(구버전)은 40%가 60세+로 은퇴 쏠림.
+  const band = rngInt(rng, 100);
+  const off = rngInt(rng, 26);
+  let age;
+  if (band < 15) age = 15 + (off % 11);
+  else if (band < 60) age = 26 + (off % 20);
+  else if (band < 85) age = 46 + (off % 19);
+  else age = 65 + off;
   const mbti = {};
   for (const axis of MBTI_AXES) mbti[axis] = rngInt(rng, 101); // 0~100
   const eligible = OCCUPATIONS.filter((o) => occupationAllowed(o, age));
@@ -19,6 +31,8 @@ export function generateTraits(rng) {
 export function occupationAllowed(occupation, age) {
   if (occupation === 'retired') return age >= 60;
   if (occupation === 'student') return age <= 25;
+  if (occupation === 'doctor' || occupation === 'politician') return age >= 26 && age < 60;
+  if (['police', 'firefighter', 'nurse'].includes(occupation)) return age >= 20 && age < 60;
   return true;
 }
 

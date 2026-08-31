@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 13,
+  logicSchemaVersion: 15, // v14는 미배포 중간본이지만 chrono 키 교체를 버전 경계로 명시 (Codex 35차)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -30,20 +30,26 @@ export const DEFAULT_LOGIC = {
     see_doctor: { duration: 30, cost: 800 }, // §17.3 진료
   },
   occupations: {
-    office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000 },
+    office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
     barista: { workStart: 420, workEnd: 960, wagePct: 90, startMoney: 1000 },
-    freelancer: { workStart: 0, workEnd: 1440, wagePct: 80, startMoney: 1000 },
+    freelancer: { workStart: 300, workEnd: 1260, wagePct: 80, startMoney: 1000, flex: true },
     student: { workStart: 840, workEnd: 1200, wagePct: 50, startMoney: 500 },
     retired: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 3000 },
     // §17.2 신규 직업 — 근무지는 workplace 매핑
     doctor: { workStart: 480, workEnd: 1140, wagePct: 140, startMoney: 1500 },
-    civil_servant: { workStart: 540, workEnd: 1080, wagePct: 110, startMoney: 1200 },
+    civil_servant: { workStart: 540, workEnd: 1080, wagePct: 110, startMoney: 1200, flex: true },
     teacher: { workStart: 480, workEnd: 960, wagePct: 105, startMoney: 1100 },
+    // §17.13 신규 — police/firefighter/nurse는 교대(shift), politician은 flex
+    police: { workStart: 540, workEnd: 1080, wagePct: 115, startMoney: 1200, shift: 'rotating' },
+    firefighter: { workStart: 540, workEnd: 1080, wagePct: 115, startMoney: 1200, shift: 'rotating' },
+    nurse: { workStart: 540, workEnd: 1080, wagePct: 120, startMoney: 1200, shift: 'rotating' },
+    politician: { workStart: 540, workEnd: 1080, wagePct: 125, startMoney: 1500, flex: true },
   },
   // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
   workplace: {
     office_worker: 'office', barista: 'cafe', freelancer: 'office', student: 'school',
     retired: 'office', doctor: 'hospital', civil_servant: 'city_hall', teacher: 'school',
+    police: 'police_station', firefighter: 'fire_station', nurse: 'hospital', politician: 'city_hall',
   },
   persFactor: { socializeBase: 150, playBase: 100, workBase: 150 },
   affinity: {
@@ -149,10 +155,22 @@ export const DEFAULT_LOGIC = {
     graduateAge: 26,         // student → office_worker
     retireAge: 65,           // → retired
     festivalDays: 30,        // §17.10 마을 축제 주기
+    childCheckDays: 30,      // §17.13 자녀 월간 평가 (나이는 새해 유지)
   },
   family: {
     childPermille: 300,      // §17.11 새해 자녀 정착 확률(‰, 동거 부부·빈 침대 조건)
     familyBonus: 12,         // 가족 페어링 호감 가산
+  },
+  // §17.13 생활 리듬 — 크로노타입·교대·야근 (전부 분 단위 tod, 무드로우)
+  chrono: {
+    earlyMax: 20, owlMin: 70,            // 라벨 구간 (표시용 — 로직은 연속 오프셋)
+    maxShiftMin: 120,                    // 연속 크로노 오프셋 ±상한 (v 0..99 선형)
+    overtimeProbPct: 70,                 // 야근 의사확률 상한: p=(100-JP)×70/100 (일별 dayHash)
+    overtimeMinBase: 60, overtimeMinSpan: 90, // 야근 길이 60 + (100-JP)×90/100 그라데이션
+    dayShiftStart: 540, dayShiftEnd: 1080,
+    nightShiftStart: 1320, nightShiftEnd: 1800,  // 자정 랩 (to>1440)
+    sleepStart: 1350, sleepLenMin: 450,
+    daySleepStart: 480, daySleepEnd: 960,        // 야간조 주간 수면
   },
   disease: {
     basePermille: 5, starvingBonus: 30, rainBonus: 10, lowEnergyBonus: 20,
@@ -377,6 +395,21 @@ function checkRanges(p, errors) {
     if (typeof w !== 'string') errors.push(`workplace.${o} 문자열 아님`);
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
+  inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);
+  inRange('chrono.earlyMax', p.chrono.earlyMax, 0, 100);
+  inRange('chrono.owlMin', p.chrono.owlMin, 0, 100);
+  inRange('chrono.maxShiftMin', p.chrono.maxShiftMin, 0, 480);
+  inRange('chrono.overtimeProbPct', p.chrono.overtimeProbPct, 0, 100);
+  inRange('chrono.overtimeMinBase', p.chrono.overtimeMinBase, 0, 480);
+  inRange('chrono.overtimeMinSpan', p.chrono.overtimeMinSpan, 0, 480);
+  inRange('chrono.dayShiftStart', p.chrono.dayShiftStart, 0, 1439);
+  inRange('chrono.dayShiftEnd', p.chrono.dayShiftEnd, 1, 1440);
+  inRange('chrono.nightShiftStart', p.chrono.nightShiftStart, 0, 1439);
+  inRange('chrono.nightShiftEnd', p.chrono.nightShiftEnd, 1, 2880);
+  inRange('chrono.sleepStart', p.chrono.sleepStart, 0, 1439);
+  inRange('chrono.sleepLenMin', p.chrono.sleepLenMin, 60, 1440);
+  inRange('chrono.daySleepStart', p.chrono.daySleepStart, 0, 1439);
+  inRange('chrono.daySleepEnd', p.chrono.daySleepEnd, 1, 1440);
   inRange('society.yearDays', p.society.yearDays, 30, 100000);
   inRange('society.graduateAge', p.society.graduateAge, 15, 90);
   inRange('society.retireAge', p.society.retireAge, 15, 91);

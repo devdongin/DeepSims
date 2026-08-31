@@ -1,22 +1,28 @@
 // Phase 4: 하루 계획 + 정보 확산 (PLAN §2.5 D/F, 델타 D4~D7). 정수 연산, 계획은 rng 미사용.
 import { recordFact } from './cognition.js';
 import { rngInt } from './prng.js';
+import { workWindowFor, sleepWindowFor, slotMatches, dayHash } from './chrono.js';
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 // 기상 시 하루 계획 생성 (sleep 완료 정산 직후, lastPlannedDay 가드는 호출자)
 // 슬롯 배열 순서 = 우선순위: 식사 > 근무 > 여가 (D4, 겹칠 때 앞선 슬롯의 intent만 유효)
-export function buildDailyPlan(sim, L) {
+export function buildDailyPlan(sim, L, day) {
   const slots = [];
-  const occ = L.occupations[sim.traits.occupation];
   slots.push({ from: L.plan.mealSlot1Start, to: L.plan.mealSlot1End, intent: 'eat' });
   slots.push({ from: L.plan.mealSlot2Start, to: L.plan.mealSlot2End, intent: 'eat' });
-  if (occ.wagePct > 0) slots.push({ from: occ.workStart, to: occ.workEnd, intent: 'work' });
+  // §17.13 개인 근무 창: 크로노타입·야근(일별 의사확률)·교대 반영 (to > 1440 자정 랩)
+  const ww = workWindowFor(sim, L, day);
+  if (ww) slots.push({ from: ww.from, to: ww.to, intent: 'work' });
+  // 여가 의도 의사확률: p(사교)=100-EI — E 성향일수록 어울리는 날이 많고, I도 가끔 어울린다
   slots.push({
     from: L.plan.leisureStart, to: L.plan.leisureEnd,
-    intent: sim.traits.mbti.EI < 50 ? 'socialize' : 'play', // E는 어울리고 I는 혼자 논다
+    intent: dayHash(sim.id, day, 2) < (100 - sim.traits.mbti.EI) ? 'socialize' : 'play',
   });
+  // §17.13 개인 수면 슬롯 (우선순위 최하 — 욕구 주도 수면의 타이밍만 끌어당김)
+  const sw = sleepWindowFor(sim, L);
+  slots.push({ from: sw.from, to: sw.to, intent: 'sleep' });
   return slots;
 }
 
@@ -39,7 +45,7 @@ export function planFactorFor(world, sim, action, facilityId, t, L) {
   if (Array.isArray(slots)) {
     const tod = t % 1440;
     // 활성 intent = tod를 포함하는 **첫** 슬롯 (배열 순서 = 우선순위, D4)
-    const active = slots.find((slot) => tod >= slot.from && tod < slot.to);
+    const active = slots.find((slot) => slotMatches(slot, tod)); // §17.13 자정 랩 지원
     if (active && active.intent === action) {
       const factor = clamp(100 + floorDiv(L.plan.bonusMax * (100 - sim.traits.mbti.JP), 100), 100, 150);
       return { factor, partyPull: false };

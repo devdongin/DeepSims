@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 13,
+  "logicSchemaVersion": 15,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -100,7 +100,8 @@
       "workStart": 540,
       "workEnd": 1080,
       "wagePct": 100,
-      "startMoney": 1000
+      "startMoney": 1000,
+      "flex": true
     },
     "barista": {
       "workStart": 420,
@@ -109,10 +110,11 @@
       "startMoney": 1000
     },
     "freelancer": {
-      "workStart": 0,
-      "workEnd": 1440,
+      "workStart": 300,
+      "workEnd": 1260,
       "wagePct": 80,
-      "startMoney": 1000
+      "startMoney": 1000,
+      "flex": true
     },
     "student": {
       "workStart": 840,
@@ -136,13 +138,42 @@
       "workStart": 540,
       "workEnd": 1080,
       "wagePct": 110,
-      "startMoney": 1200
+      "startMoney": 1200,
+      "flex": true
     },
     "teacher": {
       "workStart": 480,
       "workEnd": 960,
       "wagePct": 105,
       "startMoney": 1100
+    },
+    "police": {
+      "workStart": 540,
+      "workEnd": 1080,
+      "wagePct": 115,
+      "startMoney": 1200,
+      "shift": "rotating"
+    },
+    "firefighter": {
+      "workStart": 540,
+      "workEnd": 1080,
+      "wagePct": 115,
+      "startMoney": 1200,
+      "shift": "rotating"
+    },
+    "nurse": {
+      "workStart": 540,
+      "workEnd": 1080,
+      "wagePct": 120,
+      "startMoney": 1200,
+      "shift": "rotating"
+    },
+    "politician": {
+      "workStart": 540,
+      "workEnd": 1080,
+      "wagePct": 125,
+      "startMoney": 1500,
+      "flex": true
     }
   },
   "workplace": {
@@ -153,7 +184,11 @@
     "retired": "office",
     "doctor": "hospital",
     "civil_servant": "city_hall",
-    "teacher": "school"
+    "teacher": "school",
+    "police": "police_station",
+    "firefighter": "fire_station",
+    "nurse": "hospital",
+    "politician": "city_hall"
   },
   "persFactor": {
     "socializeBase": 150,
@@ -334,11 +369,28 @@
     "yearDays": 120,
     "graduateAge": 26,
     "retireAge": 65,
-    "festivalDays": 30
+    "festivalDays": 30,
+    "childCheckDays": 30
   },
   "family": {
     "childPermille": 300,
     "familyBonus": 12
+  },
+  "chrono": {
+    "earlyMax": 20,
+    "owlMin": 70,
+    "maxShiftMin": 120,
+    "overtimeProbPct": 70,
+    "overtimeMinBase": 60,
+    "overtimeMinSpan": 90,
+    "dayShiftStart": 540,
+    "dayShiftEnd": 1080,
+    "nightShiftStart": 1320,
+    "nightShiftEnd": 1800,
+    "sleepStart": 1350,
+    "sleepLenMin": 450,
+    "daySleepStart": 480,
+    "daySleepEnd": 960
   },
   "disease": {
     "basePermille": 5,
@@ -369,7 +421,7 @@
     "sweetTalkDelta": 8
   },
   "club": {
-    "habitMin": 20000000000,
+    "habitMin": 10000000000,
     "pairBonus": 10,
     "talkDelta": 5
   },

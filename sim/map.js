@@ -156,6 +156,7 @@ export function buildMap() {
   expandMapTo512(map, null);
   addSocietyVenuesTo(map.tiles, map.facilities, map.w);
   addLeisureVenuesTo(map.tiles, map.facilities, map.w);
+  addCivicVenuesTo(map.tiles, map.facilities, map.w); // §17.13
   return map;
 }
 
@@ -221,6 +222,29 @@ export function extraPlots512() {
   for (const x of [63, 186, 378]) for (let y = 80; y <= 440; y += 40) coords.push([x, y]); // 세로 밴드 30
   coords.push([300, 300], [340, 340], [420, 420], [460, 460]);                              // 원거리 4
   return coords.map(([x, y], i) => ({ plotId: 32 + i, x, y, used: false }));
+}
+
+// §17.13: 치안·소방 — police_station/fire_station (단일 권위, §16.A 방식)
+export function addCivicVenuesTo(tiles, facilities, W) {
+  const bld = (bx, by, bw, bh, dx, dy) => {
+    for (let j = by; j < by + bh; j++) for (let i = bx; i < bx + bw; i++) tiles[j * W + i] = TILE.WALL;
+    for (let j = by + 1; j < by + bh - 1; j++) for (let i = bx + 1; i < bx + bw - 1; i++) tiles[j * W + i] = TILE.FLOOR;
+    tiles[dy * W + dx] = TILE.FLOOR;
+  };
+  if (!facilities.some((f) => f.id === 'fire_station')) {
+    bld(16, 64, 7, 5, 19, 64);
+    facilities.push({
+      id: 'fire_station', type: 'fire_station', x: 16, y: 64, w: 7, h: 5, door: { x: 19, y: 64 },
+      resources: [0, 1, 2].map((k) => ({ id: `slot${k}`, kind: 'slot', x: 17 + k * 2, y: 66 })),
+    });
+  }
+  if (!facilities.some((f) => f.id === 'police_station')) {
+    bld(34, 64, 7, 5, 37, 64);
+    facilities.push({
+      id: 'police_station', type: 'police_station', x: 34, y: 64, w: 7, h: 5, door: { x: 37, y: 64 },
+      resources: [0, 1, 2].map((k) => ({ id: `slot${k}`, kind: 'slot', x: 35 + k * 2, y: 66 })),
+    });
+  }
 }
 
 // §17.2: 공공시설 — hospital/city_hall/school (단일 권위, §16.A 방식)
