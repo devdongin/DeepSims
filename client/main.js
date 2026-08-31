@@ -62,11 +62,15 @@ const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital'
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
+for (const t of ['house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
+  'cinema', 'bar', 'library', 'market', 'police', 'fire']) {
+  BLD_KEYS.push([`bld_${t}_int`, `./props/bld_${t}_int.png`]); // §17.19 내부 컷어웨이
+}
 const BLD_OF_FACILITY = { cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
   city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
   police_station: 'bld_police', fire_station: 'bld_fire' };
-const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern']
+const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern', 'police_car', 'fire_truck', 'ambulance']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -118,12 +122,19 @@ class TownScene extends Phaser.Scene {
         put('fishing_sign', fac.door.x - 1, fac.door.y, 24);
       } else if (fac.type === 'hospital') {
         put('hospital_cross', fac.door.x + 1, fac.door.y - 1, 26);
+        put('ambulance', fac.door.x - 2, fac.door.y - 1, 34); // §17.19 차량
         for (const r of fac.resources.filter((x) => x.kind === 'clinic')) put('pill_bottle', r.x, r.y, 16);
         for (const r of fac.resources.filter((x) => x.kind === 'slot')) put('desk', r.x, r.y, 22);
       } else if (fac.type === 'city_hall') {
         put('flag_pole', fac.door.x - 2, fac.door.y - 1, 36);
         put('ballot_box', fac.door.x + 2, fac.door.y + 1, 20);
         put('noticeboard', fac.x + 6, fac.y + 6, 24);
+        for (const r of fac.resources) put('desk', r.x, r.y, 22);
+      } else if (fac.type === 'police_station') {
+        put('police_car', fac.door.x - 2, fac.door.y - 1, 34); // §17.19 차량
+        for (const r of fac.resources) put('desk', r.x, r.y, 22);
+      } else if (fac.type === 'fire_station') {
+        put('fire_truck', fac.door.x - 2, fac.door.y - 1, 38); // §17.19 차량
         for (const r of fac.resources) put('desk', r.x, r.y, 22);
       } else if (fac.type === 'school') {
         for (const r of fac.resources) put('school_desk', r.x, r.y, 22);
