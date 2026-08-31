@@ -16,6 +16,7 @@ import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expi
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
   dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend, applyWelfare,
+  dailyFireDraws, fireSelfOut, resolveFire,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
   updateCampaigners, maybeNewYear, maybeFestival, maybeChildren,
 } from './society.js';
@@ -34,6 +35,7 @@ function needValueFor(sim, action, L) {
   if (action === 'shop') return sim.needs.hunger; // 배고픈데 장이 비면 급함 (§16.B, Codex 22차 항목 5)
   if (action === 'construct') return NEED_MAX - L.construct.deficit; // §16.5 고정 급함
   if (action === 'see_doctor') return NEED_MAX - L.disease.doctorDeficit; // 아플 때 최우선급 (§17.3)
+  if (action === 'respond_fire') return NEED_MAX - L.incidents.respondDeficit; // §17.20 화재 급함
   return sim.needs[NEED_OF_ACTION[action]];
 }
 
@@ -75,7 +77,8 @@ function scoreCandidate(sim, action, res, L) {
   const num = deficit * deficit * 16;
   // 대처 행동은 거리 무시 (den 고정 16) — 대처 방식 선택은 성격이 지배해야 한다 (§15.1.A).
   // 아니면 "집이 가까워서 은둔"이 항상 이겨 성격 변조가 무력화된다.
-  const den = COPING_ACTIONS.includes(action) ? 16 : manhattan(sim.x, sim.y, res.x, res.y) + 16;
+  // §17.20: 화재 출동도 거리 무시 — 불은 어디든 달려간다
+  const den = (COPING_ACTIONS.includes(action) || action === 'respond_fire') ? 16 : manhattan(sim.x, sim.y, res.x, res.y) + 16;
   const base = floorDiv(num * SCORE_SCALE, den);
   const pf = persFactorFor(sim, action, L);
   const mm = moodModFor(sim, action, L);
@@ -95,6 +98,10 @@ function actionBlockReason(world, sim, action, t) {
     if (!slotMatches(ww, t % 1440)) return 'off_hours';
   }
   if (COPING_ACTIONS.includes(action) && sim.mood >= L.coping.threshold) return 'not_coping';
+  if (action === 'respond_fire') {
+    if (sim.traits.occupation !== 'firefighter') return 'not_needed';
+    if (world.incidents.length === 0) return 'no_project'; // 불이 없다
+  }
   if (action === 'shop' && (sim.groceries > 0 || sim.money < L.actions.shop.cost)) {
     return sim.money < L.actions.shop.cost ? 'no_money' : 'not_needed'; // 장바구니 차 있으면 불필요 (§16.B)
   }
@@ -165,6 +172,25 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
       }
       continue;
     }
+    // §17.20: respond_fire — 불타는 시설 문 앞 가상 스팟 (위급 승격은 아래 소방관 분기)
+    if (action === 'respond_fire') {
+      for (const inc of world.incidents) {
+        const fac = world.map.facilities.find((f) => f.id === inc.facilityId);
+        const res = { id: `fire:${inc.facilityId}`, x: fac.door.x, y: fac.door.y - 1 >= 0 ? fac.door.y - 1 : fac.door.y };
+        const holder = world.reservations[resKey('firesite', res.id)];
+        if (holder !== undefined && holder !== sim.id) continue;
+        const sc = scoreCandidate(sim, action, res, L);
+        const cand = {
+          action, facilityId: 'firesite', resourceId: res.id, res,
+          ...sc, planFactor: 100, partyPull: false, weatherFactor: 100,
+          score: sc.core + sc.moodMod,
+          memoryMod: 0, stateMod: 0, habitMod: 0, cited: [],
+        };
+        if (cand.score <= 0 && !includeZeroScore) continue;
+        out.push(cand);
+      }
+      continue;
+    }
     // §17.2: work는 자기 직업의 근무 시설에서만
     const ftypes = action === 'work'
       ? [L.workplace[sim.traits.occupation]]
@@ -172,6 +198,7 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
     for (const ftype of ftypes) {
       for (const fac of (byType.get(ftype) ?? [])) {
         if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue; // 자기 집만 (§15.1)
+        if (world.incidents.some((inc) => inc.facilityId === fac.id)) continue; // §17.20 화재 중 사용 불가
         const facTag = `facility:${fac.id}`; // 자원 루프 밖 1회
         // §17.22: (action, 시설) 단위 공유 계산 — 자원(좌석)별로 동일한 값 재사용 (결과 동일)
         const memoKey = action + '|' + fac.id;
@@ -572,6 +599,8 @@ export function tick(world, inputsForThisTick = []) {
       } else {
         applyMood(sim, -L.actions.fish.missMood);
       }
+    } else if (s.action === 'respond_fire') {
+      resolveFire(world, sim, s.resourceId.slice(5), t, emit); // 'fire:<facId>' → facId (§17.20)
     } else if (s.action === 'see_doctor') {
       sim.money -= L.actions.see_doctor.cost;
       emit('money_changed', sim.id, { delta: -L.actions.see_doctor.cost, balance: sim.money, action: 'see_doctor' });
@@ -744,6 +773,7 @@ export function tick(world, inputsForThisTick = []) {
       if (world.lastDailyDay !== day) {
         world.lastDailyDay = day;
         dailyDiseaseDraws(world, t, emit);
+        dailyFireDraws(world, t, emit); // §17.20 (①.5 — 질병 다음, 시설당 1드로우)
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
         mayorStipend(world, t, emit);
@@ -755,6 +785,7 @@ export function tick(world, inputsForThisTick = []) {
         world.reputation = floorDiv(world.reputation * world.logic.growth.repDecayPct, 100); // §17.21 일일 감쇠
       }
     }
+    fireSelfOut(world, t, emit); // §17.20 자연 진화 (매 틱, 4단계)
     const day = floorDiv(t, 1440);
     if (!world.project && world.lastPlanDay !== day) {
       world.lastPlanDay = day;

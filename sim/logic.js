@@ -4,10 +4,11 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 20,
+  logicSchemaVersion: 21,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
+    respond_fire: { duration: 60, recoverPerTick: 0, cost: 0 }, // §17.20 화재 진압 (소방관 전용 위급 후보)
     eat: { duration: 30, recoverPerTick: 300, cost: 200 },
     sleep: { duration: 420, recoverPerTick: 25 },
     work: { duration: 240, wageBase: 1200 },
@@ -70,8 +71,7 @@ export const DEFAULT_LOGIC = {
       drank: 3, binge: 3, hole_up: 2, workout: 3, built_bed: 5,
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
       sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
-      new_neighbor: 3, club_joined: 4,
-    },
+      new_neighbor: 3, club_joined: 4, heroic: 8 },
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
     posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프
@@ -174,6 +174,15 @@ export const DEFAULT_LOGIC = {
   },
   // §17.18 삼각 폐쇄: 친구의 친구와는 빨리 가까워진다 (페어 델타 가산, 무드로우)
   triad: { perFriendBonus: 8, maxCommon: 3 },
+  // §17.20 사건: 화재 — 소방관에게 실제 업무를 (일일 시설별 드로우, §17.8 ①.5)
+  incidents: {
+    fireBasePermille: 2, kitchenBonusPermille: 3, // 식당·카페 주방 가중
+    respondDeficit: 5500,      // 진압 급함 (construct 4000보다 위)
+    selfOutTicks: 1440,        // 방치 시 자연 진화 (평판 타격)
+    selfOutRepPenalty: 40,     // 자연 진화 시 평판 감소
+    heroAffinity: 800,         // 목격자(맨해튼≤10) → 진압 소방관 호감
+    heroRadius: 10,
+  },
   // §17.21 도시 성장 드라이브: 행동 이벤트 → 평판 → 이민 웨이브 + 선제·일자리 건설
   growth: {
     headroomBeds: 2,        // 빈 침대가 이보다 적으면 선제 house 프로젝트
@@ -417,6 +426,13 @@ function checkRanges(p, errors) {
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
   inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);
+  inRange('incidents.respondDeficit', p.incidents.respondDeficit, 0, 10000);
+  inRange('incidents.fireBasePermille', p.incidents.fireBasePermille, 0, 1000);
+  inRange('incidents.kitchenBonusPermille', p.incidents.kitchenBonusPermille, 0, 1000);
+  inRange('incidents.selfOutTicks', p.incidents.selfOutTicks, 1, 100000);
+  inRange('incidents.selfOutRepPenalty', p.incidents.selfOutRepPenalty, 0, 10000);
+  inRange('incidents.heroAffinity', p.incidents.heroAffinity, 0, 10000);
+  inRange('incidents.heroRadius', p.incidents.heroRadius, 0, 1000);
   inRange('growth.headroomBeds', p.growth.headroomBeds, 0, 100);
   inRange('growth.repCap', p.growth.repCap, 0, 100000);
   inRange('growth.repDecayPct', p.growth.repDecayPct, 0, 100);

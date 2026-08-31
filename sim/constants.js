@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -13,7 +13,7 @@ export const NEED_MAX = 10000;
 // 확장은 뒤에 append (기존 타이브레이크 순서 보존). drink~build는 §15.1 로드맵 행동.
 export const ACTIONS = ['eat', 'sleep', 'work', 'socialize', 'play', 'idle',
   'drink', 'binge_eat', 'hole_up', 'exercise', 'build',
-  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor'];
+  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire'];
 export const COPING_ACTIONS = ['drink', 'binge_eat', 'hole_up', 'exercise'];
 export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat']; // 자기 집 시설만 후보
 
@@ -37,7 +37,7 @@ export const AFFINITY_MAX = 10000;
 
 export const EVENT_TYPES = [
   'action_started', 'action_completed', 'action_failed', 'input_rejected',
-  'starving', 'lonely', 'argument', 'money_changed', 'welfare_paid',
+  'starving', 'lonely', 'argument', 'money_changed', 'welfare_paid', 'fire_started', 'fire_out', 'heroic_save',
   'player_created', 'logic_changed', 'relationship_changed',
   'token_created', 'gathering', 'conversation', 'greeting',
   'road_formed', 'bed_built', 'hangover',

@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 20,
+  "logicSchemaVersion": 21,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -13,6 +13,11 @@
     "oldEnergyAdd": 2
   },
   "actions": {
+    "respond_fire": {
+      "duration": 60,
+      "recoverPerTick": 0,
+      "cost": 0
+    },
     "eat": {
       "duration": 30,
       "recoverPerTick": 300,
@@ -251,7 +256,8 @@
       "voted": 2,
       "child": 9,
       "new_neighbor": 3,
-      "club_joined": 4
+      "club_joined": 4,
+      "heroic": 8
     },
     "recencyLut": [
       1000,
@@ -397,6 +403,15 @@
   "triad": {
     "perFriendBonus": 8,
     "maxCommon": 3
+  },
+  "incidents": {
+    "fireBasePermille": 2,
+    "kitchenBonusPermille": 3,
+    "respondDeficit": 5500,
+    "selfOutTicks": 1440,
+    "selfOutRepPenalty": 40,
+    "heroAffinity": 800,
+    "heroRadius": 10
   },
   "growth": {
     "headroomBeds": 2,

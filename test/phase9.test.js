@@ -621,3 +621,48 @@ test('S-22. §17.21 성장 드라이브: 평판 적립·감쇠·이민 웨이브
   assert.equal(of.resources.length, 4);
   assert.ok(of.resources.every((r) => r.kind === 'desk'));
 });
+
+test('S-23. §17.20 화재: 발화·사용 배제·소방관 진압·목격 호감·자연 진화 평판 타격', () => {
+  const w = createWorld(SEED);
+  w.logic = JSON.parse(JSON.stringify(w.logic));
+  w.logic.incidents.fireBasePermille = 0; // 신규 발화 차단 — 대응 경로 격리
+  w.logic.incidents.kitchenBonusPermille = 0;
+  const ff = w.sims[0];
+  ff.traits = { ...ff.traits, age: 30, occupation: 'firefighter' };
+  // 화재 주입 (드로우 경로는 결정성 스위트가 커버 — 여기선 대응 경로 격리)
+  w.incidents.push({ type: 'fire', facilityId: 'cafe', sinceTick: w.worldTick });
+  idleAll(w, []);
+  resetIdle(ff);
+  w.reservations = {};
+  ff.needs = { hunger: 8000, energy: 8000, social: 8000, fun: 8000 };
+  ff.money = 5000; ff.mood = 0;
+  tick(w, []);
+  assert.equal(ff.state.action, 'respond_fire', `소방관 출동 (실제: ${ff.state.action})`);
+  // 불타는 카페는 후보 배제: 다른 심이 eat 후보로 cafe를 못 잡는다
+  const other = w.sims[1];
+  resetIdle(other);
+  other.needs = { hunger: 1000, energy: 9000, social: 9000, fun: 9000 };
+  other.money = 5000;
+  tick(w, []);
+  assert.ok(!(other.state.action === 'eat' && other.state.facilityId === 'cafe'), '화재 중 카페 배제');
+  // 진압 완료까지 진행
+  let out = null;
+  for (let i = 0; i < 400 && !out; i++) {
+    const evs = tick(w, []);
+    out = evs.find((e) => e.type === 'fire_out');
+  }
+  assert.ok(out, '진압 완료');
+  assert.equal(out.payload.by, ff.id);
+  assert.equal(w.incidents.length, 0);
+  assert.ok(ff.memories.some((m) => m.kind === 'heroic'), '영웅 기억');
+  // 자연 진화: 방치 화재 → 평판 타격
+  const w2 = createWorld(SEED);
+  w2.reputation = 100;
+  w2.lastDailyDay = 0; // 일일 블록(평판 감쇠 포함) 억제 — 자연 진화 효과 격리
+  w2.incidents.push({ type: 'fire', facilityId: 'office', sinceTick: w2.worldTick - w2.logic.incidents.selfOutTicks });
+  idleAll(w2, []);
+  const evs2 = tick(w2, []);
+  const so = evs2.find((e) => e.type === 'fire_out');
+  assert.ok(so && so.payload.by === 'self', '자연 진화');
+  assert.equal(w2.reputation, 100 - w2.logic.incidents.selfOutRepPenalty, '평판 타격');
+});
