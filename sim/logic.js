@@ -49,7 +49,7 @@ export const DEFAULT_LOGIC = {
   },
   // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
   workplace: {
-    office_worker: 'office', barista: 'cafe', freelancer: 'office', student: 'school',
+    office_worker: 'office', barista: 'cafe', freelancer: 'office', student: ['school', 'university'], // §18.T3
     retired: 'office', doctor: 'hospital', civil_servant: 'city_hall', teacher: 'school',
     police: 'police_station', firefighter: 'fire_station', nurse: 'hospital', politician: 'city_hall',
     worker: 'factory', // §18.T3
@@ -444,7 +444,9 @@ function checkRanges(p, errors) {
   inRange('actions.see_doctor.duration', p.actions.see_doctor.duration, 1, 10000);
   inRange('actions.see_doctor.cost', p.actions.see_doctor.cost, 0, 1000000);
   for (const [o, w] of Object.entries(p.workplace)) {
-    if (typeof w !== 'string') errors.push(`workplace.${o} 문자열 아님`);
+    const ok = typeof w === 'string'
+      || (Array.isArray(w) && w.length > 0 && w.every((x) => typeof x === 'string')); // §18.T3 배열 허용
+    if (!ok) errors.push(`workplace.${o} 문자열/문자열 배열 아님`);
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
   inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);

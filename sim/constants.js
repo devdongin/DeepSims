@@ -19,10 +19,10 @@ export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat']; // 자기 집
 
 // 행동 → 시설 타입 (구조), 행동 → 회복 욕구 (구조)
 export const ACTION_FACILITY = {
-  eat: ['cafe', 'restaurant'], sleep: ['house'], work: ['office'],
+  eat: ['cafe', 'restaurant'], sleep: ['house', 'apartment'], work: ['office'],
   socialize: ['cafe', 'park'], idle: [],
-  drink: ['bar'], binge_eat: ['cafe', 'restaurant'], hole_up: ['house'], exercise: ['park', 'gym'], build: ['house'],
-  read: ['library'], shop: ['market', 'mall'], fish: ['pond'], cook_eat: ['house'],
+  drink: ['bar'], binge_eat: ['cafe', 'restaurant'], hole_up: ['house', 'apartment'], exercise: ['park', 'gym'], build: ['house'],
+  read: ['library'], shop: ['market', 'mall'], fish: ['pond'], cook_eat: ['house', 'apartment'],
   play: ['park', 'cinema', 'mall'],
   construct: [], // 가상 현장(site) — collectCandidates 특수 경로 (§16.5.B)
   see_doctor: ['hospital'],

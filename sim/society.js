@@ -1,7 +1,7 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
-import { generateTraits } from './traits.js';
+import { generateTraits, occupationAllowed } from './traits.js';
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
 import { isResidence } from './map.js';
@@ -126,8 +126,9 @@ export function maybeNewYear(world, t, day, emit) {
       // §18.T3: 가중 풀 단일 드로우 (51차 (a)) — 대학 보유 마을은 고급 직업 풀 append
       const G2 = world.logic.graduation;
       const hasUni = world.map.facilities.some((f) => f.type === 'university');
-      const pool = hasUni ? [...G2.poolBase, ...G2.poolUni] : G2.poolBase;
-      sim.traits.occupation = pool[rngInt(world.rngSim, pool.length)];
+      const raw = hasUni ? [...G2.poolBase, ...G2.poolUni] : G2.poolBase;
+      const pool = raw.filter((o) => occupationAllowed(o, sim.traits.age)); // §18.T3: 나이 제약 (52차)
+      sim.traits.occupation = pool.length > 0 ? pool[rngInt(world.rngSim, pool.length)] : 'office_worker';
       emit('graduated', sim.id, { to: sim.traits.occupation, uni: hasUni });
     } else if (sim.traits.occupation !== 'retired' && sim.traits.age >= S.retireAge) {
       sim.traits.occupation = 'retired';

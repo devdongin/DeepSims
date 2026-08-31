@@ -193,7 +193,7 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
     }
     // §17.2: work는 자기 직업의 근무 시설에서만
     const ftypes = action === 'work'
-      ? [L.workplace[sim.traits.occupation]]
+      ? [].concat(L.workplace[sim.traits.occupation]) // §18.T3: 배열 허용 (student → school|university)
       : ACTION_FACILITY[action];
     for (const ftype of ftypes) {
       for (const fac of (byType.get(ftype) ?? [])) {
