@@ -11,7 +11,7 @@ import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
 import { validateLogic, logicHash } from './logic.js';
 import { validateTraits } from './traits.js';
-import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection } from './cognition.js';
+import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
@@ -114,10 +114,29 @@ function actionAllowed(world, sim, action, t) {
   return actionBlockReason(world, sim, action, t) === null;
 }
 
-// ctx: { shortlist, urgency } — Phase 3 인지 보정. urgency 시 습관 보정 배제 (PLAN §2.5.D).
+// §17.22: 시설 타입 인덱스 — facilities 배열 길이 변화 시에만 재구축 (append-only라 안전)
+let facIndexRef = null; let facIndexLen = -1; let facIndex = null;
+function facilitiesByType(map) {
+  if (facIndexRef !== map.facilities || facIndexLen !== map.facilities.length) {
+    facIndex = new Map();
+    for (const f of map.facilities) {
+      let arr = facIndex.get(f.type);
+      if (!arr) { arr = []; facIndex.set(f.type, arr); }
+      arr.push(f);
+    }
+    facIndexRef = map.facilities; facIndexLen = map.facilities.length;
+  }
+  return facIndex;
+}
+
+// ctx: { shortlist, prep, urgency } — Phase 3 인지 보정. urgency 시 습관 보정 배제 (PLAN §2.5.D).
 function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx = null) {
   const L = world.logic;
   const out = [];
+  const byType = facilitiesByType(world.map);
+  const stateModCache = new Map(); // 같은 결정 내 시설별 캐시 (심 상태 불변 구간 — 결과 동일)
+  const memoCache = new Map(); // (action|facility) → {mm, pl} — 자원들이 공유 (결과 동일, §17.22)
+  const candTags = ['', '']; // 재사용 버퍼 (memoryModFast는 동기 소비)
   for (const action of actions) {
     if (action === 'idle') continue;
     if (!actionAllowed(world, sim, action, t)) continue;
@@ -151,17 +170,29 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
       ? [L.workplace[sim.traits.occupation]]
       : ACTION_FACILITY[action];
     for (const ftype of ftypes) {
-      for (const fac of world.map.facilities) {
-        if (fac.type !== ftype) continue;
+      for (const fac of (byType.get(ftype) ?? [])) {
         if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue; // 자기 집만 (§15.1)
+        const facTag = `facility:${fac.id}`; // 자원 루프 밖 1회
+        // §17.22: (action, 시설) 단위 공유 계산 — 자원(좌석)별로 동일한 값 재사용 (결과 동일)
+        const memoKey = action + '|' + fac.id;
+        let memo = memoCache.get(memoKey);
+        if (!memo) {
+          const pl0 = (ctx && ctx.urgency)
+            ? { factor: 100, partyPull: false }
+            : planFactorFor(world, sim, action, fac.id, t, L);
+          let mm0 = null;
+          if (ctx) {
+            candTags[0] = action; candTags[1] = facTag;
+            mm0 = memoryModFast(ctx.prep, candTags, L);
+          }
+          memo = { pl: pl0, mm: mm0 };
+          memoCache.set(memoKey, memo);
+        }
         for (const res of fac.resources) {
           const holder = world.reservations[resKey(fac.id, res.id)];
           if (holder !== undefined && holder !== sim.id) continue;
           const sc = scoreCandidate(sim, action, res, L);
-          // planFactor (D4/D6): 위급 시 100 강제 (구조적 배제, PLAN §2.5.D)
-          const pl = (ctx && ctx.urgency)
-            ? { factor: 100, partyPull: false }
-            : planFactorFor(world, sim, action, fac.id, t, L);
+          const pl = memo.pl;
           // §16.D: 우천 야외 축소 계수 — §G 곱셈 체인 확장 (base×pers×plan×weather, 축소만이라 경계 보존)
           const weatherFactor = (world.weather?.kind === 'rain' && OUTDOOR_FACILITIES.includes(ftype))
             ? L.weather.outdoorRainFactor : 100;
@@ -172,10 +203,12 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
             memoryMod: 0, stateMod: 0, habitMod: 0, cited: [],
           };
           if (ctx) {
-            const mm = memoryModFor(ctx.shortlist, [action, `facility:${fac.id}`], t, L);
+            const mm = memo.mm;
             cand.memoryMod = mm.mod;
             cand.cited = mm.cited;
-            cand.stateMod = stateModFor(world, sim, fac.id, L);
+            let sm = stateModCache.get(fac.id);
+            if (sm === undefined) { sm = stateModFor(world, sim, fac.id, L); stateModCache.set(fac.id, sm); }
+            cand.stateMod = sm;
             if (!ctx.urgency) cand.habitMod = Math.min(sim.habit[`${action}:${fac.id}`] ?? 0, L.social.habitCap);
             cand.score += cand.memoryMod + cand.stateMod + cand.habitMod;
           }
@@ -770,16 +803,17 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     if (sim.state.kind !== 'idle') continue;
     const shortlist = shortlistMemories(sim, t, L); // D1: 심당 1회 계산
+    const prep = prepareShortlist(shortlist, t, L); // §17.22: 후보 독립 전처리 (심당 1회)
     const critical = Object.entries(NEED_OF_ACTION)
       .filter(([, need]) => sim.needs[need] < L.needCritical)
       .map(([action]) => action);
     let cands = [];
     let urgency = false;
     if (critical.length > 0) {
-      cands = collectCandidates(world, sim, critical, t, false, { shortlist, urgency: true });
+      cands = collectCandidates(world, sim, critical, t, false, { shortlist, prep, urgency: true });
       urgency = cands.length > 0;
     }
-    if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, urgency: false });
+    if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });
     const best = pickBest(cands);
     if (best) {
       // §15.1.C 사고 흐름: 막힌 대안 수집 (rng 미사용, ACTIONS 순, 최대 4개)
