@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, DEFAULT_LOGIC } from '../sim/index.js';
+import { circadianEnergyPct } from '../sim/chrono.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { serialize, deserialize } from '../sim/serialize.js';
@@ -70,7 +71,10 @@ test('R-A3. 숙취: 음주 완료 후 다음날까지 energy 감쇠 가산 + 이
   s.state = { kind: 'performing', action: 'idle', facilityId: null, resourceId: null, path: [], ticksLeft: 999, pairedTicks: 0 };
   tick(w, []);
   const ageAdd = s.traits.age >= L.ageDecay.oldMin ? L.ageDecay.oldEnergyAdd : 0;
-  assert.equal(before - s.needs.energy, L.decay.energy + ageAdd + L.coping.hangoverEnergyDecay);
+  // §17.16: (기본+나이)에 서카디언 가중 후 숙취 가산
+  const circ = circadianEnergyPct(s, L, w.worldTick);
+  assert.equal(before - s.needs.energy,
+    Math.floor((L.decay.energy + ageAdd) * circ / 100) + L.coping.hangoverEnergyDecay);
 });
 
 test('R-A4. 중독 루프: 반복 음주 → habit[drink:bar] 형성 (창발)', () => {
