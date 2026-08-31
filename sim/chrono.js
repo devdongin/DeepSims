@@ -73,3 +73,14 @@ export function slotMatches(slot, tod) {
   if (slot.to > 1440) return tod >= slot.from || tod < slot.to - 1440;
   return tod >= slot.from && tod < slot.to;
 }
+
+// §17.16 서카디언: 개인 위상(크로노 오프셋 + 야간조 12h 반전)이 반영된 시각별 에너지 감쇠 가중(%).
+// 생리 기반 rest/activity 모델의 '수면 압력' 곡선을 24칸 정수 테이블로 이산화 (논문 로드맵 P1-②).
+export function circadianEnergyPct(sim, L, t) {
+  const occ = L.occupations[sim.traits.occupation];
+  const nightShift = occ?.shift === 'rotating' && sim.id % 2 === 1;
+  const off = floorDiv((chronoValue(sim.traits) - 50) * L.chrono.maxShiftMin, 50);
+  let tod = (t % 1440) - off + (nightShift ? 720 : 0);
+  tod = ((tod % 1440) + 1440) % 1440;
+  return L.circadian.energyPct[floorDiv(tod, 60)];
+}

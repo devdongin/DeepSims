@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 16,
+  logicSchemaVersion: 17,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -178,6 +178,11 @@ export const DEFAULT_LOGIC = {
     welfareThreshold: 300,  // 이 잔고 미만이면 복지 대상
     welfareAmount: 200,     // 1회 지급액
     welfareDailyCap: 5,     // 하루 최대 수급자 수 (id asc)
+  },
+  // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
+  circadian: {
+    energyPct: [150, 150, 145, 140, 135, 125, 110, 100, 95, 90, 90, 90,
+                95, 95, 95, 95, 100, 105, 110, 115, 125, 135, 145, 150],
   },
   disease: {
     basePermille: 5, starvingBonus: 30, rainBonus: 10, lowEnergyBonus: 20,
@@ -407,6 +412,11 @@ function checkRanges(p, errors) {
   inRange('economy.welfareThreshold', p.economy.welfareThreshold, 0, 100000);
   inRange('economy.welfareAmount', p.economy.welfareAmount, 0, 100000);
   inRange('economy.welfareDailyCap', p.economy.welfareDailyCap, 0, 1000);
+  if (!Array.isArray(p.circadian?.energyPct) || p.circadian.energyPct.length !== 24) {
+    errors.push('circadian.energyPct: 24칸 배열 필요');
+  } else {
+    p.circadian.energyPct.forEach((v, i) => inRange(`circadian.energyPct[${i}]`, v, 10, 400));
+  }
   inRange('chrono.earlyMax', p.chrono.earlyMax, 0, 100);
   inRange('chrono.owlMin', p.chrono.owlMin, 0, 100);
   inRange('chrono.maxShiftMin', p.chrono.maxShiftMin, 0, 480);

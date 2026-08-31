@@ -8,7 +8,7 @@ import {
 import { TILE, addBuilding } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
-import { workWindowFor, slotMatches } from './chrono.js';
+import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
 import { validateLogic, logicHash } from './logic.js';
 import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection } from './cognition.js';
@@ -618,6 +618,7 @@ export function tick(world, inputsForThisTick = []) {
       let d = L.decay[need];
       if (need === 'fun' && age <= L.ageDecay.youngMax) d += L.ageDecay.youngFunAdd;
       if (need === 'energy' && age >= L.ageDecay.oldMin) d += L.ageDecay.oldEnergyAdd;
+      if (need === 'energy') d = floorDiv(d * circadianEnergyPct(sim, L, t), 100); // §17.16 수면 압력 (개인 위상)
       if (need === 'energy' && sim.hangoverUntil > t) d += L.coping.hangoverEnergyDecay; // 숙취 (§15.1.A)
       if (sim.sick && (need === 'energy' || need === 'fun')) d += floorDiv(d * L.disease.decayFactorNum, L.disease.decayFactorDen); // 병 (§17.3)
       const before = sim.needs[need];

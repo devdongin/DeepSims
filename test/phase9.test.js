@@ -7,6 +7,7 @@ import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
 import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronoValue as chronoValueRef } from '../sim/chrono.js';
 import { buildDailyPlan as buildDailyPlanRef } from '../sim/planning.js';
+import { circadianEnergyPct as circadianEnergyPctRef } from '../sim/chrono.js';
 
 const SEED = 7777;
 
@@ -525,4 +526,18 @@ test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () 
   assert.deepEqual(wp.map((e) => e.simId), [0, 1], 'id asc');
   assert.equal(w2.treasury, 0);
   assert.equal(w2.sims[0].money, w2.logic.economy.welfareAmount);
+});
+
+test('S-19. §17.16 서카디언: 밤에 수면 압력↑, 야간조는 위상 반전, 감쇠 가중 적용', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const s = { ...w.sims[0], traits: { ...w.sims[0].traits, occupation: 'office_worker', mbti: { ...w.sims[0].traits.mbti } } };
+  // 위상 보정 전 원칙: 새벽(03시)이 정오(12시)보다 감쇠가 크다 — 개인 위상은 chronoValue에 따라 이동하므로
+  // 같은 심에서 두 시각을 비교(오프셋 동일 소거)
+  const pct3 = circadianEnergyPctRef(s, L, 3 * 60);
+  const pct12 = circadianEnergyPctRef(s, L, 12 * 60);
+  assert.ok(pct3 > pct12, `새벽 압력 > 정오 (${pct3} vs ${pct12})`);
+  // 야간조(홀수 id 교대 직업): 12시간 위상 반전 — 정오 압력이 자정 압력보다 크다
+  const n = { ...w.sims[1], id: 1, traits: { ...w.sims[1].traits, occupation: 'police' } };
+  assert.ok(circadianEnergyPctRef(n, L, 12 * 60) > circadianEnergyPctRef(n, L, 0), '야간조 위상 반전');
 });
