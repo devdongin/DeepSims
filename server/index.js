@@ -149,7 +149,7 @@ function sendSnapshot(ws) {
 
 engine.onBatch((msg) => {
   for (const ws of clients) {
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury });
+    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier });
     else send(ws, msg);
   }
 });

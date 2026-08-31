@@ -616,7 +616,7 @@ function replyLine(e) {
 }
 
 function handleVisualEvent(e) {
-  if (e.type === 'city_promoted') { updateBadge(); fireworksBurst(); }
+  if (e.type === 'city_promoted') { if (world) world.cityTier = e.payload.to; updateBadge(); fireworksBurst(); }
   const sp = (id) => simSprites.get(id);
   switch (e.type) {
     case 'conversation': {
