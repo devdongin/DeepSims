@@ -91,6 +91,7 @@ test('S-4. 선거: 인기 기반 후보·투표·시장, 수당과 공사 가속
     if (o.id !== 3) w.affinity[o.id][3] = 8000;
     if (o.id !== 5 && o.id % 2 === 0) w.affinity[o.id][5] = 7000;
   }
+  w.treasury = 100000; // §17.15: 수당은 국고 지출 — 시드
   idleAll(w, []);
   // 30일 경계로 점프해 선거 유발
   w.worldTick = 30 * 1440 - 1;
@@ -494,3 +495,34 @@ test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수�
   w2.sims.slice(0, agesBefore.length).forEach((x, i) => assert.equal(x.traits.age, agesBefore[i], '노화는 연 단위'));
 });
 
+
+test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  // 근무 정산: 원천징수
+  const s = w.sims.find((x) => x.traits.occupation !== 'retired' && x.traits.occupation !== 'student') ?? w.sims[0];
+  idleAll(w, []);
+  s.state = { kind: 'performing', action: 'work', facilityId: 'office', resourceId: 'desk0', path: [], ticksLeft: 1, pairedTicks: 0 };
+  const before = s.money;
+  const wage = Math.floor(L.actions.work.wageBase * L.occupations[s.traits.occupation].wagePct / 100);
+  const net = Math.floor(wage * (100 - L.economy.taxPct) / 100);
+  const evs = tick(w, []);
+  const mc = evs.find((e) => e.type === 'money_changed' && e.simId === s.id);
+  assert.ok(mc, '정산 발생');
+  assert.equal(mc.payload.delta, net, '실수령 = 세후');
+  assert.equal(mc.payload.tax, wage - net, '세금 필드');
+  assert.equal(w.treasury, wage - net, '국고 적립');
+  assert.equal(s.money, before + net);
+  // 복지: 가난한 심 id asc, 캡·국고 한도
+  const w2 = createWorld(SEED);
+  w2.treasury = w2.logic.economy.welfareAmount * 2; // 2명분만
+  for (const x of w2.sims) x.money = 0;
+  idleAll(w2, []);
+  w2.worldTick = 1440 - 1; w2.weather.day = 1; w2.lastDailyDay = 0; w2.lastPlanDay = 1;
+  const evs2 = tick(w2, []);
+  const wp = evs2.filter((e) => e.type === 'welfare_paid');
+  assert.equal(wp.length, 2, '국고 한도만큼만');
+  assert.deepEqual(wp.map((e) => e.simId), [0, 1], 'id asc');
+  assert.equal(w2.treasury, 0);
+  assert.equal(w2.sims[0].money, w2.logic.economy.welfareAmount);
+});

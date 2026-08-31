@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 15,
+  "logicSchemaVersion": 16,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -391,6 +391,12 @@
     "sleepLenMin": 450,
     "daySleepStart": 480,
     "daySleepEnd": 960
+  },
+  "economy": {
+    "taxPct": 15,
+    "welfareThreshold": 300,
+    "welfareAmount": 200,
+    "welfareDailyCap": 5
   },
   "disease": {
     "basePermille": 5,
