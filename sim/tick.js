@@ -5,7 +5,7 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding } from './map.js';
+import { TILE, addBuilding, plotBuildable } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
@@ -218,6 +218,8 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
         for (const res of fac.resources) {
           const holder = world.reservations[resKey(fac.id, res.id)];
           if (holder !== undefined && holder !== sim.id) continue;
+          const cool = sim.noPathCool[`${fac.id}:${res.id}`];
+          if (cool !== undefined && t < cool) continue; // §17.23 no_path 쿨다운
           const sc = scoreCandidate(sim, action, res, L);
           const pl = memo.pl;
           // §16.D: 우천 야외 축소 계수 — §G 곱셈 체인 확장 (base×pers×plan×weather, 축소만이라 경계 보존)
@@ -281,6 +283,8 @@ function startAction(world, sim, cand, emit, reason) {
     delete world.reservations[resKey(cand.facilityId, cand.resourceId)];
     sim.state = emptyState();
     emit('action_failed', sim.id, { action: cand.action, reason: 'no_path' });
+    // §17.23 no_path 쿨다운: 같은 자원 재선택 고착 방지 — 다음 틱엔 차순위 후보로
+    sim.noPathCool[`${cand.facilityId}:${cand.resourceId}`] = t + world.logic.construct.noPathCoolTicks;
     return false;
   }
   sim.state = {
@@ -374,7 +378,7 @@ function applyCreatePlayer(world, inp, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1,
+    hangoverUntil: -1, noPathCool: {},
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -783,13 +787,16 @@ export function tick(world, inputsForThisTick = []) {
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10
         world.reputation = floorDiv(world.reputation * world.logic.growth.repDecayPct, 100); // §17.21 일일 감쇠
+        for (const s2 of world.sims) { // §17.23 쿨다운 청소
+          for (const k of Object.keys(s2.noPathCool)) if (s2.noPathCool[k] <= t) delete s2.noPathCool[k];
+        }
       }
     }
     fireSelfOut(world, t, emit); // §17.20 자연 진화 (매 틱, 4단계)
     const day = floorDiv(t, 1440);
     if (!world.project && world.lastPlanDay !== day) {
       world.lastPlanDay = day;
-      const freePlot = world.plots.find((p) => !p.used);
+      const freePlot = world.plots.find((p) => !p.used && plotBuildable(world.map, p)); // §17.23 침범 방지
       if (freePlot) {
         const beds = world.map.facilities.filter((f) => f.type === 'house')
           .reduce((n, f) => n + f.resources.length, 0);

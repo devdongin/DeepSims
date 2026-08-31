@@ -174,7 +174,7 @@ export function maybeChildren(world, t, day, emit) {
       memories: [], memorySeq: 0, habit: {}, relTiers: {},
       lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
       knownTokens: [], plan: null, lastPlannedDay: -1,
-      hangoverUntil: -1, groceries: 0, sick: null,
+      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {},
     };
     world.sims.push(child);
     for (const row of world.affinity) row.push(0);
@@ -274,7 +274,7 @@ function immigrateOne(world, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, groceries: 0, sick: null,
+    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {},
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
