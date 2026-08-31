@@ -786,3 +786,41 @@ test('S-27. §18.T2 건설 지시: 차감·FIFO 우선 착공·재검증 폐기�
   const doorTile = w2.map.tiles[built.door.y * w2.map.w + built.door.x];
   assert.equal(doorTile, 2, '문 FLOOR');
 });
+
+test('S-28. §18.T4 도시 등급: 승급·축하·웨이브 캡·티어 게이트·비가역', () => {
+  const w = createWorld(SEED);
+  w.lastPlanDay = 1; // 계획 억제
+  // 인구 30으로 부풀리기 (읍 문턱 25)
+  while (w.sims.length < 30) {
+    const src = w.sims[0];
+    const id = w.sims[w.sims.length - 1].id + 1;
+    w.sims.push({ ...JSON.parse(JSON.stringify(src)), id, name: 'T' + id, isPlayer: false });
+    for (const row of w.affinity) row.push(0);
+    w.affinity.push(new Array(w.sims.length).fill(0));
+    for (const row of w.interactions) row.push(0);
+    w.interactions.push(new Array(w.sims.length).fill(0));
+    for (const row of w.lastGreetDay) row.push(-1);
+    w.lastGreetDay.push(new Array(w.sims.length).fill(-1));
+  }
+  idleAll(w, []);
+  const moodBefore = w.sims[0].mood;
+  w.worldTick = 1440 - 1; w.weather.day = 1; w.lastDailyDay = 0;
+  const evs = tick(w, []);
+  const pr = evs.find((e) => e.type === 'city_promoted');
+  assert.ok(pr, '승급');
+  assert.equal(pr.payload.to, 1);
+  assert.equal(pr.payload.nameKo, '읍');
+  assert.equal(w.cityTier, 1);
+  assert.ok(w.sims[0].mood > moodBefore, '축하 mood');
+  assert.ok(w.sims[0].memories.some((mm) => mm.kind === 'celebration'), '축하 기억');
+  // 티어 게이트: apartment는 읍 언락이지만 레시피 미구현 → bad_type (마을이면 tier_locked)
+  w.treasury = 99999;
+  const free = w.plots.find((p) => !p.used && plotBuildableRef(w.map, p));
+  const evs2 = tick(w, [{ sequence: 0, command: 'zone', payload: { plotId: free.plotId, type: 'apartment', dir: 0 } }]);
+  assert.ok(evs2.some((e) => e.type === 'input_rejected' && e.payload.reason === 'bad_type'), '읍: 언락됐지만 T3 대기');
+  const w2 = createWorld(SEED);
+  w2.treasury = 99999;
+  const free2 = w2.plots.find((p) => !p.used && plotBuildableRef(w2.map, p));
+  const evs3 = tick(w2, [{ sequence: 0, command: 'zone', payload: { plotId: free2.plotId, type: 'apartment', dir: 0 } }]);
+  assert.ok(evs3.some((e) => e.type === 'input_rejected' && e.payload.reason === 'tier_locked'), '마을: 잠김');
+});

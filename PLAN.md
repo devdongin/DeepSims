@@ -915,3 +915,13 @@ traits: {
 - 회전: dir 0..3, 90°마다 로컬 (lx,ly)→(h−1−ly, lx), footprint w/h 스왑, 문·자원·예비 슬롯
   단일 변환. facility.dir(기존 세이브 ??=0 — 마이그레이션 불요). 세이브 v21(zoneOrders), 로직 v23(zone.costs).
 - 클라: 공터 클릭 → 📐 지정 모달(타입 4종·회전·비용), 회전 외형 bld_*_d{1,2,3}(배치 7) 폴백 d0.
+
+### 18.T4 라운드 18 — 도시 등급·마일스톤 (타이쿤 3단계, Codex 49차 합의)
+- world.cityTier(세이브 v22, 비가역): 마을(0)→읍(25)→시(60)→대도시(120). 판정은 일일 평가
+  이민 직후·새해 전(합의), 최고 도달 등급으로 1회 승급.
+- 승급 효과: city_promoted 이벤트, 전 주민(id asc) mood +1000(clamp, 사실 델타 — §G 무오염),
+  celebration(7) 기억, 평판 +100(캡). 이민 웨이브 캡 = immigWaveMax + cityTier.
+- zone 언락 프레임: tiers[].unlocks(읍 apartment / 시 factory·mall / 대도시 university) —
+  게이트 tier_locked, 언락됐지만 레시피 미구현은 bad_type(T3에서 해제). 로직 v24(tiers/promotion).
+- checkShape 확장: 객체 배열(tiers) 원소별 형태 재귀 + 문자열 leaf 허용.
+- 클라: 상단 등급 배지(배치 8), 승급 피드 + 폭죽 연출.
