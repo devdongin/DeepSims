@@ -49,6 +49,9 @@ function destroySimSprites() {
   simSprites.clear();
 }
 
+// §17.19 내부 모드: 열려 있는 시설 id — 건물 클릭으로 토글, 지붕이 걷히고 내부·심이 보인다
+const interiorOpen = new Set();
+
 function archOf(sim) {
   if (sim.isPlayer) return 'p';
   const m = ARCH_OF_OCCUPATION[sim.traits?.occupation];
@@ -202,7 +205,18 @@ class TownScene extends Phaser.Scene {
         const d = dx * dx + dy * dy;
         if (d < bestD) { bestD = d; best = sim; }
       }
-      if (best) selectSim(best.id);
+      if (best) { selectSim(best.id); return; }
+      // 심이 아니면 건물 토글 (§17.19 내부 모드): 화면→타일 역변환 후 발자국 검사
+      const tx2 = (wp.x / (TW / 2) + wp.y / (TH / 2)) / 2;
+      const ty2 = (wp.y / (TH / 2) - wp.x / (TW / 2)) / 2;
+      const fac = world.map.facilities.find((f) => f.w
+        && tx2 >= f.x - 3 && tx2 < f.x + f.w && ty2 >= f.y - 3 && ty2 < f.y + f.h); // 지붕 클릭 여유 북서 3타일
+      if (fac && fac.type !== 'park' && fac.type !== 'pond') {
+        if (interiorOpen.has(fac.id)) interiorOpen.delete(fac.id);
+        else interiorOpen.add(fac.id);
+        destroySimSprites();
+        this.drawWorld();
+      }
     });
     if (world) this.drawWorld();
   }
@@ -242,9 +256,16 @@ class TownScene extends Phaser.Scene {
       const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서' }[fac.type];
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
       let bldKey = fac.type === 'house' ? `bld_house_${'abc'[houseIdx++ % 3]}` : BLD_OF_FACILITY[fac.type];
-      // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
-      const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
-      if (bldKey && (hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
+      // §17.19 내부 모드: 컷어웨이 텍스처로 교체(없으면 스프라이트 생략 → 타일 내부 노출)
+      const opened = interiorOpen.has(fac.id);
+      if (opened) {
+        const intKey = fac.type === 'house' ? 'bld_house_int' : `${BLD_OF_FACILITY[fac.type]}_int`;
+        bldKey = this.textures.exists(intKey) ? intKey : null;
+      } else {
+        // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
+        const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
+        if (bldKey && (hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
+      }
       if (bldKey && !this.textures.exists(bldKey)) bldKey = null;
       if (bldKey) {
         const cx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
@@ -252,9 +273,10 @@ class TownScene extends Phaser.Scene {
         const img = this.add.image(cx, cy + TH, bldKey).setOrigin(0.5, 1);
         const wpx = (fac.w + fac.h) / 2 * TW * 1.02; // 발자국 대각 폭에 맞춤
         img.setScale(wpx / img.width);
-        img.setDepth(1000 + fac.x + fac.w + fac.y + fac.h - 1);
+        // 내부 모드는 북쪽 모서리 깊이 → 안의 심·가구가 위에 그려짐
+        img.setDepth(opened ? 1000 + fac.x + fac.y : 1000 + fac.x + fac.w + fac.y + fac.h - 1);
         this.propSprites.push(img);
-      } else {
+      } else if (!opened) {
         g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
         for (let j = fac.y; j < fac.y + fac.h; j++) for (let i = fac.x; i < fac.x + fac.w; i++) {
           if (map.tiles[j * map.w + i] === 3) this.drawTile(g, i, j, FACILITY_COLORS[fac.type], 10);
