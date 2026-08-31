@@ -16,7 +16,7 @@ import { maybeConverse, processGreetings } from './interaction.js';
 import {
   dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival,
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren,
 } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
@@ -711,6 +711,7 @@ export function tick(world, inputsForThisTick = []) {
         mayorStipend(world, t, emit);
         maybeImmigration(world, t, day, emit);
         maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)
+        maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10
       }
     }
@@ -726,8 +727,18 @@ export function tick(world, inputsForThisTick = []) {
         const parkSpots = world.map.facilities.filter((f) => f.type === 'park')
           .reduce((n, f) => n + f.resources.length, 0);
         const pop = world.sims.length;
+        // §17.11: 별거 부부는 신혼집 수요 — 부부당 침대 1개 추가 필요분으로 계산
+        let separated = 0;
+        for (const [aStr, b] of Object.entries(world.partners)) {
+          const a = Number(aStr);
+          if (a < b && world.partnerStage[a] === 'married') {
+            const pa = world.sims.find((s2) => s2.id === a);
+            const pb = world.sims.find((s2) => s2.id === b);
+            if (pa.homeId !== pb.homeId) separated++;
+          }
+        }
         let type = null;
-        if (pop > beds) type = 'house';
+        if (pop + separated > beds) type = 'house';
         else if (pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (pop > parkSpots * L.construct.parkRatio) type = 'park';
         if (type) {

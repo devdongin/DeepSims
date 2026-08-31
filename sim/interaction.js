@@ -90,6 +90,18 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
         candidates.push({ key, w, about: found.a, detail: { otherId: found.b, kind: found.kind } });
         continue;
       }
+      if (key === 'family_talk') {
+        // §17.11: 자녀(최고 id) 우선, 없으면 부모[0]
+        const kids = Object.entries(world.parents ?? {})
+          .filter(([, ps]) => ps.includes(speaker.id)).map(([cid]) => Number(cid)).sort((x, y) => y - x);
+        const myParents = world.parents?.[speaker.id];
+        if (kids.length > 0) {
+          candidates.push({ key, w, about: kids[0], detail: { relation: 'child' } });
+        } else if (myParents) {
+          candidates.push({ key, w, about: myParents[0], detail: { relation: 'parent' } });
+        }
+        continue;
+      }
       if (key === 'weather') {
         candidates.push({ key, w, about: null, detail: { kind: world.weather?.kind ?? 'sunny' } });
         continue;

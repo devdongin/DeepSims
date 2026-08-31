@@ -104,10 +104,13 @@ export function migrateWorld(world) {
   if (from < 12) {
     addLeisureVenuesTo(world.map.tiles, world.map.facilities, world.map.w); // §17.10
   }
+  if (from < 13) {
+    world.parents ??= {}; // §17.11
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 12;
+  world.schemaVersion = 13;
   return world;
 }

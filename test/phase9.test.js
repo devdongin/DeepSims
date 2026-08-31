@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
+import { applyRomance } from '../sim/society.js';
 
 const SEED = 7777;
 
@@ -314,4 +315,95 @@ test('S-12. §17.10: 실내 여가·축제', () => {
   const evs = tick(w2, []);
   assert.ok(evs.some((e) => e.type === 'festival'), '축제');
   assert.ok(w2.sims.every((x) => x.knownTokens.length > 0), '전 주민 인지');
+});
+
+test('S-13. §17.11 가족: 동거 부부 새해 자녀 정착 + 가족 대화·보너스', () => {
+  const run = () => {
+    const w = createWorld(SEED);
+    w.logic = JSON.parse(JSON.stringify(w.logic));
+    w.logic.family.childPermille = 1000; // 확정 정착으로 경로 검증
+    // 동거 married 부부 구성 + 빈 침대
+    const [a, b] = w.sims;
+    b.homeId = a.homeId;
+    w.partners[0] = 1; w.partners[1] = 0;
+    w.partnerStage[0] = 'married'; w.partnerStage[1] = 'married';
+    const home = w.map.facilities.find((f) => f.id === a.homeId);
+    home.resources.push({ id: 'bed2', kind: 'bed', x: home.x + 2, y: home.y + 2 });
+    idleAll(w, []);
+    w.worldTick = 360 * 1440 - 1;
+    w.weather.day = 360; w.lastDailyDay = 359; w.lastPlanDay = 360;
+    const evs = tick(w, []);
+    return { evs, w };
+  };
+  const { evs, w } = run();
+  const born = evs.find((e) => e.type === 'child_settled');
+  assert.ok(born, '자녀 정착');
+  assert.deepEqual([born.payload.parentA, born.payload.parentB], [0, 1]);
+  const child = w.sims[w.sims.length - 1];
+  assert.equal(child.traits.age, 15, '새해(나이+1)가 먼저, 정착이 나중 — 15 유지');
+  const { w: w2 } = run();
+  assert.equal(hashWorld(w), hashWorld(w2), '결정적');
+  assert.equal(w.parents[child.id]?.length, 2);
+  assert.equal(w.affinity[child.id][0], 5000);
+});
+
+test('S-14. §17.11 개정: 별거 부부 신혼집 이사 + 별거 수요 건설 트리거', () => {
+  // ⓑ 신혼집: lo 집도 만원 → 빈 침대 2개 집으로 부부가 함께 이사
+  const w = createWorld(SEED);
+  const a = w.sims[0]; const b = w.sims[2];
+  w.partners[0] = 2; w.partners[2] = 0;
+  w.partnerStage[0] = 'married'; w.partnerStage[2] = 'married';
+  assert.notEqual(a.homeId, b.homeId, '전제: 별거');
+  // 모든 집 만원(기본 상태) + 빈 집 하나 추가
+  w.map.facilities.push({
+    id: 'house9', type: 'house', x: 2, y: 2, w: 6, h: 5, door: { x: 4, y: 6 },
+    resources: [{ id: 'bed0', kind: 'bed', x: 3, y: 3 }, { id: 'bed1', kind: 'bed', x: 5, y: 3 }],
+    extraBedSlots: [{ x: 4, y: 4 }, { x: 5, y: 4 }],
+  });
+  const evs = [];
+  applyRomance(w, a, 0, (type, simId, payload) => evs.push({ type, simId, payload }));
+  const moves = evs.filter((e) => e.type === 'moved_home');
+  assert.equal(moves.length, 2, '부부 동반 이사');
+  assert.equal(a.homeId, 'house9');
+  assert.equal(b.homeId, 'house9');
+
+  // 별거 수요 건설 트리거: 인구=침대여도 별거 부부 있으면 house 프로젝트
+  const w2 = createWorld(SEED);
+  w2.partners[0] = 2; w2.partners[2] = 0;
+  w2.partnerStage[0] = 'married'; w2.partnerStage[2] = 'married';
+  idleAll(w2, []);
+  w2.worldTick = 1440 - 1; w2.weather.day = 1; w2.lastDailyDay = 0; w2.lastPlanDay = 0;
+  const evs2 = tick(w2, []);
+  const proj = evs2.find((e) => e.type === 'project_started');
+  assert.ok(proj, '별거 수요로 프로젝트 시작');
+  assert.equal(proj.payload.type, 'house');
+});
+
+test('S-15. §17.11 개정: 증축 여력만으로 자녀 성립(빈 침대 없어도)', () => {
+  const w = createWorld(SEED);
+  w.logic = JSON.parse(JSON.stringify(w.logic));
+  w.logic.family.childPermille = 1000;
+  const [a, b] = w.sims;
+  b.homeId = a.homeId; // 동거 (침대 2/거주 2 — 빈 침대 없음, 예비 슬롯 2)
+  w.partners[0] = 1; w.partners[1] = 0;
+  w.partnerStage[0] = 'married'; w.partnerStage[1] = 'married';
+  idleAll(w, []);
+  w.worldTick = 360 * 1440 - 1;
+  w.weather.day = 360; w.lastDailyDay = 359; w.lastPlanDay = 360;
+  const evs = tick(w, []);
+  assert.ok(evs.some((e) => e.type === 'child_settled'), '증축 여력으로 자녀 성립');
+  // maxExtraBeds=0이면 스킵
+  const w2 = createWorld(SEED);
+  w2.logic = JSON.parse(JSON.stringify(w2.logic));
+  w2.logic.family.childPermille = 1000;
+  w2.logic.build.maxExtraBeds = 0;
+  const [a2, b2] = w2.sims;
+  b2.homeId = a2.homeId;
+  w2.partners[0] = 1; w2.partners[1] = 0;
+  w2.partnerStage[0] = 'married'; w2.partnerStage[1] = 'married';
+  idleAll(w2, []);
+  w2.worldTick = 360 * 1440 - 1;
+  w2.weather.day = 360; w2.lastDailyDay = 359; w2.lastPlanDay = 360;
+  const evs2 = tick(w2, []);
+  assert.ok(!evs2.some((e) => e.type === 'child_settled'), 'maxExtraBeds=0 → 스킵');
 });

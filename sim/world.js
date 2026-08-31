@@ -60,7 +60,7 @@ export function createWorld(seed) {
   const lastGreetDay = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(-1));
 
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),
@@ -87,6 +87,7 @@ export function createWorld(seed) {
     lastDailyDay: -1,      // 일일 평가(질병·선거·수당·이민) 가드
     campaigners: [],       // §17.9 유세 중 후보 (D-3 계산, 선거 직전 클리어)
     recentCouples: [],     // §17.9 최근 커플 링 (최대 8, {a,b,day,kind})
+    parents: {},           // §17.11 childId -> [부모A, 부모B] (id asc)
     reservations: {}, // "facilityId:resourceId" -> simId
     tokens: [],       // 활성 정보 토큰 (PLAN §F)
     tokenCounter: 0,

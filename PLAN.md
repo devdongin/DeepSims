@@ -592,7 +592,8 @@ traits: {
 
 ### B. 마을 건설 프로젝트 (결정적 도시계획)
 - 하루 1회(4단계 서브순서 맨 끝, 날씨 다음 날 경계에서) 트리거 평가 — **활성 프로젝트는 최대 1개**:
-  1) 총 침대 < 심 수 → house
+  1) 총 침대 < 심 수 + 별거 married 부부 수 → house — 별거 부부(§17.11 개정: married인데 homeId가
+     다른 페어, min-id asc 순회로 결정적 카운트, 드로우 없음)는 신혼집 수요 1침대로 계상
   2) 심 수 > 카페 좌석 합 × cafeRatio(2) → cafe
   3) 심 수 > 공원 스팟 합 → park (사실상 비활성 기본값)
   우선순위 house > cafe > park. 트리거 시 미사용 plot 첫 번째 배정, 'project_started' 이벤트.
@@ -759,3 +760,20 @@ traits: {
 - 스키마 불변(신규 상태 없음), 로직 v11: society.festivalDays(90), 시설은 v12 마이그레이션으로 주입.
   (시설 주입은 맵 상태라 세이브 v12 필요 — 정정.)
 - 에셋: restaurant_table, gym_rack, cinema_screen, popcorn, festival_lantern (5종).
+
+### 17.11 라운드 4 — 가족 (자녀 정착)
+- 새해 평가(§17.9 다음)에서 married 부부(id 낮은 쪽 기준 페어 순회, id asc)마다 **1드로우**:
+  p = childPermille(300)‰ && 부부 집에 빈 침대 있으면 'child_settled' — 새 심(나이 15, student,
+  성별·MBTI rngSim, 이름 이민 풀 공유) 부모 집에 정착. world.parents[childId] = [부모A, 부모B]
+  (id asc). 부부·자녀 상호 호감 +5000 초기화, 전 주민 new_neighbor 기억, 부모는 child(9) 기억.
+- 대화 주제 family_talk: 화자에게 자녀/부모 있으면 후보(가중 30) — 실명 문장("우리 애가 벌써
+  학교엘 다녀"). 자녀는 부모와 페어링 시 호감 보너스 familyBonus(12) (pairDeltaBonus 확장).
+- 자녀 술어(개정): 부부 집에 빈 침대 **또는 증축 여력**(잔여 예비 슬롯 = min(extraBedSlots 수,
+  build.maxExtraBeds) − 이미 증축한 침대 수 > 0) 있으면 성립 — 아이가 태어나 일시 과밀이 되면
+  부모의 build(§15.1)가 발동해 침대를 짓는 창발(닭-달걀 해소). 둘 다 없으면 그 해 스킵(드로우 없음).
+  드로우는 조건 충족 부부만 소비(순서 결정적).
+- **합가 재시도**(회고 ①.5, §17.5 개정): married인데 별거 중인 부부 — ⓐ min-id 쪽 집에 빈 침대
+  있으면 상대가 이주(moved_home), ⓑ 없으면 빈 침대 ≥2인 house 중 시설 배열 첫 번째(삽입 순 — 축조 순서라 결정적; id 사전순 아님)로 **부부가 함께
+  이사**(신혼집, moved_home ×2 — lo 먼저). 실행자는 §17.5 단일 실행자 규칙(먼저 회고한 쪽) 동일.
+- 주거 수요 개정: §B 트리거 1이 별거 부부 수를 수요로 계상 → 건설→합가→자녀→이민 성장 루프 폐쇄.
+- 스키마 v13(world.parents), 로직 v12(family{childPermille, familyBonus, talkWeight}).

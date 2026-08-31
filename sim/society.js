@@ -131,6 +131,72 @@ export function maybeNewYear(world, t, day, emit) {
   }
 }
 
+// §17.11 자녀 정착 (새해 평가 다음): 동거 married 부부, 가구 정원 여유 시 1드로우.
+// 처리 순서(커플별 완결, min-id asc): id→이름→push→매트릭스→parents→호감 초기화→기억→이벤트.
+// 신생 심은 그날의 남은 일일 시스템에 미참여(다음 틱부터 결정 참여) — Codex 30차 규칙.
+export function maybeChildren(world, t, day, emit) {
+  const S = world.logic.society;
+  const F = world.logic.family;
+  if (day === 0 || day % S.yearDays !== 0) return;
+  // married 페어 (min asc, 중복 제거)
+  const pairs = [];
+  for (const [aStr, b] of Object.entries(world.partners)) {
+    const a = Number(aStr);
+    if (a < b && world.partnerStage[a] === 'married') pairs.push([a, b]);
+  }
+  pairs.sort((x, y) => x[0] - y[0]);
+  for (const [a, b] of pairs) {
+    const pa = world.sims.find((s2) => s2.id === a);
+    const pb = world.sims.find((s2) => s2.id === b);
+    if (pa.homeId !== pb.homeId) continue; // 같은 집 필수 (드로우 없음)
+    const home = world.map.facilities.find((f) => f.id === pa.homeId);
+    const residents = world.sims.filter((s2) => s2.homeId === pa.homeId).length;
+    // 정원 여유 또는 증축 여력(예비 슬롯) 필요 — 아이가 생기면 부모의 build(§15.1)가 발동하는 창발
+    const extraLeft = Math.min(home.extraBedSlots?.length ?? 0, world.logic.build.maxExtraBeds)
+      - (home.resources.length - 2);
+    if (home.resources.length <= residents && extraLeft <= 0) continue; // (드로우 없음)
+    const roll = rngInt(world.rngSim, 1000);
+    if (roll >= F.childPermille) continue;
+    // traits 생성 후 age/occupation 강제 — 소비된 두 드로우는 의도적 폐기 (결정적, Codex 30차)
+    const traits = generateTraits(world.rngSim);
+    traits.age = 15;
+    traits.occupation = 'student';
+    const id = world.sims[world.sims.length - 1].id + 1;
+    const name = IMMIGRANT_NAMES[world.immigrantCounter % IMMIGRANT_NAMES.length];
+    world.immigrantCounter++;
+    const L = world.logic;
+    const child = {
+      id, name, homeId: pa.homeId, isPlayer: false, traits, mood: 0,
+      x: home.door.x, y: home.door.y + 1,
+      needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 },
+      money: L.occupations.student.startMoney,
+      state: { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 },
+      memories: [], memorySeq: 0, habit: {}, relTiers: {},
+      lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
+      knownTokens: [], plan: null, lastPlannedDay: -1,
+      hangoverUntil: -1, groceries: 0, sick: null,
+    };
+    world.sims.push(child);
+    for (const row of world.affinity) row.push(0);
+    world.affinity.push(new Array(world.sims.length).fill(0));
+    for (const row of world.interactions) row.push(0);
+    world.interactions.push(new Array(world.sims.length).fill(0));
+    for (const row of world.lastGreetDay) row.push(-1);
+    world.lastGreetDay.push(new Array(world.sims.length).fill(-1));
+    world.parents[id] = [a, b];
+    world.affinity[id][a] = 5000; world.affinity[a][id] = 5000;
+    world.affinity[id][b] = 5000; world.affinity[b][id] = 5000;
+    recordFact(pa, t, L, 'child', { subjectSimId: id, tags: [`sim:${id}`, 'family'] });
+    recordFact(pb, t, L, 'child', { subjectSimId: id, tags: [`sim:${id}`, 'family'] });
+    for (const other of world.sims) {
+      if (other.id !== id && other.id !== a && other.id !== b) {
+        recordFact(other, t, L, 'new_neighbor', { subjectSimId: id, tags: [`sim:${id}`, 'town'] });
+      }
+    }
+    emit('child_settled', id, { name, parentA: a, parentB: b, homeId: pa.homeId });
+  }
+}
+
 // §17.10 축제: 전 주민이 즉시 아는 마을 행사
 export function maybeFestival(world, t, day, emit) {
   const S = world.logic.society;
@@ -215,6 +281,32 @@ export function applyRomance(world, sim, t, emit) {
       recordFact(sim, t, world.logic, 'heartbreak', { subjectSimId: partner, tags: [`sim:${partner}`, 'love'] });
       recordFact(other, t, world.logic, 'heartbreak', { subjectSimId: sim.id, tags: [`sim:${sim.id}`, 'love'] });
       return;
+    }
+  }
+  // ①.5 §17.11: 별거 중인 부부는 회고마다 합가 재시도 (결혼 시점에 침대가 없었던 경우 —
+  // 건설로 침대가 생기면 다음 회고에서 합침. 무드로우, 결혼 시 이주와 동일 규칙)
+  if (partner !== undefined && world.partnerStage[sim.id] === 'married') {
+    const other = world.sims.find((s2) => s2.id === partner);
+    if (other.homeId !== sim.homeId) {
+      const [lo, hi] = sim.id < partner ? [sim, other] : [other, sim];
+      const loHome = world.map.facilities.find((f) => f.id === lo.homeId);
+      const residents = world.sims.filter((s2) => s2.homeId === lo.homeId).length;
+      if (loHome.resources.length > residents) {
+        const from = hi.homeId;
+        hi.homeId = lo.homeId;
+        emit('moved_home', hi.id, { from, to: lo.homeId });
+      } else {
+        // 신혼집: 두 자리 빈 집(facilityId asc)으로 부부가 함께 이사
+        const fresh = world.map.facilities.find((f) => f.type === 'house'
+          && f.resources.length - world.sims.filter((s2) => s2.homeId === f.id).length >= 2);
+        if (fresh) {
+          for (const mover of [lo, hi]) {
+            const from = mover.homeId;
+            mover.homeId = fresh.id;
+            emit('moved_home', mover.id, { from, to: fresh.id });
+          }
+        }
+      }
     }
   }
   // ② 결혼
@@ -338,6 +430,10 @@ export function pairDeltaBonus(world, a, b) {
   const L = world.logic;
   let bonus = 0;
   if (world.partners[a.id] === b.id) bonus += L.romance.sweetTalkDelta;
+  // §17.11 가족(부모-자녀)
+  if ((world.parents[a.id] ?? []).includes(b.id) || (world.parents[b.id] ?? []).includes(a.id)) {
+    bonus += L.family.familyBonus;
+  }
   for (const club of CLUBS) {
     const mem = world.clubs[club.id];
     if (mem.includes(a.id) && mem.includes(b.id)) { bonus += L.club.pairBonus; break; }

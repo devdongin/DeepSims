@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 11,
+  logicSchemaVersion: 12,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -63,7 +63,7 @@ export const DEFAULT_LOGIC = {
       lonely: 4, work_done: 3, meal: 2, small_talk: 1, play_time: 1,
       drank: 3, binge: 3, hole_up: 2, workout: 3, built_bed: 5,
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
-      sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2,
+      sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
       new_neighbor: 3, club_joined: 4,
     },
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
@@ -104,7 +104,7 @@ export const DEFAULT_LOGIC = {
   // 대화·상호작용 (logicSchemaVersion 4): D8~D10
   conversation: {
     lineInterval: 15,          // socialize 페어의 발화 간격 (pairedTicks % interval == 1)
-    topicWeights: { couple_news: 25, food: 20, gossip: 30, memory_share: 20, politics: 25, weather: 10, work_gripe: 20 },
+    topicWeights: { couple_news: 25, family_talk: 30, food: 20, gossip: 30, memory_share: 20, politics: 25, weather: 10, work_gripe: 20 },
     greetingAffinity: 15,      // 인사 시 호감도(부호 보존 TF 스케일 적용 전 기본값)
     greetingSocial: 100,       // 인사 시 사교 회복
     greetingRange: 1,          // 맨해튼 거리 임계
@@ -149,6 +149,10 @@ export const DEFAULT_LOGIC = {
     graduateAge: 26,         // student → office_worker
     retireAge: 65,           // → retired
     festivalDays: 90,        // §17.10 마을 축제 주기
+  },
+  family: {
+    childPermille: 300,      // §17.11 새해 자녀 정착 확률(‰, 동거 부부·빈 침대 조건)
+    familyBonus: 12,         // 가족 페어링 호감 가산
   },
   disease: {
     basePermille: 5, starvingBonus: 30, rainBonus: 10, lowEnergyBonus: 20,
@@ -377,6 +381,8 @@ function checkRanges(p, errors) {
   inRange('society.graduateAge', p.society.graduateAge, 15, 90);
   inRange('society.retireAge', p.society.retireAge, 15, 91);
   inRange('society.festivalDays', p.society.festivalDays, 7, 100000);
+  inRange('family.childPermille', p.family.childPermille, 0, 1000);
+  inRange('family.familyBonus', p.family.familyBonus, 0, 1000);
   inRange('election.campaignPull', p.election.campaignPull, 100, 150);
   inRange('election.campaignDays', p.election.campaignDays, 0, 29);
   for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {

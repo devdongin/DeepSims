@@ -393,6 +393,11 @@ function conversationLine(e) {
         ? pick([`${about}랑 ${other} 결혼했대!! 대박`, `${about}네 결혼식 얘기 들었어?`], t)
         : pick([`${about}랑 ${other} 사귄대!`, `${about}이(가) 요즘 ${other}만 만난다?`], t);
     }
+    case 'family_talk': {
+      return d.relation === 'child'
+        ? pick([`우리 ${about} 벌써 학교에 다녀. 시간 참 빠르지`, `${about}이(가) 요즘 낚시에 빠졌다니까`, `애 키우는 게 보통이 아니야`], t)
+        : pick([`부모님이 어제 집밥 해주셨어`, `${about}이(가) 잔소리는 해도 고마운 분이지`], t);
+    }
     case 'weather': {
       return pick({
         sunny: ['날씨 진짜 좋다~', '이런 날엔 공원이지', '햇살 봐, 나가길 잘했어'],
@@ -546,6 +551,7 @@ function eventText(e) {
       return `🎊 ${tp}이(가) 완공됐습니다! 마을이 넓어졌어요`;
     }
     case 'moved_home': return `📦 ${n}이(가) 새 집으로 이사했습니다`;
+    case 'child_settled': return `👶 ${simName(e.payload.parentA)}·${simName(e.payload.parentB)} 부부의 자녀 ${e.payload.name}이(가) 마을에서 자립을 시작했습니다!`;
     case 'immigrated': return `🚌 ${e.payload.name}이(가) 해솔마을로 이사 왔습니다! (${OCC_KO[e.payload.occupation] ?? e.payload.occupation})`;
     case 'fell_sick': return `🤒 ${n}이(가) 감기에 걸렸습니다`;
     case 'recovered': return e.payload.how === 'doctor' ? `💊 ${n}이(가) 진료를 받고 나았습니다` : `🌤️ ${n}이(가) 감기에서 회복했습니다`;
