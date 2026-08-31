@@ -340,10 +340,10 @@ export function defaultPlots() {
   ].map(([x, y], i) => ({ plotId: i, x, y, used: false }));
 }
 
-// §17.23: 공터 건축 가능 검증 — 최악 크기(7×5) 전 타일이 GRASS여야 함 (기존 시설·도로·물 침범 방지)
-export function plotBuildable(map, plot) {
-  for (let j = plot.y; j < plot.y + 5; j++) {
-    for (let i = plot.x; i < plot.x + 7; i++) {
+// §17.23/18.T2: 공터 건축 가능 검증 — 지을 footprint(기본 최악 7×5, 회전 시 치수 전달) 전 타일 GRASS
+export function plotBuildable(map, plot, w = 7, h = 5) {
+  for (let j = plot.y; j < plot.y + h; j++) {
+    for (let i = plot.x; i < plot.x + w; i++) {
       if (i < 0 || j < 0 || i >= map.w || j >= map.h) return false;
       if (map.tiles[j * map.w + i] !== TILE.GRASS) return false;
     }
@@ -362,7 +362,14 @@ function rotateLocal(lx, ly, w0, h0, dir) {
   }
   return { x, y };
 }
-function rotatedSize(w0, h0, dir) { return dir % 2 === 0 ? { w: w0, h: h0 } : { w: h0, h: w0 }; }
+export function rotatedSize(w0, h0, dir) { return dir % 2 === 0 ? { w: w0, h: h0 } : { w: h0, h: w0 }; }
+
+// §18.T2: 타입별 기본 footprint (dir 0 기준) — zone 검증·회전 치수의 단일 권위
+export const ZONE_DIMS = { house: [6, 5], cafe: [7, 5], office: [7, 5], park: [7, 5] };
+export function zoneFootprint(type, dir) {
+  const [w0, h0] = ZONE_DIMS[type];
+  return rotatedSize(w0, h0, dir);
+}
 
 export function addBuilding(map, type, plot, dir = 0) {
   const { x, y } = plot;

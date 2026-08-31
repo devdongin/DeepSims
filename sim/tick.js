@@ -5,7 +5,7 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding, plotBuildable } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
@@ -438,7 +438,7 @@ function applyZone(world, inp, t, emit) {
   else if (plot.used) reason = 'plot_used';
   else if (!ZONEABLE.includes(p.type)) reason = 'bad_type';
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
-  else if (!plotBuildable(world.map, plot)) reason = 'not_buildable';
+  else if (!(() => { const fp = zoneFootprint(p.type, p.dir); return plotBuildable(world.map, plot, fp.w, fp.h); })()) reason = 'not_buildable';
   else if (world.treasury < cost) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   world.treasury -= cost;
@@ -837,7 +837,8 @@ export function tick(world, inputsForThisTick = []) {
     while (!world.project && world.zoneOrders.length > 0) {
       const order = world.zoneOrders.shift();
       const plot = world.plots.find((p) => p.plotId === order.plotId);
-      if (!plot || plot.used || !plotBuildable(world.map, plot)) { // 착공 재검증 (47차 합의 — 환불 없음)
+      const fp2 = plot ? zoneFootprint(order.type, order.dir) : null;
+      if (!plot || plot.used || !plotBuildable(world.map, plot, fp2.w, fp2.h)) { // 착공 재검증 — 회전 치수 (Codex 48차)
         emit('input_rejected', null, { command: 'zone', reason: 'stale_order', plotId: order.plotId });
         continue;
       }
