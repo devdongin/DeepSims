@@ -8,14 +8,14 @@ import {
 import { TILE, addBuilding } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
-import { workWindowFor, slotMatches } from './chrono.js';
+import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
 import { validateLogic, logicHash } from './logic.js';
 import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
-  dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend,
+  dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend, applyWelfare,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
   updateCampaigners, maybeNewYear, maybeFestival, maybeChildren,
 } from './society.js';
@@ -570,8 +570,12 @@ export function tick(world, inputsForThisTick = []) {
       emit('bed_built', sim.id, { facilityId: home.id, resourceId: newRes.id, x: slot.x, y: slot.y });
     } else if (s.action === 'work') {
       const wage = floorDiv(L.actions.work.wageBase * L.occupations[sim.traits.occupation].wagePct, 100);
-      sim.money += wage;
-      emit('money_changed', sim.id, { delta: wage, balance: sim.money, action: 'work' });
+      // §17.15 소득세 원천징수: 실수령 = wage×(100-taxPct)/100, 세금은 국고로
+      const net = floorDiv(wage * (100 - L.economy.taxPct), 100);
+      const tax = wage - net;
+      sim.money += net;
+      world.treasury += tax;
+      emit('money_changed', sim.id, { delta: net, balance: sim.money, action: 'work', tax });
       applyMood(sim, L.mood.moneyGain);
     }
     if (s.action === 'socialize' && s.pairedTicks === 0) {
@@ -614,6 +618,7 @@ export function tick(world, inputsForThisTick = []) {
       let d = L.decay[need];
       if (need === 'fun' && age <= L.ageDecay.youngMax) d += L.ageDecay.youngFunAdd;
       if (need === 'energy' && age >= L.ageDecay.oldMin) d += L.ageDecay.oldEnergyAdd;
+      if (need === 'energy') d = floorDiv(d * circadianEnergyPct(sim, L, t), 100); // §17.16 수면 압력 (개인 위상)
       if (need === 'energy' && sim.hangoverUntil > t) d += L.coping.hangoverEnergyDecay; // 숙취 (§15.1.A)
       if (sim.sick && (need === 'energy' || need === 'fun')) d += floorDiv(d * L.disease.decayFactorNum, L.disease.decayFactorDen); // 병 (§17.3)
       const before = sim.needs[need];
@@ -709,6 +714,7 @@ export function tick(world, inputsForThisTick = []) {
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
         mayorStipend(world, t, emit);
+        applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
         maybeImmigration(world, t, day, emit);
         maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착

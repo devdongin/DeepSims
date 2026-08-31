@@ -2,11 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
-import { applyRomance } from '../sim/society.js';
+import { applyRomance, pairDeltaBonus as pairDeltaBonusRef } from '../sim/society.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
 import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronoValue as chronoValueRef } from '../sim/chrono.js';
 import { buildDailyPlan as buildDailyPlanRef } from '../sim/planning.js';
+import { circadianEnergyPct as circadianEnergyPctRef } from '../sim/chrono.js';
 
 const SEED = 7777;
 
@@ -91,6 +92,7 @@ test('S-4. 선거: 인기 기반 후보·투표·시장, 수당과 공사 가속
     if (o.id !== 3) w.affinity[o.id][3] = 8000;
     if (o.id !== 5 && o.id % 2 === 0) w.affinity[o.id][5] = 7000;
   }
+  w.treasury = 100000; // §17.15: 수당은 국고 지출 — 시드
   idleAll(w, []);
   // 30일 경계로 점프해 선거 유발
   w.worldTick = 30 * 1440 - 1;
@@ -442,6 +444,7 @@ test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수�
   const base = L.occupations.office_worker;
   let jDays = 0; let pDays = 0;
   for (let d = 0; d < 60; d++) {
+    if (d % 7 >= 5) continue; // §17.17 주말 휴무 — 근무 창 없음
     s.traits = { ...s.traits, age: 30, occupation: 'office_worker', mbti: { ...s.traits.mbti, EI: 50, JP: 0 } };
     const wwJ = workWindowForRef(s, L, d);
     const offJ = Math.floor((chronoValueRef(s.traits) - 50) * L.chrono.maxShiftMin / 50);
@@ -454,7 +457,7 @@ test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수�
     const offP = Math.floor((chronoValueRef(s.traits) - 50) * L.chrono.maxShiftMin / 50);
     if (wwP.to - (base.workEnd + offP) > 0) pDays++;
   }
-  assert.ok(jDays >= 25, `J형 야근 일수 (${jDays}/60)`);
+  assert.ok(jDays >= 18, `J형 야근 일수 (${jDays}/주중42일)`);
   assert.equal(pDays, 0, 'JP=100은 야근 확률 0');
   // 교대 랩 + 야간조 주간 수면 + 수면 창 자정 정규화 (from < 1440 항상)
   const p = w.sims[1];
@@ -494,3 +497,78 @@ test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수�
   w2.sims.slice(0, agesBefore.length).forEach((x, i) => assert.equal(x.traits.age, agesBefore[i], '노화는 연 단위'));
 });
 
+
+test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  // 근무 정산: 원천징수
+  const s = w.sims.find((x) => x.traits.occupation !== 'retired' && x.traits.occupation !== 'student') ?? w.sims[0];
+  idleAll(w, []);
+  s.state = { kind: 'performing', action: 'work', facilityId: 'office', resourceId: 'desk0', path: [], ticksLeft: 1, pairedTicks: 0 };
+  const before = s.money;
+  const wage = Math.floor(L.actions.work.wageBase * L.occupations[s.traits.occupation].wagePct / 100);
+  const net = Math.floor(wage * (100 - L.economy.taxPct) / 100);
+  const evs = tick(w, []);
+  const mc = evs.find((e) => e.type === 'money_changed' && e.simId === s.id);
+  assert.ok(mc, '정산 발생');
+  assert.equal(mc.payload.delta, net, '실수령 = 세후');
+  assert.equal(mc.payload.tax, wage - net, '세금 필드');
+  assert.equal(w.treasury, wage - net, '국고 적립');
+  assert.equal(s.money, before + net);
+  // 복지: 가난한 심 id asc, 캡·국고 한도
+  const w2 = createWorld(SEED);
+  w2.treasury = w2.logic.economy.welfareAmount * 2; // 2명분만
+  for (const x of w2.sims) x.money = 0;
+  idleAll(w2, []);
+  w2.worldTick = 1440 - 1; w2.weather.day = 1; w2.lastDailyDay = 0; w2.lastPlanDay = 1;
+  const evs2 = tick(w2, []);
+  const wp = evs2.filter((e) => e.type === 'welfare_paid');
+  assert.equal(wp.length, 2, '국고 한도만큼만');
+  assert.deepEqual(wp.map((e) => e.simId), [0, 1], 'id asc');
+  assert.equal(w2.treasury, 0);
+  assert.equal(w2.sims[0].money, w2.logic.economy.welfareAmount);
+});
+
+test('S-19. §17.16 서카디언: 밤에 수면 압력↑, 야간조는 위상 반전, 감쇠 가중 적용', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const s = { ...w.sims[0], traits: { ...w.sims[0].traits, occupation: 'office_worker', mbti: { ...w.sims[0].traits.mbti } } };
+  // 위상 보정 전 원칙: 새벽(03시)이 정오(12시)보다 감쇠가 크다 — 개인 위상은 chronoValue에 따라 이동하므로
+  // 같은 심에서 두 시각을 비교(오프셋 동일 소거)
+  const pct3 = circadianEnergyPctRef(s, L, 3 * 60);
+  const pct12 = circadianEnergyPctRef(s, L, 12 * 60);
+  assert.ok(pct3 > pct12, `새벽 압력 > 정오 (${pct3} vs ${pct12})`);
+  // 야간조(홀수 id 교대 직업): 12시간 위상 반전 — 정오 압력이 자정 압력보다 크다
+  const n = { ...w.sims[1], id: 1, traits: { ...w.sims[1].traits, occupation: 'police' } };
+  assert.ok(circadianEnergyPctRef(n, L, 12 * 60) > circadianEnergyPctRef(n, L, 0), '야간조 위상 반전');
+});
+
+test('S-20. §17.17 주중/주말: 주말 휴무·교대 유지·여가 확장', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const s = { ...w.sims[0], traits: { ...w.sims[0].traits, age: 30, occupation: 'office_worker' } };
+  assert.equal(workWindowForRef(s, L, 5), null, '토요일 휴무');
+  assert.ok(workWindowForRef(s, L, 4) !== null, '금요일 근무');
+  const p = { ...w.sims[1], id: 1, traits: { ...w.sims[1].traits, occupation: 'police' } };
+  assert.ok(workWindowForRef(p, L, 6) !== null, '교대는 일요일도 근무');
+  const b = { ...w.sims[2], traits: { ...w.sims[2].traits, age: 30, occupation: 'barista' } };
+  assert.ok(workWindowForRef(b, L, 5) !== null, '카페는 주말도 연다');
+  const planSat = buildDailyPlanRef(s, L, 5);
+  assert.ok(!planSat.some((sl) => sl.intent === 'work'), '주말 계획에 근무 없음');
+  const leisure = planSat.find((sl) => sl.intent === 'socialize' || sl.intent === 'play');
+  assert.equal(leisure.from, L.plan.mealSlot1End, '주말 여가 확장');
+});
+
+test('S-21. §17.18 삼각 폐쇄: 공통 친구 수 비례 페어 보너스 (캡)', () => {
+  const w = createWorld(SEED);
+  const [a, b] = w.sims;
+  const base = pairDeltaBonusRef(w, a, b);
+  a.relTiers[5] = 'friend'; b.relTiers[5] = 'friend';
+  assert.equal(pairDeltaBonusRef(w, a, b), base + w.logic.triad.perFriendBonus, '공통 친구 1');
+  a.relTiers[6] = 'friend'; b.relTiers[6] = 'friend';
+  a.relTiers[7] = 'friend'; b.relTiers[7] = 'friend';
+  a.relTiers[8] = 'friend'; b.relTiers[8] = 'friend';
+  assert.equal(pairDeltaBonusRef(w, a, b), base + w.logic.triad.perFriendBonus * w.logic.triad.maxCommon, '캡');
+  b.relTiers[5] = 'acquaintance';
+  assert.equal(pairDeltaBonusRef(w, a, b), base + w.logic.triad.perFriendBonus * 3, '양방 friend만 계수'); // 6,7,8
+});

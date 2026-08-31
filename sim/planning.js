@@ -1,7 +1,7 @@
 // Phase 4: 하루 계획 + 정보 확산 (PLAN §2.5 D/F, 델타 D4~D7). 정수 연산, 계획은 rng 미사용.
 import { recordFact } from './cognition.js';
 import { rngInt } from './prng.js';
-import { workWindowFor, sleepWindowFor, slotMatches, dayHash } from './chrono.js';
+import { workWindowFor, sleepWindowFor, slotMatches, dayHash, isWeekend } from './chrono.js';
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -16,8 +16,9 @@ export function buildDailyPlan(sim, L, day) {
   const ww = workWindowFor(sim, L, day);
   if (ww) slots.push({ from: ww.from, to: ww.to, intent: 'work' });
   // 여가 의도 의사확률: p(사교)=100-EI — E 성향일수록 어울리는 날이 많고, I도 가끔 어울린다
+  // §17.17 주말은 여가 창이 근무 시간대까지 확장 (근무 슬롯이 빠진 자리를 여가가 채움)
   slots.push({
-    from: L.plan.leisureStart, to: L.plan.leisureEnd,
+    from: isWeekend(day) ? L.plan.mealSlot1End : L.plan.leisureStart, to: L.plan.leisureEnd,
     intent: dayHash(sim.id, day, 2) < (100 - sim.traits.mbti.EI) ? 'socialize' : 'play',
   });
   // §17.13 개인 수면 슬롯 (우선순위 최하 — 욕구 주도 수면의 타이밍만 끌어당김)

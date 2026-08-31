@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 15, // v14는 미배포 중간본이지만 chrono 키 교체를 버전 경계로 명시 (Codex 35차)
+  logicSchemaVersion: 19,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -31,8 +31,8 @@ export const DEFAULT_LOGIC = {
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
-    barista: { workStart: 420, workEnd: 960, wagePct: 90, startMoney: 1000 },
-    freelancer: { workStart: 300, workEnd: 1260, wagePct: 80, startMoney: 1000, flex: true },
+    barista: { workStart: 420, workEnd: 960, wagePct: 90, startMoney: 1000, weekendWork: true }, // 카페는 주말도 연다
+    freelancer: { workStart: 300, workEnd: 1260, wagePct: 80, startMoney: 1000, flex: true, weekendWork: true },
     student: { workStart: 840, workEnd: 1200, wagePct: 50, startMoney: 500 },
     retired: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 3000 },
     // §17.2 신규 직업 — 근무지는 workplace 매핑
@@ -171,6 +171,20 @@ export const DEFAULT_LOGIC = {
     nightShiftStart: 1320, nightShiftEnd: 1800,  // 자정 랩 (to>1440)
     sleepStart: 1350, sleepLenMin: 450,
     daySleepStart: 480, daySleepEnd: 960,        // 야간조 주간 수면
+  },
+  // §17.18 삼각 폐쇄: 친구의 친구와는 빨리 가까워진다 (페어 델타 가산, 무드로우)
+  triad: { perFriendBonus: 8, maxCommon: 3 },
+  // §17.15 경제 순환: 소득세 → 국고 → 복지·시장 수당 (Lengnick baseline 차용, 드로우 0회)
+  economy: {
+    taxPct: 15,             // 임금 원천징수율
+    welfareThreshold: 300,  // 이 잔고 미만이면 복지 대상
+    welfareAmount: 200,     // 1회 지급액
+    welfareDailyCap: 5,     // 하루 최대 수급자 수 (id asc)
+  },
+  // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
+  circadian: {
+    energyPct: [150, 150, 145, 140, 135, 125, 110, 100, 95, 90, 90, 90,
+                95, 95, 95, 95, 100, 105, 110, 115, 125, 135, 145, 150],
   },
   disease: {
     basePermille: 5, starvingBonus: 30, rainBonus: 10, lowEnergyBonus: 20,
@@ -396,6 +410,17 @@ function checkRanges(p, errors) {
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
   inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);
+  inRange('triad.perFriendBonus', p.triad.perFriendBonus, 0, 1000);
+  inRange('triad.maxCommon', p.triad.maxCommon, 0, 100);
+  inRange('economy.taxPct', p.economy.taxPct, 0, 90);
+  inRange('economy.welfareThreshold', p.economy.welfareThreshold, 0, 100000);
+  inRange('economy.welfareAmount', p.economy.welfareAmount, 0, 100000);
+  inRange('economy.welfareDailyCap', p.economy.welfareDailyCap, 0, 1000);
+  if (!Array.isArray(p.circadian?.energyPct) || p.circadian.energyPct.length !== 24) {
+    errors.push('circadian.energyPct: 24칸 배열 필요');
+  } else {
+    p.circadian.energyPct.forEach((v, i) => inRange(`circadian.energyPct[${i}]`, v, 10, 400));
+  }
   inRange('chrono.earlyMax', p.chrono.earlyMax, 0, 100);
   inRange('chrono.owlMin', p.chrono.owlMin, 0, 100);
   inRange('chrono.maxShiftMin', p.chrono.maxShiftMin, 0, 480);
