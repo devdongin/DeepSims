@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
 import { applyRomance } from '../sim/society.js';
 import { migrateWorld } from '../sim/migrate.js';
+import { SCHEMA_VERSION } from '../sim/constants.js';
+import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronotypeOf as chronotypeOfRef } from '../sim/chrono.js';
 
 const SEED = 7777;
 
@@ -67,6 +69,10 @@ test('S-3. 전염: 페어링에서 감염이 옮는다 (결정적 드로우)', (
     const w = createWorld(SEED);
     w.logic = JSON.parse(JSON.stringify(w.logic));
     w.logic.disease.contagionPermille = 1000; // 확정 전염으로 경로 검증
+    w.logic.disease.basePermille = 0; // 일일 발병 차단 — 전염 경로만 격리 검증
+    w.logic.disease.starvingBonusPermille = 0;
+    w.logic.disease.rainBonusPermille = 0;
+    w.logic.disease.lowEnergyBonusPermille = 0;
     idleAll(w, []);
     w.sims[0].sick = { kind: 'cold', untilTick: 999999 };
     pairAt(w, [0, 1]);
@@ -410,17 +416,60 @@ test('S-15. §17.11 개정: 증축 여력만으로 자녀 성립(빈 침대 없�
   assert.ok(!evs2.some((e) => e.type === 'child_settled'), 'maxExtraBeds=0 → 스킵');
 });
 
-test('S-16. v14 마이그레이션: required 없는 진행 중 프로젝트 백필 → 완공 재개', () => {
+test('S-16. v14+ 마이그레이션: required 없는 진행 중 프로젝트 백필 → 완공 재개', () => {
   const w = createWorld(SEED);
   // 구 빌드 세이브 재현: v13 + required 없는 프로젝트 (라이브 교착 시나리오)
   w.schemaVersion = 13;
   w.project = { plotId: 0, progress: 76420, type: 'cafe' };
   const m = migrateWorld(JSON.parse(JSON.stringify(w)));
-  assert.equal(m.schemaVersion, 14);
+  assert.equal(m.schemaVersion, SCHEMA_VERSION); // 백필 후 최신 버전
   assert.equal(m.project.required, 600, 'required 백필');
   // 완공 판정 재개: 다음 틱 4단계에서 progress ≥ required → facility_built
   idleAll(m, []);
   const evs = tick(m, []);
   assert.ok(evs.some((e) => e.type === 'facility_built'), '백필 즉시 완공');
   assert.equal(m.project, null);
+});
+
+test('S-17. §17.13 생활 리듬: 크로노타입·야근·교대·수면 슬롯·월간 자녀', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  // 신규 시설 존재
+  assert.ok(w.map.facilities.some((f) => f.id === 'police_station'), '경찰서');
+  assert.ok(w.map.facilities.some((f) => f.id === 'fire_station'), '소방서');
+  // flex + J형(JP≤40) → 야근 +overtimeMin
+  const s = w.sims[0];
+  s.traits = { ...s.traits, age: 30, occupation: 'office_worker', mbti: { ...s.traits.mbti, EI: 50, JP: 20 } };
+  const ww = workWindowForRef(s, L);
+  const base = L.occupations.office_worker;
+  const chronoV = (50 * 3 + 20 * 5 + 30 * 7) % 100; // 60 → normal (오프셋 0)
+  assert.ok(chronoV >= L.chrono.earlyMax && chronoV < L.chrono.owlMin, '전제: normal');
+  assert.equal(ww.to, base.workEnd + L.chrono.overtimeMin, 'J형 야근');
+  // P형(JP 80) → 칼퇴
+  s.traits.mbti.JP = 80; // v = 60+300+... 재계산되지만 to는 overtime 없이
+  const ww2 = workWindowForRef(s, L);
+  assert.ok(ww2.to === base.workEnd + (chronotypeOfRef(s.traits, L) === 'owl' ? L.chrono.owlShiftMin : chronotypeOfRef(s.traits, L) === 'early' ? -L.chrono.earlyShiftMin : 0), '칼퇴(크로노 오프셋만)');
+  // 교대: police 홀수 id → 야간 랩 창
+  const p = w.sims[1];
+  p.traits = { ...p.traits, age: 30, occupation: 'police' };
+  const nw = workWindowForRef(p, L);
+  assert.equal(nw.from, L.chrono.nightShiftStart);
+  assert.ok(nw.to > 1440, '자정 랩');
+  assert.ok(slotMatchesRef(nw, 1400) && slotMatchesRef(nw, 100) && !slotMatchesRef(nw, 600), '랩 매칭');
+  // 야간조 수면 슬롯은 주간
+  const sw = sleepWindowForRef(p, L);
+  assert.equal(sw.from, L.chrono.daySleepStart);
+  // 월간 자녀: day 30 경계에서도 평가 (S-13은 360 — 여기선 30)
+  const w2 = createWorld(SEED);
+  w2.logic = JSON.parse(JSON.stringify(w2.logic));
+  w2.logic.family.childPermille = 1000;
+  const [a2, b2] = w2.sims;
+  b2.homeId = a2.homeId;
+  w2.partners[0] = 1; w2.partners[1] = 0;
+  w2.partnerStage[0] = 'married'; w2.partnerStage[1] = 'married';
+  idleAll(w2, []);
+  w2.worldTick = 30 * 1440 - 1;
+  w2.weather.day = 30; w2.lastDailyDay = 29; w2.lastPlanDay = 30;
+  const evs = tick(w2, []);
+  assert.ok(evs.some((e) => e.type === 'child_settled'), '월간 자녀 평가');
 });

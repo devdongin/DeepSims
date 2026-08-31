@@ -8,6 +8,7 @@ import {
 import { TILE, addBuilding } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
+import { workWindowFor, slotMatches } from './chrono.js';
 import { validateLogic, logicHash } from './logic.js';
 import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection } from './cognition.js';
@@ -89,10 +90,9 @@ function actionBlockReason(world, sim, action, t) {
   const cost = L.actions[action]?.cost ?? 0;
   if (cost > 0 && sim.money < cost) return 'no_money';
   if (action === 'work') {
-    const occ = L.occupations[sim.traits.occupation];
-    if (occ.wagePct === 0) return 'off_hours';
-    const tod = t % 1440;
-    if (tod < occ.workStart || tod >= occ.workEnd) return 'off_hours';
+    const ww = workWindowFor(sim, L); // §17.13 크로노타입·야근·교대 반영 (단일 권위)
+    if (!ww) return 'off_hours';
+    if (!slotMatches(ww, t % 1440)) return 'off_hours';
   }
   if (COPING_ACTIONS.includes(action) && sim.mood >= L.coping.threshold) return 'not_coping';
   if (action === 'shop' && (sim.groceries > 0 || sim.money < L.actions.shop.cost)) {

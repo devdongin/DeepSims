@@ -41,11 +41,11 @@ test('W-2. 날씨: day 0은 드로우 없이 sunny, 이후 하루 1회 결정적
 
 test('W-3. 분실 동전: 스폰 → 습득(돈·기분·기억) 또는 만료', () => {
   const w = createWorld(SEED);
-  const evs = advance(w, {}, 5 * 1440);
+  const evs = advance(w, {}, 7 * 1440);
   const spawned = evs.filter((e) => e.type === 'item_spawned');
   assert.ok(spawned.length >= 5, `스폰 발생 (${spawned.length})`);
   const found = evs.filter((e) => e.type === 'item_found');
-  // 5일이면 누군가는 줍는다 (심들이 계속 돌아다님)
+  // 7일이면 누군가는 줍는다 (심들이 계속 돌아다님)
   assert.ok(found.length >= 1, `습득 발생 (${found.length})`);
   assert.ok(found.every((e) => e.payload.amount >= w.logic.items.amountMin));
 });

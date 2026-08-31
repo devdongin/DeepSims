@@ -786,3 +786,32 @@ traits: {
   기준 사회 페이싱 — immigrationIntervalDays 3, yearDays 120, festivalDays 30,
   election.intervalDays 15, dating 4500/40회, marry 7500/120회.
 - 테스트는 주기값 하드코딩 금지 — logic 값에서 유도(S-5 정정).
+
+### 17.13 라운드 5 — 생활 리듬·직업 확충 (행동 다양화, Generative Agents 일정 개인화)
+- **크로노타입**(무드로우, 저장 안 함 — traits 순수 함수): v=(EI×3+JP×5+age×7)%100 →
+  v<earlyMax(20) early / v≥owlMin(70) owl / 그 외 normal. 나이 들면 값이 이동(새해마다 재평가되는
+  창발). early는 근무·여가·수면 -90분, owl +120분(flex 직업만).
+- **야근/칼퇴**: flex 직업 && J형(JP≤overtimeJpMax 40) → 근무 종료 +overtimeMin(120) 야근.
+  그 외 정시 칼퇴. slot.to>1440은 자정 랩(매칭: tod≥from || tod<to−1440).
+- **교대근무**: police/firefighter/nurse는 shift:'rotating' — 조 = sim.id%2, A조 주간(540–1080),
+  B조 야간(1320–1800 랩). B조 수면 슬롯 주간(480–960). 밤엔 대부분 자고 누군가는 새벽에 일한다.
+- **수면 슬롯 신설**: buildDailyPlan에 intent 'sleep' 슬롯(개인 크로노타입 반영, 야간조는 주간).
+  수면은 여전히 욕구 주도 — 슬롯은 planFactor로 타이밍만 끌어당김(우선순위 배열 맨 뒤).
+- **직업 확충**: OCCUPATIONS 풀에 §17.2 3종(doctor/civil_servant/teacher — 풀 누락 버그 수리) +
+  신규 4종 police(115%)/firefighter(115%)/nurse(120%)/politician(125%). 나이 제약: doctor·politician
+  ≥26, police·firefighter·nurse ≥20. workplace: police_station/fire_station/hospital/city_hall.
+- **신규 시설**: addCivicVenuesTo — police_station(34,64) 7×5 슬롯3, fire_station(16,64) 7×5 슬롯3
+  (도로 인접·BFS 도달 검증). 세이브 v15로 주입, 신규 월드는 buildMap 체인.
+- **자녀 월간화**: maybeChildren 게이트 yearDays → childCheckDays(30) (day>0 && day%30==0).
+  나이·졸업·은퇴는 새해 유지. 일일 서브순서 위치 불변(newYear 다음). '모두 나이만 먹는' 문제 해소.
+- 로직 v14(chrono/occupations/workplace/society.childCheckDays), 세이브 v15(시설 주입).
+  워크 게이트·계획이 workWindowFor 단일 헬퍼 공유(§17.2 매핑 유지). 에셋: 경찰서·소방서 +
+  경찰·소방관 원형 스프라이트(Codex imagegen, §17.14 아트 라운드에 합류).
+
+### 17.14 라운드 6 — 캐릭터 아트·보행 애니메이션 (탈 클립아트)
+- 스타일: 16비트 SNES풍 치비 도트(스타듀 계열), 진한 외곽선, 3/4 뷰. 원형 10종(id%10 재사용 —
+  이민자·자녀 포함) + 플레이어. 시트: 가로 4프레임 걷기(↙), 마젠타 배경(Codex imagegen 전담).
+- 파이프라인: chromakey 플러드필 → tools/slice-sheet.js(알파 열-투영 분리 — 격자 오차 흡수,
+  프레임별 bbox 공통 셀 하단-중앙 정렬 = 발끝 기준선 고정) → walk{N}_{0..3}.png.
+- 클라: Phaser anims(8fps 루프) 이동 중 재생·정지 시 frame 0, dx 부호로 flipX(↘ 반전),
+  발밑 타원 그림자. 프레임 미존재 원형은 구 정적 이미지 → 색 원 폴백 체인 유지. 시뮬 코어 무변경.
