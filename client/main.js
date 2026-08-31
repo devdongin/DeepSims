@@ -29,11 +29,45 @@ for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
   WALK_KEYS.push([`walk${i}_${f}`, `./sprites/walk${i}_${f}.png`]);
 }
 for (let f = 0; f < 4; f++) WALK_KEYS.push([`walkp_${f}`, `./sprites/walkp_${f}.png`]); // 플레이어
+for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
+  WALK_KEYS.push([`walkup${i}_${f}`, `./sprites/walkup${i}_${f}.png`]);   // 후면 걷기
+}
+for (let f = 0; f < 4; f++) WALK_KEYS.push([`walkupp_${f}`, `./sprites/walkupp_${f}.png`]);
+for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
+  WALK_KEYS.push([`pose${i}_${f}`, `./sprites/pose${i}_${f}.png`]);       // 서기↙·앉기↙·서기↖·앉기↖
+}
+for (let f = 0; f < 4; f++) WALK_KEYS.push([`posep_${f}`, `./sprites/posep_${f}.png`]);
+const SIT_ACTIONS = ['eat', 'read', 'work', 'drink', 'cook_eat', 'see_doctor', 'binge_eat'];
+// 직업 → 스프라이트 원형 (제복 정합): 경찰은 경찰복, 의사·간호사는 가운, 소방관은 소방복
+const ARCH_OF_OCCUPATION = {
+  police: 7, firefighter: 8, doctor: 5, nurse: 5, teacher: 6, student: 3,
+  retired: 4, barista: 2, office_worker: 1, civil_servant: 1, politician: 1, fisher: 9,
+};
+// 심 스프라이트 일괄 폐기 — stopTimer 콜백이 폐기된 body를 만지지 않도록 함께 정리 (Codex 37차)
+function destroySimSprites() {
+  simSprites.forEach((s) => { if (s.stopTimer) s.stopTimer.remove(); s.destroy(); });
+  simSprites.clear();
+}
+
+function archOf(sim) {
+  if (sim.isPlayer) return 'p';
+  const m = ARCH_OF_OCCUPATION[sim.traits?.occupation];
+  return m !== undefined ? m : sim.id % 10;
+}
+// §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
+const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
+  'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
+const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
+for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
+const BLD_OF_FACILITY = { cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
+  city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
+  cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
+  police_station: 'bld_police', fire_station: 'bld_fire' };
 const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
-  const entries = [...SPRITE_KEYS, ...WALK_KEYS, ...PROP_KEYS];
+  const entries = [...SPRITE_KEYS, ...WALK_KEYS, ...BLD_KEYS, ...PROP_KEYS];
   return Promise.all(entries.map(([key, url]) => new Promise((res) => {
     const img = new Image();
     img.onload = () => res([key, img]);
@@ -203,26 +237,53 @@ class TownScene extends Phaser.Scene {
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
     this.drawProps();
+    let houseIdx = 0;
     for (const fac of map.facilities) {
       const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서' }[fac.type];
-      const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - 24;
-      this.add.text(tx, ty, label, { fontSize: '11px', color: '#ffd97a', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
-      g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
-      for (let j = fac.y; j < fac.y + fac.h; j++) for (let i = fac.x; i < fac.x + fac.w; i++) {
-        if (map.tiles[j * map.w + i] === 3) this.drawTile(g, i, j, FACILITY_COLORS[fac.type], 10);
+      // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
+      let bldKey = fac.type === 'house' ? `bld_house_${'abc'[houseIdx++ % 3]}` : BLD_OF_FACILITY[fac.type];
+      // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
+      const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
+      if (bldKey && (hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
+      if (bldKey && !this.textures.exists(bldKey)) bldKey = null;
+      if (bldKey) {
+        const cx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
+        const cy = isoY(fac.x + fac.w / 2, fac.y + fac.h / 2);
+        const img = this.add.image(cx, cy + TH, bldKey).setOrigin(0.5, 1);
+        const wpx = (fac.w + fac.h) / 2 * TW * 1.02; // 발자국 대각 폭에 맞춤
+        img.setScale(wpx / img.width);
+        img.setDepth(1000 + fac.x + fac.w + fac.y + fac.h - 1);
+        this.propSprites.push(img);
+      } else {
+        g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
+        for (let j = fac.y; j < fac.y + fac.h; j++) for (let i = fac.x; i < fac.x + fac.w; i++) {
+          if (map.tiles[j * map.w + i] === 3) this.drawTile(g, i, j, FACILITY_COLORS[fac.type], 10);
+        }
       }
+      const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - (bldKey ? 40 : 24);
+      const lb = this.add.text(tx, ty, label, { fontSize: '11px', color: '#ffd97a', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
+      lb.setDepth(5000);
+      this.propSprites.push(lb);
     }
     this.syncSims();
   }
 
-  // 원형별 걷기 애니메이션 등록 (프레임이 전부 로드된 원형만)
-  ensureWalkAnim(arch) {
-    const key = `walkanim${arch}`;
+  // 원형·방향별 걷기 애니메이션 등록 (프레임이 전부 로드된 것만). dir: '' 정면 ↙, 'up' 후면 ↖
+  ensureWalkAnim(arch, dir = '') {
+    const key = `walk${dir}anim${arch}`;
     if (this.anims.exists(key)) return key;
-    const frames = [0, 1, 2, 3].map((f) => ({ key: `walk${arch}_${f}` }));
+    const frames = [0, 1, 2, 3].map((f) => ({ key: `walk${dir}${arch}_${f}` }));
     if (!frames.every((fr) => this.textures.exists(fr.key))) return null;
     this.anims.create({ key, frames, frameRate: 8, repeat: -1 });
     return key;
+  }
+
+  // 정지 포즈 텍스처: pose 시트 [0 서↙, 1 앉↙, 2 서↖, 3 앉↖] — 없으면 걷기 frame 0 폴백
+  poseTexture(arch, sitting, back) {
+    const idx = (back ? 2 : 0) + (sitting ? 1 : 0);
+    const key = `pose${arch}_${idx}`;
+    if (this.textures.exists(key)) return key;
+    return this.textures.exists(`walk${arch}_0`) ? `walk${arch}_0` : null;
   }
 
   syncSims() {
@@ -230,7 +291,7 @@ class TownScene extends Phaser.Scene {
       let sp = simSprites.get(sim.id);
       const tx = isoX(sim.x, sim.y), ty = isoY(sim.x, sim.y) - 8;
       if (!sp) {
-        const arch = sim.isPlayer ? 'p' : sim.id % 10; // 플레이어 전용 시트, 이민자·자녀는 원형 재사용
+        const arch = archOf(sim); // 직업 제복 우선, 미지정 직업은 id%10
         const animKey = this.ensureWalkAnim(arch);
         let body;
         if (animKey) {
@@ -248,18 +309,32 @@ class TownScene extends Phaser.Scene {
         c.bodyRef = body; c.animKey = animKey;
         sp = c; simSprites.set(sim.id, sp);
       }
+      const arch = archOf(sim);
+      // 타일 델타로 4방향: 정/후면 = sign(ddx+ddy), 좌/우 = 화면 dx 부호(flipX)
+      const prev = sp.lastTile ?? { x: sim.x, y: sim.y };
+      const ddx = sim.x - prev.x, ddy = sim.y - prev.y;
+      sp.lastTile = { x: sim.x, y: sim.y };
       const dx = tx - sp.x;
       const moving = Math.abs(dx) + Math.abs(ty - sp.y) > 1;
       const body = sp.bodyRef;
       if (body && sp.animKey) {
         if (moving) {
-          if (dx !== 0) body.setFlipX(dx > 0); // 원본 ↙ — 오른쪽 이동 시 반전
-          body.anims.play(sp.animKey, true);
+          const back = (ddx + ddy) < 0; // 북쪽(카메라 반대)으로 이동 → 후면
+          const animKey = (back && this.ensureWalkAnim(arch, 'up')) || this.ensureWalkAnim(arch);
+          if (dx !== 0) body.setFlipX(dx > 0); // 원본 ↙/↖ — 오른쪽 이동 시 반전
+          body.anims.play(animKey, true);
+          sp.lastBack = back && this.ensureWalkAnim(arch, 'up') !== null;
           if (sp.stopTimer) { sp.stopTimer.remove(); }
           sp.stopTimer = this.time.delayedCall(950, () => {
             body.anims.stop();
-            body.setTexture(`walk${sim.isPlayer ? 'p' : sim.id % 10}_0`);
+            const sitting = sim.state?.kind === 'performing' && SIT_ACTIONS.includes(sim.state.action);
+            body.setTexture(this.poseTexture(arch, sitting, sp.lastBack) ?? `walk${arch}_0`);
           });
+        } else if (sim.state?.kind === 'performing') {
+          // 정지 수행 중: 착석 행동이면 앉기 포즈 유지
+          const sitting = SIT_ACTIONS.includes(sim.state.action);
+          const tex = this.poseTexture(arch, sitting, sp.lastBack);
+          if (tex && !body.anims.isPlaying && body.texture.key !== tex) body.setTexture(tex);
         }
       }
       this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
@@ -505,6 +580,26 @@ function handleVisualEvent(e) {
 // ---- UI ----
 const $ = (id) => document.getElementById(id);
 
+// 목업 황혼 톤: 시각별 씬 위 틴트 (§UI). CSS transition이 부드럽게 보간.
+let lastNightFlag = null;
+function applyDaylight(tick) {
+  const el = document.getElementById('daynight');
+  if (!el) return;
+  const h = Math.floor((tick % 1440) / 60);
+  const night = h >= 19 || h < 6;
+  if (lastNightFlag !== null && night !== lastNightFlag && scene) {
+    destroySimSprites();
+    scene.drawWorld(); // 점등 변형 스왑
+  }
+  lastNightFlag = night;
+  let bg = 'transparent';
+  if (h >= 21 || h < 5) bg = 'rgba(20, 26, 60, 0.38)';        // 밤
+  else if (h >= 19) bg = 'rgba(50, 30, 70, 0.26)';             // 황혼
+  else if (h >= 17) bg = 'rgba(255, 140, 60, 0.12)';           // 노을
+  else if (h < 7) bg = 'rgba(90, 110, 170, 0.18)';             // 새벽
+  el.style.background = bg;
+}
+
 function fmtClock(tick) {
   const day = Math.floor(tick / 1440);
   const tod = tick % 1440;
@@ -637,6 +732,7 @@ function renderPanel() {
   const sim = world.sims.find((s) => s.id === selectedSimId);
   panel.style.display = 'block';
   $('simname').textContent = sim.name;
+  $('portrait').src = `./sprites/walk${archOf(sim)}_0.png`; // 도트 초상화 — 직업 제복 반영 (§17.14)
   for (const k of ['hunger', 'energy', 'social', 'fun']) {
     $(`b-${k}`).style.width = `${sim.needs[k] / 100}%`;
   }
@@ -783,7 +879,8 @@ function connect() {
         world = msg.world;
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
-        if (scene) { simSprites.forEach((s) => s.destroy()); simSprites.clear(); scene.drawWorld(); }
+        applyDaylight(world.worldTick);
+        if (scene) { destroySimSprites(); scene.drawWorld(); }
         showReport();
         maybeShowOnboarding();
         renderPanel();
@@ -797,6 +894,7 @@ function connect() {
         world.sims = msg.sims;
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
         $('clock').textContent = fmtClock(world.worldTick);
+        applyDaylight(world.worldTick);
         for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
         let mapDirty = false;
