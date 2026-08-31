@@ -107,10 +107,15 @@ export function migrateWorld(world) {
   if (from < 13) {
     world.parents ??= {}; // §17.11
   }
+  if (from < 14) {
+    // 구 빌드가 required 스냅샷 없이 만든 진행 중 프로젝트 백필 — 완공 판정(progress ≥ required)이
+    // 영원히 false가 되어 프로젝트 슬롯을 영구 점유하는 교착 수리. 값은 §16.5 기본 노동량.
+    if (world.project && !Number.isSafeInteger(world.project.required)) world.project.required = 600;
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 13;
+  world.schemaVersion = 14;
   return world;
 }

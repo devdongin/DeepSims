@@ -1,3 +1,4 @@
+import { SCHEMA_VERSION } from './constants.js';
 // 월드 생성 — rngWorldgen만 사용, 이후 런타임은 rngSim (PLAN §2 네임드 스트림).
 // schemaVersion 2: traits(성별·나이·MBTI·직업)·mood·world.logic 포함 (PLAN §12.1).
 import { buildMap, defaultPlots, extraPlots128, extraPlots512 } from './map.js';
@@ -60,7 +61,7 @@ export function createWorld(seed) {
   const lastGreetDay = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(-1));
 
   return {
-    schemaVersion: 13,
+    schemaVersion: SCHEMA_VERSION,
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),

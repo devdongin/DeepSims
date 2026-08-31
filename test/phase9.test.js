@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
 import { applyRomance } from '../sim/society.js';
+import { migrateWorld } from '../sim/migrate.js';
 
 const SEED = 7777;
 
@@ -110,8 +111,9 @@ test('S-5. 이민: 빈 침대가 있어야 오고, 인구가 늘고, 이웃 기�
   const h0 = w.map.facilities.find((f) => f.id === 'house0');
   h0.resources.push({ id: 'bed2', kind: 'bed', x: h0.x + 2, y: h0.y + 2 });
   idleAll(w, []);
-  w.worldTick = 7 * 1440 - 1; // 이민 주기 경계
-  w.weather.day = 7;
+  const iv = w.logic.society.immigrationIntervalDays; // 주기 하드코딩 금지 (페이싱 튜닝 내성)
+  w.worldTick = iv * 1440 - 1; // 이민 주기 경계
+  w.weather.day = iv;
   const popBefore = w.sims.length;
   const evs = tick(w, []);
   const im = evs.find((e) => e.type === 'immigrated');
@@ -406,4 +408,19 @@ test('S-15. §17.11 개정: 증축 여력만으로 자녀 성립(빈 침대 없�
   w2.weather.day = 360; w2.lastDailyDay = 359; w2.lastPlanDay = 360;
   const evs2 = tick(w2, []);
   assert.ok(!evs2.some((e) => e.type === 'child_settled'), 'maxExtraBeds=0 → 스킵');
+});
+
+test('S-16. v14 마이그레이션: required 없는 진행 중 프로젝트 백필 → 완공 재개', () => {
+  const w = createWorld(SEED);
+  // 구 빌드 세이브 재현: v13 + required 없는 프로젝트 (라이브 교착 시나리오)
+  w.schemaVersion = 13;
+  w.project = { plotId: 0, progress: 76420, type: 'cafe' };
+  const m = migrateWorld(JSON.parse(JSON.stringify(w)));
+  assert.equal(m.schemaVersion, 14);
+  assert.equal(m.project.required, 600, 'required 백필');
+  // 완공 판정 재개: 다음 틱 4단계에서 progress ≥ required → facility_built
+  idleAll(m, []);
+  const evs = tick(m, []);
+  assert.ok(evs.some((e) => e.type === 'facility_built'), '백필 즉시 완공');
+  assert.equal(m.project, null);
 });

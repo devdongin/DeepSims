@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 12,
+  logicSchemaVersion: 13,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -144,11 +144,11 @@ export const DEFAULT_LOGIC = {
   },
   // §17 사회 (logicSchemaVersion 9)
   society: {
-    immigrationIntervalDays: 7,
-    yearDays: 360,           // §17.9 새해 주기 (전원 age+1)
+    immigrationIntervalDays: 3,
+    yearDays: 120,           // §17.9 새해 주기 (전원 age+1) — 실시간 관람 페이싱(v0.9.1)
     graduateAge: 26,         // student → office_worker
     retireAge: 65,           // → retired
-    festivalDays: 90,        // §17.10 마을 축제 주기
+    festivalDays: 30,        // §17.10 마을 축제 주기
   },
   family: {
     childPermille: 300,      // §17.11 새해 자녀 정착 확률(‰, 동거 부부·빈 침대 조건)
@@ -163,15 +163,15 @@ export const DEFAULT_LOGIC = {
     doctorDeficit: 8500,     // see_doctor needValue = NEED_MAX - deficit (아플 때 최우선급)
   },
   election: {
-    intervalDays: 30,
+    intervalDays: 15,
     mayorLaborPct: 90,       // 시장 재임 중 시작되는 프로젝트 노동량 ×90%
     mayorStipend: 200,       // 일일 수당
     campaignPull: 140,       // §17.9 유세: 후보의 socialize planFactor
     campaignDays: 3,         // 선거 D-3부터
   },
   romance: {
-    datingMin: 6000, datingInteractions: 100,
-    marryMin: 9000, marryInteractions: 300,
+    datingMin: 4500, datingInteractions: 40,
+    marryMin: 7500, marryInteractions: 120,
     breakup: 2000, breakupMood: 1500,
     partnerSocialPct: 150,   // 파트너 페어링 사교 회복 %
     sweetTalkDelta: 8,       // 파트너 대화 상호 호감 가산(스케일 전)

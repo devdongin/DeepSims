@@ -777,3 +777,12 @@ traits: {
   이사**(신혼집, moved_home ×2 — lo 먼저). 실행자는 §17.5 단일 실행자 규칙(먼저 회고한 쪽) 동일.
 - 주거 수요 개정: §B 트리거 1이 별거 부부 수를 수요로 계상 → 건설→합가→자녀→이민 성장 루프 폐쇄.
 - 스키마 v13(world.parents), 로직 v12(family{childPermille, familyBonus, talkWeight}).
+
+### 17.12 v0.9.1 — 라이브 세이브 교착 수리 + 관람 페이싱
+- 세이브 v14: 구 빌드가 required 스냅샷 없이 만든 진행 중 프로젝트 백필(!Number.isSafeInteger →
+  600, 멱등). 완공 판정 불능으로 프로젝트 슬롯이 영구 점유되던 교착 수리(§16.5 완공 규칙 불변).
+- createWorld의 schemaVersion은 SCHEMA_VERSION 상수 단일 권위(리터럴 금지 — 왕복 해시 드리프트 방지).
+- 로직 v13(값만 변경, 형태 불변 — 값 변경도 버전 경계 필요): 실시간 1틱=1초(1게임일=24실분) 관람
+  기준 사회 페이싱 — immigrationIntervalDays 3, yearDays 120, festivalDays 30,
+  election.intervalDays 15, dating 4500/40회, marry 7500/120회.
+- 테스트는 주기값 하드코딩 금지 — logic 값에서 유도(S-5 정정).
