@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 19,
+  "logicSchemaVersion": 20,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -397,6 +397,19 @@
   "triad": {
     "perFriendBonus": 8,
     "maxCommon": 3
+  },
+  "growth": {
+    "headroomBeds": 2,
+    "repMarried": 40,
+    "repFestival": 30,
+    "repBuilt": 25,
+    "repChild": 30,
+    "repElection": 10,
+    "repGathering": 2,
+    "repCap": 500,
+    "repDecayPct": 95,
+    "immigPerExtra": 80,
+    "immigWaveMax": 3
   },
   "economy": {
     "taxPct": 15,

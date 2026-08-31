@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 19,
+  logicSchemaVersion: 20,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -174,6 +174,13 @@ export const DEFAULT_LOGIC = {
   },
   // §17.18 삼각 폐쇄: 친구의 친구와는 빨리 가까워진다 (페어 델타 가산, 무드로우)
   triad: { perFriendBonus: 8, maxCommon: 3 },
+  // §17.21 도시 성장 드라이브: 행동 이벤트 → 평판 → 이민 웨이브 + 선제·일자리 건설
+  growth: {
+    headroomBeds: 2,        // 빈 침대가 이보다 적으면 선제 house 프로젝트
+    repMarried: 40, repFestival: 30, repBuilt: 25, repChild: 30, repElection: 10, repGathering: 2,
+    repCap: 500, repDecayPct: 95, // 일일 ×95% 감쇠
+    immigPerExtra: 80, immigWaveMax: 3, // 웨이브 = 1 + floor(평판/80), 캡
+  },
   // §17.15 경제 순환: 소득세 → 국고 → 복지·시장 수당 (Lengnick baseline 차용, 드로우 0회)
   economy: {
     taxPct: 15,             // 임금 원천징수율
@@ -410,6 +417,17 @@ function checkRanges(p, errors) {
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
   inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);
+  inRange('growth.headroomBeds', p.growth.headroomBeds, 0, 100);
+  inRange('growth.repCap', p.growth.repCap, 0, 100000);
+  inRange('growth.repDecayPct', p.growth.repDecayPct, 0, 100);
+  inRange('growth.immigPerExtra', p.growth.immigPerExtra, 1, 100000);
+  inRange('growth.immigWaveMax', p.growth.immigWaveMax, 1, 100);
+  inRange('growth.repMarried', p.growth.repMarried, 0, 10000);
+  inRange('growth.repFestival', p.growth.repFestival, 0, 10000);
+  inRange('growth.repBuilt', p.growth.repBuilt, 0, 10000);
+  inRange('growth.repChild', p.growth.repChild, 0, 10000);
+  inRange('growth.repElection', p.growth.repElection, 0, 10000);
+  inRange('growth.repGathering', p.growth.repGathering, 0, 10000);
   inRange('triad.perFriendBonus', p.triad.perFriendBonus, 0, 1000);
   inRange('triad.maxCommon', p.triad.maxCommon, 0, 100);
   inRange('economy.taxPct', p.economy.taxPct, 0, 90);

@@ -70,7 +70,7 @@ const BLD_OF_FACILITY = { cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld
   city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
   police_station: 'bld_police', fire_station: 'bld_fire' };
-const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern', 'police_car', 'fire_truck', 'ambulance']
+const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern', 'police_car', 'fire_truck', 'ambulance', 'well', 'jangdok', 'laundry', 'bicycle', 'cart', 'flower_bed2', 'fence_wood', 'lamp_stone', 'street_tree_lit', 'bench2']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -127,6 +127,11 @@ class TownScene extends Phaser.Scene {
       if (fac.type === 'house') {
         for (const r of fac.resources) put('bed', r.x, r.y, 24);
         put('mailbox', fac.door.x + 1, fac.door.y + 1, 20);
+        // §17.21 마당 장식 — 좌표 기반 결정적 변형 (배치 5)
+        const yard = (fac.x * 7 + fac.y * 13) % 3;
+        if (yard === 0) put('jangdok', fac.x + fac.w, fac.y + 1, 18);
+        else if (yard === 1) put('laundry', fac.x + fac.w, fac.y + 2, 22);
+        else put('bicycle', fac.x - 1, fac.y + 3, 16);
       } else if (fac.type === 'cafe') {
         for (const r of fac.resources) put('cafe_table', r.x, r.y, 24);
       } else if (fac.type === 'office') {
@@ -138,6 +143,7 @@ class TownScene extends Phaser.Scene {
         for (const r of fac.resources) put('bookshelf', r.x, r.y, 26);
         put('umbrella_stand', fac.door.x + 1, fac.door.y + 1, 20);
       } else if (fac.type === 'market') {
+        put('cart', fac.door.x - 2, fac.door.y - 1, 20);
         for (const r of fac.resources) put('market_stall', r.x, r.y, 28);
       } else if (fac.type === 'pond') {
         put('fishing_sign', fac.door.x - 1, fac.door.y, 24);
@@ -177,6 +183,9 @@ class TownScene extends Phaser.Scene {
         put('fountain', fac.x + 8, fac.y + 5, 34);
         put('flowerbed', fac.x + 2, fac.y + 8, 18);
         put('flowerbed', fac.x + 13, fac.y + 2, 18);
+        put('well', fac.x - 1, fac.y - 1, 24);          // 배치 5 장식
+        put('lamp_stone', fac.x + fac.w, fac.y + fac.h, 16);
+        put('flower_bed2', fac.x + 7, fac.y - 1, 16);
       }
     }
     // §16.5: 공터 표지판·공사 현장

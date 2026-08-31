@@ -719,6 +719,7 @@ export function tick(world, inputsForThisTick = []) {
         maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10
+        world.reputation = floorDiv(world.reputation * world.logic.growth.repDecayPct, 100); // §17.21 일일 감쇠
       }
     }
     const day = floorDiv(t, 1440);
@@ -743,8 +744,14 @@ export function tick(world, inputsForThisTick = []) {
             if (pa.homeId !== pb.homeId) separated++;
           }
         }
+        // §17.21 일자리 수요: office 근무 직업 심 수 vs 책상 슬롯 합
+        const officeWorkers = world.sims.filter((s2) => L.workplace[s2.traits.occupation] === 'office'
+          && L.occupations[s2.traits.occupation].wagePct > 0).length;
+        const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
+          .reduce((n, f) => n + f.resources.length, 0);
         let type = null;
-        if (pop + separated > beds) type = 'house';
+        if (pop + separated + L.growth.headroomBeds > beds) type = 'house'; // 선제 주택 (§17.21)
+        else if (officeWorkers > officeDesks) type = 'office';
         else if (pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (pop > parkSpots * L.construct.parkRatio) type = 'park';
         if (type) {
@@ -803,6 +810,17 @@ export function tick(world, inputsForThisTick = []) {
         urgencyOverride: urgency,
       });
     } else startIdle(sim, L, emit);
+  }
+
+  // 5.5) §17.21 평판 적립: 이번 틱의 행동 이벤트 가중 합산 (순서 무관, 캡)
+  {
+    const G = world.logic.growth;
+    const REP = { married: G.repMarried, festival: G.repFestival, facility_built: G.repBuilt,
+      child_settled: G.repChild, election: G.repElection, gathering: G.repGathering };
+    for (const e of events) {
+      const r = REP[e.type];
+      if (r) world.reputation = Math.min(G.repCap, world.reputation + r);
+    }
   }
 
   // 6) ordinal 부여 — 단계 순 + 단계 내 적용 순서 (1단계는 sequence 순)

@@ -244,7 +244,14 @@ export function applyWelfare(world, t, emit) {
 
 export function maybeImmigration(world, t, day, emit) {
   const S = world.logic.society;
+  const G = world.logic.growth;
   if (day === 0 || day % S.immigrationIntervalDays !== 0) return;
+  // §17.21 평판 웨이브: 활기찬 마을일수록 여러 명이 온다 (각자 빈 침대 필요, 결정적)
+  const wave = Math.min(G.immigWaveMax, 1 + Math.floor(world.reputation / G.immigPerExtra));
+  for (let wv = 0; wv < wave; wv++) immigrateOne(world, t, emit);
+}
+
+function immigrateOne(world, t, emit) {
   const beds = world.map.facilities.filter((f) => f.type === 'house')
     .reduce((n, f) => n + f.resources.length, 0);
   if (beds <= world.sims.length) return; // 집 없으면 안 온다

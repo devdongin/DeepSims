@@ -8,6 +8,7 @@ import { SCHEMA_VERSION } from '../sim/constants.js';
 import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronoValue as chronoValueRef } from '../sim/chrono.js';
 import { buildDailyPlan as buildDailyPlanRef } from '../sim/planning.js';
 import { circadianEnergyPct as circadianEnergyPctRef } from '../sim/chrono.js';
+import { addBuilding as addBuildingRef } from '../sim/map.js';
 
 const SEED = 7777;
 
@@ -431,7 +432,8 @@ test('S-16. v14+ 마이그레이션: required 없는 진행 중 프로젝트 백
   idleAll(m, []);
   const evs = tick(m, []);
   assert.ok(evs.some((e) => e.type === 'facility_built'), '백필 즉시 완공');
-  assert.equal(m.project, null);
+  // §17.21 선제 주택 도입 후엔 같은 틱 계획이 새 프로젝트를 시작할 수 있음 — 옛 cafe가 아니면 됨
+  assert.ok(m.project === null || m.project.progress === 0, '옛 프로젝트는 소멸');
 });
 
 test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수면 정규화·월간 자녀·연 노화', () => {
@@ -571,4 +573,51 @@ test('S-21. §17.18 삼각 폐쇄: 공통 친구 수 비례 페어 보너스 (�
   assert.equal(pairDeltaBonusRef(w, a, b), base + w.logic.triad.perFriendBonus * w.logic.triad.maxCommon, '캡');
   b.relTiers[5] = 'acquaintance';
   assert.equal(pairDeltaBonusRef(w, a, b), base + w.logic.triad.perFriendBonus * 3, '양방 friend만 계수'); // 6,7,8
+});
+
+test('S-22. §17.21 성장 드라이브: 평판 적립·감쇠·이민 웨이브·선제 주택·일자리 건설', () => {
+  const w = createWorld(SEED);
+  const G = w.logic.growth;
+  // 평판 적립: 결혼 이벤트 발생 틱에 +repMarried (틱 끝 합산)
+  w.affinity[0][1] = 9999; w.affinity[1][0] = 9999;
+  w.interactions[0][1] = 999; w.interactions[1][0] = 999;
+  w.partners[0] = 1; w.partners[1] = 0;
+  w.partnerStage[0] = 'dating'; w.partnerStage[1] = 'dating';
+  const repBefore = w.reputation;
+  idleAll(w, []);
+  // 회고 유도 대신 직접: pairDeltaBonus 경유는 복잡 — 축제로 검증 (전 주민 이벤트)
+  const w2 = createWorld(SEED);
+  idleAll(w2, []);
+  w2.worldTick = 30 * 1440 - 1; w2.weather.day = 30; w2.lastDailyDay = 29; w2.lastPlanDay = 30;
+  tick(w2, []); // 축제일 (festivalDays 30)
+  assert.ok(w2.reputation >= w2.logic.growth.repFestival * 95 / 100 - 2, `축제 평판 적립 (${w2.reputation})`);
+  // 웨이브 크기: 평판 200 → 1 + floor(200/80) = 3 (캡 3)
+  const w3 = createWorld(SEED);
+  w3.reputation = 200;
+  const h0 = w3.map.facilities.find((f) => f.id === 'house0');
+  h0.resources.push({ id: 'bx1', kind: 'bed', x: h0.x + 2, y: h0.y + 2 });
+  h0.resources.push({ id: 'bx2', kind: 'bed', x: h0.x + 3, y: h0.y + 2 });
+  const h1 = w3.map.facilities.find((f) => f.id === 'house1');
+  h1.resources.push({ id: 'bx3', kind: 'bed', x: h1.x + 2, y: h1.y + 2 });
+  idleAll(w3, []);
+  const iv = w3.logic.society.immigrationIntervalDays;
+  w3.worldTick = iv * 1440 - 1; w3.weather.day = iv;
+  const pop0 = w3.sims.length;
+  tick(w3, []);
+  assert.equal(w3.sims.length, pop0 + 3, '평판 웨이브 3명');
+  // 선제 주택: 인구=침대여도 headroom 미달이면 house
+  const w4 = createWorld(SEED);
+  idleAll(w4, []);
+  w4.worldTick = 1440 - 1; w4.weather.day = 1; w4.lastDailyDay = 0; w4.lastPlanDay = 0;
+  const evs4 = tick(w4, []);
+  const proj4 = evs4.find((e) => e.type === 'project_started');
+  assert.ok(proj4 && proj4.payload.type === 'house', '선제 주택 프로젝트');
+  // 일자리 건설: addBuilding office 규칙
+  const w5 = createWorld(SEED);
+  const plot = w5.plots.find((p) => !p.used);
+  addBuildingRef(w5.map, 'office', plot);
+  const of = w5.map.facilities[w5.map.facilities.length - 1];
+  assert.equal(of.type, 'office');
+  assert.equal(of.resources.length, 4);
+  assert.ok(of.resources.every((r) => r.kind === 'desk'));
 });

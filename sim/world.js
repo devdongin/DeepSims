@@ -63,6 +63,7 @@ export function createWorld(seed) {
   return {
     schemaVersion: SCHEMA_VERSION,
     treasury: 0, // §17.15 국고 (세금 유입 → 복지·수당 유출)
+    reputation: 0, // §17.21 마을 평판 — 행동 이벤트 누적, 이민 웨이브 규모 결정
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),

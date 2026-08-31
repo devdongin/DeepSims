@@ -851,3 +851,14 @@ traits: {
 - 열림: bld_*_int 컷어웨이(지붕 제거·낮은 벽·가구) 텍스처, 북쪽 모서리 깊이로 안의 심이 위에
   그려짐. 텍스처 없으면 스프라이트 생략 → 타일 내부 폴백. 닫힘: 기존 외형(야간 점등 포함).
 - 차량 소품: 경찰차(파출소)·소방차(소방서)·구급차(병원) 문 앞 배치. 시뮬 코어 무변경.
+
+### 17.21 라운드 12 — 도시 성장 드라이브 (행동 → 성장 폐루프)
+- world.reputation(세이브 v17): 틱 끝 5.5단계에서 이번 틱 이벤트 가중 합산(married 40·festival
+  30·facility_built 25·child_settled 30·election 10·gathering 2, 캡 500), 일일 블록 마지막
+  (축제 다음)에 ×repDecayPct(95)% 감쇠.
+- 이민 웨이브: 주기마다 1 + floor(평판/immigPerExtra 80)명(캡 immigWaveMax 3), 각자 빈 침대
+  필요(immigrateOne 반복 — 결정적, 드로우는 특성 생성만).
+- 계획 트리거 개정(우선순위): ① 선제 주택 pop+별거+headroomBeds(2) > 침대 ② 일자리: office
+  근무 직업 심 수 > 책상 합 → office 신축 ③ cafe 비율 ④ park. addBuilding 'office' 7×5
+  문(x+3,y+4) desk4 (x+1,y+1)(x+4,y+1)(x+1,y+3)(x+4,y+3).
+- 로직 v20(growth). 행동이 평판을 만들고 평판이 사람을 부르고 사람이 건물을 부른다.
