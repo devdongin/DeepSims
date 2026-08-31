@@ -21,11 +21,19 @@ const isoY = (x, y) => (x + y) * (TH / 2);
 // 에셋 목록 — Phaser 로더가 임베디드 환경에서 32개+ 동시 로드 시 멈추는 문제를 피해
 // 브라우저 네이티브 Image로 직접 프리로드 후 textures.addImage로 주입한다.
 const SPRITE_KEYS = [...Array.from({ length: 10 }, (_, i) => [`sim${i}`, `./sprites/sim${i}.png`]), ['player', './sprites/player.png']];
+// §17.14 걷기 시트 (Codex imagegen → tools/slice-sheet.js): 원형 N종 × 4프레임.
+// 존재하는 것만 로드 — 아직 생성 안 된 원형은 정적 sim 이미지로 폴백.
+const WALK_ARCHETYPES = 10;
+const WALK_KEYS = [];
+for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
+  WALK_KEYS.push([`walk${i}_${f}`, `./sprites/walk${i}_${f}.png`]);
+}
+for (let f = 0; f < 4; f++) WALK_KEYS.push([`walkp_${f}`, `./sprites/walkp_${f}.png`]); // 플레이어
 const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
-  const entries = [...SPRITE_KEYS, ...PROP_KEYS];
+  const entries = [...SPRITE_KEYS, ...WALK_KEYS, ...PROP_KEYS];
   return Promise.all(entries.map(([key, url]) => new Promise((res) => {
     const img = new Image();
     img.onload = () => res([key, img]);
@@ -207,22 +215,52 @@ class TownScene extends Phaser.Scene {
     this.syncSims();
   }
 
+  // 원형별 걷기 애니메이션 등록 (프레임이 전부 로드된 원형만)
+  ensureWalkAnim(arch) {
+    const key = `walkanim${arch}`;
+    if (this.anims.exists(key)) return key;
+    const frames = [0, 1, 2, 3].map((f) => ({ key: `walk${arch}_${f}` }));
+    if (!frames.every((fr) => this.textures.exists(fr.key))) return null;
+    this.anims.create({ key, frames, frameRate: 8, repeat: -1 });
+    return key;
+  }
+
   syncSims() {
     for (const sim of world.sims) {
       let sp = simSprites.get(sim.id);
       const tx = isoX(sim.x, sim.y), ty = isoY(sim.x, sim.y) - 8;
       if (!sp) {
-        const key = sim.isPlayer ? 'player' : `sim${sim.id}`;
+        const arch = sim.isPlayer ? 'p' : sim.id % 10; // 플레이어 전용 시트, 이민자·자녀는 원형 재사용
+        const animKey = this.ensureWalkAnim(arch);
         let body;
-        if (this.textures.exists(key)) {
-          body = this.add.image(0, -12, key);
-          body.setScale(36 / body.height); // 표시 높이 ~36px로 정규화
+        if (animKey) {
+          body = this.add.sprite(0, -12, `walk${arch}_0`);
+          body.setScale(38 / body.height);
+        } else if (this.textures.exists(sim.isPlayer ? 'player' : `sim${arch}`)) {
+          body = this.add.image(0, -12, sim.isPlayer ? 'player' : `sim${arch}`);
+          body.setScale(36 / body.height);
         } else {
           body = this.add.circle(0, 0, 6, SIM_COLORS[sim.id % SIM_COLORS.length]).setStrokeStyle(1.5, 0x14121a);
         }
-        const label = this.add.text(0, -28, sim.name, { fontSize: '10px', color: '#e8e2d8', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
-        const c = this.add.container(tx, ty, [body, label]);
+        const shadow = this.add.ellipse(0, 1, 18, 7, 0x000000, 0.28); // 발밑 그림자 — 접지감
+        const label = this.add.text(0, -30, sim.name, { fontSize: '10px', color: '#e8e2d8', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
+        const c = this.add.container(tx, ty, [shadow, body, label]);
+        c.bodyRef = body; c.animKey = animKey;
         sp = c; simSprites.set(sim.id, sp);
+      }
+      const dx = tx - sp.x;
+      const moving = Math.abs(dx) + Math.abs(ty - sp.y) > 1;
+      const body = sp.bodyRef;
+      if (body && sp.animKey) {
+        if (moving) {
+          if (dx !== 0) body.setFlipX(dx > 0); // 원본 ↙ — 오른쪽 이동 시 반전
+          body.anims.play(sp.animKey, true);
+          if (sp.stopTimer) { sp.stopTimer.remove(); }
+          sp.stopTimer = this.time.delayedCall(950, () => {
+            body.anims.stop();
+            body.setTexture(`walk${sim.isPlayer ? 'p' : sim.id % 10}_0`);
+          });
+        }
       }
       this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
       sp.setDepth(1000 + sim.x + sim.y);
