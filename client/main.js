@@ -61,6 +61,7 @@ function archOf(sim) {
 const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
+BLD_KEYS.push(['firework', './ui/fx_firework.png']); // §18.T4 승급 연출
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
 for (const t of ['house_a', 'cafe', 'office']) for (const d of [1, 2, 3]) {
   BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
@@ -615,6 +616,7 @@ function replyLine(e) {
 }
 
 function handleVisualEvent(e) {
+  if (e.type === 'city_promoted') { updateBadge(); fireworksBurst(); }
   const sp = (id) => simSprites.get(id);
   switch (e.type) {
     case 'conversation': {
@@ -748,6 +750,25 @@ function syncFires() {
   }
 }
 
+// §18.T4 등급 배지 + 승급 폭죽
+const TIER_BADGE = ['badge_village', 'badge_town', 'badge_city', 'badge_metropolis'];
+function updateBadge() {
+  const img = document.getElementById('tier-badge');
+  if (!img || !world) return;
+  img.src = `./ui/${TIER_BADGE[world.cityTier ?? 0]}.png`;
+  img.title = ['마을', '읍', '시', '대도시'][world.cityTier ?? 0];
+}
+function fireworksBurst() {
+  if (!scene) return;
+  const cam = scene.cameras.main;
+  for (let i = 0; i < 6; i++) {
+    const x = cam.scrollX + cam.width / 2 + (i - 3) * 60;
+    const y = cam.scrollY + cam.height / 2 - 80 + (i % 2) * 60;
+    const fx = scene.add.image(x, y, 'firework').setDepth(9000).setScale(0.6 + (i % 3) * 0.3);
+    scene.tweens.add({ targets: fx, alpha: 0, scale: '+=0.5', duration: 1200 + i * 150, onComplete: () => fx.destroy() });
+  }
+}
+
 function facTypeOf(facId) {
   return world?.map?.facilities?.find((f) => f.id === facId)?.type;
 }
@@ -763,6 +784,7 @@ function eventText(e) {
     case 'fire_started': return `🔥 ${PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId}에 불이 났다!`;
     case 'fire_out': return e.payload.by === 'self' ? `💨 ${e.payload.facilityId}의 불이 겨우 잦아들었다… (아무도 안 왔다)` : `🚒 ${simName(e.payload.by)}이(가) ${e.payload.facilityId} 화재를 진압했다!`;
     case 'heroic_save': return `🎖️ ${n}: 영웅이 됐다`;
+    case 'city_promoted': return `🏙️ 해솔${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
@@ -1000,6 +1022,7 @@ function connect() {
         renderPanel();
         syncItems();
         syncFires(); // §17.20: 스냅샷·리싱크 시 진행 중 화재 복원/정리 (Codex 43차)
+        updateBadge();
         applyWeather();
         updateStats();
         break;
@@ -1009,6 +1032,7 @@ function connect() {
         world.sims = msg.sims;
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
         if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
+        if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         // §18.T1: 정책 변경 이벤트로 클라 상태 동기화 — 슬라이더가 낡은 값을 재전송하지 않도록 (Codex 46차)
         for (const e of msg.events) {
           if (e.type === 'policy_changed') world.policy = { ...(world.policy ?? {}), ...e.payload.changes };

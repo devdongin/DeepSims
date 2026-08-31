@@ -16,7 +16,7 @@ import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expi
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
   dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend, applyWelfare,
-  dailyFireDraws, fireSelfOut, resolveFire,
+  dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
   updateCampaigners, maybeNewYear, maybeFestival, maybeChildren,
 } from './society.js';
@@ -436,7 +436,8 @@ function applyZone(world, inp, t, emit) {
   let reason = null;
   if (!plot) reason = 'no_plot';
   else if (plot.used) reason = 'plot_used';
-  else if (!ZONEABLE.includes(p.type)) reason = 'bad_type';
+  else if (!zoneAllowedTypes(world).includes(p.type)) reason = 'tier_locked'; // §18.T4 등급 게이트
+  else if (!ZONEABLE.includes(p.type)) reason = 'bad_type'; // 언락됐지만 레시피 미구현(T3 대기)
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
   else if (!(() => { const fp = zoneFootprint(p.type, p.dir); return plotBuildable(world.map, plot, fp.w, fp.h); })()) reason = 'not_buildable';
   else if (world.treasury < cost) reason = 'treasury_short';
@@ -822,6 +823,7 @@ export function tick(world, inputsForThisTick = []) {
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
         maybeImmigration(world, t, day, emit);
+        maybePromotion(world, t, emit); // §18.T4 (이민 직후·새해 전 — 49차 합의)
         maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10

@@ -140,6 +140,7 @@ function sendSnapshot(ws) {
     incidents: engine.world.incidents,
     policy: engine.world.policy,
     zoneOrders: engine.world.zoneOrders,
+    cityTier: engine.world.cityTier,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,

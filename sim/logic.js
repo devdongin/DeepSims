@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 23,
+  logicSchemaVersion: 24,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -71,7 +71,7 @@ export const DEFAULT_LOGIC = {
       drank: 3, binge: 3, hole_up: 2, workout: 3, built_bed: 5,
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
       sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
-      new_neighbor: 3, club_joined: 4, heroic: 8 },
+      new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7 },
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
     posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프
@@ -184,6 +184,14 @@ export const DEFAULT_LOGIC = {
     heroAffinity: 800,         // 목격자(맨해튼≤10) → 진압 소방관 호감
     heroRadius: 10,
   },
+  // §18.T4 도시 등급 (비가역, 49차 합의): 인구 문턱 승급 — 웨이브 캡 확장·zone 언락
+  tiers: [
+    { popMin: 0, nameKo: '마을', unlocks: [] },
+    { popMin: 25, nameKo: '읍', unlocks: ['apartment'] },
+    { popMin: 60, nameKo: '시', unlocks: ['factory', 'mall'] },
+    { popMin: 120, nameKo: '대도시', unlocks: ['university'] },
+  ],
+  promotion: { moodBonus: 1000, repBonus: 100 },
   // §18.T2 건설 지시: 주문 시 국고 차감 (취소 없음 — 47차 합의), 착공 시 재검증
   zone: {
     costs: { house: 2000, cafe: 3000, office: 3000, park: 1000 },
@@ -441,6 +449,10 @@ function checkRanges(p, errors) {
   inRange('incidents.heroAffinity', p.incidents.heroAffinity, 0, 10000);
   inRange('incidents.heroRadius', p.incidents.heroRadius, 0, 1000);
   for (const k of ['house', 'cafe', 'office', 'park']) inRange(`zone.costs.${k}`, p.zone.costs[k], 0, 1000000);
+  if (!Array.isArray(p.tiers) || p.tiers.length < 1) errors.push('tiers: 배열 필요');
+  else p.tiers.forEach((tr, i) => inRange(`tiers[${i}].popMin`, tr.popMin, 0, 1000000));
+  inRange('promotion.moodBonus', p.promotion.moodBonus, 0, 10000);
+  inRange('promotion.repBonus', p.promotion.repBonus, 0, 100000);
   inRange('growth.headroomBeds', p.growth.headroomBeds, 0, 100);
   inRange('growth.repCap', p.growth.repCap, 0, 100000);
   inRange('growth.repDecayPct', p.growth.repDecayPct, 0, 100);
@@ -522,7 +534,13 @@ function checkShape(ref, val, path, errors) {
     } else if (Array.isArray(r)) {
       if (!Array.isArray(v) || v.length !== r.length) errors.push(`배열 길이 불일치: ${path}${k}`);
       else for (let i = 0; i < v.length; i++) {
-        if (!Number.isSafeInteger(v[i])) errors.push(`정수 아님: ${path}${k}[${i}]`);
+        if (typeof r[i] === 'object' && r[i] !== null && !Array.isArray(r[i])) {
+          // §18.T4: 객체 배열(tiers 등) — 원소별 형태 재귀
+          if (typeof v[i] !== 'object' || v[i] === null) errors.push(`객체 아님: ${path}${k}[${i}]`);
+          else checkShape(r[i], v[i], `${path}${k}[${i}].`, errors);
+        } else if (typeof r[i] === 'string') {
+          if (typeof v[i] !== 'string') errors.push(`문자열 아님: ${path}${k}[${i}]`);
+        } else if (!Number.isSafeInteger(v[i])) errors.push(`정수 아님: ${path}${k}[${i}]`);
       }
     } else if (typeof r === 'object' && r !== null) {
       if (typeof v !== 'object' || v === null || Array.isArray(v)) errors.push(`객체 아님: ${path}${k}`);

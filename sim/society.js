@@ -250,7 +250,7 @@ export function maybeImmigration(world, t, day, emit) {
   const G = world.logic.growth;
   if (day === 0 || day % S.immigrationIntervalDays !== 0) return;
   // §17.21 평판 웨이브: 활기찬 마을일수록 여러 명이 온다 (각자 빈 침대 필요, 결정적)
-  const wave = Math.min(G.immigWaveMax, 1 + Math.floor(world.reputation / G.immigPerExtra));
+  const wave = Math.min(G.immigWaveMax + world.cityTier, 1 + Math.floor(world.reputation / G.immigPerExtra)); // §18.T4 등급 캡 확장
   for (let wv = 0; wv < wave; wv++) immigrateOne(world, t, emit);
 }
 
@@ -529,4 +529,32 @@ export function resolveFire(world, sim, facilityId, t, emit) {
   emit('heroic_save', sim.id, { facilityId });
   recordFact(sim, t, world.logic, 'heroic', { placeId: facilityId, tags: ['respond_fire', `facility:${facilityId}`] });
   return true;
+}
+
+// ---- §18.T4 도시 등급 ----
+
+// 승급 판정 (일일 평가 — 이민 직후·새해 전, 49차 합의): 최고 도달 등급으로 1회 승급, 비가역.
+export function maybePromotion(world, t, emit) {
+  const L = world.logic;
+  const pop = world.sims.length;
+  let target = world.cityTier;
+  for (let i = world.cityTier + 1; i < L.tiers.length; i++) {
+    if (pop >= L.tiers[i].popMin) target = i;
+  }
+  if (target === world.cityTier) return;
+  const from = world.cityTier;
+  world.cityTier = target;
+  emit('city_promoted', null, { from, to: target, nameKo: L.tiers[target].nameKo, pop });
+  world.reputation = Math.min(L.growth.repCap, world.reputation + L.promotion.repBonus);
+  for (const sim of world.sims) { // id asc — 합의: 사실 발생 mood 델타 (clamp)
+    sim.mood = clamp(sim.mood + L.promotion.moodBonus, -10000, 10000);
+    recordFact(sim, t, L, 'celebration', { tags: ['festival'] });
+  }
+}
+
+// §18.T4: 현재 등급에서 zone 허용 타입 (기본 + 누적 언락)
+export function zoneAllowedTypes(world) {
+  const out = ['house', 'cafe', 'office', 'park'];
+  for (let i = 1; i <= world.cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
+  return out;
 }

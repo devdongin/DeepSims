@@ -135,11 +135,14 @@ export function migrateWorld(world) {
   if (from < 21) {
     world.zoneOrders ??= []; // §18.T2
   }
+  if (from < 22) {
+    world.cityTier ??= 0; // §18.T4 — 기존 세이브는 다음 일일 평가에서 자연 승급 (축하 이벤트 라이브)
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 21;
+  world.schemaVersion = 22;
   return world;
 }
 

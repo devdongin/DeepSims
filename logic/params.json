@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 23,
+  "logicSchemaVersion": 24,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -257,7 +257,8 @@
       "child": 9,
       "new_neighbor": 3,
       "club_joined": 4,
-      "heroic": 8
+      "heroic": 8,
+      "celebration": 7
     },
     "recencyLut": [
       1000,
@@ -413,6 +414,39 @@
     "selfOutRepPenalty": 40,
     "heroAffinity": 800,
     "heroRadius": 10
+  },
+  "tiers": [
+    {
+      "popMin": 0,
+      "nameKo": "마을",
+      "unlocks": []
+    },
+    {
+      "popMin": 25,
+      "nameKo": "읍",
+      "unlocks": [
+        "apartment"
+      ]
+    },
+    {
+      "popMin": 60,
+      "nameKo": "시",
+      "unlocks": [
+        "factory",
+        "mall"
+      ]
+    },
+    {
+      "popMin": 120,
+      "nameKo": "대도시",
+      "unlocks": [
+        "university"
+      ]
+    }
+  ],
+  "promotion": {
+    "moodBonus": 1000,
+    "repBonus": 100
   },
   "zone": {
     "costs": {
