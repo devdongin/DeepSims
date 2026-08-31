@@ -15,7 +15,7 @@ test('P4-21a. 계획 생성: 기상 시 하루 1회, 우선순위 식사>근무>
   const w = createWorld(SEED);
   const s = w.sims[0];
   s.traits = { ...s.traits, age: 40, occupation: 'office_worker', mbti: { EI: 25, SN: 50, TF: 50, JP: 0 } };
-  const plan = buildDailyPlan(s, L);
+  const plan = buildDailyPlan(s, L, 1);
   s.plan = plan;
   // 저녁 식사 창(1050~1170)과 근무 창(540~1080)이 겹치는 1060: eat이 우선
   const eatAt1060 = planFactorFor(w, s, 'eat', 'cafe', 1060, L);

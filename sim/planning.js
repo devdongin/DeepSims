@@ -18,7 +18,7 @@ export function buildDailyPlan(sim, L, day) {
   // 여가 의도 의사확률: p(사교)=100-EI — E 성향일수록 어울리는 날이 많고, I도 가끔 어울린다
   slots.push({
     from: L.plan.leisureStart, to: L.plan.leisureEnd,
-    intent: dayHash(sim.id, day ?? 0, 2) < (100 - sim.traits.mbti.EI) ? 'socialize' : 'play',
+    intent: dayHash(sim.id, day, 2) < (100 - sim.traits.mbti.EI) ? 'socialize' : 'play',
   });
   // §17.13 개인 수면 슬롯 (우선순위 최하 — 욕구 주도 수면의 타이밍만 끌어당김)
   const sw = sleepWindowFor(sim, L);

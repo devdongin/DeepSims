@@ -30,7 +30,7 @@ function chronoOffset(traits, L) {
 }
 
 // 개인 근무 창 { from, to } — to > 1440 은 자정 랩. wagePct 0(은퇴)은 null.
-// day 의존: 야근 여부가 일별 의사확률(J 성향 가중)이라 '오늘은 야근, 내일은 칼퇴'가 나온다.
+// day 의존(필수 인자): 야근 여부가 일별 의사확률(J 성향 가중) — '오늘은 야근, 내일은 칼퇴'.
 export function workWindowFor(sim, L, day) {
   const occ = L.occupations[sim.traits.occupation];
   if (!occ || occ.wagePct === 0) return null;
@@ -47,7 +47,7 @@ export function workWindowFor(sim, L, day) {
     from += off; to += off;
     // 야근 의사확률: p = (100-JP)×probPct/100 (J 강할수록 잦음), 길이도 JP 가중 그라데이션
     const pOver = floorDiv((100 - sim.traits.mbti.JP) * L.chrono.overtimeProbPct, 100);
-    if (dayHash(sim.id, day ?? 0, 1) < pOver) {
+    if (dayHash(sim.id, day, 1) < pOver) {
       to += L.chrono.overtimeMinBase + floorDiv((100 - sim.traits.mbti.JP) * L.chrono.overtimeMinSpan, 100);
     }
     if (from < 0) { from += 1440; to += 1440; } // early 음수 → 랩 표현으로 정규화
