@@ -29,11 +29,19 @@ for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
   WALK_KEYS.push([`walk${i}_${f}`, `./sprites/walk${i}_${f}.png`]);
 }
 for (let f = 0; f < 4; f++) WALK_KEYS.push([`walkp_${f}`, `./sprites/walkp_${f}.png`]); // 플레이어
+// §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
+const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
+  'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
+const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
+const BLD_OF_FACILITY = { cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
+  city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
+  cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
+  police_station: 'bld_police', fire_station: 'bld_fire' };
 const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
-  const entries = [...SPRITE_KEYS, ...WALK_KEYS, ...PROP_KEYS];
+  const entries = [...SPRITE_KEYS, ...WALK_KEYS, ...BLD_KEYS, ...PROP_KEYS];
   return Promise.all(entries.map(([key, url]) => new Promise((res) => {
     const img = new Image();
     img.onload = () => res([key, img]);
@@ -203,14 +211,30 @@ class TownScene extends Phaser.Scene {
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
     this.drawProps();
+    let houseIdx = 0;
     for (const fac of map.facilities) {
       const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서' }[fac.type];
-      const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - 24;
-      this.add.text(tx, ty, label, { fontSize: '11px', color: '#ffd97a', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
-      g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
-      for (let j = fac.y; j < fac.y + fac.h; j++) for (let i = fac.x; i < fac.x + fac.w; i++) {
-        if (map.tiles[j * map.w + i] === 3) this.drawTile(g, i, j, FACILITY_COLORS[fac.type], 10);
+      // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
+      let bldKey = fac.type === 'house' ? `bld_house_${'abc'[houseIdx++ % 3]}` : BLD_OF_FACILITY[fac.type];
+      if (bldKey && !this.textures.exists(bldKey)) bldKey = null;
+      if (bldKey) {
+        const cx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
+        const cy = isoY(fac.x + fac.w / 2, fac.y + fac.h / 2);
+        const img = this.add.image(cx, cy + TH, bldKey).setOrigin(0.5, 1);
+        const wpx = (fac.w + fac.h) / 2 * TW * 1.02; // 발자국 대각 폭에 맞춤
+        img.setScale(wpx / img.width);
+        img.setDepth(1000 + fac.x + fac.w + fac.y + fac.h - 1);
+        this.propSprites.push(img);
+      } else {
+        g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
+        for (let j = fac.y; j < fac.y + fac.h; j++) for (let i = fac.x; i < fac.x + fac.w; i++) {
+          if (map.tiles[j * map.w + i] === 3) this.drawTile(g, i, j, FACILITY_COLORS[fac.type], 10);
+        }
       }
+      const tx = isoX(fac.x + fac.w / 2, fac.y), ty = isoY(fac.x + fac.w / 2, fac.y) - (bldKey ? 40 : 24);
+      const lb = this.add.text(tx, ty, label, { fontSize: '11px', color: '#ffd97a', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
+      lb.setDepth(5000);
+      this.propSprites.push(lb);
     }
     this.syncSims();
   }
