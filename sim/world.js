@@ -53,6 +53,7 @@ export function createWorld(seed) {
       hangoverUntil: -1, // §15.1.A: t < hangoverUntil 동안 숙취
       sick: null,        // §17.3: null | { kind, untilTick }
       groceries: 0,      // §16.B 장바구니 (집밥 재료)
+      noPathCool: {},    // §17.23 no_path 쿨다운
     });
   }
 

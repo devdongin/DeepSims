@@ -340,6 +340,17 @@ export function defaultPlots() {
   ].map(([x, y], i) => ({ plotId: i, x, y, used: false }));
 }
 
+// §17.23: 공터 건축 가능 검증 — 최악 크기(7×5) 전 타일이 GRASS여야 함 (기존 시설·도로·물 침범 방지)
+export function plotBuildable(map, plot) {
+  for (let j = plot.y; j < plot.y + 5; j++) {
+    for (let i = plot.x; i < plot.x + 7; i++) {
+      if (i < 0 || j < 0 || i >= map.w || j >= map.h) return false;
+      if (map.tiles[j * map.w + i] !== TILE.GRASS) return false;
+    }
+  }
+  return true;
+}
+
 // §16.5.B: 완공 축조 — 좌표·id 규칙은 PLAN §16.5 확정 명세 그대로 (신규/마이그레이션 동일)
 export function addBuilding(map, type, plot) {
   const { x, y } = plot;

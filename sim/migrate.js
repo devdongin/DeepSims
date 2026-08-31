@@ -125,10 +125,50 @@ export function migrateWorld(world) {
   if (from < 18) {
     world.incidents ??= []; // §17.20 사건
   }
+  if (from < 19) {
+    for (const sim of world.sims) sim.noPathCool ??= {}; // §17.23
+    repairOverlaps(world); // §17.23: 공터-권위 시설 겹침 외과수술 (이슈 #21 라이브 세이브)
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 18;
+  world.schemaVersion = 19;
   return world;
+}
+
+// §17.23: 공터에 지어진 건물이 권위(authored) 시설을 덮은 세이브 수리 — 결정적.
+// 침입자(정규식 ^(house|cafe|office|park)\d+$)를 제거하고 권위 시설을 재축조한다.
+function repairOverlaps(world) {
+  const map = world.map;
+  const W = map.w;
+  const isPlotBuilt = (f) => /^(house|cafe|office|park)\d+$/.test(f.id);
+  for (let i = map.facilities.length - 1; i >= 0; i--) {
+    const b = map.facilities[i];
+    if (!b.w || !isPlotBuilt(b)) continue;
+    const victim = map.facilities.find((a) => a !== b && a.w
+      && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h);
+    if (!victim) continue;
+    // 1) 침입자 발자국 초지화
+    for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) map.tiles[y * W + x] = 0;
+    map.facilities.splice(i, 1);
+    // 2) 주민 재배치 (침입자가 집이면): 빈 침대 있는 집 배열 순, 없으면 첫 집
+    for (const sim of world.sims) {
+      if (sim.homeId !== b.id) continue;
+      const home = map.facilities.find((f) => f.type === 'house'
+        && f.resources.length > world.sims.filter((s2) => s2.homeId === f.id).length)
+        ?? map.facilities.find((f) => f.type === 'house');
+      sim.homeId = home.id;
+    }
+    // 3) 피해 시설 재축조 (벽 있는 유형 일반 규칙: 둘레 WALL·내부 FLOOR·문 FLOOR)
+    if (victim.type !== 'park' && victim.type !== 'pond') {
+      for (let y = victim.y; y < victim.y + victim.h; y++) {
+        for (let x = victim.x; x < victim.x + victim.w; x++) {
+          const edge = y === victim.y || y === victim.y + victim.h - 1 || x === victim.x || x === victim.x + victim.w - 1;
+          map.tiles[y * W + x] = edge ? 3 : 2; // WALL : FLOOR
+        }
+      }
+      map.tiles[victim.door.y * W + victim.door.x] = 2;
+    }
+  }
 }

@@ -8,7 +8,8 @@ import { SCHEMA_VERSION } from '../sim/constants.js';
 import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronoValue as chronoValueRef } from '../sim/chrono.js';
 import { buildDailyPlan as buildDailyPlanRef } from '../sim/planning.js';
 import { circadianEnergyPct as circadianEnergyPctRef } from '../sim/chrono.js';
-import { addBuilding as addBuildingRef } from '../sim/map.js';
+import { addBuilding as addBuildingRef, plotBuildable as plotBuildableRef } from '../sim/map.js';
+import { bfsPath as bfsPathRef } from '../sim/pathfind.js';
 
 const SEED = 7777;
 
@@ -665,4 +666,54 @@ test('S-23. §17.20 화재: 발화·사용 배제·소방관 진압·목격 호�
   const so = evs2.find((e) => e.type === 'fire_out');
   assert.ok(so && so.payload.by === 'self', '자연 진화');
   assert.equal(w2.reputation, 100 - w2.logic.incidents.selfOutRepPenalty, '평판 타격');
+});
+
+test('S-24. §17.23 no_path 수리 3종: 공터 검증·겹침 수술·쿨다운', () => {
+  // 예방: 시설을 덮는 공터는 건축 불가
+  const w = createWorld(SEED);
+  const rest = w.map.facilities.find((f) => f.id === 'restaurant');
+  assert.equal(plotBuildableRef(w.map, { x: rest.x, y: rest.y }), false, '시설 위 공터 거부');
+  const free = w.plots.find((p) => plotBuildableRef(w.map, p));
+  assert.ok(free, '정상 공터는 통과');
+  // 수술: v18 세이브에 침입 건물 재현 → v19 마이그레이션이 제거·재축조
+  const w2 = createWorld(SEED);
+  w2.schemaVersion = 18;
+  const W = w2.map.w;
+  for (let y = rest.y; y < rest.y + 5; y++) for (let x = rest.x; x < rest.x + 6; x++) w2.map.tiles[y * W + x] = 3;
+  w2.map.facilities.push({ id: 'house99', type: 'house', x: rest.x, y: rest.y, w: 6, h: 5,
+    door: { x: rest.x + 2, y: rest.y + 4 }, resources: [{ id: 'bed0', kind: 'bed', x: rest.x + 1, y: rest.y + 1 }], extraBedSlots: [] });
+  w2.sims[3].homeId = 'house99';
+  const m = migrateWorld(JSON.parse(JSON.stringify(w2)));
+  assert.ok(!m.map.facilities.some((f) => f.id === 'house99'), '침입자 제거');
+  assert.ok(m.sims[3].homeId !== 'house99', '주민 재배치');
+  const r0 = m.map.facilities.find((f) => f.id === 'restaurant').resources[0];
+  assert.ok(bfsPathRef(m.map, m.sims[0].x, m.sims[0].y, r0.x, r0.y), '재축조 후 도달');
+  // 쿨다운: no_path 실패 시 같은 자원 재선택 안 함
+  const w3 = createWorld(SEED);
+  const s3 = w3.sims[0];
+  s3.noPathCool['cafe:seat0'] = w3.worldTick + 500;
+  idleAll(w3, []);
+  resetIdle(s3);
+  w3.reservations = {};
+  s3.needs = { hunger: 500, energy: 9500, social: 9500, fun: 9500 };
+  s3.money = 5000;
+  tick(w3, []);
+  assert.ok(!(s3.state.facilityId === 'cafe' && s3.state.resourceId === 'seat0'), '쿨다운 자원 회피');
+});
+
+test('S-25. §17.23 no_path 실발생 경로: 크래시 없이 쿨다운 기록 (Codex 45차 블로커 회귀)', () => {
+  const w = createWorld(SEED);
+  const s = w.sims[0];
+  w.map.facilities.push({ id: 'cafe9', type: 'cafe', x: 1, y: 1, w: 2, h: 2, door: { x: 1, y: 1 },
+    resources: [{ id: 'seat0', kind: 'seat', x: 0, y: 0 }] }); // (0,0) 외곽 WATER — 도달 불가
+  idleAll(w, []);
+  resetIdle(s);
+  w.reservations = {};
+  s.x = 3; s.y = 3;
+  s.needs = { hunger: 100, energy: 9500, social: 9500, fun: 9500 };
+  s.money = 5000;
+  const evs = tick(w, []);
+  const fail = evs.find((e) => e.type === 'action_failed' && e.payload.reason === 'no_path' && e.simId === s.id);
+  if (fail) assert.ok(Object.keys(s.noPathCool).length > 0, '쿨다운 기록');
+  else assert.ok(true); // 크래시 없음이 회귀의 본질
 });

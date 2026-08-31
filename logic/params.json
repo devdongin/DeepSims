@@ -370,7 +370,8 @@
     "deficit": 4000,
     "persJDiv": 4,
     "cafeRatio": 2,
-    "parkRatio": 1
+    "parkRatio": 1,
+    "noPathCoolTicks": 240
   },
   "society": {
     "immigrationIntervalDays": 3,

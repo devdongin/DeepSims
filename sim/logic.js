@@ -147,6 +147,7 @@ export const DEFAULT_LOGIC = {
     persJDiv: 4,         // persFactor = 100 + floorDiv(100 - JP, persJDiv)
     cafeRatio: 2,        // 심 수 > 좌석합×ratio → cafe 프로젝트
     parkRatio: 1,        // 심 수 > 스팟합×ratio → park 프로젝트
+    noPathCoolTicks: 240,     // §17.23 no_path 재시도 쿨다운 (4시간)
   },
   // §17 사회 (logicSchemaVersion 9)
   society: {
@@ -426,6 +427,7 @@ function checkRanges(p, errors) {
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
   inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);
+  inRange('construct.noPathCoolTicks', p.construct.noPathCoolTicks, 1, 100000);
   inRange('incidents.respondDeficit', p.incidents.respondDeficit, 0, 10000);
   inRange('incidents.fireBasePermille', p.incidents.fireBasePermille, 0, 1000);
   inRange('incidents.kitchenBonusPermille', p.incidents.kitchenBonusPermille, 0, 1000);
