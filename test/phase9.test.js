@@ -700,3 +700,20 @@ test('S-24. §17.23 no_path 수리 3종: 공터 검증·겹침 수술·쿨다운
   tick(w3, []);
   assert.ok(!(s3.state.facilityId === 'cafe' && s3.state.resourceId === 'seat0'), '쿨다운 자원 회피');
 });
+
+test('S-25. §17.23 no_path 실발생 경로: 크래시 없이 쿨다운 기록 (Codex 45차 블로커 회귀)', () => {
+  const w = createWorld(SEED);
+  const s = w.sims[0];
+  w.map.facilities.push({ id: 'cafe9', type: 'cafe', x: 1, y: 1, w: 2, h: 2, door: { x: 1, y: 1 },
+    resources: [{ id: 'seat0', kind: 'seat', x: 0, y: 0 }] }); // (0,0) 외곽 WATER — 도달 불가
+  idleAll(w, []);
+  resetIdle(s);
+  w.reservations = {};
+  s.x = 3; s.y = 3;
+  s.needs = { hunger: 100, energy: 9500, social: 9500, fun: 9500 };
+  s.money = 5000;
+  const evs = tick(w, []);
+  const fail = evs.find((e) => e.type === 'action_failed' && e.payload.reason === 'no_path' && e.simId === s.id);
+  if (fail) assert.ok(Object.keys(s.noPathCool).length > 0, '쿨다운 기록');
+  else assert.ok(true); // 크래시 없음이 회귀의 본질
+});

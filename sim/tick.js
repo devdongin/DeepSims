@@ -275,7 +275,7 @@ function releaseReservation(world, sim) {
 function actionDuration(action, L) { return L.actions[action].duration; }
 
 // 예약 + walking/performing 전이 (원자적). reason은 판단 사유 (PLAN §14.1).
-function startAction(world, sim, cand, emit, reason) {
+function startAction(world, sim, cand, t, emit, reason) {
   releaseReservation(world, sim);
   world.reservations[resKey(cand.facilityId, cand.resourceId)] = sim.id;
   const path = bfsPath(world.map, sim.x, sim.y, cand.res.x, cand.res.y);
@@ -433,7 +433,7 @@ function applyAssign(world, inp, t, emit) {
     emit('input_rejected', simId, { reason: 'no_valid_target', action: actionType, inputId: inp.id ?? null });
     return;
   }
-  startAction(world, sim, best, emit, { assigned: true });
+  startAction(world, sim, best, t, emit, { assigned: true });
 }
 
 // ---- 메인: 틱 t로의 전이. world를 mutate, 이벤트 배열 반환 ----
@@ -866,7 +866,7 @@ export function tick(world, inputsForThisTick = []) {
         }
       }
       // 사유 필드는 §14.1 계약대로 + Phase 3 citedMemorySeqs
-      startAction(world, sim, best, emit, {
+      startAction(world, sim, best, t, emit, {
         chain,
         need: NEED_OF_ACTION[best.action]
           ?? (COPING_ACTIONS.includes(best.action) ? 'mood' : best.action === 'build' ? 'space' : 'money'),
