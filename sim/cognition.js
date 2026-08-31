@@ -72,6 +72,63 @@ export function shortlistMemories(sim, t, L) {
   return scored.slice(0, SHORTLIST).map((x) => x.m);
 }
 
+// §17.22 성능: 후보 독립 전처리 — base retrieval 내림차순(동점 memorySeq 오름차순) 정렬 + 태그 Set.
+// memoryModFast와 함께 쓰면 memoryModFor와 **비트 동일** 결과 (정렬 총순서·topK·기여 합 모두 동일).
+const tagSetCache = new WeakMap(); // 기억 객체당 1회 (tags 불변 — 직렬화 무영향)
+function tagSetOf(m) {
+  let s = tagSetCache.get(m);
+  if (!s) { s = new Set(m.tags); tagSetCache.set(m, s); }
+  return s;
+}
+
+export function prepareShortlist(shortlist, t, L) {
+  const entries = shortlist.map((m) => ({
+    m,
+    base: L.memory.wRecency * L.memory.recencyLut[ageDays(t, m.tick)] + L.memory.wImportance * m.importance,
+    tagSet: tagSetOf(m),
+  }));
+  entries.sort((a, b) => (b.base - a.base) || (a.m.memorySeq - b.m.memorySeq));
+  return entries;
+}
+
+// 후보별 고속 경로: overlap 버킷(0..cap)별로 base 순서가 보존됨을 이용해 k-way 병합으로 topK 추출.
+// 비교자는 (retrieval desc, memorySeq asc) — memoryModFor의 전체 정렬과 동일한 총순서.
+const bucketScratch = []; // §17.22: 호출 간 재사용 (매 호출 초기화 — 순수성 불변)
+export function memoryModFast(prep, candTags, L) {
+  const cap = L.memory.relevanceCap;
+  while (bucketScratch.length <= cap) bucketScratch.push([]);
+  const buckets = bucketScratch;
+  for (let o = 0; o <= cap; o++) buckets[o].length = 0;
+  for (const e of prep) {
+    let overlap = 0;
+    for (const tag of candTags) if (e.tagSet.has(tag)) overlap++;
+    if (overlap > cap) overlap = cap;
+    buckets[overlap].push(e);
+  }
+  const ptr = new Array(cap + 1).fill(0);
+  let mod = 0;
+  const cited = [];
+  for (let taken = 0; taken < L.memory.topK; taken++) {
+    let bi = -1; let bestRet = -Infinity; let bestSeq = Infinity;
+    for (let o = 0; o <= cap; o++) {
+      const e = buckets[o][ptr[o]];
+      if (!e) continue;
+      const ret = e.base + L.memory.relevancePer * o;
+      if (ret > bestRet || (ret === bestRet && e.m.memorySeq < bestSeq)) {
+        bi = o; bestRet = ret; bestSeq = e.m.memorySeq;
+      }
+    }
+    if (bi < 0) break;
+    const e = buckets[bi][ptr[bi]++];
+    if (bi > 0) { // overlap 0 은 슬롯만 차지 (기존과 동일)
+      const scale = NEGATIVE_MEMORY_KINDS.includes(e.m.kind) ? -L.memory.negScale : L.memory.posScale;
+      mod += e.m.importance * (1 + bi) * scale;
+      cited.push(e.m.memorySeq);
+    }
+  }
+  return { mod: clamp(mod, -MEMORY_MOD_CLAMP, MEMORY_MOD_CLAMP), cited };
+}
+
 // 후보별 memoryMod: 숏리스트에서 연관성 포함 retrieval로 top-K 선별 후 부호 기여 합산.
 // 반환: { mod, cited } — cited는 기여한 memorySeq 목록 (§14.1 citedMemorySeqs).
 export function memoryModFor(shortlist, candTags, t, L) {

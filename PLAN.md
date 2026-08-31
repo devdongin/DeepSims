@@ -862,3 +862,14 @@ traits: {
   근무 직업 심 수 > 책상 합 → office 신축 ③ cafe 비율 ④ park. addBuilding 'office' 7×5
   문(x+3,y+4) desk4 (x+1,y+1)(x+4,y+1)(x+1,y+3)(x+4,y+3).
 - 로직 v20(growth). 행동이 평판을 만들고 평판이 사람을 부르고 사람이 건물을 부른다.
+
+### 17.22 라운드 13 — 성장 월드 성능 (결과 불변 최적화, 이슈 #17)
+- 계측: 인구 69에서 22.5s/게임일. BFS는 0.2%(호출당 평균 13셀) — 병목은 후보별 기억 retrieval.
+- 결과 불변 최적화(46일 해시 f0da44a9 비트 동일 검증):
+  ① prepareShortlist(심 결정당 1회): base retrieval 내림차순 정렬 + 기억별 tagSet(WeakMap 캐시).
+  ② memoryModFast: overlap 버킷(0..cap) k-way 병합으로 topK — 전체 정렬과 동일 총순서
+     (retrieval desc, memorySeq asc). 버킷 스크래치 재사용.
+  ③ (action, 시설) 메모: planFactor·memoryMod를 자원(좌석)들이 공유 — 좌석 4개면 4배 절약.
+  ④ 시설 타입 인덱스(길이 변화 시 재구축), 결정 내 stateMod 시설 캐시, 태그 문자열 호이스팅.
+- 46일 소크 97.1s → 48.4s (2.0×). 잔여 병목(후보 볼륨 자체)은 후속 — 후보 상한은 행동 변경이라
+  별도 버전 경계 필요.
