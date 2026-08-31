@@ -101,6 +101,27 @@
       <div id="feed"></div>
     </div>
   </div>
+  <div id="zone-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">
+    <div class="box" style="width:340px;background:#241d14;border:2px solid #c9a86a;border-radius:12px;padding:20px">
+      <h2 style="color:#ffcf6a;font-size:16px;margin-bottom:6px">📐 건설 지시</h2>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button data-zt="house" style="flex:1;padding:6px;background:#3a2e1d;color:#ead9b0;border:2px solid #ffcf6a;border-radius:6px;cursor:pointer">🏠 집</button>
+        <button data-zt="cafe" style="flex:1;padding:6px;background:#3a2e1d;color:#ead9b0;border:2px solid #6b5638;border-radius:6px;cursor:pointer">☕ 카페</button>
+        <button data-zt="office" style="flex:1;padding:6px;background:#3a2e1d;color:#ead9b0;border:2px solid #6b5638;border-radius:6px;cursor:pointer">🏢 사무소</button>
+        <button data-zt="park" style="flex:1;padding:6px;background:#3a2e1d;color:#ead9b0;border:2px solid #6b5638;border-radius:6px;cursor:pointer">🌳 공원</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <button id="zone-rot" style="padding:6px 12px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer">🔄 회전</button>
+        <span id="zone-info" style="font-size:12px;color:#cdbb95"></span>
+      </div>
+      <p style="font-size:11px;color:#9c8a6a;margin-bottom:10px">비용은 국고에서 즉시 차감됩니다. 심들이 직접 공사합니다.</p>
+      <div style="display:flex;gap:8px">
+        <button id="zone-go" style="padding:6px 14px;background:#ffcf6a;color:#171310;border:0;border-radius:6px;cursor:pointer;font-weight:bold">지시</button>
+        <button id="zone-close" style="padding:6px 14px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer">닫기</button>
+      </div>
+      <div id="zone-msg" style="font-size:11px;color:#b8d49a;margin-top:8px"></div>
+    </div>
+  </div>
   <div id="policy-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">
     <div class="box" style="width:360px;background:#241d14;border:2px solid #c9a86a;border-radius:12px;padding:20px">
       <h2 style="color:#ffcf6a;font-size:16px;margin-bottom:4px">🏛️ 시정 운영</h2>

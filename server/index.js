@@ -97,7 +97,7 @@ app.post('/api/input', async (req, res) => {
     || payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
     return res.status(400).json({ error: 'clientInputId(문자열), command(문자열), payload(객체)가 필요합니다' });
   }
-  if (!['assign', 'create_player', 'announce', 'policy'].includes(command)) {
+  if (!['assign', 'create_player', 'announce', 'policy', 'zone'].includes(command)) {
     return res.status(400).json({ error: '허용되지 않은 명령입니다' }); // logic_update는 서버 내부 전용
   }
   if (command === 'assign'
@@ -139,6 +139,7 @@ function sendSnapshot(ws) {
     treasury: engine.world.treasury,
     incidents: engine.world.incidents,
     policy: engine.world.policy,
+    zoneOrders: engine.world.zoneOrders,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,

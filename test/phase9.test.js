@@ -755,3 +755,34 @@ test('S-26. §18.T1 시정: policy 내구 입력 → 세율·복지 오버라이
   assert.equal(wp.length, 1, '국고 400 = 1명분(400)');
   assert.equal(wp[0].payload.amount, 400, '오버라이드 지급액');
 });
+
+test('S-27. §18.T2 건설 지시: 차감·FIFO 우선 착공·재검증 폐기·회전 축조', () => {
+  const w = createWorld(SEED);
+  w.treasury = 10000;
+  // 주문: 국고 차감 + zoned
+  const free = w.plots.find((p) => plotBuildableRef(w.map, p));
+  const evs0 = tick(w, [{ sequence: 0, command: 'zone', payload: { plotId: free.plotId, type: 'cafe', dir: 1 } }]);
+  const z = evs0.find((e) => e.type === 'zoned');
+  assert.ok(z, 'zoned');
+  assert.equal(w.treasury, 10000 - w.logic.zone.costs.cafe, '주문 시 차감');
+  // 우선 착공 (자동 수요보다 먼저, 같은 틱 이후 4단계에서)
+  assert.ok(w.project && w.project.type === 'cafe' && w.project.dir === 1 && w.project.zoned, '주문 우선 착공');
+  // 국고 부족 거부
+  w.treasury = 0;
+  const free2 = w.plots.find((p) => !p.used && p.plotId !== free.plotId && plotBuildableRef(w.map, p));
+  const evs1 = tick(w, [{ sequence: 0, command: 'zone', payload: { plotId: free2.plotId, type: 'house', dir: 0 } }]);
+  assert.ok(evs1.some((e) => e.type === 'input_rejected' && e.payload.reason === 'treasury_short'), '국고 부족 거부');
+  // 회전 축조: dir 1 카페 — footprint 스왑(7×5→5×7) + 자원 회전
+  const w2 = createWorld(SEED);
+  const plot2 = w2.plots.find((p) => plotBuildableRef(w2.map, p));
+  addBuildingRef(w2.map, 'cafe', plot2, 1);
+  const built = w2.map.facilities[w2.map.facilities.length - 1];
+  assert.equal(built.dir, 1);
+  assert.equal(built.w, 5); assert.equal(built.h, 7, 'footprint 스왑');
+  for (const r of built.resources) {
+    assert.ok(r.x > built.x && r.x < built.x + built.w - 1 && r.y > built.y && r.y < built.y + built.h - 1, '자원이 내부에');
+  }
+  // 문이 벽 위 (경계)이며 FLOOR로 뚫림
+  const doorTile = w2.map.tiles[built.door.y * w2.map.w + built.door.x];
+  assert.equal(doorTile, 2, '문 FLOOR');
+});

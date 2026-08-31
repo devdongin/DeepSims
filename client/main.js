@@ -62,6 +62,9 @@ const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital'
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
+for (const t of ['house_a', 'cafe', 'office']) for (const d of [1, 2, 3]) {
+  BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
+}
 for (const t of ['house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
   'cinema', 'bar', 'library', 'market', 'police', 'fire']) {
   BLD_KEYS.push([`bld_${t}_int`, `./props/bld_${t}_int.png`]); // §17.19 내부 컷어웨이
@@ -263,7 +266,12 @@ class TownScene extends Phaser.Scene {
         else interiorOpen.add(fac.id);
         destroySimSprites();
         this.drawWorld();
+        return;
       }
+      // §18.T2: 빈 공터 클릭 → 건설 지정 모달
+      const plot = world.plots?.find((p) => !p.used
+        && tx2 >= p.x && tx2 < p.x + 7 && ty2 >= p.y && ty2 < p.y + 5);
+      if (plot && typeof window.openZoneModal === 'function') window.openZoneModal(plot);
     });
     if (world) this.drawWorld();
   }
@@ -311,6 +319,8 @@ class TownScene extends Phaser.Scene {
         bldKey = fac.type === 'house' ? 'bld_house_int' : `${BLD_OF_FACILITY[fac.type]}_int`;
       } else if (mode === 'ext') {
         bldKey = fac.type === 'house' ? `bld_house_${'abc'[hv % 3]}` : BLD_OF_FACILITY[fac.type];
+        // §18.T2 회전 외형: dir 텍스처 존재 시 사용 (없으면 d0 폴백)
+        if (fac.dir && this.textures.exists(`${bldKey}_d${fac.dir}`)) bldKey = `${bldKey}_d${fac.dir}`;
         // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
         const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
         if ((hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
@@ -753,6 +763,7 @@ function eventText(e) {
     case 'fire_started': return `🔥 ${PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId}에 불이 났다!`;
     case 'fire_out': return e.payload.by === 'self' ? `💨 ${e.payload.facilityId}의 불이 겨우 잦아들었다… (아무도 안 왔다)` : `🚒 ${simName(e.payload.by)}이(가) ${e.payload.facilityId} 화재를 진압했다!`;
     case 'heroic_save': return `🎖️ ${n}: 영웅이 됐다`;
+    case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
       const parts = Object.entries(e.payload.changes).map(([k, v2]) => `${ko[k] ?? k} ${e.payload.before[k]}→${v2}${k === 'taxPct' ? '%' : '원'}`);
@@ -1083,6 +1094,32 @@ connect();
     });
     const j = await res.json();
     document.getElementById('pol-msg').textContent = res.ok ? '시행되었습니다. 다음 틱부터 적용됩니다.' : `거부: ${j.error}`;
+    if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
+  });
+})();
+
+// ---- §18.T2 건설 지정 모달 ----
+(() => {
+  const modal = document.getElementById('zone-modal');
+  if (!modal) return;
+  let cur = null; let dir = 0; let type = 'house';
+  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000 };
+  const render = () => {
+    document.getElementById('zone-info').textContent = `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원`;
+    for (const b of modal.querySelectorAll('[data-zt]')) b.style.borderColor = b.dataset.zt === type ? '#ffcf6a' : '#6b5638';
+  };
+  window.openZoneModal = (plot) => { cur = plot; dir = 0; type = 'house'; modal.style.display = 'flex'; render(); };
+  for (const b of modal.querySelectorAll('[data-zt]')) b.addEventListener('click', () => { type = b.dataset.zt; render(); });
+  document.getElementById('zone-rot').addEventListener('click', () => { dir = (dir + 1) % 4; render(); });
+  document.getElementById('zone-close').addEventListener('click', () => { modal.style.display = 'none'; });
+  document.getElementById('zone-go').addEventListener('click', async () => {
+    const res = await fetch('/api/input', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientInputId: `zone:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+        command: 'zone', payload: { plotId: cur.plotId, type, dir } }),
+    });
+    const j = await res.json();
+    document.getElementById('zone-msg').textContent = res.ok ? '지시했습니다. 심들이 착공합니다.' : `거부: ${j.error}`;
     if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
   });
 })();

@@ -352,7 +352,19 @@ export function plotBuildable(map, plot) {
 }
 
 // §16.5.B: 완공 축조 — 좌표·id 규칙은 PLAN §16.5 확정 명세 그대로 (신규/마이그레이션 동일)
-export function addBuilding(map, type, plot) {
+// §18.T2 회전: dir 0..3, 90°마다 (lx,ly)→(h-1-ly, lx) — footprint·문·자원 단일 변환 (47차 합의)
+function rotateLocal(lx, ly, w0, h0, dir) {
+  let x = lx; let y = ly; let w = w0; let h = h0;
+  for (let d = 0; d < dir; d++) {
+    const nx = h - 1 - y; const ny = x;
+    x = nx; y = ny;
+    const t = w; w = h; h = t;
+  }
+  return { x, y };
+}
+function rotatedSize(w0, h0, dir) { return dir % 2 === 0 ? { w: w0, h: h0 } : { w: h0, h: w0 }; }
+
+export function addBuilding(map, type, plot, dir = 0) {
   const { x, y } = plot;
   const count = map.facilities.filter((f) => f.type === type).length;
   const id = `${type}${count}`;
@@ -403,6 +415,30 @@ export function addBuilding(map, type, plot) {
       })),
     };
   }
+  // §18.T2: dir > 0 이면 로컬 좌표 전체 회전 (타일은 회전된 footprint로 재배치)
+  if (dir > 0 && fac.w) {
+    const w0 = fac.w; const h0 = fac.h;
+    const sz = rotatedSize(w0, h0, dir);
+    const rot = (px, py) => {
+      const r = rotateLocal(px - x, py - y, w0, h0, dir);
+      return { x: x + r.x, y: y + r.y };
+    };
+    // 타일 재배치: 기존 분기가 그린 dir0 벽·바닥을 지우고(초지) 회전본으로 다시
+    if (fac.type !== 'park') {
+      for (let j = y; j < y + Math.max(w0, h0); j++) for (let i = x; i < x + Math.max(w0, h0); i++) {
+        if (i < x + w0 && j < y + h0) map.tiles[j * W + i] = TILE.GRASS;
+      }
+      for (let j = y; j < y + sz.h; j++) for (let i = x; i < x + sz.w; i++) map.tiles[j * W + i] = TILE.WALL;
+      for (let j = y + 1; j < y + sz.h - 1; j++) for (let i = x + 1; i < x + sz.w - 1; i++) map.tiles[j * W + i] = TILE.FLOOR;
+    }
+    const nd = rot(fac.door.x, fac.door.y);
+    fac.door = nd;
+    if (fac.type !== 'park') map.tiles[nd.y * W + nd.x] = TILE.FLOOR;
+    for (const r of fac.resources) { const p2 = rot(r.x, r.y); r.x = p2.x; r.y = p2.y; }
+    if (fac.extraBedSlots) for (const s2 of fac.extraBedSlots) { const p2 = rot(s2.x, s2.y); s2.x = p2.x; s2.y = p2.y; }
+    fac.w = sz.w; fac.h = sz.h;
+  }
+  fac.dir = dir;
   map.facilities.push(fac);
   return fac;
 }
