@@ -983,6 +983,7 @@ function connect() {
         maybeShowOnboarding();
         renderPanel();
         syncItems();
+        syncFires(); // §17.20: 스냅샷·리싱크 시 진행 중 화재 복원/정리 (Codex 43차)
         applyWeather();
         updateStats();
         break;
