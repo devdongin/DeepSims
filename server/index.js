@@ -133,6 +133,7 @@ function sendSnapshot(ws) {
     partnerStage: engine.world.partnerStage,
     mayorId: engine.world.mayorId,
     treasury: engine.world.treasury,
+    incidents: engine.world.incidents,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,

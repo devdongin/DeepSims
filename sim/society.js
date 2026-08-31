@@ -475,3 +475,55 @@ export function pairDeltaBonus(world, a, b) {
   }
   return bonus;
 }
+
+// ---- §17.20 사건: 화재 ----
+
+// 일일 화재 드로우 (§17.8 ①.5 — 질병 다음): 시설 배열 순, 시설당 정확히 1드로우.
+// 이미 불타는 시설도 드로우는 소비(무발화) — 드로우 수 불변 계약.
+export function dailyFireDraws(world, t, emit) {
+  const I = world.logic.incidents;
+  for (const fac of world.map.facilities) {
+    if (!fac.w || fac.type === 'park' || fac.type === 'pond') continue;
+    const roll = rngInt(world.rngSim, 1000);
+    if (world.incidents.some((inc) => inc.facilityId === fac.id)) continue;
+    let p = I.fireBasePermille;
+    if (fac.type === 'restaurant' || fac.type === 'cafe') p += I.kitchenBonusPermille;
+    if (roll < p) {
+      world.incidents.push({ type: 'fire', facilityId: fac.id, sinceTick: t });
+      emit('fire_started', null, { facilityId: fac.id });
+    }
+  }
+}
+
+// 자연 진화 (4단계 매 틱): 방치된 불은 스스로 꺼지지만 마을 평판이 타격을 입는다.
+export function fireSelfOut(world, t, emit) {
+  const I = world.logic.incidents;
+  for (let i = world.incidents.length - 1; i >= 0; i--) {
+    const inc = world.incidents[i];
+    if (t - inc.sinceTick >= I.selfOutTicks) {
+      world.incidents.splice(i, 1);
+      world.reputation = Math.max(0, world.reputation - I.selfOutRepPenalty);
+      emit('fire_out', null, { facilityId: inc.facilityId, by: 'self' });
+    }
+  }
+}
+
+// 진압 완료 정산: 사건 제거 + 목격자 호감 + 영웅 기억
+export function resolveFire(world, sim, facilityId, t, emit) {
+  const idx = world.incidents.findIndex((inc) => inc.facilityId === facilityId);
+  if (idx < 0) return false; // 이미 꺼짐 (자연 진화 레이스) — 무해
+  const I = world.logic.incidents;
+  world.incidents.splice(idx, 1);
+  emit('fire_out', null, { facilityId, by: sim.id });
+  const fac = world.map.facilities.find((f) => f.id === facilityId);
+  for (const other of world.sims) {
+    if (other.id === sim.id) continue;
+    const d = Math.abs(other.x - fac.x) + Math.abs(other.y - fac.y);
+    if (d <= I.heroRadius) {
+      world.affinity[other.id][sim.id] = clamp(world.affinity[other.id][sim.id] + I.heroAffinity, AFFINITY_MIN, AFFINITY_MAX);
+    }
+  }
+  emit('heroic_save', sim.id, { facilityId });
+  recordFact(sim, t, world.logic, 'heroic', { placeId: facilityId, tags: ['respond_fire', `facility:${facilityId}`] });
+  return true;
+}

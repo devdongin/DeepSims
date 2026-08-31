@@ -873,3 +873,16 @@ traits: {
   ④ 시설 타입 인덱스(길이 변화 시 재구축), 결정 내 stateMod 시설 캐시, 태그 문자열 호이스팅.
 - 46일 소크 97.1s → 48.4s (2.0×). 잔여 병목(후보 볼륨 자체)은 후속 — 후보 상한은 행동 변경이라
   별도 버전 경계 필요.
+
+### 17.20 라운드 14 — 사건: 화재와 소방관 (제복에 업무를)
+- world.incidents(세이브 v18): {type:'fire', facilityId, sinceTick}. 로직 v21 incidents.
+- 발화(§17.8 ①.5 — 질병 다음): 시설 배열 순, park·pond 제외 시설당 정확히 1드로우
+  (불타는 중에도 드로우 소비 — 드로우 수 불변). p=base(2‰)+주방 보너스(식당·카페 +3‰).
+- 사용 배제: 불타는 시설은 행동 후보에서 제외(자기 집 포함 — 드라마 허용).
+- 진압: respond_fire(enum append, 소방관 전용 게이트) — 시설 문 북측 가상 스팟(firesite),
+  deficit 고정 respondDeficit(5500, construct보다 급함). 완료 시 resolveFire: 사건 제거,
+  목격자(맨해튼≤heroRadius 10) → 진압자 호감 +heroAffinity(800), heroic(8) 기억, heroic_save.
+- 자연 진화(4단계 매 틱): sinceTick+selfOutTicks(1440) 경과 → 꺼지되 평판 −selfOutRepPenalty(40)
+  — 소방관이 없는 마을은 소문이 나빠진다(§17.21 이민 위축과 연결).
+- 이벤트: fire_started/fire_out{by}/heroic_save. 클라: 🔥 오버레이(스냅샷·tickBatch incidents 동봉),
+  피드 문구. 드로우 추가로 rngSim 스트림 변경 — 행동 버전 경계.

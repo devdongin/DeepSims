@@ -717,6 +717,31 @@ function reasonText(r) {
   return out;
 }
 
+// §17.20 화재 오버레이: 불타는 시설 위 🔥
+const fireSprites = new Map();
+function syncFires() {
+  if (!scene || !world?.incidents) return;
+  const alive = new Set(world.incidents.map((i) => i.facilityId));
+  for (const [id, sp] of fireSprites) {
+    if (!alive.has(id)) { sp.destroy(); fireSprites.delete(id); }
+  }
+  for (const inc of world.incidents) {
+    if (fireSprites.has(inc.facilityId)) continue;
+    const fac = world.map.facilities.find((f) => f.id === inc.facilityId);
+    if (!fac) continue;
+    const tx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
+    const ty = isoY(fac.x + fac.w / 2, fac.y + fac.h / 2) - 40;
+    const em = scene.add.text(tx, ty, '🔥', { fontSize: '28px' }).setOrigin(0.5);
+    em.setDepth(6000);
+    scene.tweens.add({ targets: em, y: ty - 8, scale: 1.2, duration: 400, yoyo: true, repeat: -1 });
+    fireSprites.set(inc.facilityId, em);
+  }
+}
+
+function facTypeOf(facId) {
+  return world?.map?.facilities?.find((f) => f.id === facId)?.type;
+}
+
 function eventText(e) {
   const n = simName(e.simId);
   switch (e.type) {
@@ -725,6 +750,9 @@ function eventText(e) {
     case 'action_failed': return `${n}: 행동 실패 (${e.payload.reason})`;
     case 'money_changed': return `${n}: ${e.payload.delta > 0 ? '+' : ''}${e.payload.delta}원${e.payload.tax ? ` (세금 ${e.payload.tax}원)` : ''} (잔액 ${e.payload.balance})`;
     case 'welfare_paid': return `🏛️ 정부가 ${n}에게 생계 지원 +${e.payload.amount}원 (국고 ${e.payload.treasury}원)`;
+    case 'fire_started': return `🔥 ${PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId}에 불이 났다!`;
+    case 'fire_out': return e.payload.by === 'self' ? `💨 ${e.payload.facilityId}의 불이 겨우 잦아들었다… (아무도 안 왔다)` : `🚒 ${simName(e.payload.by)}이(가) ${e.payload.facilityId} 화재를 진압했다!`;
+    case 'heroic_save': return `🎖️ ${n}: 영웅이 됐다`;
     case 'starving': return `⚠️ ${n}이(가) 굶고 있습니다!`;
     case 'lonely': return `${n}이(가) 혼자 시간을 보냈습니다…`;
     case 'argument': return `💢 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 말다툼했습니다`;
@@ -963,6 +991,7 @@ function connect() {
         world.worldTick = msg.toTick;
         world.sims = msg.sims;
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
+        if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
         for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }

@@ -120,7 +120,7 @@ export class Engine {
       const n = Math.min(cap.target - this.world.worldTick, BATCH_TICKS);
       if (n <= 0) return;
       const batch = this.runLive(n);
-      this.emit({ type: 'tickBatch', ...batch, sims: this.world.sims, treasury: this.world.treasury });
+      this.emit({ type: 'tickBatch', ...batch, sims: this.world.sims, treasury: this.world.treasury, incidents: this.world.incidents });
     }, 250);
   }
 
