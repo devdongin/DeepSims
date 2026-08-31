@@ -49,6 +49,9 @@ function destroySimSprites() {
   simSprites.clear();
 }
 
+// §17.19 내부 모드: 열려 있는 시설 id — 건물 클릭으로 토글, 지붕이 걷히고 내부·심이 보인다
+const interiorOpen = new Set();
+
 function archOf(sim) {
   if (sim.isPlayer) return 'p';
   const m = ARCH_OF_OCCUPATION[sim.traits?.occupation];
@@ -59,11 +62,15 @@ const BLD_TYPES = ['house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital'
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
+for (const t of ['house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
+  'cinema', 'bar', 'library', 'market', 'police', 'fire']) {
+  BLD_KEYS.push([`bld_${t}_int`, `./props/bld_${t}_int.png`]); // §17.19 내부 컷어웨이
+}
 const BLD_OF_FACILITY = { cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
   city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
   police_station: 'bld_police', fire_station: 'bld_fire' };
-const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern']
+const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern', 'police_car', 'fire_truck', 'ambulance']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -80,11 +87,32 @@ class TownScene extends Phaser.Scene {
 
   // 소품 배치 (Codex imagegen 에셋) — 시설 자원·맵 지형에서 위치 유도.
   // resync 재호출 시 중복 방지를 위해 기존 소품을 지우고 다시 그린다.
+  // 시설 렌더 모드: 'ext' 외형 스프라이트 / 'int' 컷어웨이 / 'tile' 타일 폴백 (이슈 #15)
+  computeFacModes() {
+    this.facMode = new Map();
+    let hi = 0;
+    for (const fac of world.map.facilities) {
+      if (!fac.w) continue;
+      let ext = fac.type === 'house' ? `bld_house_${'abc'[hi++ % 3]}` : BLD_OF_FACILITY[fac.type];
+      const intKey = fac.type === 'house' ? 'bld_house_int' : `${BLD_OF_FACILITY[fac.type]}_int`;
+      if (interiorOpen.has(fac.id)) {
+        this.facMode.set(fac.id, this.textures.exists(intKey) ? 'int' : 'tile');
+      } else {
+        this.facMode.set(fac.id, ext && this.textures.exists(ext) ? 'ext' : 'tile');
+      }
+    }
+  }
+
   drawProps() {
     if (this.propSprites) for (const p of this.propSprites) p.destroy();
     this.propSprites = [];
+    // 스프라이트/컷어웨이로 그려지는 발자국 안의 프롭은 생략 — 지붕·가구 이중 렌더 방지 (이슈 #15)
+    const coveredBy = (x, y) => world.map.facilities.find((f) => f.w
+      && x >= f.x && x < f.x + f.w && y >= f.y && y < f.y + f.h
+      && this.facMode.get(f.id) !== 'tile' && f.type !== 'park' && f.type !== 'pond');
     const put = (key, x, y, h = 26, dy = -4) => {
       if (!this.textures.exists(key)) return;
+      if (coveredBy(x, y)) return;
       const img = this.add.image(isoX(x, y), isoY(x, y) + dy, key).setOrigin(0.5, 1);
       img.setScale(h / img.height);
       img.setDepth(1000 + x + y - 0.5); // 같은 타일의 심보다 살짝 뒤
@@ -115,12 +143,19 @@ class TownScene extends Phaser.Scene {
         put('fishing_sign', fac.door.x - 1, fac.door.y, 24);
       } else if (fac.type === 'hospital') {
         put('hospital_cross', fac.door.x + 1, fac.door.y - 1, 26);
+        put('ambulance', fac.door.x - 2, fac.door.y - 1, 34); // §17.19 차량
         for (const r of fac.resources.filter((x) => x.kind === 'clinic')) put('pill_bottle', r.x, r.y, 16);
         for (const r of fac.resources.filter((x) => x.kind === 'slot')) put('desk', r.x, r.y, 22);
       } else if (fac.type === 'city_hall') {
         put('flag_pole', fac.door.x - 2, fac.door.y - 1, 36);
         put('ballot_box', fac.door.x + 2, fac.door.y + 1, 20);
         put('noticeboard', fac.x + 6, fac.y + 6, 24);
+        for (const r of fac.resources) put('desk', r.x, r.y, 22);
+      } else if (fac.type === 'police_station') {
+        put('police_car', fac.door.x - 2, fac.door.y - 1, 34); // §17.19 차량
+        for (const r of fac.resources) put('desk', r.x, r.y, 22);
+      } else if (fac.type === 'fire_station') {
+        put('fire_truck', fac.door.x - 2, fac.door.y - 1, 38); // §17.19 차량
         for (const r of fac.resources) put('desk', r.x, r.y, 22);
       } else if (fac.type === 'school') {
         for (const r of fac.resources) put('school_desk', r.x, r.y, 22);
@@ -202,7 +237,24 @@ class TownScene extends Phaser.Scene {
         const d = dx * dx + dy * dy;
         if (d < bestD) { bestD = d; best = sim; }
       }
-      if (best) selectSim(best.id);
+      if (best) { selectSim(best.id); return; }
+      // 심이 아니면 건물 토글 (§17.19 내부 모드): 화면→타일 역변환 후 발자국 검사
+      const tx2 = (wp.x / (TW / 2) + wp.y / (TH / 2)) / 2;
+      const ty2 = (wp.y / (TH / 2) - wp.x / (TW / 2)) / 2;
+      // 지붕 여유(북서 3타일) 포함 후보 수집 → 발자국 중심 최근접 선택 (겹침 결정적, Codex 38차)
+      let fac = null; let facD = Infinity;
+      for (const f of world.map.facilities) {
+        if (!f.w || tx2 < f.x - 3 || tx2 >= f.x + f.w || ty2 < f.y - 3 || ty2 >= f.y + f.h) continue;
+        const dcx = tx2 - (f.x + f.w / 2); const dcy = ty2 - (f.y + f.h / 2);
+        const d = dcx * dcx + dcy * dcy;
+        if (d < facD) { facD = d; fac = f; }
+      }
+      if (fac && fac.type !== 'park' && fac.type !== 'pond') {
+        if (interiorOpen.has(fac.id)) interiorOpen.delete(fac.id);
+        else interiorOpen.add(fac.id);
+        destroySimSprites();
+        this.drawWorld();
+      }
     });
     if (world) this.drawWorld();
   }
@@ -236,23 +288,32 @@ class TownScene extends Phaser.Scene {
       const lift = (t === 3 || t === 4) ? 10 : 0; // 벽·나무는 살짝 올림
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
+    this.computeFacModes();
     this.drawProps();
     let houseIdx = 0;
     for (const fac of map.facilities) {
       const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서' }[fac.type];
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
-      let bldKey = fac.type === 'house' ? `bld_house_${'abc'[houseIdx++ % 3]}` : BLD_OF_FACILITY[fac.type];
-      // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
-      const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
-      if (bldKey && (hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
-      if (bldKey && !this.textures.exists(bldKey)) bldKey = null;
+      const mode = this.facMode.get(fac.id) ?? 'tile';
+      const opened = interiorOpen.has(fac.id);
+      const hv = fac.type === 'house' ? houseIdx++ : 0; // 모드 무관 1회 증가 — 변형 고정 (Codex 40차)
+      let bldKey = null;
+      if (mode === 'int') {
+        bldKey = fac.type === 'house' ? 'bld_house_int' : `${BLD_OF_FACILITY[fac.type]}_int`;
+      } else if (mode === 'ext') {
+        bldKey = fac.type === 'house' ? `bld_house_${'abc'[hv % 3]}` : BLD_OF_FACILITY[fac.type];
+        // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
+        const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
+        if ((hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
+      }
       if (bldKey) {
         const cx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
         const cy = isoY(fac.x + fac.w / 2, fac.y + fac.h / 2);
         const img = this.add.image(cx, cy + TH, bldKey).setOrigin(0.5, 1);
-        const wpx = (fac.w + fac.h) / 2 * TW * 1.02; // 발자국 대각 폭에 맞춤
+        const wpx = (fac.w + fac.h) / 2 * TW; // 발자국 대각 폭 = 트림된 내용 폭 (이슈 #15)
         img.setScale(wpx / img.width);
-        img.setDepth(1000 + fac.x + fac.w + fac.y + fac.h - 1);
+        // 내부 모드는 북쪽 모서리 깊이 → 안의 심·가구가 위에 그려짐
+        img.setDepth(opened ? 1000 + fac.x + fac.y : 1000 + fac.x + fac.w + fac.y + fac.h - 1);
         this.propSprites.push(img);
       } else {
         g.fillStyle(FACILITY_COLORS[fac.type], 0.35);
