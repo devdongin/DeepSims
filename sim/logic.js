@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 18,
+  logicSchemaVersion: 19,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -172,6 +172,8 @@ export const DEFAULT_LOGIC = {
     sleepStart: 1350, sleepLenMin: 450,
     daySleepStart: 480, daySleepEnd: 960,        // 야간조 주간 수면
   },
+  // §17.18 삼각 폐쇄: 친구의 친구와는 빨리 가까워진다 (페어 델타 가산, 무드로우)
+  triad: { perFriendBonus: 8, maxCommon: 3 },
   // §17.15 경제 순환: 소득세 → 국고 → 복지·시장 수당 (Lengnick baseline 차용, 드로우 0회)
   economy: {
     taxPct: 15,             // 임금 원천징수율
@@ -408,6 +410,8 @@ function checkRanges(p, errors) {
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
   inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);
+  inRange('triad.perFriendBonus', p.triad.perFriendBonus, 0, 1000);
+  inRange('triad.maxCommon', p.triad.maxCommon, 0, 100);
   inRange('economy.taxPct', p.economy.taxPct, 0, 90);
   inRange('economy.welfareThreshold', p.economy.welfareThreshold, 0, 100000);
   inRange('economy.welfareAmount', p.economy.welfareAmount, 0, 100000);

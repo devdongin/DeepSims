@@ -456,5 +456,15 @@ export function pairDeltaBonus(world, a, b) {
     const mem = world.clubs[club.id];
     if (mem.includes(a.id) && mem.includes(b.id)) { bonus += L.club.pairBonus; break; }
   }
+  // §17.18 삼각 폐쇄(Science Advances aax7310): 공통 친구 수에 비례한 가산 (캡, 그라데이션)
+  const T = L.triad;
+  if (T) {
+    let common = 0;
+    for (const [cid, tier] of Object.entries(a.relTiers)) {
+      if (tier === 'friend' && b.relTiers[cid] === 'friend') common++;
+      if (common >= T.maxCommon) break;
+    }
+    bonus += common * T.perFriendBonus;
+  }
   return bonus;
 }

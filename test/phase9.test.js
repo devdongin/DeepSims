@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
-import { applyRomance } from '../sim/society.js';
+import { applyRomance, pairDeltaBonus as pairDeltaBonusRef } from '../sim/society.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
 import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronoValue as chronoValueRef } from '../sim/chrono.js';
@@ -557,4 +557,18 @@ test('S-20. §17.17 주중/주말: 주말 휴무·교대 유지·여가 확장',
   assert.ok(!planSat.some((sl) => sl.intent === 'work'), '주말 계획에 근무 없음');
   const leisure = planSat.find((sl) => sl.intent === 'socialize' || sl.intent === 'play');
   assert.equal(leisure.from, L.plan.mealSlot1End, '주말 여가 확장');
+});
+
+test('S-21. §17.18 삼각 폐쇄: 공통 친구 수 비례 페어 보너스 (캡)', () => {
+  const w = createWorld(SEED);
+  const [a, b] = w.sims;
+  const base = pairDeltaBonusRef(w, a, b);
+  a.relTiers[5] = 'friend'; b.relTiers[5] = 'friend';
+  assert.equal(pairDeltaBonusRef(w, a, b), base + w.logic.triad.perFriendBonus, '공통 친구 1');
+  a.relTiers[6] = 'friend'; b.relTiers[6] = 'friend';
+  a.relTiers[7] = 'friend'; b.relTiers[7] = 'friend';
+  a.relTiers[8] = 'friend'; b.relTiers[8] = 'friend';
+  assert.equal(pairDeltaBonusRef(w, a, b), base + w.logic.triad.perFriendBonus * w.logic.triad.maxCommon, '캡');
+  b.relTiers[5] = 'acquaintance';
+  assert.equal(pairDeltaBonusRef(w, a, b), base + w.logic.triad.perFriendBonus * 3, '양방 friend만 계수'); // 6,7,8
 });
