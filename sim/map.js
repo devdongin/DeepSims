@@ -373,6 +373,17 @@ export function addBuilding(map, type, plot) {
         { id: 'seat3', kind: 'seat', x: x + 4, y: y + 3 },
       ],
     };
+  } else if (type === 'office') { // §17.21: 일자리 건설 — 카페와 동일 배열, kind desk
+    bld(x, y, 7, 5, x + 3, y + 4);
+    fac = {
+      id, type, x, y, w: 7, h: 5, door: { x: x + 3, y: y + 4 },
+      resources: [
+        { id: 'desk0', kind: 'desk', x: x + 1, y: y + 1 },
+        { id: 'desk1', kind: 'desk', x: x + 4, y: y + 1 },
+        { id: 'desk2', kind: 'desk', x: x + 1, y: y + 3 },
+        { id: 'desk3', kind: 'desk', x: x + 4, y: y + 3 },
+      ],
+    };
   } else { // park: 무벽 스팟 6
     fac = {
       id, type: 'park', x, y, w: 7, h: 5, door: { x, y: y + 2 },
