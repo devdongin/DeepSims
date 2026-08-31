@@ -1086,3 +1086,28 @@ connect();
     if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
   });
 })();
+
+// ---- 상단 미니 추이 그래프: 인구(초록)·국고(금색) — 클라 로컬 링버퍼 (§18.T5 예고편) ----
+const sparkHist = [];
+function pushSpark() {
+  if (!world) return;
+  sparkHist.push({ pop: world.sims.length, tre: world.treasury ?? 0 });
+  if (sparkHist.length > 120) sparkHist.shift();
+  const cv = document.getElementById('spark');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const draw = (key, color) => {
+    const max = Math.max(1, ...sparkHist.map((p) => p[key]));
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
+    sparkHist.forEach((p, i) => {
+      const x = (i / Math.max(1, sparkHist.length - 1)) * (cv.width - 4) + 2;
+      const y = cv.height - 3 - (p[key] / max) * (cv.height - 8);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  };
+  draw('tre', '#c9a86a');
+  draw('pop', '#8fd48a');
+}
+setInterval(pushSpark, 5000);
