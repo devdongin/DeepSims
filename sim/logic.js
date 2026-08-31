@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 22,
+  logicSchemaVersion: 23,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -183,6 +183,10 @@ export const DEFAULT_LOGIC = {
     selfOutRepPenalty: 40,     // 자연 진화 시 평판 감소
     heroAffinity: 800,         // 목격자(맨해튼≤10) → 진압 소방관 호감
     heroRadius: 10,
+  },
+  // §18.T2 건설 지시: 주문 시 국고 차감 (취소 없음 — 47차 합의), 착공 시 재검증
+  zone: {
+    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000 },
   },
   // §17.21 도시 성장 드라이브: 행동 이벤트 → 평판 → 이민 웨이브 + 선제·일자리 건설
   growth: {
@@ -436,6 +440,7 @@ function checkRanges(p, errors) {
   inRange('incidents.selfOutRepPenalty', p.incidents.selfOutRepPenalty, 0, 10000);
   inRange('incidents.heroAffinity', p.incidents.heroAffinity, 0, 10000);
   inRange('incidents.heroRadius', p.incidents.heroRadius, 0, 1000);
+  for (const k of ['house', 'cafe', 'office', 'park']) inRange(`zone.costs.${k}`, p.zone.costs[k], 0, 1000000);
   inRange('growth.headroomBeds', p.growth.headroomBeds, 0, 100);
   inRange('growth.repCap', p.growth.repCap, 0, 100000);
   inRange('growth.repDecayPct', p.growth.repDecayPct, 0, 100);
@@ -530,6 +535,8 @@ function checkShape(ref, val, path, errors) {
 }
 
 // §18.T1: 시장 정책 화이트리스트 — 필드·정수·범위 검증 (서버·시뮬 공유 단일 권위)
+export const ZONEABLE = ['house', 'cafe', 'office', 'park']; // §18.T2
+
 export const POLICY_FIELDS = {
   taxPct: [5, 30],
   welfareAmount: [0, 1000],

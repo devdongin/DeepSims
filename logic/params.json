@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 22,
+  "logicSchemaVersion": 23,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -413,6 +413,14 @@
     "selfOutRepPenalty": 40,
     "heroAffinity": 800,
     "heroRadius": 10
+  },
+  "zone": {
+    "costs": {
+      "house": 2000,
+      "cafe": 3000,
+      "office": 3000,
+      "park": 1000
+    }
   },
   "growth": {
     "headroomBeds": 2,
