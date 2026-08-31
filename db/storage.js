@@ -192,7 +192,7 @@ export class Storage {
       .all(cursorTick, uptoTick);
     const highlights = this.db.prepare(
       `SELECT tick, ordinal, type, sim_id, payload FROM events WHERE tick > ? AND tick <= ?
-       AND type IN ('argument', 'starving', 'lonely', 'input_rejected')
+       AND type IN ('argument', 'starving', 'lonely', 'input_rejected', 'election', 'married', 'started_dating', 'broke_up', 'immigrated', 'facility_built', 'festival', 'fell_sick')
        ORDER BY tick DESC, ordinal DESC LIMIT 50`)
       .all(cursorTick, uptoTick)
       .map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
