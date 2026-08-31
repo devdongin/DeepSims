@@ -94,13 +94,13 @@ class TownScene extends Phaser.Scene {
     scene = this;
     this.cameras.main.setBackgroundColor('#14121a');
     this.mapLayer = this.add.graphics();
-    const center = () => this.cameras.main.centerOn(isoX(30, 30), isoY(30, 30)); // 64맵 중심부
-    this.cameras.main.setZoom(0.7);
+    const center = () => this.cameras.main.centerOn(isoX(32, 32), isoY(32, 32)); // 구시가 중심 (128맵)
+    this.cameras.main.setZoom(0.65);
     center();
     this.scale.on('resize', center); // RESIZE 모드가 뷰포트를 갱신한 뒤 재센터
     this.input.on('wheel', (_p, _o, _dx, dy) => {
       const z = this.cameras.main.zoom * (dy > 0 ? 0.9 : 1.1);
-      this.cameras.main.setZoom(Phaser.Math.Clamp(z, 0.5, 3));
+      this.cameras.main.setZoom(Phaser.Math.Clamp(z, 0.25, 3));
     });
     this.input.on('pointermove', (p) => {
       if (!p.isDown) return;

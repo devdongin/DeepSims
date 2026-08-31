@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 7,
+  "logicSchemaVersion": 8,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -267,6 +267,8 @@
   "items": {
     "spawnInterval": 720,
     "spawnTries": 8,
+    "spawnAreaW": 64,
+    "spawnAreaH": 64,
     "amountMin": 50,
     "amountSpan": 201,
     "expireTicks": 2880,

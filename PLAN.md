@@ -623,3 +623,13 @@ traits: {
 ### 스키마
 - 세이브 v8: 맵 64×64 확장, world.plots/project. 로직 v7: construct{laborRequired, stintTicks,
   deficit, cafeRatio, parkRatio, persJDiv}.
+
+## 16.6 2차 확장 — 128×128 (사용자 지시)
+
+- expandMapTo를 파라미터화해 §16.5와 같은 계약으로 64→128 확장 (v8→v9 마이그레이션 체인
+  48→64→128, buildMap도 동일 헬퍼·동일 순서). 옛 63 경계 개방, 새 127 물 테두리, 주 도로 연장
+  + 새 땅 간선 2줄(가로 y=70, 세로 x=70 — GRASS만 도로화, 기존 구조물 불침).
+- 공터 8 → **32** (plotId 8~31 append — 기존 id·used 보존): 동측 밴드 10, 남측 밴드 10,
+  원거리 사분면 4.
+- 동전 스폰은 items.spawnAreaW/H(64) 창으로 한정 (logic v8) — 128 전역 스폰은 아무도 못 줍는
+  죽은 콘텐츠임을 §16.C 개정에서 확인한 원칙의 연장.

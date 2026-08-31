@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 7,
+  logicSchemaVersion: 8,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -117,6 +117,7 @@ export const DEFAULT_LOGIC = {
   items: {
     spawnInterval: 720,   // 12게임시간마다 스폰 시도
     spawnTries: 8,
+    spawnAreaW: 64, spawnAreaH: 64, // §16.6: 동전은 구시가(사람 다니는 곳)에만 떨어진다
     amountMin: 50, amountSpan: 201,
     expireTicks: 2880,
     pickupMood: 100,
@@ -302,6 +303,8 @@ function checkRanges(p, errors) {
   inRange('weather.outdoorRainFactor', p.weather.outdoorRainFactor, 0, 100); // 축소만 허용 — §G 상한 보존
   inRange('items.spawnInterval', p.items.spawnInterval, 1, 1000000);
   inRange('items.spawnTries', p.items.spawnTries, 1, 64);
+  inRange('items.spawnAreaW', p.items.spawnAreaW, 1, 1024);
+  inRange('items.spawnAreaH', p.items.spawnAreaH, 1, 1024);
   inRange('items.amountMin', p.items.amountMin, 0, 1000000);
   inRange('items.amountSpan', p.items.amountSpan, 1, 1000000);
   inRange('items.expireTicks', p.items.expireTicks, 1, 1000000);

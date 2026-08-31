@@ -618,8 +618,8 @@ export function tick(world, inputsForThisTick = []) {
     const I = L.items;
     if (t % I.spawnInterval === 0) {
       for (let attempt = 0; attempt < I.spawnTries; attempt++) {
-        const x = rngInt(world.rngSim, world.map.w);
-        const y = rngInt(world.rngSim, world.map.h);
+        const x = rngInt(world.rngSim, Math.min(I.spawnAreaW, world.map.w));
+        const y = rngInt(world.rngSim, Math.min(I.spawnAreaH, world.map.h));
         const tile = world.map.tiles[y * world.map.w + x];
         // ROAD에만 스폰 — 사람이 다니는 곳에 떨어지고, 다니는 사람이 줍는다 (§16.C 개정)
         if (tile === TILE.ROAD

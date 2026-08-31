@@ -2,7 +2,7 @@
 // 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
-import { addBarTo, addVenuesTo, expandMapTo64, defaultPlots } from './map.js';
+import { addBarTo, addVenuesTo, expandMapTo64, expandMapTo128, defaultPlots, extraPlots128 } from './map.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -70,10 +70,16 @@ export function migrateWorld(world) {
     if (world.project && world.project.required === undefined) world.project.required = 600;
     world.lastPlanDay ??= -1;
   }
+  if (from < 9) {
+    // §16.6: 128 확장 (v8 체인 뒤에 적용 — 신규 월드와 같은 헬퍼·순서) + 추가 공터 append
+    const r = expandMapTo128(world.map, world.wear);
+    world.wear = r.wear;
+    if (world.plots.length <= 8) world.plots = [...world.plots, ...extraPlots128()];
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 8;
+  world.schemaVersion = 9;
   return world;
 }

@@ -9,17 +9,19 @@ import { isWalkable, bfsPath } from '../sim/index.js';
 const SEED = 8484;
 const PLAYER = { name: '동', gender: 'X', age: 30, mbti: { EI: 50, SN: 50, TF: 50, JP: 0 }, occupation: 'freelancer' };
 
-test('X-1. 맵 64×64 확장: 좌표 보존·경계 개방·도로 연장·공터 8', () => {
+test('X-1. 맵 128×128 확장: 좌표 보존·경계 개방·도로 연장·공터 32', () => {
   const w = createWorld(SEED);
-  assert.equal(w.map.w, 64);
-  assert.equal(w.map.h, 64);
-  assert.equal(w.plots.length, 8);
-  // 옛 경계 개방
-  assert.ok(isWalkable(w.map, 47, 20), '옛 동쪽 경계 개방');
-  assert.ok(isWalkable(w.map, 20, 47), '옛 남쪽 경계 개방');
+  assert.equal(w.map.w, 128);
+  assert.equal(w.map.h, 128);
+  assert.equal(w.plots.length, 32);
+  // 옛 경계들(47, 63) 개방
+  assert.ok(isWalkable(w.map, 47, 20), '1차 확장 동쪽 경계 개방');
+  assert.ok(isWalkable(w.map, 20, 47), '1차 확장 남쪽 경계 개방');
+  assert.ok(isWalkable(w.map, 63, 20), '2차 확장 동쪽 경계 개방');
+  assert.ok(isWalkable(w.map, 20, 63), '2차 확장 남쪽 경계 개방');
   // 새 경계 물
-  assert.ok(!isWalkable(w.map, 63, 20));
-  assert.ok(!isWalkable(w.map, 20, 63));
+  assert.ok(!isWalkable(w.map, 127, 20));
+  assert.ok(!isWalkable(w.map, 20, 127));
   // 도로 연장로 공터까지 도달 가능
   for (const p of w.plots) {
     assert.ok(bfsPath(w.map, 5, 7, p.x + 1, p.y + 1) !== null, `plot${p.plotId} 도달`);

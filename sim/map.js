@@ -2,9 +2,11 @@
 // 타일: 0=grass(가능) 1=road(가능) 2=floor(가능,실내) 3=wall(불가) 4=tree(불가) 5=water(불가)
 
 export const MAP_W = 48;          // 기본 저작 영역 (§2)
-export const MAP_W2 = 64;         // §16.5 확장 후 크기
+export const MAP_W2 = 64;         // §16.5 1차 확장
 export const MAP_H = 48;
 export const MAP_H2 = 64;
+export const MAP_W3 = 128;        // §16.6 2차 확장
+export const MAP_H3 = 128;
 export const TILE = { GRASS: 0, ROAD: 1, FLOOR: 2, WALL: 3, TREE: 4, WATER: 5 };
 
 function rect(tiles, x, y, w, h, v) {
@@ -145,36 +147,62 @@ export function buildMap() {
   addBarTo(tiles, facilities);
   addVenuesTo(tiles, facilities);
 
-  // §16.5: 64×64 확장 (신규 월드도 마이그레이션과 같은 헬퍼)
+  // §16.5/§16.6: 확장 체인 (신규 월드도 마이그레이션과 같은 헬퍼·같은 순서)
   const map = { w: MAP_W, h: MAP_H, tiles, facilities };
   expandMapTo64(map, null);
+  expandMapTo128(map, null);
   return map;
 }
 
-// §16.5.A: 48×48 → 64×64 확장 — buildMap(신규)과 v7→v8 마이그레이션의 단일 권위.
-// 좌표 보존, 옛 외곽 물(x=47열·y=47행, 코너 포함) 개방, 새 외곽 물 테두리, 주 도로 연장.
-export function expandMapTo64(map, wear) {
-  if (map.w >= MAP_W2) return { map, wear };
-  const W = MAP_W2, H = MAP_H2;
+// §16.5.A/§16.6: 좌표 보존 확장 — buildMap(신규)과 마이그레이션의 단일 권위 (파라미터화).
+// 옛 외곽 물(구 경계 열·행, 코너 포함) 개방, 새 외곽 물 테두리, 주 도로(y23-24, x23-24) 연장.
+export function expandMapTo(map, wear, W, H) {
+  if (map.w >= W) return { map, wear };
+  const oldW = map.w, oldH = map.h;
   const tiles = new Array(W * H).fill(TILE.GRASS);
   const newWear = new Array(W * H).fill(0);
-  for (let y = 0; y < map.h; y++) {
-    for (let x = 0; x < map.w; x++) {
-      tiles[y * W + x] = map.tiles[y * map.w + x];
-      newWear[y * W + x] = wear ? wear[y * map.w + x] : 0;
+  for (let y = 0; y < oldH; y++) {
+    for (let x = 0; x < oldW; x++) {
+      tiles[y * W + x] = map.tiles[y * oldW + x];
+      newWear[y * W + x] = wear ? wear[y * oldW + x] : 0;
     }
   }
   // 옛 동·남 경계 물 개방 (코너 포함)
-  for (let y = 0; y < map.h; y++) if (tiles[y * W + 47] === TILE.WATER) tiles[y * W + 47] = TILE.GRASS;
-  for (let x = 0; x < map.w; x++) if (tiles[47 * W + x] === TILE.WATER) tiles[47 * W + x] = TILE.GRASS;
+  for (let y = 0; y < oldH; y++) if (tiles[y * W + (oldW - 1)] === TILE.WATER) tiles[y * W + (oldW - 1)] = TILE.GRASS;
+  for (let x = 0; x < oldW; x++) if (tiles[(oldH - 1) * W + x] === TILE.WATER) tiles[(oldH - 1) * W + x] = TILE.GRASS;
   // 새 외곽 물
   for (let x = 0; x < W; x++) { tiles[0 * W + x] = TILE.WATER; tiles[(H - 1) * W + x] = TILE.WATER; }
   for (let y = 0; y < H; y++) { tiles[y * W + 0] = TILE.WATER; tiles[y * W + (W - 1)] = TILE.WATER; }
-  // 주 도로 연장 (중앙 가로 y23-24 → x62, 중앙 세로 x23-24 → y62)
-  for (let x = 46; x < W - 1; x++) { tiles[23 * W + x] = TILE.ROAD; tiles[24 * W + x] = TILE.ROAD; }
-  for (let y = 46; y < H - 1; y++) { tiles[y * W + 23] = TILE.ROAD; tiles[y * W + 24] = TILE.ROAD; }
+  // 주 도로 연장
+  for (let x = oldW - 2; x < W - 1; x++) { tiles[23 * W + x] = TILE.ROAD; tiles[24 * W + x] = TILE.ROAD; }
+  for (let y = oldH - 2; y < H - 1; y++) { tiles[y * W + 23] = TILE.ROAD; tiles[y * W + 24] = TILE.ROAD; }
   map.w = W; map.h = H; map.tiles = tiles;
   return { map, wear: newWear };
+}
+
+// v7→v8 호환 래퍼 (마이그레이션 체인은 48→64→128 순서를 유지한다)
+export function expandMapTo64(map, wear) {
+  return expandMapTo(map, wear, MAP_W2, MAP_H2);
+}
+
+// §16.6: 128 확장 + 새 땅 간선 도로 (가로 y=70·세로 x=70 — 원거리 사분면 접근성)
+export function expandMapTo128(map, wear) {
+  const r = expandMapTo(map, wear, MAP_W3, MAP_H3);
+  const W = map.w;
+  if (map.tiles[70 * W + 70] !== undefined) {
+    for (let x = 2; x < W - 1; x++) if (map.tiles[70 * W + x] === TILE.GRASS) map.tiles[70 * W + x] = TILE.ROAD;
+    for (let y = 2; y < map.h - 1; y++) if (map.tiles[y * W + 70] === TILE.GRASS) map.tiles[y * W + 70] = TILE.ROAD;
+  }
+  return r;
+}
+
+// §16.6: 추가 공터 24곳 (plotId 8~31) — 간선 도로변, 사용 순서 = 배열 순서
+export function extraPlots128() {
+  const coords = [];
+  for (const x of [72, 82, 92, 102, 112]) coords.push([x, 17], [x, 26]);   // 동측 밴드 10
+  for (const y of [72, 82, 92, 102, 112]) coords.push([17, y], [26, y]);   // 남측 밴드 10
+  coords.push([76, 74], [88, 86], [100, 98], [112, 110]);                   // 원거리 사분면 4
+  return coords.map(([x, y], i) => ({ plotId: 8 + i, x, y, used: false }));
 }
 
 // §16.5.A: 공터 8곳 (7×5) — 사용 순서 = 배열 순서
