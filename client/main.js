@@ -296,15 +296,16 @@ class TownScene extends Phaser.Scene {
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
       const mode = this.facMode.get(fac.id) ?? 'tile';
       const opened = interiorOpen.has(fac.id);
+      const hv = fac.type === 'house' ? houseIdx++ : 0; // 모드 무관 1회 증가 — 변형 고정 (Codex 40차)
       let bldKey = null;
       if (mode === 'int') {
         bldKey = fac.type === 'house' ? 'bld_house_int' : `${BLD_OF_FACILITY[fac.type]}_int`;
       } else if (mode === 'ext') {
-        bldKey = fac.type === 'house' ? `bld_house_${'abc'[houseIdx++ % 3]}` : BLD_OF_FACILITY[fac.type];
+        bldKey = fac.type === 'house' ? `bld_house_${'abc'[hv % 3]}` : BLD_OF_FACILITY[fac.type];
         // 야간(19~06시) 점등 변형이 있으면 교체 — 하루 2번 낮밤 전환 시 drawWorld 재호출로 반영
         const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
         if ((hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
-      } else if (fac.type === 'house') houseIdx++; // 변형 인덱스 일관성
+      }
       if (bldKey) {
         const cx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
         const cy = isoY(fac.x + fac.w / 2, fac.y + fac.h / 2);
