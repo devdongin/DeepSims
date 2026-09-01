@@ -1084,8 +1084,8 @@ test('S-35. §19.5 시민 불만·청원: 커서 집계·문턱 발화·재무�
   collectComplaintsRef(w, s, 100, () => {});
   assert.equal(w.complaints.find((x) => x.kind === 'lonely' && x.placeId === 'cafe').count,
     L.complaints.lonelyMin, '중복 가산 없음');
-  // 문턱 초과 시 청원 1회, 재발화 없음 (70차 ②)
-  c1.count = 9999;
+  // 문턱 초과 시 청원 1회, 재발화 없음 (70차 ② / §19.7: 사람 수 기준)
+  for (const s2 of w.sims) s2.complaintDays = { lonely: 1 }; // 전원이 최근 불만 제기
   const evs = [];
   const emit = (type, simId, payload) => evs.push({ type, simId, payload });
   maybePetitionRef(w, 0, 1, emit);
@@ -1093,8 +1093,8 @@ test('S-35. §19.5 시민 불만·청원: 커서 집계·문턱 발화·재무�
   assert.equal(w.petitions.lonely.armed, false, '무장 해제');
   maybePetitionRef(w, 0, 2, emit);
   assert.equal(evs.filter((e) => e.type === 'petition').length, 1, '재발화 없음');
-  // 문턱 아래로 내려가면 재무장
-  c1.count = 0;
+  // 문턱 아래로 내려가면 재무장 (§19.7: 최근 불만 제기자가 사라지면)
+  for (const s2 of w.sims) s2.complaintDays = {};
   maybePetitionRef(w, 0, 3, emit);
   assert.equal(w.petitions.lonely.armed, true, '재무장');
   // 캡: 초과 시 oldest-first 제거 (70차 ④)

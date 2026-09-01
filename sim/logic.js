@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 28, // §19.3 growth.slotPerTreasury/maxProjectSlots 추가
+  logicSchemaVersion: 29, // §19.3 growth.slotPerTreasury/maxProjectSlots 추가
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -202,6 +202,8 @@ export const DEFAULT_LOGIC = {
     lonelyMin: 3,          // 이 횟수 이상 외로우면 불만 적재
     petitionPct: 40,       // 문턱 = floorDiv(인구 × pct, 100), count > threshold일 때 발화
     petitionRepPenalty: 25, // 청원 발생 시 평판 감소
+    decayPct: 82,          // §19.7 일일 망각 — 개선되면 문턱 아래로 내려가 청원이 재무장
+    windowDays: 3,         // §19.7 이 기간 내 불만을 제기한 **사람 수**로 문턱 판정 (Granovetter)
   },
   // §19 R-B 교통 (64차 조건부 GO): 이동 수요가 쌓여야 수단이 생긴다 (4단계 모델의 ABM 대체)
   transport: {
@@ -484,6 +486,8 @@ function checkRanges(p, errors) {
   inRange('complaints.lonelyMin', p.complaints.lonelyMin, 1, 1000);
   inRange('complaints.petitionPct', p.complaints.petitionPct, 1, 1000);
   inRange('complaints.petitionRepPenalty', p.complaints.petitionRepPenalty, 0, 10000);
+  inRange('complaints.decayPct', p.complaints.decayPct, 1, 100);
+  inRange('complaints.windowDays', p.complaints.windowDays, 1, 365);
   inRange('transport.longTripMin', p.transport.longTripMin, 1, 10000);
   inRange('transport.carTripsMin', p.transport.carTripsMin, 1, 100000);
   inRange('transport.carPrice', p.transport.carPrice, 0, 10000000);

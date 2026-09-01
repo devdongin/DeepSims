@@ -146,10 +146,13 @@ export function migrateWorld(world) {
     world.lostAndFound ??= []; // §17.24
     for (const sim of world.sims) sim.patrolIdx ??= 0;
   }
+  if (from < 29) {
+    for (const sim of world.sims) sim.complaintDays ??= {}; // §19.7
+  }
   if (from < 28) {
     world.complaints ??= []; // §19.5
     world.petitions ??= {};
-    for (const sim of world.sims) sim.complaintCursor ??= 0;
+    for (const sim of world.sims) { sim.complaintCursor ??= 0; sim.complaintDays ??= {}; }
   }
   if (from < 27) {
     // §19.3 (66차 ④): 단수 project → 배열 이관, plotId asc 정규화, required 백필, legacy 제거
@@ -172,7 +175,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 28;
+  world.schemaVersion = 29;
   return world;
 }
 

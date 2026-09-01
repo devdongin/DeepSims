@@ -181,7 +181,7 @@ export function maybeChildren(world, t, day, emit) {
       memories: [], memorySeq: 0, habit: {}, relTiers: {},
       lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
       knownTokens: [], plan: null, lastPlannedDay: -1,
-      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0,
+      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
     };
     world.sims.push(child);
     for (const row of world.affinity) row.push(0);
@@ -284,7 +284,7 @@ function immigrateOne(world, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0,
+    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -611,6 +611,7 @@ export function collectComplaints(world, sim, t, emit) {
     } else {
       world.complaints.push({ kind, placeId, severity: Math.min(100, n), sinceDay: day, count: n });
     }
+    sim.complaintDays[kind] = day; // §19.7 이 심이 이 종류로 불만을 제기한 날 (사람 수 판정용)
   }
   // 캡 초과 시 oldest-first 제거 (sinceDay asc, 동률은 배열 순 — 70차 ④)
   while (world.complaints.length > C.cap) {
@@ -628,8 +629,18 @@ export function maybePetition(world, t, day, emit) {
   const C = world.logic.complaints;
   const pop = world.sims.length;
   const threshold = floorDiv(pop * C.petitionPct, 100);
+  // §19.7 (이슈 #45): 사건 수가 아니라 **최근 windowDays 내에 그 불만을 제기한 사람 수**로
+  // 판정한다. 한 명이 하루 열 번 외로워도 한 사람이다 — Granovetter 모델의 원의미.
+  const kinds = new Set(world.complaints.map((c) => c.kind));
   const byKind = new Map();
-  for (const c of world.complaints) byKind.set(c.kind, (byKind.get(c.kind) ?? 0) + c.count);
+  for (const kind of kinds) {
+    let people = 0;
+    for (const s2 of world.sims) {
+      const d = s2.complaintDays?.[kind];
+      if (d !== undefined && day - d <= C.windowDays) people++;
+    }
+    byKind.set(kind, people);
+  }
   for (const kind of [...byKind.keys()].sort()) { // kind asc — 결정적
     const total = byKind.get(kind);
     const st = world.petitions[kind] ?? { lastDay: -1, armed: true };
@@ -642,5 +653,19 @@ export function maybePetition(world, t, day, emit) {
     } else if (!world.petitions[kind]) {
       world.petitions[kind] = st;
     }
+  }
+}
+
+
+// §19.7 불만 망각 (이슈 #45): 일일 감쇠로 count·severity를 줄이고 0이 되면 제거한다.
+// 문제가 개선되면 문턱 아래로 내려가 청원이 재무장하고, 지속되면 다시 쌓여 재발화한다.
+// 누적만 하면 재무장이 영원히 불가능해져 루프가 1회성으로 동결된다(라이브에서 실제 발생).
+export function decayComplaints(world) {
+  const C = world.logic.complaints;
+  for (let i = world.complaints.length - 1; i >= 0; i--) {
+    const c = world.complaints[i];
+    c.count = floorDiv(c.count * C.decayPct, 100);
+    c.severity = floorDiv(c.severity * C.decayPct, 100);
+    if (c.count <= 0) world.complaints.splice(i, 1); // 잊힌 불만은 사라진다
   }
 }

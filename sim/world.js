@@ -59,6 +59,7 @@ export function createWorld(seed) {
       patrolIdx: 0,      // §17.24 순찰 진행 (경찰만 의미)
       hasCar: false,     // §19 R-B 자가용 (이동 속도 배수)
       complaintCursor: 0, // §19.5 불만 집계 커서 (중복 가산 방지 — 70차 ①)
+      complaintDays: {},  // §19.7 kind → 마지막 불만 제기일 (Granovetter: 사건 수가 아니라 사람 수)
       longTrips: 0,      // §19 R-B 장거리 이동 횟수 (출발 시점 누적 — 64차 (c))
     });
   }
