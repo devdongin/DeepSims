@@ -64,7 +64,7 @@ test('X-3b. 이주 브랜치: 완공 시 과밀 집의 최고 id 거주자가 �
   // 통제: 증축·다른 심의 개입 차단 — 프로젝트를 손으로 완공 직전 상태로
   for (const s of w.sims) s.state = { kind: 'performing', action: 'idle', facilityId: null, resourceId: null, path: [], ticksLeft: 99999, pairedTicks: 0 };
   w.reservations = {};
-  w.project = { plotId: 0, type: 'house', progress: 999999, required: 600 };
+  w.projects = [{ plotId: 0, type: 'house', progress: 999999, required: 600 }];
   const evs = tick(w, []);
   const built = evs.find((e) => e.type === 'facility_built');
   const moved = evs.find((e) => e.type === 'moved_home');

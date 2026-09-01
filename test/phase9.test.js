@@ -109,7 +109,7 @@ test('S-4. 선거: 인기 기반 후보·투표·시장, 수당과 공사 가속
   // 수당 (같은 일일 평가에서 지급)
   assert.ok(evs.some((e) => e.type === 'money_changed' && e.simId === 3 && e.payload.action === 'mayor'));
   // 시장 재임 중 프로젝트 required 감소
-  w.project = null;
+  w.projects = [];
   for (const p of w.plots) p.used = false;
   w.lastPlanDay = -1;
   const PLAYER = { name: '동', gender: 'X', age: 30, mbti: { EI: 50, SN: 50, TF: 50, JP: 50 }, occupation: 'freelancer' };
@@ -427,16 +427,16 @@ test('S-16. v14+ 마이그레이션: required 없는 진행 중 프로젝트 백
   const w = createWorld(SEED);
   // 구 빌드 세이브 재현: v13 + required 없는 프로젝트 (라이브 교착 시나리오)
   w.schemaVersion = 13;
-  w.project = { plotId: 0, progress: 76420, type: 'cafe' };
+  w.project = { plotId: 0, progress: 76420, type: 'cafe' }; // v13 단수 필드(마이그레이션 입력)
   const m = migrateWorld(JSON.parse(JSON.stringify(w)));
   assert.equal(m.schemaVersion, SCHEMA_VERSION); // 백필 후 최신 버전
-  assert.equal(m.project.required, 600, 'required 백필');
+  assert.equal(m.projects[0].required, 600, 'required 백필 (§19.3 배열 이관)');
   // 완공 판정 재개: 다음 틱 4단계에서 progress ≥ required → facility_built
   idleAll(m, []);
   const evs = tick(m, []);
   assert.ok(evs.some((e) => e.type === 'facility_built'), '백필 즉시 완공');
   // §17.21 선제 주택 도입 후엔 같은 틱 계획이 새 프로젝트를 시작할 수 있음 — 옛 cafe가 아니면 됨
-  assert.ok(m.project === null || m.project.progress === 0, '옛 프로젝트는 소멸');
+  assert.ok(m.projects.every((p) => p.progress === 0), '옛 프로젝트는 완공되어 소멸');
 });
 
 test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수면 정규화·월간 자녀·연 노화', () => {
@@ -768,7 +768,7 @@ test('S-27. §18.T2 건설 지시: 차감·FIFO 우선 착공·재검증 폐기�
   assert.ok(z, 'zoned');
   assert.equal(w.treasury, 10000 - w.logic.zone.costs.cafe, '주문 시 차감');
   // 우선 착공 (자동 수요보다 먼저, 같은 틱 이후 4단계에서)
-  assert.ok(w.project && w.project.type === 'cafe' && w.project.dir === 1 && w.project.zoned, '주문 우선 착공');
+  assert.ok(w.projects.some((p) => p.type === 'cafe' && p.dir === 1 && p.zoned), '주문 우선 착공');
   // 국고 부족 거부
   w.treasury = 0;
   const free2 = w.plots.find((p) => !p.used && p.plotId !== free.plotId && plotBuildableRef(w.map, p));

@@ -146,6 +146,15 @@ export function migrateWorld(world) {
     world.lostAndFound ??= []; // §17.24
     for (const sim of world.sims) sim.patrolIdx ??= 0;
   }
+  if (from < 27) {
+    // §19.3 (66차 ④): 단수 project → 배열 이관, plotId asc 정규화, required 백필, legacy 제거
+    const legacy = world.project;
+    if (!Array.isArray(world.projects)) world.projects = [];
+    if (legacy && world.projects.length === 0) world.projects.push(legacy); // 단수 → 배열 이관
+    for (const p of world.projects) if (!Number.isSafeInteger(p.required)) p.required = 600;
+    world.projects.sort((a, b) => a.plotId - b.plotId);
+    delete world.project;
+  }
   if (from < 26) {
     for (const sim of world.sims) { sim.hasCar ??= false; sim.longTrips ??= 0; } // §19 R-B
   }
@@ -158,7 +167,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 26;
+  world.schemaVersion = 27;
   return world;
 }
 

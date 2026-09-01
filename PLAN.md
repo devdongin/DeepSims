@@ -978,3 +978,17 @@ traits: {
 - 실측 조정(64차 (c) 요구): carPrice 15000 → 6000. 잔고 상한이 ~9.8천이라 15000은 영구 미달이었음
   (120일 soak 구매 0대) → 6000에서 day 4 첫 구매, 120일 99명 중 69명 보유.
 - 기차역(stationDemand 300)·공항은 후속 라운드. 에셋 5장 세트(4방향+내부) 확보 완료.
+
+### 19.3 라운드 24 — 동시 건설 슬롯 (구조 변경, Codex 66차 GO)
+- world.project(단수) → world.projects(배열), 세이브 v27. 마이그레이션은 legacy가 있고 배열이
+  비었을 때만 이관(66차 ④ — `??=`는 이미 존재하는 빈 배열 때문에 놓친다).
+- 동시 슬롯 = clamp(1 + floor(treasury / slotPerTreasury 15만), 1, maxProjectSlots 3) — 계획 단계
+  시작 시 1회 계산(66차 ②). 로직 v27.
+- construct 후보는 맨해튼 최근접 프로젝트(동률 plotId asc), 진행도는 자원 id `p{plotId}:`가
+  프로젝트를 식별해 가산(§16.5 레이스 규칙 유지). 완공은 plotId asc 다중 처리(66차 ③).
+- **실측: 효과 없음.** 라이브 고정 스냅샷 60일 A/B가 완전 동일(인구 38→62, 착공 18, 완공 18,
+  이민 17). 실질 제한은 슬롯 수가 아니라 **하루 1회 계획 가드**(lastPlanDay)와 트리거 조건
+  (pop+headroom > beds)이었다. 구조는 R-C 다중 마을의 전제이므로 유지하되, 성장 가속은
+  별도 문제로 분리한다.
+- 함정 기록: logicSchemaVersion을 올리지 않으면 mergeLogicDefaults가 스킵되어 신규 파라미터가
+  undefined가 되고, 그 값을 쓰는 clamp가 NaN이 되어 **모든 계획이 조용히 차단**된다(이번에 실제 발생).

@@ -132,7 +132,7 @@ function sendSnapshot(ws) {
     weather: engine.world.weather,
     lostItems: engine.world.lostItems,
     plots: engine.world.plots,
-    project: engine.world.project,
+    projects: engine.world.projects,
     partners: engine.world.partners,
     partnerStage: engine.world.partnerStage,
     mayorId: engine.world.mayorId,
@@ -150,7 +150,7 @@ function sendSnapshot(ws) {
 
 engine.onBatch((msg) => {
   for (const ws of clients) {
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, statsToday: msg.statsToday });
+    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday });
     else send(ws, msg);
   }
 });

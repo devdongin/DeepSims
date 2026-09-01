@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 26,
+  logicSchemaVersion: 27, // §19.3 growth.slotPerTreasury/maxProjectSlots 추가
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -221,6 +221,8 @@ export const DEFAULT_LOGIC = {
     repMarried: 40, repFestival: 30, repBuilt: 25, repChild: 30, repElection: 10, repGathering: 2,
     repCap: 500, repDecayPct: 95, // 일일 ×95% 감쇠
     immigPerExtra: 80, immigWaveMax: 3, // 웨이브 = 1 + floor(평판/80), 캡
+    slotPerTreasury: 150000, // §19.3 국고 15만당 동시 건설 슬롯 +1 (돈이 시공 능력을 만든다)
+    maxProjectSlots: 3,      // 동시 착공 상한
   },
   // §17.15 경제 순환: 소득세 → 국고 → 복지·시장 수당 (Lengnick baseline 차용, 드로우 0회)
   economy: {
@@ -493,6 +495,8 @@ function checkRanges(p, errors) {
   inRange('growth.repDecayPct', p.growth.repDecayPct, 0, 100);
   inRange('growth.immigPerExtra', p.growth.immigPerExtra, 1, 100000);
   inRange('growth.immigWaveMax', p.growth.immigWaveMax, 1, 100);
+  inRange('growth.slotPerTreasury', p.growth.slotPerTreasury, 1, 100000000);
+  inRange('growth.maxProjectSlots', p.growth.maxProjectSlots, 1, 20);
   inRange('growth.repMarried', p.growth.repMarried, 0, 10000);
   inRange('growth.repFestival', p.growth.repFestival, 0, 10000);
   inRange('growth.repBuilt', p.growth.repBuilt, 0, 10000);
