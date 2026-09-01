@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 29, // §19.3 growth.slotPerTreasury/maxProjectSlots 추가
+  logicSchemaVersion: 30, // §20.1 복지 수급 순서 = 필요도 순 (거동 변경 — 파라미터 추가는 없음)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
