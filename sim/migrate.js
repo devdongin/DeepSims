@@ -149,6 +149,10 @@ export function migrateWorld(world) {
   if (from < 29) {
     for (const sim of world.sims) sim.complaintDays ??= {}; // §19.7
   }
+  if (from < 30) {
+    // §19.10 (73차 ②): 원인 분화 시행일 — 이전 no_facility 항목은 외부 노출에서 legacy 표시
+    world.complaintReasonDay = Math.floor(world.worldTick / 1440);
+  }
   if (from < 28) {
     world.complaints ??= []; // §19.5
     world.petitions ??= {};
@@ -175,7 +179,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 29;
+  world.schemaVersion = 30;
   return world;
 }
 

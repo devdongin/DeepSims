@@ -1157,3 +1157,37 @@ test('S-37. §19.7 재무장 누락 수리: 불만이 사라진 kind도 재무�
   maybePetitionRef(w, 0, 3, (type, simId, payload) => evs2.push({ type, payload }));
   assert.equal(evs2.filter((e) => e.type === 'petition').length, 1, '재발화 정상');
 });
+
+test('S-38. §19.10 불만 원인 분화: 돈이 없어서 막힌 것은 시설 부재가 아니다 (이슈 #49)', () => {
+  const w = createWorld(SEED);
+  const s = w.sims[0];
+  idleAll(w, []);
+  resetIdle(s);
+  w.reservations = {};
+  // 시설은 그대로 두고 돈만 없앤다 → no_money로 기록되어야 한다
+  s.needs = { hunger: 100, energy: 9000, social: 9000, fun: 9000 };
+  s.money = 0;
+  s.groceries = 0;
+  const before = s.memories.length;
+  tick(w, []);
+  const unmet = s.memories.slice(before).find((m) => m.kind === 'unmet');
+  assert.ok(unmet, 'unmet 기억');
+  assert.ok(unmet.tags.includes('no_money'), `돈 부족으로 라벨 (실제: ${unmet.tags.join(',')})`);
+  collectComplaintsRef(w, s, w.worldTick, () => {});
+  assert.ok(w.complaints.some((c) => c.kind === 'no_money'), 'no_money 불만');
+  assert.ok(!w.complaints.some((c) => c.kind === 'no_facility'), '시설 부재로 오진하지 않음');
+  // 시설이 실제로 없으면 no_facility로 기록된다
+  const w2 = createWorld(SEED);
+  const s2 = w2.sims[0];
+  w2.map.facilities = w2.map.facilities.filter((f) => !['cafe', 'restaurant', 'mall', 'market'].includes(f.type));
+  idleAll(w2, []);
+  resetIdle(s2);
+  w2.reservations = {};
+  s2.needs = { hunger: 100, energy: 9000, social: 9000, fun: 9000 };
+  s2.money = 9000; // 돈은 충분
+  s2.groceries = 0;
+  const b2 = s2.memories.length;
+  tick(w2, []);
+  const u2 = s2.memories.slice(b2).find((m) => m.kind === 'unmet');
+  assert.ok(u2 && u2.tags.includes('no_facility'), '진짜 시설 부재는 no_facility');
+});
