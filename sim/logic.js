@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 27, // §19.3 growth.slotPerTreasury/maxProjectSlots 추가
+  logicSchemaVersion: 28, // §19.3 growth.slotPerTreasury/maxProjectSlots 추가
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -196,6 +196,13 @@ export const DEFAULT_LOGIC = {
   promotion: { moodBonus: 1000, repBonus: 100 },
   // §18.T3: 공장 공해(전역 평판, 51차 위치 고정 — 복지 다음·이민 전) + 대학 졸업 가중 풀
   pollution: { repPerFactoryPerDay: 3 },
+  // §19.5 시민 불만 → 집단 청원 (Granovetter 문턱 모델, 70차 조건 반영)
+  complaints: {
+    cap: 64,               // 배열 상한 (초과 시 oldest-first 제거)
+    lonelyMin: 3,          // 이 횟수 이상 외로우면 불만 적재
+    petitionPct: 40,       // 문턱 = floorDiv(인구 × pct, 100), count > threshold일 때 발화
+    petitionRepPenalty: 25, // 청원 발생 시 평판 감소
+  },
   // §19 R-B 교통 (64차 조건부 GO): 이동 수요가 쌓여야 수단이 생긴다 (4단계 모델의 ABM 대체)
   transport: {
     longTripMin: 40,      // 이 칸수 이상이면 '장거리' 1회 (출발 시점 누적)
@@ -473,6 +480,10 @@ function checkRanges(p, errors) {
   inRange('incidents.heroRadius', p.incidents.heroRadius, 0, 1000);
   for (const k of Object.keys(p.zone.costs)) inRange(`zone.costs.${k}`, p.zone.costs[k], 0, 1000000);
   inRange('pollution.repPerFactoryPerDay', p.pollution.repPerFactoryPerDay, 0, 10000);
+  inRange('complaints.cap', p.complaints.cap, 1, 10000);
+  inRange('complaints.lonelyMin', p.complaints.lonelyMin, 1, 1000);
+  inRange('complaints.petitionPct', p.complaints.petitionPct, 1, 1000);
+  inRange('complaints.petitionRepPenalty', p.complaints.petitionRepPenalty, 0, 10000);
   inRange('transport.longTripMin', p.transport.longTripMin, 1, 10000);
   inRange('transport.carTripsMin', p.transport.carTripsMin, 1, 100000);
   inRange('transport.carPrice', p.transport.carPrice, 0, 10000000);

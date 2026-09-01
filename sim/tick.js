@@ -17,6 +17,7 @@ import { maybeConverse, processGreetings } from './interaction.js';
 import {
   dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend, applyWelfare,
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
+  collectComplaints, maybePetition,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
   updateCampaigners, maybeNewYear, maybeFestival, maybeChildren,
 } from './society.js';
@@ -347,6 +348,7 @@ function startAction(world, sim, cand, t, emit, reason) {
   if (sim.state.kind === 'performing' && cand.action === 'sleep') {
     runReflection(world, sim, world.worldTick + 1, emit);
     maybeBuyCar(world, sim, world.worldTick + 1, emit); // §19 R-B: 두 sleep 전이 지점 모두 (65차)
+    collectComplaints(world, sim, world.worldTick + 1, emit); // §19.5
   }
   return true;
 }
@@ -423,7 +425,7 @@ function applyCreatePlayer(world, inp, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0,
+    hangoverUntil: -1, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -588,7 +590,7 @@ export function tick(world, inputsForThisTick = []) {
     if (s.path.length === 0) {
       s.kind = 'performing';
       // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
-      if (s.action === 'sleep') { runReflection(world, sim, t, emit); maybeBuyCar(world, sim, t, emit); } // §19 R-B
+      if (s.action === 'sleep') { runReflection(world, sim, t, emit); maybeBuyCar(world, sim, t, emit); collectComplaints(world, sim, t, emit); } // §19 R-B/§19.5
     }
     }
   }
@@ -916,6 +918,7 @@ export function tick(world, inputsForThisTick = []) {
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10
         world.reputation = floorDiv(world.reputation * world.logic.growth.repDecayPct, 100); // §17.21 일일 감쇠
+        maybePetition(world, t, day, emit); // §19.5 (70차 ③: 평판 합산·감쇠 뒤)
         { // §18.T5 일일 통계 (평판 감쇠 다음 — 54차 고정, 캡 180 shift)
           const pop = world.sims.length;
           const sumMood = world.sims.reduce((n, s2) => n + s2.mood, 0);
