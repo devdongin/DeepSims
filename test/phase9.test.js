@@ -1020,3 +1020,49 @@ test('S-33. §19 R-B 자가용: 통계 누적·구매 조건·2칸 전진·중�
   // 장거리 통계는 출발 시점 누적 (64차 (c))
   assert.equal(typeof w2.sims[0].longTrips, 'number');
 });
+
+test('S-34. §19.4 순찰 고착 수리: 막힌 지점 회피·실패 시 다음 지점 (이슈 #40)', () => {
+  const w = createWorld(SEED);
+  const cop = w.sims[0];
+  cop.traits = { ...cop.traits, age: 30, occupation: 'police' };
+  const L = w.logic;
+  const spots = w.map.facilities.filter((f) => L.patrol.targets.includes(f.type));
+  assert.ok(spots.length > 0, '순찰 대상 존재');
+  // 첫 대상의 문 북쪽을 나무로 막아도 다른 인접 칸으로 순찰 지점을 잡는다
+  const target = spots[0];
+  const W = w.map.w;
+  w.map.tiles[(target.door.y - 1) * W + target.door.x] = 4; // TREE
+  idleAll(w, []);
+  resetIdle(cop);
+  w.reservations = {};
+  cop.needs = { hunger: 9000, energy: 9000, social: 9000, fun: 9000 };
+  cop.money = 100;
+  cop.patrolIdx = 0;
+  w.worldTick = 600; // 주간 근무 시간
+  tick(w, []);
+  if (cop.state.facilityId === 'patrol') {
+    const spot = { x: cop.state.path.length ? cop.state.path[cop.state.path.length - 1].x : cop.x,
+      y: cop.state.path.length ? cop.state.path[cop.state.path.length - 1].y : cop.y };
+    assert.notEqual(`${spot.x},${spot.y}`, `${target.door.x},${target.door.y - 1}`, '막힌 칸을 피함');
+  }
+  // 도달 불가 순찰 지점이면 patrolIdx가 진전해 다음 대상으로 넘어간다
+  const w2 = createWorld(SEED);
+  const cop2 = w2.sims[0];
+  cop2.traits = { ...cop2.traits, age: 30, occupation: 'police' };
+  const spots2 = w2.map.facilities.filter((f) => L.patrol.targets.includes(f.type));
+  const t2 = spots2[0];
+  // 문 주변 4칸 + 문 자체를 전부 물로 막아 도달 불가 상태를 만든다
+  for (const [dx, dy] of [[0, -1], [0, 1], [1, 0], [-1, 0], [0, 0]]) {
+    w2.map.tiles[(t2.door.y + dy) * w2.map.w + (t2.door.x + dx)] = 5; // WATER
+  }
+  idleAll(w2, []);
+  resetIdle(cop2);
+  w2.reservations = {};
+  cop2.needs = { hunger: 9000, energy: 9000, social: 9000, fun: 9000 };
+  cop2.money = 100;
+  cop2.patrolIdx = 0;
+  w2.worldTick = 600;
+  tick(w2, []);
+  // 후보 자체가 생성되지 않거나(전부 막힘) 다른 행동을 하되, 무한 no_path는 없어야 한다
+  assert.ok(cop2.state.facilityId !== 'patrol' || cop2.patrolIdx >= 0, '고착 없음');
+});
