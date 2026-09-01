@@ -230,30 +230,11 @@ class TownScene extends Phaser.Scene {
       for (const [key, img] of pairs) {
         if (img && !this.textures.exists(key)) this.textures.addImage(key, img);
       }
+      this.ensureTerrain();
       if (world) { simSprites.forEach((s) => s.destroy()); simSprites.clear(); this.drawWorld(); }
     });
     this.cameras.main.setBackgroundColor('#14121a');
-    // §UI 지형: 잔디 반복 패턴 — 아이소 격자(주기 32×16)에 정렬된 카메라 고정 TileSprite
-    if (this.textures.exists('tile_grass') && !this.textures.exists('grass_cell')) {
-      const src = this.textures.get('tile_grass').getSourceImage();
-      const cell = document.createElement('canvas');
-      cell.width = 32; cell.height = 16;
-      const cx2 = cell.getContext('2d');
-      cx2.imageSmoothingEnabled = false;
-      // 중앙 1 + 네 모서리 1/4 — 마름모 격자 완전 타일링
-      cx2.drawImage(src, 0, 0, 32, 16);
-      for (const [ox, oy] of [[-16, -8], [16, -8], [-16, 8], [16, 8]]) cx2.drawImage(src, ox, oy, 32, 16);
-      this.textures.addCanvas('grass_cell', cell);
-    }
-    if (this.textures.exists('grass_cell')) {
-      // 월드 공간 배치 — 마름모 격자 주기(32×16)와 자연 정렬, 카메라 줌·스크롤 자동
-      const MW = 512;
-      const wpx = (MW + MW) * (TW / 2) + TW * 2;
-      const hpx = (MW + MW) * (TH / 2) + TH * 2;
-      this.grassBg = this.add.tileSprite(-(MW * TW) / 2 - TW, -TH, wpx, hpx, 'grass_cell')
-        .setOrigin(0, 0).setDepth(-10);
-      this.grassBg.tilePositionX = 16; this.grassBg.tilePositionY = 8; // 셀 중심 마름모 = 격자점
-    }
+    this.ensureTerrain();
     this.mapLayer = this.add.graphics();
     const center = () => this.cameras.main.centerOn(isoX(32, 32), isoY(32, 32)); // 구시가 중심 (128맵)
     this.cameras.main.setZoom(0.65);
@@ -315,30 +296,69 @@ class TownScene extends Phaser.Scene {
     g.lineStyle(1, 0x14121a, 0.25); g.strokePath();
   }
 
-  drawWorld() {
+  // §UI 지형(멱등): 잔디 합성 셀 + 월드 TileSprite — 네이티브 로드 완료 후에도 안전 (Codex 59차)
+  ensureTerrain() {
+    if (this.grassBg || !this.textures.exists('tile_grass')) return;
+    if (!this.textures.exists('grass_cell')) {
+      const src = this.textures.get('tile_grass').getSourceImage();
+      const cell = document.createElement('canvas');
+      cell.width = 32; cell.height = 16;
+      const cx2 = cell.getContext('2d');
+      cx2.imageSmoothingEnabled = false;
+      cx2.drawImage(src, 0, 0, 32, 16);
+      for (const [ox, oy] of [[-16, -8], [16, -8], [-16, 8], [16, 8]]) cx2.drawImage(src, ox, oy, 32, 16);
+      this.textures.addCanvas('grass_cell', cell);
+    }
+    const MW = 512;
+    const wpx = (MW + MW) * (TW / 2) + TW * 2;
+    const hpx = (MW + MW) * (TH / 2) + TH * 2;
+    this.grassBg = this.add.tileSprite(-(MW * TW) / 2 - TW, -TH, wpx, hpx, 'grass_cell')
+      .setOrigin(0, 0).setDepth(-10);
+    this.grassBg.tilePositionX = 16; this.grassBg.tilePositionY = 8;
+  }
+
+  // §UI 도로·바닥 레이어(59차 ③ 재검토): 구시가 한정(0..132) 개별 스탬프 — 실측 1,419개.
+  // RenderTexture·캔버스 베이크가 본 임베디드 CANVAS 환경에서 무출력이라(2회 검증) 실측상
+  // 원활한 스탬프 방식을 채택, 영역 캡으로 오브젝트 수를 고정한다. 밖은 그래픽 폴백.
+  bakeGround() {
+    if (!world || !this.textures.exists('tile_road')) return;
     if (this.roadSprites) for (const r of this.roadSprites) r.destroy();
     this.roadSprites = [];
+    const N = 132;
+    const map = world.map;
+    const lim = Math.min(N, map.w);
+    const hasPave = this.textures.exists('tile_pavement');
+    for (let y = 0; y < lim; y++) for (let x = 0; x < lim; x++) {
+      const t2 = map.tiles[y * map.w + x];
+      if (t2 !== 1 && !(t2 === 2 && hasPave)) continue;
+      const key = t2 === 2 ? 'tile_pavement' : 'tile_road';
+      const im = this.add.image(isoX(x, y), isoY(x, y), key).setDisplaySize(TW, TH).setDepth(-5);
+      this.roadSprites.push(im);
+    }
+  }
+
+  drawWorld() {
     const g = this.mapLayer; g.clear();
     const { map } = world;
     const hasTreeSprite = this.textures.exists('tree');
-    // §17.0: 지면은 거대 다각형 1개(잔디색) — 262k 타일 개별 렌더는 불가
-    g.fillStyle(TILE_COLORS[0], 1);
-    g.beginPath();
-    g.moveTo(isoX(0, 0), isoY(0, 0) - 8);
-    g.lineTo(isoX(map.w, 0), isoY(map.w, 0));
-    g.lineTo(isoX(map.w, map.h), isoY(map.w, map.h) + 8);
-    g.lineTo(isoX(0, map.h), isoY(0, map.h));
-    g.closePath(); g.fillPath();
+    this.ensureTerrain(); // 텍스처가 이미 로드됐다면 여기서도 멱등 생성 (59차 ①)
+    if (!this.grassBg) {
+      // §17.0: 지면은 거대 다각형 1개(잔디색) — 잔디 텍스처 부재 시 폴백 (텍스처가 있으면
+      // grassBg(-10)가 담당하고, 다각형은 스탬프(-5)를 덮으므로 그리지 않는다 — 59차 후속)
+      g.fillStyle(TILE_COLORS[0], 1);
+      g.beginPath();
+      g.moveTo(isoX(0, 0), isoY(0, 0) - 8);
+      g.lineTo(isoX(map.w, 0), isoY(map.w, 0));
+      g.lineTo(isoX(map.w, map.h), isoY(map.w, map.h) + 8);
+      g.lineTo(isoX(0, map.h), isoY(0, map.h));
+      g.closePath(); g.fillPath();
+    }
     // 비-GRASS 타일만 개별 렌더
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       const t = map.tiles[y * map.w + x];
       if (t === 0) continue;
       if (t === 4 && hasTreeSprite) continue; // 나무는 스프라이트로
-      if (t === 1 && this.textures.exists('tile_road')) { // §UI 도로 텍스처 스탬프 (전용 레이어)
-        const rd = this.add.image(isoX(x, y), isoY(x, y), 'tile_road').setDisplaySize(TW, TH).setDepth(-5);
-        this.roadSprites.push(rd);
-        continue;
-      }
+      if ((t === 1 || t === 2) && x < 132 && y < 132 && this.textures.exists('tile_road')) continue; // §UI 베이크 담당 (59차)
       const lift = (t === 3 || t === 4) ? 10 : 0; // 벽·나무는 살짝 올림
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
@@ -382,6 +402,7 @@ class TownScene extends Phaser.Scene {
       lb.setDepth(5000);
       this.propSprites.push(lb);
     }
+    this.bakeGround();
     this.syncSims();
   }
 
