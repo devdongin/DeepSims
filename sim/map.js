@@ -365,7 +365,11 @@ function rotateLocal(lx, ly, w0, h0, dir) {
 export function rotatedSize(w0, h0, dir) { return dir % 2 === 0 ? { w: w0, h: h0 } : { w: h0, h: w0 }; }
 
 // §18.T2: 타입별 기본 footprint (dir 0 기준) — zone 검증·회전 치수의 단일 권위
-export const ZONE_DIMS = { house: [6, 5], cafe: [7, 5], office: [7, 5], park: [7, 5] };
+export const ZONE_DIMS = { house: [6, 5], cafe: [7, 5], office: [7, 5], park: [7, 5],
+  apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [8, 6] }; // §18.T3
+// §18.T3: 주거 시설 판정 단일 권위 — 이민·합가·자녀·완공 이사·수면(HOME_ONLY는 homeId 기준이라 무관)
+export function isResidence(f) { return f.type === 'house' || f.type === 'apartment'; }
+
 export function zoneFootprint(type, dir) {
   const [w0, h0] = ZONE_DIMS[type];
   return rotatedSize(w0, h0, dir);
@@ -413,6 +417,42 @@ export function addBuilding(map, type, plot, dir = 0) {
         { id: 'desk2', kind: 'desk', x: x + 1, y: y + 3 },
         { id: 'desk3', kind: 'desk', x: x + 4, y: y + 3 },
       ],
+    };
+  } else if (type === 'apartment') { // §18.T3: 고밀 주거 — 침대 8
+    bld(x, y, 7, 5, x + 3, y + 4);
+    fac = {
+      id, type, x, y, w: 7, h: 5, door: { x: x + 3, y: y + 4 },
+      resources: Array.from({ length: 8 }, (_, k) => ({
+        id: `bed${k}`, kind: 'bed', x: x + 1 + (k % 4) * 1 + (k % 4 >= 2 ? 1 : 0), y: y + 1 + Math.floor(k / 4) * 2,
+      })),
+      extraBedSlots: [],
+    };
+  } else if (type === 'factory') { // §18.T3: 고용 8 — 공해 트레이드오프
+    bld(x, y, 8, 6, x + 4, y);
+    fac = {
+      id, type, x, y, w: 8, h: 6, door: { x: x + 4, y },
+      resources: Array.from({ length: 8 }, (_, k) => ({
+        id: `slot${k}`, kind: 'slot', x: x + 1 + (k % 4) * 2, y: y + 2 + Math.floor(k / 4) * 2,
+      })),
+    };
+  } else if (type === 'mall') { // §18.T3: 쇼핑(till)+여가(seat) 복합 — 51차: till 결정적 명시
+    bld(x, y, 8, 6, x + 4, y + 5);
+    fac = {
+      id, type, x, y, w: 8, h: 6, door: { x: x + 4, y: y + 5 },
+      resources: [
+        { id: 'till0', kind: 'till', x: x + 1, y: y + 1 },
+        { id: 'till1', kind: 'till', x: x + 3, y: y + 1 },
+        { id: 'till2', kind: 'till', x: x + 6, y: y + 1 },
+        { id: 'seat0', kind: 'seat', x: x + 1, y: y + 4 },
+        { id: 'seat1', kind: 'seat', x: x + 3, y: y + 4 },
+        { id: 'seat2', kind: 'seat', x: x + 6, y: y + 4 },
+      ],
+    };
+  } else if (type === 'university') { // §18.T3: 학생 근무 확장 + 졸업 가중
+    bld(x, y, 8, 6, x + 4, y + 5);
+    fac = {
+      id, type, x, y, w: 8, h: 6, door: { x: x + 4, y: y + 5 },
+      resources: [0, 1, 2, 3].map((k) => ({ id: `slot${k}`, kind: 'slot', x: x + 1 + k * 2, y: y + 2 })),
     };
   } else { // park: 무벽 스팟 6
     fac = {

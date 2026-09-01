@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 24,
+  logicSchemaVersion: 25,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -45,12 +45,14 @@ export const DEFAULT_LOGIC = {
     firefighter: { workStart: 540, workEnd: 1080, wagePct: 115, startMoney: 1200, shift: 'rotating' },
     nurse: { workStart: 540, workEnd: 1080, wagePct: 120, startMoney: 1200, shift: 'rotating' },
     politician: { workStart: 540, workEnd: 1080, wagePct: 125, startMoney: 1500, flex: true },
+    worker: { workStart: 540, workEnd: 1080, wagePct: 95, startMoney: 1000 }, // §18.T3 공장
   },
   // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
   workplace: {
-    office_worker: 'office', barista: 'cafe', freelancer: 'office', student: 'school',
+    office_worker: 'office', barista: 'cafe', freelancer: 'office', student: ['school', 'university'], // §18.T3
     retired: 'office', doctor: 'hospital', civil_servant: 'city_hall', teacher: 'school',
     police: 'police_station', firefighter: 'fire_station', nurse: 'hospital', politician: 'city_hall',
+    worker: 'factory', // §18.T3
   },
   persFactor: { socializeBase: 150, playBase: 100, workBase: 150 },
   affinity: {
@@ -192,9 +194,15 @@ export const DEFAULT_LOGIC = {
     { popMin: 120, nameKo: '대도시', unlocks: ['university'] },
   ],
   promotion: { moodBonus: 1000, repBonus: 100 },
+  // §18.T3: 공장 공해(전역 평판, 51차 위치 고정 — 복지 다음·이민 전) + 대학 졸업 가중 풀
+  pollution: { repPerFactoryPerDay: 3 },
+  graduation: {
+    poolBase: ['office_worker', 'office_worker', 'worker', 'teacher', 'civil_servant'],
+    poolUni: ['doctor', 'doctor', 'politician', 'nurse'], // 대학 보유 시 풀에 append — 단일 드로우 유지
+  },
   // §18.T2 건설 지시: 주문 시 국고 차감 (취소 없음 — 47차 합의), 착공 시 재검증
   zone: {
-    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000 },
+    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000 },
   },
   // §17.21 도시 성장 드라이브: 행동 이벤트 → 평판 → 이민 웨이브 + 선제·일자리 건설
   growth: {
@@ -436,7 +444,9 @@ function checkRanges(p, errors) {
   inRange('actions.see_doctor.duration', p.actions.see_doctor.duration, 1, 10000);
   inRange('actions.see_doctor.cost', p.actions.see_doctor.cost, 0, 1000000);
   for (const [o, w] of Object.entries(p.workplace)) {
-    if (typeof w !== 'string') errors.push(`workplace.${o} 문자열 아님`);
+    const ok = typeof w === 'string'
+      || (Array.isArray(w) && w.length > 0 && w.every((x) => typeof x === 'string')); // §18.T3 배열 허용
+    if (!ok) errors.push(`workplace.${o} 문자열/문자열 배열 아님`);
   }
   inRange('society.immigrationIntervalDays', p.society.immigrationIntervalDays, 1, 1000);
   inRange('society.childCheckDays', p.society.childCheckDays, 1, 100000);
@@ -448,7 +458,8 @@ function checkRanges(p, errors) {
   inRange('incidents.selfOutRepPenalty', p.incidents.selfOutRepPenalty, 0, 10000);
   inRange('incidents.heroAffinity', p.incidents.heroAffinity, 0, 10000);
   inRange('incidents.heroRadius', p.incidents.heroRadius, 0, 1000);
-  for (const k of ['house', 'cafe', 'office', 'park']) inRange(`zone.costs.${k}`, p.zone.costs[k], 0, 1000000);
+  for (const k of Object.keys(p.zone.costs)) inRange(`zone.costs.${k}`, p.zone.costs[k], 0, 1000000);
+  inRange('pollution.repPerFactoryPerDay', p.pollution.repPerFactoryPerDay, 0, 10000);
   if (!Array.isArray(p.tiers) || p.tiers.length < 1) errors.push('tiers: 배열 필요');
   else p.tiers.forEach((tr, i) => inRange(`tiers[${i}].popMin`, tr.popMin, 0, 1000000));
   inRange('promotion.moodBonus', p.promotion.moodBonus, 0, 10000);
@@ -553,7 +564,7 @@ function checkShape(ref, val, path, errors) {
 }
 
 // §18.T1: 시장 정책 화이트리스트 — 필드·정수·범위 검증 (서버·시뮬 공유 단일 권위)
-export const ZONEABLE = ['house', 'cafe', 'office', 'park']; // §18.T2
+export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university']; // §18.T2/T3
 
 export const POLICY_FIELDS = {
   taxPct: [5, 30],

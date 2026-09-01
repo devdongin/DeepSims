@@ -5,7 +5,7 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding, plotBuildable, zoneFootprint } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
@@ -193,7 +193,7 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
     }
     // §17.2: work는 자기 직업의 근무 시설에서만
     const ftypes = action === 'work'
-      ? [L.workplace[sim.traits.occupation]]
+      ? [].concat(L.workplace[sim.traits.occupation]) // §18.T3: 배열 허용 (student → school|university)
       : ACTION_FACILITY[action];
     for (const ftype of ftypes) {
       for (const fac of (byType.get(ftype) ?? [])) {
@@ -220,6 +220,8 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
           if (holder !== undefined && holder !== sim.id) continue;
           const cool = sim.noPathCool[`${fac.id}:${res.id}`];
           if (cool !== undefined && t < cool) continue; // §17.23 no_path 쿨다운
+          // §18.T3 mall 복합 자원: shop은 계산대(till), play는 좌석(seat)만 (51차 합의 명시)
+          if (fac.type === 'mall' && ((action === 'shop' && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
           const sc = scoreCandidate(sim, action, res, L);
           const pl = memo.pl;
           // §16.D: 우천 야외 축소 계수 — §G 곱셈 체인 확장 (base×pers×plan×weather, 축소만이라 경계 보존)
@@ -363,7 +365,7 @@ function applyCreatePlayer(world, inp, t, emit) {
   if (traitErr) return reject(`invalid_traits: ${traitErr}`);
 
   // 홈: 거주자 최소 집, 동수면 facilityId 오름차순 (결정적)
-  const houses = world.map.facilities.filter((f) => f.type === 'house');
+  const houses = world.map.facilities.filter(isResidence); // §18.T3 아파트 포함
   const counts = new Map(houses.map((h) => [h.id, 0]));
   for (const s of world.sims) if (counts.has(s.homeId)) counts.set(s.homeId, counts.get(s.homeId) + 1);
   const home = [...houses].sort((a, b) => (counts.get(a.id) - counts.get(b.id)) || (a.id < b.id ? -1 : 1))[0];
@@ -792,11 +794,11 @@ export function tick(world, inputsForThisTick = []) {
       plot.used = true;
       world.project = null;
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
-      if (fac.type === 'house') {
+      if (isResidence(fac)) { // §18.T3: 아파트 완공도 과밀 이사 대상
         // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
         let worst = null, worstOver = 0;
         for (const h of world.map.facilities) {
-          if (h.type !== 'house' || h.id === fac.id) continue;
+          if (!isResidence(h) || h.id === fac.id) continue;
           const res = world.sims.filter((x) => x.homeId === h.id).length;
           const over = res - h.resources.length;
           if (over > worstOver || (over === worstOver && worst && h.id < worst.id)) {
@@ -822,6 +824,10 @@ export function tick(world, inputsForThisTick = []) {
         maybeElection(world, t, day, emit);
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
+        { // §18.T3 공장 공해 (51차: 복지 다음·이민 전 고정) — 전역 평판 감소
+          const nf = world.map.facilities.filter((f) => f.type === 'factory').length;
+          if (nf > 0) world.reputation = Math.max(0, world.reputation - nf * L.pollution.repPerFactoryPerDay);
+        }
         maybeImmigration(world, t, day, emit);
         maybePromotion(world, t, emit); // §18.T4 (이민 직후·새해 전 — 49차 합의)
         maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)
@@ -854,7 +860,7 @@ export function tick(world, inputsForThisTick = []) {
       world.lastPlanDay = day;
       const freePlot = world.plots.find((p) => !p.used && plotBuildable(world.map, p)); // §17.23 침범 방지
       if (freePlot) {
-        const beds = world.map.facilities.filter((f) => f.type === 'house')
+        const beds = world.map.facilities.filter(isResidence)
           .reduce((n, f) => n + f.resources.length, 0);
         const cafeSeats = world.map.facilities.filter((f) => f.type === 'cafe')
           .reduce((n, f) => n + f.resources.length, 0);

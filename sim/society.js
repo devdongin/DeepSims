@@ -1,9 +1,10 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
-import { generateTraits } from './traits.js';
+import { generateTraits, occupationAllowed } from './traits.js';
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
+import { isResidence } from './map.js';
 import { learnToken as learnTokenRef } from './planning.js';
 
 // §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
@@ -122,8 +123,14 @@ export function maybeNewYear(world, t, day, emit) {
   for (const sim of world.sims) {
     sim.traits.age = Math.min(90, sim.traits.age + 1);
     if (sim.traits.occupation === 'student' && sim.traits.age >= S.graduateAge) {
-      sim.traits.occupation = 'office_worker';
-      emit('graduated', sim.id, {});
+      // §18.T3: 가중 풀 단일 드로우 (51차 (a)) — 대학 보유 마을은 고급 직업 풀 append
+      const G2 = world.logic.graduation;
+      const hasUni = world.map.facilities.some((f) => f.type === 'university');
+      const raw = hasUni ? [...G2.poolBase, ...G2.poolUni] : G2.poolBase;
+      let pool = raw.filter((o) => occupationAllowed(o, sim.traits.age)); // §18.T3: 나이 제약 (52차)
+      if (pool.length === 0) pool = ['office_worker']; // 폴백 풀 — 드로우 1회 계약 유지 (53차)
+      sim.traits.occupation = pool[rngInt(world.rngSim, pool.length)];
+      emit('graduated', sim.id, { to: sim.traits.occupation, uni: hasUni });
     } else if (sim.traits.occupation !== 'retired' && sim.traits.age >= S.retireAge) {
       sim.traits.occupation = 'retired';
       emit('retired_now', sim.id, {});
@@ -255,12 +262,12 @@ export function maybeImmigration(world, t, day, emit) {
 }
 
 function immigrateOne(world, t, emit) {
-  const beds = world.map.facilities.filter((f) => f.type === 'house')
+  const beds = world.map.facilities.filter(isResidence)
     .reduce((n, f) => n + f.resources.length, 0);
   if (beds <= world.sims.length) return; // 집 없으면 안 온다
-  // 빈 침대 있는 집 (facilityId asc)
+  // 빈 침대 있는 주거 (배열 순 — §18.T3 아파트 포함)
   const home = world.map.facilities
-    .filter((f) => f.type === 'house')
+    .filter(isResidence)
     .find((f) => f.resources.length > world.sims.filter((s) => s.homeId === f.id).length);
   if (!home) return;
   const traits = generateTraits(world.rngSim); // §12.1 순서, rngSim 소비
@@ -325,7 +332,7 @@ export function applyRomance(world, sim, t, emit) {
         emit('moved_home', hi.id, { from, to: lo.homeId });
       } else {
         // 신혼집: 두 자리 빈 집(facilityId asc)으로 부부가 함께 이사
-        const fresh = world.map.facilities.find((f) => f.type === 'house'
+        const fresh = world.map.facilities.find((f) => isResidence(f)
           && f.resources.length - world.sims.filter((s2) => s2.homeId === f.id).length >= 2);
         if (fresh) {
           for (const mover of [lo, hi]) {
