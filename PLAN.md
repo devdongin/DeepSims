@@ -1033,3 +1033,13 @@ traits: {
   — Granovetter 모델의 원의미 복원. count 기반은 한 심의 반복이 인구 비례 문턱을 즉시
   압도해 판정이 무의미했다.
 - 실측(라이브 60일 A/B): 청원 0건(감쇠만) → **8건 주기적 발생**, 평판 165→438 정상 성장.
+
+### 19.10 라운드 28 — 불만 원인 분화 (이슈 #49)
+- 라이브 오진: no_facility:eat ×125(severity 100)인데 카페 5·식당 1(좌석 24석)이 멀쩡히 있었다.
+  실체는 **빈곤** — 밥값 200원조차 없는 심이 9/40명(은퇴자 다수), 복지는 하루 5명 캡.
+  §19.5가 '위급한데 후보 0'을 전부 no_facility로 적어 잘못된 처방(식당 증설)을 유도했다.
+- 수리: unmet 기록 시 actionBlockReason(world, sim, action, t)을 호출해 사유를 태그로 남긴다.
+  no_money → kind 'no_money' / off_hours → 'blocked' / 그 외 → 'no_facility'.
+  collectComplaints가 태그로 kind를 분화한다. 드로우 0.
+- 실측(라이브 20일 재수집): no_money:eat ×382, lonely 270, hungry 11 — no_facility는 0.
+  로드맵이 '식당 증설'이 아니라 '빈곤 대책'을 가리키게 됐다.

@@ -596,7 +596,11 @@ export function collectComplaints(world, sim, t, emit) {
     let kind = null;
     if (m.kind === 'lonely') kind = 'lonely';
     else if (m.kind === 'starving') kind = 'hungry';
-    else if (m.kind === 'unmet') kind = 'no_facility'; // §19.5 (71차 ①): 위급한데 갈 곳이 없었다
+    else if (m.kind === 'unmet') { // §19.5/§19.10: 위급한데 못 한 이유별로 분화 (이슈 #49)
+      if (m.tags.includes('no_money')) kind = 'no_money';
+      else if (m.tags.includes('blocked')) kind = 'blocked';
+      else kind = 'no_facility';
+    }
     if (!kind) continue;
     const key = `${kind}|${m.placeId ?? ''}`; // no_facility의 placeId에는 막힌 행동이 들어간다
     counts.set(key, (counts.get(key) ?? 0) + 1);

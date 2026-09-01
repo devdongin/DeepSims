@@ -1021,7 +1021,11 @@ export function tick(world, inputsForThisTick = []) {
       // §19.5 (71차 ①): 위급한데 갈 곳이 없다 = 시설 부재. 첫 위급 행동 하나만 기록(틱당 ≤1,
       // ACTIONS 순이라 결정적) → 회고에서 no_facility 불만으로 집계된다.
       if (cands.length === 0) {
-        recordFact(sim, t, L, 'unmet', { placeId: critical[0], tags: [critical[0], 'no_facility'] });
+        // §19.10 (이슈 #49): 왜 못 했는지를 구분해 기록한다. 시설은 있는데 돈이 없어서 막힌
+        // 것을 '시설 부재'로 적으면 잘못된 처방(식당 증설)으로 이어진다.
+        const why = actionBlockReason(world, sim, critical[0], t);
+        const kindTag = why === 'no_money' ? 'no_money' : (why === 'off_hours' ? 'blocked' : 'no_facility');
+        recordFact(sim, t, L, 'unmet', { placeId: critical[0], tags: [critical[0], kindTag] });
       }
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });
