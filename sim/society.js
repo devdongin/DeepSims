@@ -631,7 +631,9 @@ export function maybePetition(world, t, day, emit) {
   const threshold = floorDiv(pop * C.petitionPct, 100);
   // §19.7 (이슈 #45): 사건 수가 아니라 **최근 windowDays 내에 그 불만을 제기한 사람 수**로
   // 판정한다. 한 명이 하루 열 번 외로워도 한 사람이다 — Granovetter 모델의 원의미.
-  const kinds = new Set(world.complaints.map((c) => c.kind));
+  // 72차 ①: 현재 complaints의 kind + 이미 추적 중인 petitions 키의 **합집합**을 순회한다.
+  // 감쇠로 마지막 불만이 사라진 kind가 armed=false로 남으면 영영 재무장되지 않는다.
+  const kinds = new Set([...world.complaints.map((c) => c.kind), ...Object.keys(world.petitions)]);
   const byKind = new Map();
   for (const kind of kinds) {
     let people = 0;
