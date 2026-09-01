@@ -106,7 +106,7 @@ function actionBlockReason(world, sim, action, t) {
     return sim.money < L.actions.shop.cost ? 'no_money' : 'not_needed'; // 장바구니 차 있으면 불필요 (§16.B)
   }
   if (action === 'cook_eat' && sim.groceries < 1) return 'no_groceries';
-  if (action === 'construct' && !world.project) return 'no_project';
+  if (action === 'construct' && world.projects.length === 0) return 'no_project';
   if (action === 'see_doctor' && !sim.sick) return 'healthy';
   if (action === 'build') {
     const home = world.map.facilities.find((f) => f.id === sim.homeId);
@@ -149,7 +149,14 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
     if (!actionAllowed(world, sim, action, t)) continue;
     // §16.5.B: construct는 가상 현장(site) — 활성 프로젝트 plot 모서리 4 작업 스팟
     if (action === 'construct') {
-      const pr = world.project;
+      // §19.3: 다중 프로젝트 중 맨해튼 최근접 현장으로 (동률 plotId asc — 결정적)
+      let pr = null; let best = Infinity;
+      for (const cand2 of [...world.projects].sort((a, b) => a.plotId - b.plotId)) {
+        const pl = world.plots.find((p) => p.plotId === cand2.plotId);
+        const d = Math.abs(pl.x + 3 - sim.x) + Math.abs(pl.y + 2 - sim.y);
+        if (d < best) { best = d; pr = cand2; }
+      }
+      if (!pr) continue;
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
       const spots = [
         { id: `p${pr.plotId}:spot0`, x: plot.x + 1, y: plot.y + 1 },
@@ -646,9 +653,14 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
     // §16.5: 건설 노동 — 현재 프로젝트와 같은 plot의 현장 수행만 기여
-    if (s.action === 'construct' && world.project
-      && s.resourceId.startsWith(`p${world.project.plotId}:`)) {
-      world.project.progress++;
+    if (s.action === 'construct') {
+      // §19.3: 자원 id가 프로젝트를 식별 — 옛 현장 수행자는 기여하지 않음 (§16.5 레이스 규칙 유지)
+      const m2 = /^p(\d+):/.exec(s.resourceId); // §19.3 (67차 ②): 엄격 파싱 — 'p:spot0' 오인 방지
+      if (m2) {
+        const pid = Number(m2[1]);
+        const prj = Number.isSafeInteger(pid) ? world.projects.find((p) => p.plotId === pid) : null;
+        if (prj) prj.progress++;
+      }
     }
     // 대처 행동의 틱당 효과 (§15.1.A): 기분 직접 회복 + 부수 욕구
     if (def.moodPerTick) applyMood(sim, def.moodPerTick);
@@ -829,14 +841,15 @@ export function tick(world, inputsForThisTick = []) {
   // 4c) §16.5: 완공 판정(매 틱) → 일일 도시계획 트리거 (서브순서 맨 끝).
   // 의도된 순서: 완공 틱의 facility_built/moved_home은 잔여 노동자들의 action_completed보다
   // 먼저 나온다 (완공은 4단계, 노동 정산은 각자 스틴트가 끝나는 틱의 3단계 — Codex 24차 항목 2 문서화)
+  // §19.3: plotId asc 순회 다중 완공 — 각 건물마다 축조→제거→이사→이벤트 (66차 ③)
   {
-    const pr = world.project;
+  for (const pr of [...world.projects].sort((a, b) => a.plotId - b.plotId)) {
     // required는 프로젝트 시작 시점에 스냅샷 — 진행 중 logic_update가 완공 시점을 흔들지 못함 (PLAN §16.5)
-    if (pr && pr.progress >= pr.required) {
+    if (pr.progress >= pr.required) {
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
       const fac = addBuilding(world.map, pr.type, plot, pr.dir ?? 0); // §18.T2 회전
       plot.used = true;
-      world.project = null;
+      world.projects.splice(world.projects.indexOf(pr), 1);
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
       if (isResidence(fac)) { // §18.T3: 아파트 완공도 과밀 이사 대상
         // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
@@ -857,6 +870,7 @@ export function tick(world, inputsForThisTick = []) {
         }
       }
     }
+    } // §19.3 완공 루프 종료 (일일 평가부터는 매 틱 실행)
     // §17.8 일일 평가: 질병 → 선거 → 시장 수당 → 이민 (도시계획 트리거보다 앞)
     {
       const day = floorDiv(t, 1440);
@@ -907,7 +921,10 @@ export function tick(world, inputsForThisTick = []) {
     fireSelfOut(world, t, emit); // §17.20 자연 진화 (매 틱, 4단계)
     const day = floorDiv(t, 1440);
     // §18.T2: 플레이어 주문이 자동 수요보다 우선 — 프로젝트 슬롯이 비면 즉시(일일 게이트 무관) 착공
-    while (!world.project && world.zoneOrders.length > 0) {
+    // §19.3: 계획 단계 시작 시 슬롯 수를 한 번 계산 (틱 중 국고 변동에 흔들리지 않게 — 66차 ②)
+    const maxProjects = Math.max(1, Math.min(L.growth.maxProjectSlots,
+      1 + floorDiv(world.treasury, L.growth.slotPerTreasury)));
+    while (world.projects.length < maxProjects && world.zoneOrders.length > 0) {
       const order = world.zoneOrders.shift();
       const plot = world.plots.find((p) => p.plotId === order.plotId);
       const fp2 = plot ? zoneFootprint(order.type, order.dir) : null;
@@ -918,13 +935,18 @@ export function tick(world, inputsForThisTick = []) {
       const required = world.mayorId !== null
         ? floorDiv(L.construct.laborRequired * L.election.mayorLaborPct, 100)
         : L.construct.laborRequired;
-      world.project = { plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true };
+      world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true });
       emit('project_started', null, { plotId: order.plotId, type: order.type, dir: order.dir, x: plot.x, y: plot.y, required, zoned: true });
     }
-    if (!world.project && world.lastPlanDay !== day) {
+    if (world.lastPlanDay !== day) {
       world.lastPlanDay = day;
-      const freePlot = world.plots.find((p) => !p.used && plotBuildable(world.map, p)); // §17.23 침범 방지
-      if (freePlot) {
+      // §19.3 (67차 ①): 슬롯이 찰 때까지 수요를 재평가하며 반복 착공
+      while (world.projects.length < maxProjects) {
+      // §19.3: 이미 착공 중인 공터는 제외 (중복 배정 금지)
+      const busy = new Set(world.projects.map((p) => p.plotId));
+      const freePlot = world.plots.find((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)); // §17.23 침범 방지
+      if (!freePlot) break;
+      {
         const beds = world.map.facilities.filter(isResidence)
           .reduce((n, f) => n + f.resources.length, 0);
         const cafeSeats = world.map.facilities.filter((f) => f.type === 'cafe')
@@ -952,15 +974,17 @@ export function tick(world, inputsForThisTick = []) {
         else if (officeWorkers > officeDesks) type = 'office';
         else if (pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (pop > parkSpots * L.construct.parkRatio) type = 'park';
-        if (type) {
+        if (!type) break;
+        {
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
           const required = world.mayorId !== null
             ? floorDiv(L.construct.laborRequired * L.election.mayorLaborPct, 100)
             : L.construct.laborRequired;
-          world.project = { plotId: freePlot.plotId, type, progress: 0, required };
+          world.projects.push({ plotId: freePlot.plotId, type, progress: 0, required });
           emit('project_started', null, { plotId: freePlot.plotId, type, x: freePlot.x, y: freePlot.y, required });
         }
       }
+      } // while 슬롯
     }
   }
 

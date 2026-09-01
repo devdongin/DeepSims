@@ -91,7 +91,7 @@ export function createWorld(seed) {
     lostItems: [],   // §16.C 동적 오브젝트
     itemCounter: 0,
     plots, // 공터 96곳 (§16.5/16.6/17.0) — 지형 생성 전에 확정해 보호 대상으로 넘긴다
-    project: null,         // 활성 건설 프로젝트 (최대 1)
+    projects: [], // §19.3 동시 건설 슬롯 (재정 비례)         // 활성 건설 프로젝트 (최대 1)
     lastPlanDay: -1,       // 도시계획 트리거 일일 가드
     // §17 사회 상태
     partners: {},          // simId -> partnerId (대칭)

@@ -209,7 +209,7 @@ class TownScene extends Phaser.Scene {
     // §16.5: 공터 표지판·공사 현장
     for (const p of (world.plots ?? [])) {
       if (p.used) continue;
-      if (world.project && world.project.plotId === p.plotId) {
+      if ((world.projects ?? []).some((pr) => pr.plotId === p.plotId)) { // §19.3 다중 프로젝트
         put('construction', p.x + 3, p.y + 2, 34);
       } else {
         put('plot_sign', p.x + 3, p.y + 2, 20);
@@ -1108,6 +1108,7 @@ function connect() {
         world.sims = msg.sims;
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
         if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
+        if (msg.projects !== undefined) world.projects = msg.projects; // §19.3
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.statsToday) { // §18.T5 증분 upsert (54차: 동일 day는 교체)
           world.statsHistory ??= [];

@@ -1,10 +1,10 @@
 {
- "exportedAtTick": 179760,
- "day": 124,
+ "exportedAtTick": 180778,
+ "day": 125,
  "pop": 36,
  "tier": 1,
- "treasury": 322711,
- "reputation": 368,
+ "treasury": 320871,
+ "reputation": 349,
  "policy": {
   "taxPct": 25,
   "welfareAmount": 550,
@@ -32,16 +32,6 @@
  "incidents": 0,
  "complaints": [],
  "stats14": [
-  {
-   "avgMood": -16,
-   "day": 111,
-   "employed": 29,
-   "incidents": 0,
-   "pop": 33,
-   "reputation": 256,
-   "tier": 1,
-   "treasury": 241426
-  },
   {
    "avgMood": -60,
    "day": 112,
@@ -171,44 +161,54 @@
    "reputation": 364,
    "tier": 1,
    "treasury": 319921
+  },
+  {
+   "avgMood": -33,
+   "day": 125,
+   "employed": 22,
+   "incidents": 0,
+   "pop": 36,
+   "reputation": 349,
+   "tier": 1,
+   "treasury": 320001
   }
  ],
  "events7d": [
   {
    "type": "action_started",
-   "n": 2696
+   "n": 2695
   },
   {
    "type": "action_completed",
-   "n": 2297
+   "n": 2298
   },
   {
    "type": "money_changed",
-   "n": 936
+   "n": 926
   },
   {
    "type": "conversation",
-   "n": 706
+   "n": 714
   },
   {
    "type": "lonely",
-   "n": 396
+   "n": 394
   },
   {
    "type": "greeting",
-   "n": 190
+   "n": 182
   },
   {
    "type": "relationship_changed",
-   "n": 135
+   "n": 131
   },
   {
    "type": "road_formed",
-   "n": 27
+   "n": 29
   },
   {
    "type": "welfare_paid",
-   "n": 19
+   "n": 21
   },
   {
    "type": "retired_now",
