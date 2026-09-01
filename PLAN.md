@@ -936,3 +936,10 @@ traits: {
   **졸업 가중 풀**: 단일 rngInt 유지(51차 (a)) — poolBase(사무·노동·교사·공무원) + 대학 보유 시
   poolUni(의사·정치인·간호사) append. 졸업 고정 전직(office_worker) → 드로우 1회는 행동 경계.
 - 클라: 지정 모달 2단 버튼(티어 잠금 표시), 신규 색·라벨·스프라이트·내부 매핑, 공장 연기 프롭.
+
+### 18.T5 라운드 20 — 시정 대시보드 (타이쿤 5단계 완결, Codex 54차 합의)
+- world.statsHistory(세이브 v23, 캡 180 shift): 일일 평가 끝(평판 감쇠 다음 — 54차 고정)에
+  {day,pop,treasury,reputation,avgMood(floorDiv, 인구 0 가드),employed(wagePct>0·비학생),tier}.
+- 전송: 스냅샷 전체 + tickBatch statsToday 증분(클라 동일 day upsert — 54차).
+- 클라 📊 지표 모달: 3중 라인 그래프(인구·국고·평판) + 지표 카드(행복도=(avgMood+10000)/200%,
+  고용률, 등급). §18 타이쿤 로드맵 T1~T5 전 단계 완료.

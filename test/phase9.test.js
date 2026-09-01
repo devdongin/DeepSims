@@ -863,3 +863,25 @@ test('S-29. §18.T3 시설 티어: 레시피·mall 자원 분리·공해·졸업
   const pool = [...DEFAULT_LOGIC.graduation.poolBase, ...DEFAULT_LOGIC.graduation.poolUni];
   assert.ok(pool.includes(g.payload.to), '확장 풀 멤버십');
 });
+
+test('S-30. §18.T5 일일 통계: 링 적재·산식·캡·결정성', () => {
+  const w = createWorld(SEED);
+  idleAll(w, []);
+  w.worldTick = 1440 - 1; w.weather.day = 1; w.lastDailyDay = 0; w.lastPlanDay = 1;
+  tick(w, []);
+  assert.equal(w.statsHistory.length, 1, '하루 1점');
+  const st = w.statsHistory[0];
+  assert.equal(st.day, 1);
+  assert.equal(st.pop, w.sims.length);
+  const sum = w.sims.reduce((n, s2) => n + s2.mood, 0);
+  assert.equal(st.avgMood, Math.floor(sum / w.sims.length), 'avgMood floorDiv');
+  assert.ok(st.employed <= st.pop);
+  assert.equal(typeof st.incidents, 'number', '사건 수 필드 (55차)');
+  // 캡 180
+  const w2 = createWorld(SEED);
+  for (let i = 0; i < 200; i++) w2.statsHistory.push({ day: i, pop: 1, treasury: 0, reputation: 0, avgMood: 0, employed: 0, tier: 0 });
+  idleAll(w2, []);
+  w2.worldTick = 1440 - 1; w2.weather.day = 1; w2.lastDailyDay = 0; w2.lastPlanDay = 1;
+  tick(w2, []);
+  assert.equal(w2.statsHistory.length, 180, '캡 shift');
+});

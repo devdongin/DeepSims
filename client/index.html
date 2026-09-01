@@ -68,6 +68,7 @@
           <option value="2">2시간 뒤</option><option value="6">6시간 뒤</option><option value="12">12시간 뒤</option><option value="24">내일 이 시간</option></select>
         <button id="an-btn" style="padding:3px 10px;background:#ffd97a;color:#14121a;border:0;border-radius:4px;cursor:pointer;font-weight:bold">📣 모임 공지</button>
       </div>
+      <button id="dash-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">📊 지표</button>
       <button id="policy-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🏛️ 시정</button>
       <canvas id="spark" width="120" height="30" title="인구(초록)·국고(금색) 추이" style="border:1px solid #3a2e1d;border-radius:4px;background:#14100b"></canvas>
       <div id="status">접속 중…</div>
@@ -101,6 +102,14 @@
     <div id="sidebar">
       <h2>이벤트</h2>
       <div id="feed"></div>
+    </div>
+  </div>
+  <div id="dash-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">
+    <div class="box" style="width:520px;background:#241d14;border:2px solid #c9a86a;border-radius:12px;padding:20px">
+      <h2 style="color:#ffcf6a;font-size:16px;margin-bottom:8px">📊 해솔 지표 <span style="font-size:11px;color:#9c8a6a">— 인구(초록)·국고(금)·평판(파랑), 최근 180일</span></h2>
+      <canvas id="dash-canvas" width="480" height="180" style="background:#14100b;border-radius:8px"></canvas>
+      <div id="dash-cards" style="font-size:13px;color:#ead9b0;margin-top:10px"></div>
+      <button id="dash-close" style="margin-top:12px;padding:6px 14px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer">닫기</button>
     </div>
   </div>
   <div id="zone-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">

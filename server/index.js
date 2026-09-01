@@ -141,6 +141,7 @@ function sendSnapshot(ws) {
     policy: engine.world.policy,
     zoneOrders: engine.world.zoneOrders,
     cityTier: engine.world.cityTier,
+    statsHistory: engine.world.statsHistory,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,
@@ -149,7 +150,7 @@ function sendSnapshot(ws) {
 
 engine.onBatch((msg) => {
   for (const ws of clients) {
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier });
+    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, statsToday: msg.statsToday });
     else send(ws, msg);
   }
 });

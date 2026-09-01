@@ -834,6 +834,16 @@ export function tick(world, inputsForThisTick = []) {
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10
         world.reputation = floorDiv(world.reputation * world.logic.growth.repDecayPct, 100); // §17.21 일일 감쇠
+        { // §18.T5 일일 통계 (평판 감쇠 다음 — 54차 고정, 캡 180 shift)
+          const pop = world.sims.length;
+          const sumMood = world.sims.reduce((n, s2) => n + s2.mood, 0);
+          const employed = world.sims.filter((s2) => world.logic.occupations[s2.traits.occupation].wagePct > 0
+            && s2.traits.occupation !== 'student').length;
+          world.statsHistory.push({ day, pop, treasury: world.treasury, reputation: world.reputation,
+            avgMood: pop > 0 ? floorDiv(sumMood, pop) : 0, employed, tier: world.cityTier,
+            incidents: world.incidents.length }); // 오늘의 사건 수 (55차)
+          while (world.statsHistory.length > 180) world.statsHistory.shift();
+        }
         for (const s2 of world.sims) { // §17.23 쿨다운 청소
           for (const k of Object.keys(s2.noPathCool)) if (s2.noPathCool[k] <= t) delete s2.noPathCool[k];
         }
