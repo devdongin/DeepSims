@@ -2,7 +2,7 @@
 // 라이브 루프도 매 반복 computeTarget으로 목표를 재계산한다 (PLAN §1).
 import fs from 'node:fs';
 import { advance } from '../sim/tick.js';
-import { computeTarget } from '../sim/time.js';
+import { computeTarget, TICK_DURATION_MS } from '../sim/time.js';
 import { TICKS_PER_DAY } from '../sim/constants.js';
 import { validateLogic, logicHash } from '../sim/logic.js';
 
@@ -37,6 +37,7 @@ export class Engine {
     this.catchupPromise = (async () => {
       const cap = computeTarget({
         nowUtcMs: this.now(), epochUtcMs: this.epochUtcMs, lastSimulatedTick: this.world.worldTick,
+        speed: this.speed ?? 1,
       });
       if (cap.clamped) {
         this.storage.opsLog(this.now(), 'catchup_clamped', {
@@ -55,6 +56,11 @@ export class Engine {
         await new Promise((r) => setImmediate(r));
       }
       this.catchingUp = false;
+      // 따라잡는 도중 배속이 바뀌었다면 여기서 재기준화한다 (74차 ①).
+      if (this.speedChangedDuringCatchup) {
+        this.speedChangedDuringCatchup = false;
+        this.rebaseEpoch();
+      }
       this.catchupPromise = null;
       return target;
     })();
@@ -75,6 +81,7 @@ export class Engine {
     });
     this.pendingEvents = [];
     this.uncommittedFrom = this.world.worldTick;
+    this.speed ??= 1; // §20 배속 (서버 런타임 — 시뮬 상태 아님)
     return { fromTick, toTick: this.world.worldTick, events };
   }
 
@@ -106,6 +113,29 @@ export class Engine {
     this.pendingEvents = [];
     this.pendingApplied = [];
     this.uncommittedFrom = this.world.worldTick;
+    this.speed ??= 1; // §20 배속 (서버 런타임 — 시뮬 상태 아님)
+  }
+
+  // §20 배속: epoch를 "지금이 곧 현재 틱"이 되도록 재기준화한다.
+  // ceil을 쓴다: floor면 절삭분만큼 epoch가 늦게 잡혀 재기준화마다 1틱씩 영구히
+  // 잃는다 (배속을 자주 바꾸면 누적된다). ceil은 epoch를 아주 조금 이르게 잡아
+  // 목표가 현재 틱 아래로 내려가지 않게 한다 — 남는 소수 틱은 floor가 흡수한다.
+  rebaseEpoch() {
+    this.epochUtcMs = this.now() - Math.ceil((this.world.worldTick * TICK_DURATION_MS) / (this.speed ?? 1));
+  }
+
+  // §20 배속 변경. 재기준화로 시간축이 튀지 않게 한다.
+  // 따라잡기 중이라면 즉시 재기준화하지 않는다 — catchUp은 시작 시 캡처한 target까지
+  // 계속 전진하므로, 중간 worldTick 기준으로 epoch를 잡으면 따라잡기가 그 지점을
+  // 지나친 뒤 라이브 목표가 현재 틱에 묶여 시간이 멈춘다 (74차 ①). 대신 플래그만
+  // 세워두고 catchUp이 끝난 직후 재기준화한다.
+  setSpeed(speed) {
+    const s = Math.max(1, Math.min(3, Math.floor(Number(speed) || 1)));
+    if (s === this.speed) return this.speed;
+    this.speed = s;
+    if (this.catchingUp) this.speedChangedDuringCatchup = true;
+    else this.rebaseEpoch();
+    return this.speed;
   }
 
   startLive() {
@@ -114,13 +144,14 @@ export class Engine {
       if (this.catchingUp) return;
       const cap = computeTarget({
         nowUtcMs: this.now(), epochUtcMs: this.epochUtcMs, lastSimulatedTick: this.world.worldTick,
+        speed: this.speed ?? 1,
       });
       this.epochUtcMs = cap.newEpochUtcMs;
       // 반복당 최대 1일치 — 긴 슬립 후에도 이벤트 루프를 블록하지 않고 다음 반복에서 이어 따라잡음
       const n = Math.min(cap.target - this.world.worldTick, BATCH_TICKS);
       if (n <= 0) return;
       const batch = this.runLive(n);
-      this.emit({ type: 'tickBatch', ...batch, sims: this.world.sims, treasury: this.world.treasury, incidents: this.world.incidents, cityTier: this.world.cityTier, projects: this.world.projects, statsToday: this.world.statsHistory[this.world.statsHistory.length - 1] ?? null });
+      this.emit({ type: 'tickBatch', ...batch, sims: this.world.sims, treasury: this.world.treasury, incidents: this.world.incidents, cityTier: this.world.cityTier, projects: this.world.projects, statsToday: this.world.statsHistory[this.world.statsHistory.length - 1] ?? null, speed: this.speed ?? 1 });
     }, 250);
   }
 

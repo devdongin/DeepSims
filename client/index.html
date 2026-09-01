@@ -68,6 +68,11 @@
           <option value="2">2시간 뒤</option><option value="6">6시간 뒤</option><option value="12">12시간 뒤</option><option value="24">내일 이 시간</option></select>
         <button id="an-btn" style="padding:3px 10px;background:#ffd97a;color:#14121a;border:0;border-radius:4px;cursor:pointer;font-weight:bold">📣 모임 공지</button>
       </div>
+      <div id="speed-ctl" style="display:flex;gap:3px;align-items:center">
+        <button class="spd" data-s="1" style="padding:3px 8px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:5px;cursor:pointer;font-size:11px">×1</button>
+        <button class="spd" data-s="2" style="padding:3px 8px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:5px;cursor:pointer;font-size:11px">×2</button>
+        <button class="spd" data-s="3" style="padding:3px 8px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:5px;cursor:pointer;font-size:11px">×3</button>
+      </div>
       <button id="dash-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">📊 지표</button>
       <button id="policy-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🏛️ 시정</button>
       <canvas id="spark" width="120" height="30" title="인구(초록)·국고(금색) 추이" style="border:1px solid #3a2e1d;border-radius:4px;background:#14100b"></canvas>

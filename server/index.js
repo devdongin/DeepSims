@@ -90,6 +90,16 @@ app.get('/api/report', (req, res) => {
   res.json(storage.getReport(Math.min(cursor, committed), committed));
 });
 
+// §20 배속: 서버 런타임 설정 (시뮬 상태 아님 — 입력 로그·세이브에 들어가지 않는다).
+// 틱 내용은 불변이므로 결정성·리플레이에 영향 없음.
+app.post('/api/speed', (req, res) => {
+  const s = Number(req.body?.speed);
+  if (![1, 2, 3].includes(s)) return res.status(400).json({ error: 'speed는 1, 2, 3 중 하나입니다' });
+  const applied = engine.setSpeed(s);
+  for (const ws of clients) send(ws, { type: 'speed', speed: applied }); // 모든 뷰어에 즉시 반영
+  res.json({ speed: applied });
+});
+
 app.post('/api/input', async (req, res) => {
   const { clientInputId, command, payload } = req.body ?? {};
   if (typeof clientInputId !== 'string' || clientInputId.length === 0 || clientInputId.length > 128
@@ -134,6 +144,7 @@ function sendSnapshot(ws) {
     plots: engine.world.plots,
     projects: engine.world.projects,
     complaints: engine.world.complaints,
+    speed: engine.speed ?? 1,
     partners: engine.world.partners,
     partnerStage: engine.world.partnerStage,
     mayorId: engine.world.mayorId,
@@ -151,7 +162,7 @@ function sendSnapshot(ws) {
 
 engine.onBatch((msg) => {
   for (const ws of clients) {
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday });
+    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed });
     else send(ws, msg);
   }
 });
