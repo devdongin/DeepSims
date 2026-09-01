@@ -127,8 +127,9 @@ export function maybeNewYear(world, t, day, emit) {
       const G2 = world.logic.graduation;
       const hasUni = world.map.facilities.some((f) => f.type === 'university');
       const raw = hasUni ? [...G2.poolBase, ...G2.poolUni] : G2.poolBase;
-      const pool = raw.filter((o) => occupationAllowed(o, sim.traits.age)); // §18.T3: 나이 제약 (52차)
-      sim.traits.occupation = pool.length > 0 ? pool[rngInt(world.rngSim, pool.length)] : 'office_worker';
+      let pool = raw.filter((o) => occupationAllowed(o, sim.traits.age)); // §18.T3: 나이 제약 (52차)
+      if (pool.length === 0) pool = ['office_worker']; // 폴백 풀 — 드로우 1회 계약 유지 (53차)
+      sim.traits.occupation = pool[rngInt(world.rngSim, pool.length)];
       emit('graduated', sim.id, { to: sim.traits.occupation, uni: hasUni });
     } else if (sim.traits.occupation !== 'retired' && sim.traits.age >= S.retireAge) {
       sim.traits.occupation = 'retired';

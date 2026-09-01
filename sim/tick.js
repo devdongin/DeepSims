@@ -798,7 +798,7 @@ export function tick(world, inputsForThisTick = []) {
         // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
         let worst = null, worstOver = 0;
         for (const h of world.map.facilities) {
-          if (h.type !== 'house' || h.id === fac.id) continue;
+          if (!isResidence(h) || h.id === fac.id) continue;
           const res = world.sims.filter((x) => x.homeId === h.id).length;
           const over = res - h.resources.length;
           if (over > worstOver || (over === worstOver && worst && h.id < worst.id)) {
