@@ -16,7 +16,7 @@ import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expi
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
   dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend, applyWelfare,
-  dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes,
+  dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
   updateCampaigners, maybeNewYear, maybeFestival, maybeChildren,
 } from './society.js';
@@ -309,6 +309,8 @@ function startAction(world, sim, cand, t, emit, reason) {
     sim.noPathCool[`${cand.facilityId}:${cand.resourceId}`] = t + world.logic.construct.noPathCoolTicks;
     return false;
   }
+  // §19 R-B: 장거리 이동 통계 — **출발 시점** 누적(64차 (c) 계약 고정)
+  if (path.length >= world.logic.transport.longTripMin) sim.longTrips++;
   sim.state = {
     kind: path.length === 0 ? 'performing' : 'walking',
     action: cand.action,
@@ -324,6 +326,7 @@ function startAction(world, sim, cand, t, emit, reason) {
   // onEnterPerforming(sleep) 훅 — 경로 0으로 즉시 수행 진입하는 경우 (PLAN §2 전이 훅)
   if (sim.state.kind === 'performing' && cand.action === 'sleep') {
     runReflection(world, sim, world.worldTick + 1, emit);
+    maybeBuyCar(world, sim, world.worldTick + 1, emit); // §19 R-B: 두 sleep 전이 지점 모두 (65차)
   }
   return true;
 }
@@ -400,7 +403,7 @@ function applyCreatePlayer(world, inp, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, noPathCool: {}, patrolIdx: 0,
+    hangoverUntil: -1, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -516,10 +519,14 @@ export function tick(world, inputsForThisTick = []) {
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
 
-  // 2a) walking 전진 (id 오름차순)
+  // 2a) walking 전진 (id 오름차순). §19 R-B: 자가용은 한 틱에 최대 carSpeedTiles칸을
+  // **경로 순서대로** 전진한다(64차 (a)) — 마모·습득·인사 등 칸 효과는 각 칸마다 그대로 적용.
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'walking') continue;
+    const steps = sim.hasCar ? world.logic.transport.carSpeedTiles : 1;
+    let pickedThisTick = false; // §16.C 습득은 틱당 1회 — 차량이 습득률을 배로 늘리지 않도록 (65차 대비)
+    for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
     sim.x = next.x; sim.y = next.y;
     // §15.1.B 도로화: GRASS 밟힘 마모 누적 → 임계 도달 시 ROAD 전환 (rng 미사용)
@@ -532,11 +539,12 @@ export function tick(world, inputsForThisTick = []) {
         emit('road_formed', sim.id, { x: sim.x, y: sim.y });
       }
     }
-    // §16.C: 분실물 습득 — 현재 좌표의 아이템(itemId 오름차순 첫 번째)
-    if (world.lostItems.length > 0) {
+    // §16.C: 분실물 습득 — 현재 좌표의 아이템(itemId 오름차순 첫 번째). 틱당 1회.
+    if (world.lostItems.length > 0 && !pickedThisTick) {
       // 인접(맨해튼 ≤1)까지 습득 — 정확히 밟을 확률만으론 죽은 콘텐츠 (itemId asc 첫 번째)
       const idx = world.lostItems.findIndex((it) => Math.abs(it.x - sim.x) + Math.abs(it.y - sim.y) <= 1);
       if (idx !== -1) {
+        pickedThisTick = true; // 틱당 1회 (차량 다중 전진 대비)
         const it = world.lostItems[idx];
         world.lostItems.splice(idx, 1);
         emit('item_found', sim.id, { itemId: it.itemId, amount: it.amount, x: it.x, y: it.y });
@@ -560,7 +568,8 @@ export function tick(world, inputsForThisTick = []) {
     if (s.path.length === 0) {
       s.kind = 'performing';
       // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
-      if (s.action === 'sleep') runReflection(world, sim, t, emit);
+      if (s.action === 'sleep') { runReflection(world, sim, t, emit); maybeBuyCar(world, sim, t, emit); } // §19 R-B
+    }
     }
   }
 

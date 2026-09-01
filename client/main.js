@@ -463,6 +463,12 @@ class TownScene extends Phaser.Scene {
       const prev = sp.lastTile ?? { x: sim.x, y: sim.y };
       const ddx = sim.x - prev.x, ddy = sim.y - prev.y;
       sp.lastTile = { x: sim.x, y: sim.y };
+      // §19 R-B: 자가용 보유자는 이동 중 차량 아이콘을 단다
+      if (sim.hasCar && !sp.carIcon && this.textures.exists('car')) {
+        sp.carIcon = this.add.image(10, -4, 'car').setScale(16 / this.textures.get('car').getSourceImage().height);
+        sp.add(sp.carIcon);
+      }
+      if (sp.carIcon) sp.carIcon.setVisible(sim.state?.kind === 'walking');
       const dx = tx - sp.x;
       const moving = Math.abs(dx) + Math.abs(ty - sp.y) > 1;
       const body = sp.bodyRef;
@@ -852,6 +858,7 @@ function eventText(e) {
     case 'fire_started': return `🔥 ${PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId}에 불이 났다!`;
     case 'fire_out': return e.payload.by === 'self' ? `💨 ${e.payload.facilityId}의 불이 겨우 잦아들었다… (아무도 안 왔다)` : `🚒 ${simName(e.payload.by)}이(가) ${e.payload.facilityId} 화재를 진압했다!`;
     case 'heroic_save': return `🎖️ ${n}: 영웅이 됐다`;
+    case 'car_bought': return `🚗 ${n}이(가) 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
     case 'city_promoted': return `🏙️ 해솔${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {

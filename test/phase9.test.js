@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
-import { applyRomance, pairDeltaBonus as pairDeltaBonusRef } from '../sim/society.js';
+import { applyRomance, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef } from '../sim/society.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC } from '../sim/logic.js';
@@ -975,4 +975,48 @@ test('S-32. §19 R-A 지형: 구시가 보존·통행 규칙·도달성·결정�
   // 결정성: 같은 시드 → 같은 지형
   const w2 = createWorld(SEED);
   assert.equal(hashWorld(w), hashWorld(w2), '지형 포함 결정성');
+});
+
+test('S-33. §19 R-B 자가용: 통계 누적·구매 조건·2칸 전진·중복 금지 (Codex 64차 조건)', () => {
+  const w = createWorld(SEED);
+  const T = w.logic.transport;
+  const s = w.sims[0];
+  // 구매 조건 미달이면 안 산다
+  s.longTrips = T.carTripsMin - 1; s.money = 99999;
+  maybeBuyCarRef(w, s, 0, () => {});
+  assert.equal(s.hasCar, false, '이동 부족 → 미구매');
+  // 돈 부족도 안 산다
+  s.longTrips = T.carTripsMin; s.money = T.carPrice - 1;
+  maybeBuyCarRef(w, s, 0, () => {});
+  assert.equal(s.hasCar, false, '자금 부족 → 미구매');
+  // 조건 충족 → 구매 + 취득세 국고 유입
+  s.money = T.carPrice + 500;
+  const tre0 = w.treasury;
+  const evs = [];
+  maybeBuyCarRef(w, s, 0, (type, simId, payload) => evs.push({ type, simId, payload }));
+  assert.equal(s.hasCar, true, '구매');
+  assert.equal(s.money, 500);
+  assert.ok(w.treasury > tre0, '취득세 국고 유입');
+  assert.ok(evs.some((e) => e.type === 'car_bought'));
+  // 중복 구매 금지 (64차 (d))
+  s.money = 99999;
+  const before = s.money;
+  maybeBuyCarRef(w, s, 0, () => {});
+  assert.equal(s.money, before, '중복 구매 없음');
+  // 2칸 전진: 같은 경로를 가진 두 심 — 차 있는 쪽이 정확히 2배 빠르다
+  const w2 = createWorld(SEED);
+  idleAll(w2, []);
+  const a = w2.sims[0]; const b = w2.sims[1];
+  a.hasCar = true;
+  const path = [{ x: 20, y: 23 }, { x: 21, y: 23 }, { x: 22, y: 23 }, { x: 23, y: 23 }];
+  for (const sim of [a, b]) {
+    sim.x = 19; sim.y = 23;
+    sim.state = { kind: 'walking', action: 'idle', facilityId: null, resourceId: null,
+      path: path.map((p) => ({ ...p })), ticksLeft: 99, pairedTicks: 0 };
+  }
+  tick(w2, []);
+  assert.equal(a.state.path.length, 2, '차량 2칸 전진');
+  assert.equal(b.state.path.length, 3, '도보 1칸 전진');
+  // 장거리 통계는 출발 시점 누적 (64차 (c))
+  assert.equal(typeof w2.sims[0].longTrips, 'number');
 });

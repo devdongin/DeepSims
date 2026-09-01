@@ -146,6 +146,9 @@ export function migrateWorld(world) {
     world.lostAndFound ??= []; // §17.24
     for (const sim of world.sims) sim.patrolIdx ??= 0;
   }
+  if (from < 26) {
+    for (const sim of world.sims) { sim.hasCar ??= false; sim.longTrips ??= 0; } // §19 R-B
+  }
   if (from < 25) {
     // §19 R-A: 기존 세이브에 지형 1회 주입 (구시가 0..140 보존 — generateTerrain 내부 가드)
     generateTerrain(world.map, makeRng((world.seed ^ 0x7e44a1) >>> 0), world.plots); // 공터 보호 (63차 ①)
@@ -155,7 +158,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 25;
+  world.schemaVersion = 26;
   return world;
 }
 

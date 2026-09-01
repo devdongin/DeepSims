@@ -57,6 +57,8 @@ export function createWorld(seed) {
       groceries: 0,      // §16.B 장바구니 (집밥 재료)
       noPathCool: {},    // §17.23 no_path 쿨다운
       patrolIdx: 0,      // §17.24 순찰 진행 (경찰만 의미)
+      hasCar: false,     // §19 R-B 자가용 (이동 속도 배수)
+      longTrips: 0,      // §19 R-B 장거리 이동 횟수 (출발 시점 누적 — 64차 (c))
     });
   }
 
