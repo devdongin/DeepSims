@@ -507,13 +507,22 @@ export function isWalkable(map, x, y) {
 // 구시가 0..CORE는 절대 재생성 금지). 강은 다리로만 건너고 산은 막는다 — 이동 제약이
 // 도시 형태를 만든다(시티즈 스카이라인의 지형 제약 설계).
 const CORE = 140; // 보존 경계: 구시가 + 여유
-export function generateTerrain(map, seedRng) {
+export function generateTerrain(map, seedRng, plots = null) {
   const W = map.w, H = map.h;
   const idx = (x, y) => y * W + x;
   const outside = (x, y) => x >= CORE || y >= CORE; // 구시가 밖에만 조각
+  // §19 R-A (63차 ①): 공터 footprint 보호 — 지형이 공터를 덮으면 plotBuildable(GRASS 전수)이
+  // 영원히 실패해 건설 불가가 된다. 최악 크기 7×5 + 여유 1칸을 금지 영역으로 둔다.
+  const reserved = new Set();
+  for (const p of (plots ?? [])) {
+    for (let j = p.y - 1; j < p.y + 6; j++) for (let i = p.x - 1; i < p.x + 8; i++) {
+      if (i >= 0 && j >= 0 && i < W && j < H) reserved.add(j * W + i);
+    }
+  }
   const paint = (x, y, t) => {
     if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) return;
     if (!outside(x, y)) return;
+    if (reserved.has(idx(x, y))) return; // 공터 보호 (63차 ①)
     if (map.tiles[idx(x, y)] !== TILE.GRASS) return; // 기존 지물 절대 침범 금지
     map.tiles[idx(x, y)] = t;
   };

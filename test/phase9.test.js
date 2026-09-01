@@ -963,6 +963,15 @@ test('S-32. §19 R-A 지형: 구시가 보존·통행 규칙·도달성·결정�
     const r = fac.resources[0];
     assert.ok(bfsPathRef(map, home.door.x, home.door.y, r.x, r.y), `도달 불가: ${fac.id}`);
   }
+  // 공터 보호 (Codex 63차 ①): 지형이 공터 footprint를 덮으면 건설 불가가 영구화된다.
+  // 지형 타일이 공터 7×5 안에 하나도 없어야 한다.
+  for (const p of w.plots) {
+    for (let j = p.y; j < p.y + 5; j++) for (let i = p.x; i < p.x + 7; i++) {
+      const t2 = map.tiles[j * map.w + i];
+      assert.ok(t2 < 6, `공터 ${p.plotId} 침범 (${i},${j})=${t2}`);
+    }
+  }
+  assert.equal(w.terrainVersion, 1, '신규 월드도 terrainVersion 기록 (63차 ②)');
   // 결정성: 같은 시드 → 같은 지형
   const w2 = createWorld(SEED);
   assert.equal(hashWorld(w), hashWorld(w2), '지형 포함 결정성');

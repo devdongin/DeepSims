@@ -148,7 +148,7 @@ export function migrateWorld(world) {
   }
   if (from < 25) {
     // §19 R-A: 기존 세이브에 지형 1회 주입 (구시가 0..140 보존 — generateTerrain 내부 가드)
-    generateTerrain(world.map, makeRng((world.seed ^ 0x7e44a1) >>> 0));
+    generateTerrain(world.map, makeRng((world.seed ^ 0x7e44a1) >>> 0), world.plots); // 공터 보호 (63차 ①)
     world.terrainVersion = 1; // 생성 버전 고정 (61차 합의)
   }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
