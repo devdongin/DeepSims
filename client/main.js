@@ -321,19 +321,24 @@ class TownScene extends Phaser.Scene {
   // RenderTexture·캔버스 베이크가 본 임베디드 CANVAS 환경에서 무출력이라(2회 검증) 실측상
   // 원활한 스탬프 방식을 채택, 영역 캡으로 오브젝트 수를 고정한다. 밖은 그래픽 폴백.
   bakeGround() {
+    this.stamped = new Set(); // 타일 루프와 공유 — 셋에 없으면 그래픽 폴백 (60차)
     if (!world || !this.textures.exists('tile_road')) return;
     if (this.roadSprites) for (const r of this.roadSprites) r.destroy();
     this.roadSprites = [];
     const N = 132;
+    const STAMP_MAX = 2500; // 명시적 오브젝트 상한 (60차) — 초과분은 그래픽 폴백
     const map = world.map;
     const lim = Math.min(N, map.w);
     const hasPave = this.textures.exists('tile_pavement');
-    for (let y = 0; y < lim; y++) for (let x = 0; x < lim; x++) {
-      const t2 = map.tiles[y * map.w + x];
-      if (t2 !== 1 && !(t2 === 2 && hasPave)) continue;
-      const key = t2 === 2 ? 'tile_pavement' : 'tile_road';
-      const im = this.add.image(isoX(x, y), isoY(x, y), key).setDisplaySize(TW, TH).setDepth(-5);
-      this.roadSprites.push(im);
+    for (let y = 0; y < lim && this.roadSprites.length < STAMP_MAX; y++) {
+      for (let x = 0; x < lim && this.roadSprites.length < STAMP_MAX; x++) {
+        const t2 = map.tiles[y * map.w + x];
+        if (t2 !== 1 && !(t2 === 2 && hasPave)) continue;
+        const key = t2 === 2 ? 'tile_pavement' : 'tile_road';
+        const im = this.add.image(isoX(x, y), isoY(x, y), key).setDisplaySize(TW, TH).setDepth(-5);
+        this.roadSprites.push(im);
+        this.stamped.add(y * map.w + x);
+      }
     }
   }
 
@@ -353,12 +358,13 @@ class TownScene extends Phaser.Scene {
       g.lineTo(isoX(0, map.h), isoY(0, map.h));
       g.closePath(); g.fillPath();
     }
+    this.bakeGround(); // 스탬프 셋을 타일 루프 전에 확정 (60차)
     // 비-GRASS 타일만 개별 렌더
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       const t = map.tiles[y * map.w + x];
       if (t === 0) continue;
       if (t === 4 && hasTreeSprite) continue; // 나무는 스프라이트로
-      if ((t === 1 || t === 2) && x < 132 && y < 132 && this.textures.exists('tile_road')) continue; // §UI 베이크 담당 (59차)
+      if (this.stamped && this.stamped.has(y * map.w + x)) continue; // §UI 스탬프 레이어 담당 (60차: 셋 기반 — 캡·pavement 부재 자동 폴백)
       const lift = (t === 3 || t === 4) ? 10 : 0; // 벽·나무는 살짝 올림
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
@@ -402,7 +408,6 @@ class TownScene extends Phaser.Scene {
       lb.setDepth(5000);
       this.propSprites.push(lb);
     }
-    this.bakeGround();
     this.syncSims();
   }
 
