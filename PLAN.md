@@ -1040,6 +1040,8 @@ traits: {
   §19.5가 '위급한데 후보 0'을 전부 no_facility로 적어 잘못된 처방(식당 증설)을 유도했다.
 - 수리: unmet 기록 시 actionBlockReason(world, sim, action, t)을 호출해 사유를 태그로 남긴다.
   no_money → kind 'no_money' / off_hours → 'blocked' / 그 외 → 'no_facility'.
+  **용어 정의(73차 ①)**: 'no_facility'는 '그 시설이 세상에 없다'가 아니라 **'지금 쓸 수 있는
+  시설이 없다'** — 자원 전부 예약됨·BFS 도달 불가도 여기 포함된다.
   collectComplaints가 태그로 kind를 분화한다. 드로우 0.
 - 실측(라이브 20일 재수집): no_money:eat ×382, lonely 270, hungry 11 — no_facility는 0.
   로드맵이 '식당 증설'이 아니라 '빈곤 대책'을 가리키게 됐다.

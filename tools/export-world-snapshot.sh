@@ -25,7 +25,11 @@ fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
   treasury: w.treasury, reputation: w.reputation, policy: w.policy,
   facilities, plotsFree: w.plots.filter((p) => !p.used).length,
   incidents: w.incidents.length,
-  complaints: (w.complaints ?? []).slice(-20),
+  // §19.10 (73차 ②): 원인 분화 이전에 쌓인 no_facility 항목은 오라벨일 수 있어
+  // 외부(로드맵 에이전트) 노출에서 legacy로 표시한다. 감쇠로 자연 소멸한다.
+  complaints: (w.complaints ?? []).slice(-20).map((c) => (
+    c.kind === 'no_facility' && c.sinceDay < (w.complaintReasonDay ?? 0)
+      ? { ...c, kind: 'no_facility(legacy-오라벨가능)' } : c)),
   stats14: (w.statsHistory ?? []).slice(-14),
   events7d, topFails7d,
 }, null, 1) + '\n');
