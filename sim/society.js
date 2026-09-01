@@ -233,16 +233,27 @@ export function mayorStipend(world, t, emit) {
   emit('money_changed', mayor.id, { delta: pay, balance: mayor.money, action: 'mayor' });
 }
 
-// §17.15 복지: 일일 평가(수당 다음) — 잔고 < threshold 심에게 id asc, 국고 한도 + 일일 인원 캡
+// §17.15 복지: 일일 평가(수당 다음) — 잔고 < threshold 심에게, 국고 한도 + 일일 인원 캡.
+//
+// §20.1: **필요도 순(잔고 오름차순)** 으로 지급한다. 예전에는 world.sims를 id 오름차순으로
+// 훑다가 캡에 닿으면 break 했는데, 빈곤층이 캡보다 많으면 id가 높은 빈곤층이 **영구히**
+// 배제됐다 (이슈 #55: 잔고 0원인 #36이 14일간 한 번도 못 받는 동안 #4는 11번 받았다).
+// 낮은 id는 받아서 문턱을 넘고, 다시 내려오면 또 먼저 받는 순환에 갇히는 구조였다.
+//
+// 정렬은 tick 내 순수 계산이라 rngSim을 소비하지 않는다. 동점은 id 오름차순으로 갈라
+// 결정성을 보존한다. 캡은 정책 노브로 남긴다 — 순서만 바꿔도 가장 가난한 쪽부터 채워지고
+// 받은 심은 문턱 위로 올라가 다음 날 자리를 비워주므로 **순환이 창발**한다.
 export function applyWelfare(world, t, emit) {
   const E = world.logic.economy;
   // §18.T1: 정책 오버라이드 우선
   const amount = world.policy.welfareAmount ?? E.welfareAmount;
   const threshold = world.policy.welfareThreshold ?? E.welfareThreshold;
+  const needy = world.sims
+    .filter((s) => s.money < threshold)
+    .sort((a, b) => (a.money - b.money) || (a.id - b.id));
   let paid = 0;
-  for (const sim of world.sims) {
+  for (const sim of needy) {
     if (paid >= E.welfareDailyCap || world.treasury < amount) break;
-    if (sim.money >= threshold) continue;
     world.treasury -= amount;
     sim.money += amount;
     paid++;
