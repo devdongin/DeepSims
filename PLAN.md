@@ -953,3 +953,14 @@ traits: {
   {itemId, finderId, amount, dueDay=day+holdDays(3)}, mood +200, honest(6) 기억.
 - 귀속(56차): 일일 블록 복지 다음(공해 전) — dueDay ≤ day, itemId asc, 신고 시점 경찰 존재만
   검사(이후 경찰 감소 무관). item_reported/item_returned 이벤트. 로직 v26(patrol/honesty).
+
+### 19 R-A 라운드 22 — 지형 대개편: 강·산·바다·다리 (Codex 61차 조건부 GO)
+- 타일 append: RIVER(6)·BANK(7)·SAND(8)·MOUNTAIN(9)·HILL(10)·BRIDGE(11). 기존 0..5 의미 불변.
+  isWalkable은 BLOCKING_TILES(WATER·WALL·RIVER·MOUNTAIN)+TREE만 차단 — 다리·모래·언덕·강가 통행.
+- generateTerrain(map, rngTerrain): **별도 스트림**(seed ^ 0x7e44a1)으로 rngSim 비소비(61차 ③).
+  구시가 CORE(140) 이내 절대 미개입 + GRASS 타일만 덮어써 기존 지물 침범 0.
+  사행 강 2줄(폭 2~3, 양안 강가) / 산맥 3덩어리(주변 언덕) / 남단 해변+바다 / 다리 4행(강 폭 관통).
+- 세이브 v25: 기존 세이브에 1회 주입 + terrainVersion 고정(61차 ③). 클라 TILE_TEX 매핑으로
+  스탬프 레이어가 지형 텍스처 렌더(배치 10·12 에셋).
+- 근거: 지형 제약이 도시 형태를 만든다(시티즈 스카이라인). 강 건너기는 다리를 통해서만 —
+  §19 R-B 교통 수요의 물리적 토대.

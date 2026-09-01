@@ -11,6 +11,7 @@ import { buildDailyPlan as buildDailyPlanRef } from '../sim/planning.js';
 import { circadianEnergyPct as circadianEnergyPctRef, dayHash as dayHashRef } from '../sim/chrono.js';
 import { addBuilding as addBuildingRef, plotBuildable as plotBuildableRef } from '../sim/map.js';
 import { bfsPath as bfsPathRef } from '../sim/pathfind.js';
+import { isWalkable as isWalkableRef } from '../sim/map.js';
 
 const SEED = 7777;
 
@@ -925,4 +926,44 @@ test('S-31. §17.24 순찰·정직: 경찰 순찰 정산·정직 신고·3일 �
   assert.ok(evs.some((e) => e.type === 'item_returned' && e.simId === 0), '귀속 이벤트');
   assert.equal(w3.sims[0].money, m0 + 500);
   assert.equal(w3.lostAndFound.length, 0);
+});
+
+test('S-32. §19 R-A 지형: 구시가 보존·통행 규칙·도달성·결정성', () => {
+  const w = createWorld(SEED);
+  const map = w.map;
+  const T = { RIVER: 6, BANK: 7, SAND: 8, MOUNTAIN: 9, HILL: 10, BRIDGE: 11 };
+  // 구시가(0..140) 절대 보존 — 신규 지형 타일이 하나도 없어야
+  for (let y = 0; y < 140; y++) for (let x = 0; x < 140; x++) {
+    const t = map.tiles[y * map.w + x];
+    assert.ok(t < 6, `구시가 보존 위반 (${x},${y})=${t}`);
+  }
+  // 바깥에는 실제로 생성됐다
+  const counts = {};
+  for (const t of map.tiles) counts[t] = (counts[t] ?? 0) + 1;
+  assert.ok((counts[T.RIVER] ?? 0) > 100, '강 생성');
+  assert.ok((counts[T.MOUNTAIN] ?? 0) > 50, '산 생성');
+  assert.ok((counts[T.SAND] ?? 0) > 50, '해변 생성');
+  assert.ok((counts[T.BRIDGE] ?? 0) > 0, '다리 생성');
+  // 통행 규칙: 강·산은 막고 다리·모래·언덕·강가는 통행 가능
+  const findTile = (code) => {
+    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+      if (map.tiles[y * map.w + x] === code) return { x, y };
+    }
+    return null;
+  };
+  const river = findTile(T.RIVER); const mnt = findTile(T.MOUNTAIN);
+  const bridge = findTile(T.BRIDGE); const sand = findTile(T.SAND);
+  assert.equal(isWalkableRef(map, river.x, river.y), false, '강 차단');
+  assert.equal(isWalkableRef(map, mnt.x, mnt.y), false, '산 차단');
+  assert.equal(isWalkableRef(map, bridge.x, bridge.y), true, '다리 통행');
+  assert.equal(isWalkableRef(map, sand.x, sand.y), true, '해변 통행');
+  // 기존 시설 자원 도달성 보존 (지형이 구시가를 끊지 않았는가)
+  const home = map.facilities.find((f) => f.type === 'house');
+  for (const fac of map.facilities.filter((f) => f.resources?.length && f.type !== 'pond')) {
+    const r = fac.resources[0];
+    assert.ok(bfsPathRef(map, home.door.x, home.door.y, r.x, r.y), `도달 불가: ${fac.id}`);
+  }
+  // 결정성: 같은 시드 → 같은 지형
+  const w2 = createWorld(SEED);
+  assert.equal(hashWorld(w), hashWorld(w2), '지형 포함 결정성');
 });

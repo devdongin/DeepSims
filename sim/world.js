@@ -1,7 +1,7 @@
 import { SCHEMA_VERSION } from './constants.js';
 // 월드 생성 — rngWorldgen만 사용, 이후 런타임은 rngSim (PLAN §2 네임드 스트림).
 // schemaVersion 2: traits(성별·나이·MBTI·직업)·mood·world.logic 포함 (PLAN §12.1).
-import { buildMap, defaultPlots, extraPlots128, extraPlots512 } from './map.js';
+import { buildMap, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng, rngNext, rngInt } from './prng.js';
 import { generateTraits } from './traits.js';
 import { DEFAULT_LOGIC } from './logic.js';
@@ -15,6 +15,7 @@ export const SIM_COUNT = 10;
 export function createWorld(seed) {
   const rngWorldgen = makeRng(seed);
   const map = buildMap();
+  generateTerrain(map, makeRng((seed ^ 0x7e44a1) >>> 0)); // §19 R-A 전용 스트림 (rngSim 비소비)
 
   const sims = [];
   for (let id = 0; id < SIM_COUNT; id++) {
