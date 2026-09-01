@@ -1,10 +1,10 @@
 {
- "exportedAtTick": 198348,
- "day": 137,
+ "exportedAtTick": 199908,
+ "day": 138,
  "pop": 40,
  "tier": 1,
- "treasury": 416286,
- "reputation": 150,
+ "treasury": 422696,
+ "reputation": 117,
  "policy": {
   "taxPct": 25,
   "welfareAmount": 550,
@@ -32,101 +32,98 @@
  "incidents": 0,
  "complaints": [
   {
-   "count": 253,
+   "count": 210,
    "kind": "lonely",
    "placeId": "cafe2",
-   "severity": 72,
+   "severity": 62,
    "sinceDay": 132
   },
   {
-   "count": 233,
+   "count": 194,
    "kind": "lonely",
    "placeId": "cafe3",
-   "severity": 67,
+   "severity": 57,
    "sinceDay": 132
   },
   {
-   "count": 235,
+   "count": 192,
    "kind": "lonely",
    "placeId": "park",
+   "severity": 54,
+   "sinceDay": 132
+  },
+  {
+   "count": 214,
+   "kind": "lonely",
+   "placeId": "park1",
+   "severity": 58,
+   "sinceDay": 132
+  },
+  {
+   "count": 203,
+   "kind": "lonely",
+   "placeId": "park2",
+   "severity": 74,
+   "sinceDay": 132
+  },
+  {
+   "count": 118,
+   "kind": "lonely",
+   "placeId": "park3",
+   "severity": 70,
+   "sinceDay": 132
+  },
+  {
+   "count": 211,
+   "kind": "lonely",
+   "placeId": "cafe1",
    "severity": 67,
    "sinceDay": 132
   },
   {
-   "count": 261,
+   "count": 196,
    "kind": "lonely",
-   "placeId": "park1",
-   "severity": 71,
+   "placeId": "cafe",
+   "severity": 59,
    "sinceDay": 132
   },
   {
-   "count": 238,
+   "count": 125,
    "kind": "lonely",
-   "placeId": "park2",
-   "severity": 81,
+   "placeId": "cafe4",
+   "severity": 74,
    "sinceDay": 132
   },
   {
-   "count": 141,
-   "kind": "lonely",
-   "placeId": "park3",
+   "count": 15,
+   "kind": "hungry",
+   "placeId": "",
+   "severity": 15,
+   "sinceDay": 132
+  },
+  {
+   "count": 122,
+   "kind": "no_facility(legacy-오라벨가능)",
+   "placeId": "eat",
    "severity": 83,
    "sinceDay": 132
   },
   {
-   "count": 254,
-   "kind": "lonely",
-   "placeId": "cafe1",
-   "severity": 78,
-   "sinceDay": 132
-  },
-  {
-   "count": 236,
-   "kind": "lonely",
-   "placeId": "cafe",
-   "severity": 69,
-   "sinceDay": 132
-  },
-  {
-   "count": 147,
-   "kind": "lonely",
-   "placeId": "cafe4",
-   "severity": 85,
-   "sinceDay": 132
-  },
-  {
-   "count": 19,
-   "kind": "hungry",
-   "placeId": "",
-   "severity": 19,
-   "sinceDay": 132
-  },
-  {
-   "count": 138,
-   "kind": "no_facility(legacy-오라벨가능)",
-   "placeId": "eat",
-   "severity": 100,
-   "sinceDay": 132
-  },
-  {
-   "count": 66,
+   "count": 59,
    "kind": "lonely",
    "placeId": "park4",
-   "severity": 66,
+   "severity": 59,
    "sinceDay": 132
+  },
+  {
+   "count": 33,
+   "kind": "no_money",
+   "placeId": "eat",
+   "severity": 33,
+   "sinceDay": 137
   }
  ],
  "stats14": [
-  {
-   "avgMood": 5,
-   "day": 124,
-   "employed": 22,
-   "incidents": 0,
-   "pop": 36,
-   "reputation": 364,
-   "tier": 1,
-   "treasury": 319921
-  },
   {
    "avgMood": -33,
    "day": 125,
@@ -256,56 +253,66 @@
    "reputation": 150,
    "tier": 1,
    "treasury": 408171
+  },
+  {
+   "avgMood": 2,
+   "day": 138,
+   "employed": 25,
+   "incidents": 0,
+   "pop": 40,
+   "reputation": 117,
+   "tier": 1,
+   "treasury": 416861
   }
  ],
  "events7d": [
   {
    "type": "action_started",
-   "n": 3011
+   "n": 2984
   },
   {
    "type": "action_completed",
-   "n": 2524
+   "n": 2502
   },
   {
    "type": "money_changed",
-   "n": 1072
+   "n": 1051
   },
   {
    "type": "conversation",
-   "n": 728
+   "n": 731
   },
   {
    "type": "lonely",
-   "n": 487
+   "n": 482
   },
   {
    "type": "greeting",
-   "n": 191
+   "n": 185
   },
   {
    "type": "relationship_changed",
-   "n": 121
+   "n": 114
   },
   {
    "type": "welfare_paid",
-   "n": 34
+   "n": 35
   },
   {
    "type": "fish_caught",
-   "n": 23
+   "n": 28
   },
   {
    "type": "road_formed",
-   "n": 17
-  },
-  {
-   "type": "car_bought",
-   "n": 14
+   "n": 22
   },
   {
    "type": "starving",
    "n": 13
+  },
+  {
+   "type": "car_bought",
+   "n": 11
   }
  ],
  "topFails7d": []
