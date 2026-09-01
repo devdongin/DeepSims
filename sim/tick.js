@@ -193,8 +193,8 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
     }
     // §17.24: 경찰 work = 순찰 — patrolIdx 순회 지점(공공시설 문 앞) 가상 스팟
     if (action === 'work' && sim.traits.occupation === 'police') {
-      const spots = [];
-      for (const pt of L.patrol.targets) for (const f of (byType.get(pt) ?? [])) spots.push(f);
+      // 57차: facilities 배열 순 단일 필터 — 신축 append 시 기존 인덱스 의미 보존
+      const spots = world.map.facilities.filter((f) => L.patrol.targets.includes(f.type));
       if (spots.length > 0) {
         const fac2 = spots[sim.patrolIdx % spots.length];
         const res = { id: `patrol:${fac2.id}`, x: fac2.door.x, y: fac2.door.y - 1 >= 0 ? fac2.door.y - 1 : fac2.door.y };

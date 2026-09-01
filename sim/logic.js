@@ -465,6 +465,9 @@ function checkRanges(p, errors) {
   inRange('pollution.repPerFactoryPerDay', p.pollution.repPerFactoryPerDay, 0, 10000);
   inRange('patrol.repPerPatrol', p.patrol.repPerPatrol, 0, 1000);
   inRange('honesty.base', p.honesty.base, 0, 100);
+  if (p.honesty.base + Math.floor(100 / p.honesty.tfDiv) > 100) {
+    errors.push('honesty: base + floor(100/tfDiv) ≤ 100 필요 (신고 확률 상한, 57차)');
+  }
   inRange('honesty.tfDiv', p.honesty.tfDiv, 1, 1000);
   inRange('honesty.reportMood', p.honesty.reportMood, 0, 10000);
   inRange('honesty.holdDays', p.honesty.holdDays, 0, 1000);
