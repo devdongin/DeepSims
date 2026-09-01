@@ -14,6 +14,6 @@ export function computeTarget({ nowUtcMs, epochUtcMs, lastSimulatedTick, speed =
   return {
     target,
     clamped,
-    newEpochUtcMs: clamped ? nowUtcMs - Math.floor((target * TICK_DURATION_MS) / speed) : epochUtcMs,
+    newEpochUtcMs: clamped ? nowUtcMs - Math.ceil((target * TICK_DURATION_MS) / speed) : epochUtcMs,
   };
 }
