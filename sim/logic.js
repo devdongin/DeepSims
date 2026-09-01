@@ -73,7 +73,7 @@ export const DEFAULT_LOGIC = {
       drank: 3, binge: 3, hole_up: 2, workout: 3, built_bed: 5,
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
       sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
-      new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7 },
+      new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7 },
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
     posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프
@@ -196,6 +196,14 @@ export const DEFAULT_LOGIC = {
   promotion: { moodBonus: 1000, repBonus: 100 },
   // §18.T3: 공장 공해(전역 평판, 51차 위치 고정 — 복지 다음·이민 전) + 대학 졸업 가중 풀
   pollution: { repPerFactoryPerDay: 3 },
+  // §19 R-B 교통 (64차 조건부 GO): 이동 수요가 쌓여야 수단이 생긴다 (4단계 모델의 ABM 대체)
+  transport: {
+    longTripMin: 40,      // 이 칸수 이상이면 '장거리' 1회 (출발 시점 누적)
+    carTripsMin: 12,      // 자가용 구매 문턱
+    carPrice: 6000,       // 실측 조정: 잔고 상한 ~9.8천 (soak 검증, 64차 (c))
+    carSpeedTiles: 2,     // 틱당 최대 전진 칸수 (순서대로)
+    stationDemand: 300,   // 마을 총 longTrips — 기차역 언락 (후속 라운드)
+  },
   // §17.24 순찰·정직 (56차 합의): p(신고) = honesty.base + floorDiv(TF, honesty.tfDiv) — 정수식 고정
   patrol: { targets: ['cafe', 'park', 'market', 'bar', 'mall'], repPerPatrol: 1 },
   honesty: { base: 50, tfDiv: 4, reportMood: 200, holdDays: 3 },
@@ -463,6 +471,11 @@ function checkRanges(p, errors) {
   inRange('incidents.heroRadius', p.incidents.heroRadius, 0, 1000);
   for (const k of Object.keys(p.zone.costs)) inRange(`zone.costs.${k}`, p.zone.costs[k], 0, 1000000);
   inRange('pollution.repPerFactoryPerDay', p.pollution.repPerFactoryPerDay, 0, 10000);
+  inRange('transport.longTripMin', p.transport.longTripMin, 1, 10000);
+  inRange('transport.carTripsMin', p.transport.carTripsMin, 1, 100000);
+  inRange('transport.carPrice', p.transport.carPrice, 0, 10000000);
+  inRange('transport.carSpeedTiles', p.transport.carSpeedTiles, 1, 8);
+  inRange('transport.stationDemand', p.transport.stationDemand, 1, 1000000);
   inRange('patrol.repPerPatrol', p.patrol.repPerPatrol, 0, 1000);
   inRange('honesty.base', p.honesty.base, 0, 100);
   if (p.honesty.base + Math.floor(100 / p.honesty.tfDiv) > 100) {

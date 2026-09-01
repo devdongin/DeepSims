@@ -268,7 +268,8 @@
       "new_neighbor": 3,
       "club_joined": 4,
       "heroic": 8,
-      "celebration": 7
+      "celebration": 7,
+      "milestone": 7
     },
     "recencyLut": [
       1000,
@@ -460,6 +461,13 @@
   },
   "pollution": {
     "repPerFactoryPerDay": 3
+  },
+  "transport": {
+    "longTripMin": 40,
+    "carTripsMin": 12,
+    "carPrice": 6000,
+    "carSpeedTiles": 2,
+    "stationDemand": 300
   },
   "patrol": {
     "targets": [

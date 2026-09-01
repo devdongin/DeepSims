@@ -181,7 +181,7 @@ export function maybeChildren(world, t, day, emit) {
       memories: [], memorySeq: 0, habit: {}, relTiers: {},
       lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
       knownTokens: [], plan: null, lastPlannedDay: -1,
-      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0,
+      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0,
     };
     world.sims.push(child);
     for (const row of world.affinity) row.push(0);
@@ -284,7 +284,7 @@ function immigrateOne(world, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0,
+    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -564,4 +564,19 @@ export function zoneAllowedTypes(world) {
   const out = ['house', 'cafe', 'office', 'park'];
   for (let i = 1; i <= world.cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
   return out;
+}
+
+
+// §19 R-B 자가용 구매 (회고 1회당 최대 1대, 중복 불가 — 64차 (d)). RNG 없음.
+// 장거리 이동이 반복되면 차를 산다: 이동 수요가 수단을 만든다(4단계 모델의 ABM 대체).
+export function maybeBuyCar(world, sim, t, emit) {
+  const T = world.logic.transport;
+  if (sim.hasCar) return;
+  if (sim.longTrips < T.carTripsMin) return;
+  if (sim.money < T.carPrice) return;
+  sim.money -= T.carPrice;
+  sim.hasCar = true;
+  world.treasury += floorDiv(T.carPrice * world.logic.economy.taxPct, 100); // 취득세 — 국고 순환
+  emit('car_bought', sim.id, { price: T.carPrice, longTrips: sim.longTrips, balance: sim.money });
+  recordFact(sim, t, world.logic, 'milestone', { tags: ['car'] });
 }
