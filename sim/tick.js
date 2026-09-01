@@ -524,6 +524,7 @@ export function tick(world, inputsForThisTick = []) {
     const s = sim.state;
     if (s.kind !== 'walking') continue;
     const steps = sim.hasCar ? world.logic.transport.carSpeedTiles : 1;
+    let pickedThisTick = false; // §16.C 습득은 틱당 1회 — 차량이 습득률을 배로 늘리지 않도록 (65차 대비)
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
     sim.x = next.x; sim.y = next.y;
@@ -537,11 +538,12 @@ export function tick(world, inputsForThisTick = []) {
         emit('road_formed', sim.id, { x: sim.x, y: sim.y });
       }
     }
-    // §16.C: 분실물 습득 — 현재 좌표의 아이템(itemId 오름차순 첫 번째)
-    if (world.lostItems.length > 0) {
+    // §16.C: 분실물 습득 — 현재 좌표의 아이템(itemId 오름차순 첫 번째). 틱당 1회.
+    if (world.lostItems.length > 0 && !pickedThisTick) {
       // 인접(맨해튼 ≤1)까지 습득 — 정확히 밟을 확률만으론 죽은 콘텐츠 (itemId asc 첫 번째)
       const idx = world.lostItems.findIndex((it) => Math.abs(it.x - sim.x) + Math.abs(it.y - sim.y) <= 1);
       if (idx !== -1) {
+        pickedThisTick = true; // 틱당 1회 (차량 다중 전진 대비)
         const it = world.lostItems[idx];
         world.lostItems.splice(idx, 1);
         emit('item_found', sim.id, { itemId: it.itemId, amount: it.amount, x: it.x, y: it.y });
