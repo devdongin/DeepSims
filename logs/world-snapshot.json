@@ -1,0 +1,227 @@
+{
+ "exportedAtTick": 178646,
+ "day": 124,
+ "pop": 36,
+ "tier": 1,
+ "treasury": 319921,
+ "reputation": 364,
+ "policy": {
+  "taxPct": 25,
+  "welfareAmount": 550,
+  "welfareThreshold": 300
+ },
+ "facilities": {
+  "house": 18,
+  "office": 3,
+  "cafe": 5,
+  "park": 5,
+  "bar": 1,
+  "library": 1,
+  "market": 1,
+  "pond": 1,
+  "hospital": 1,
+  "city_hall": 1,
+  "school": 1,
+  "restaurant": 1,
+  "gym": 1,
+  "cinema": 1,
+  "fire_station": 1,
+  "police_station": 1
+ },
+ "plotsFree": 72,
+ "incidents": 0,
+ "complaints": [],
+ "stats14": [
+  {
+   "avgMood": -16,
+   "day": 111,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 256,
+   "tier": 1,
+   "treasury": 241426
+  },
+  {
+   "avgMood": -60,
+   "day": 112,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 266,
+   "tier": 1,
+   "treasury": 244801
+  },
+  {
+   "avgMood": -3,
+   "day": 113,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 254,
+   "tier": 1,
+   "treasury": 254786
+  },
+  {
+   "avgMood": -77,
+   "day": 114,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 241,
+   "tier": 1,
+   "treasury": 263621
+  },
+  {
+   "avgMood": -70,
+   "day": 115,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 228,
+   "tier": 1,
+   "treasury": 273281
+  },
+  {
+   "avgMood": 18,
+   "day": 116,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 218,
+   "tier": 1,
+   "treasury": 281266
+  },
+  {
+   "avgMood": 61,
+   "day": 117,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 207,
+   "tier": 1,
+   "treasury": 285761
+  },
+  {
+   "avgMood": -37,
+   "day": 118,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 196,
+   "tier": 1,
+   "treasury": 287706
+  },
+  {
+   "avgMood": -60,
+   "day": 119,
+   "employed": 29,
+   "incidents": 0,
+   "pop": 33,
+   "reputation": 188,
+   "tier": 1,
+   "treasury": 291076
+  },
+  {
+   "avgMood": -161,
+   "day": 120,
+   "employed": 21,
+   "incidents": 0,
+   "pop": 35,
+   "reputation": 216,
+   "tier": 1,
+   "treasury": 298571
+  },
+  {
+   "avgMood": 5,
+   "day": 121,
+   "employed": 21,
+   "incidents": 0,
+   "pop": 35,
+   "reputation": 327,
+   "tier": 1,
+   "treasury": 304971
+  },
+  {
+   "avgMood": -16,
+   "day": 122,
+   "employed": 21,
+   "incidents": 1,
+   "pop": 35,
+   "reputation": 336,
+   "tier": 1,
+   "treasury": 310926
+  },
+  {
+   "avgMood": -6,
+   "day": 123,
+   "employed": 22,
+   "incidents": 0,
+   "pop": 36,
+   "reputation": 319,
+   "tier": 1,
+   "treasury": 314721
+  },
+  {
+   "avgMood": 5,
+   "day": 124,
+   "employed": 22,
+   "incidents": 0,
+   "pop": 36,
+   "reputation": 364,
+   "tier": 1,
+   "treasury": 319921
+  }
+ ],
+ "events7d": [
+  {
+   "type": "action_started",
+   "n": 2669
+  },
+  {
+   "type": "action_completed",
+   "n": 2288
+  },
+  {
+   "type": "money_changed",
+   "n": 954
+  },
+  {
+   "type": "conversation",
+   "n": 687
+  },
+  {
+   "type": "lonely",
+   "n": 378
+  },
+  {
+   "type": "greeting",
+   "n": 184
+  },
+  {
+   "type": "relationship_changed",
+   "n": 130
+  },
+  {
+   "type": "road_formed",
+   "n": 27
+  },
+  {
+   "type": "welfare_paid",
+   "n": 19
+  },
+  {
+   "type": "item_found",
+   "n": 9
+  },
+  {
+   "type": "retired_now",
+   "n": 8
+  },
+  {
+   "type": "item_spawned",
+   "n": 8
+  }
+ ],
+ "topFails7d": []
+}

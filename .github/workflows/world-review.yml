@@ -1,0 +1,131 @@
+name: 세계 상태 리뷰 (PR·이슈 → 다음 스텝 제안)
+
+# 사용자 지시: PR이나 이슈가 열릴 때 현재 세계 상태를 리뷰해서
+# 다음 스텝에서 Claude와 Codex가 작업을 이어나갈 수 있도록 코멘트로 올린다.
+#
+# 세계의 살아있는 상태(logs/world-snapshot.json — 로컬 서버가 주기적으로 커밋)를 읽어
+# 변경 내용과 대조하고, 이어받을 작업자를 위한 컨텍스트를 남긴다.
+# ANTHROPIC_API_KEY 시크릿이 있으면 LLM 심층 리뷰까지 수행한다.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  world-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 의존성 설치
+        run: npm ci || npm install
+
+      - name: 결정성·계약 검증 (테스트)
+        id: tests
+        run: |
+          set +e
+          node --test test/ > test-out.txt 2>&1
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          {
+            echo 'summary<<EOF'
+            grep -E '^# (tests|pass|fail)' test-out.txt || echo '테스트 요약 없음'
+            grep -E '^not ok' test-out.txt | head -5 || true
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 세계 상태 요약
+        id: world
+        run: |
+          {
+            echo 'snapshot<<EOF'
+            if [ -f logs/world-snapshot.json ]; then
+              node -e "
+                const w = require('./logs/world-snapshot.json');
+                console.log('- 날짜: Day ' + w.day + ' · 인구 ' + w.pop + ' · 등급 ' + (['마을','읍','시','대도시'][w.tier] ?? w.tier));
+                console.log('- 국고 ' + (w.treasury ?? 0).toLocaleString() + '원 · 평판 ' + w.reputation);
+                console.log('- 시설: ' + Object.entries(w.facilities ?? {}).map(([k,v]) => k+'×'+v).join(', '));
+                if (w.topFails7d?.length) console.log('- 최근 실패 상위: ' + w.topFails7d.map(f => f.payload + ' ×' + f.n).join(' / '));
+                if (w.complaints?.length) console.log('- 심 불만 ' + w.complaints.length + '건 (최근: ' + JSON.stringify(w.complaints.slice(-3)) + ')');
+              "
+            else
+              echo '- (세계 스냅샷 없음 — 로컬 서버가 아직 logs/world-snapshot.json을 커밋하지 않음)'
+            fi
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 계약 변경 감지 (스키마·로직 버전·드로우)
+        id: contracts
+        run: |
+          {
+            echo 'diff<<EOF'
+            BASE="${{ github.event.pull_request.base.sha }}"
+            if [ -n "$BASE" ]; then
+              git diff "$BASE"...HEAD -- sim/constants.js sim/logic.js | grep -E '^\+.*(SCHEMA_VERSION|logicSchemaVersion)' || echo '(버전 변경 없음)'
+              CNT=$(git diff "$BASE"...HEAD -- sim/ | grep -cE '^\+.*rngInt\(' || true)
+              echo "신규 rngInt 호출 라인: ${CNT}개 (0이 아니면 드로우 순서 계약 검토 필요)"
+            else
+              echo '(이슈 이벤트 — diff 없음)'
+            fi
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 다음 스텝 코멘트 작성
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const isPR = context.eventName === 'pull_request';
+            const number = isPR ? context.payload.pull_request.number : context.payload.issue.number;
+            const testSummary = `${{ toJSON(steps.tests.outputs.summary) }}`;
+            const world = `${{ toJSON(steps.world.outputs.snapshot) }}`;
+            const contracts = `${{ toJSON(steps.contracts.outputs.diff) }}`;
+            const testsOk = '${{ steps.tests.outputs.exit }}' === 'exit=0' || '${{ steps.tests.outputs.exit }}'.includes('0');
+
+            const body = [
+              '## 🌍 세계 상태 리뷰 (자동)',
+              '',
+              '### 지금 해솔의 상태',
+              JSON.parse(world),
+              '',
+              '### 결정성·계약 검증',
+              '```',
+              JSON.parse(testSummary).trim(),
+              '```',
+              '```',
+              JSON.parse(contracts).trim(),
+              '```',
+              '',
+              '### 이어받는 작업자에게 (Claude / Codex)',
+              isPR
+                ? [
+                    '- 이 PR을 머지하기 전 확인: ① 스키마/로직 버전이 올라갔다면 마이그레이션이 있는가 ② 신규 `rngInt`가 있다면 §17.8 서브순서 문서에 위치가 명시됐는가 ③ PLAN.md·docs/BEHAVIOR.md가 갱신됐는가.',
+                    '- Codex 교차 리뷰가 아직이면 `codex exec resume <세션> -m gpt-5.6-luna`로 이 diff를 검토받고, NO-GO 항목은 처방 그대로 반영한 뒤 머지한다.',
+                    '- 머지 후: main 재빌드 → 서버 재시작(포트 3000) → 라이브에서 변화가 실제로 관측되는지 확인.',
+                  ].join('\\n')
+                : [
+                    '- 이 이슈를 다음 사이클에서 집을 때: 위 세계 상태의 수치와 이슈 주장이 일치하는지 먼저 검증한다(로드맵 에이전트가 이미 근거를 붙였다면 재확인).',
+                    '- 구현 순서: 설계 → Codex 합의 → 브랜치 → 테스트 → PLAN/BEHAVIOR 갱신 → PR → 교차 리뷰 → 머지 → 재시작.',
+                    '- 인구를 직접 조작하는 해법은 금지. 창발 경로로만 해결한다.',
+                  ].join('\\n'),
+              '',
+              testsOk ? '' : '> ⚠️ 테스트가 실패했습니다. 머지 전 반드시 수리하세요.',
+            ].join('\\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              body,
+            });

@@ -14,3 +14,6 @@ client/public/props/raw4/
 client/public/props/raw5/
 client/public/props/raw6/
 client/public/props/raw7/
+
+logs/*
+!logs/world-snapshot.json
