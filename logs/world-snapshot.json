@@ -1,10 +1,10 @@
 {
- "exportedAtTick": 178646,
+ "exportedAtTick": 179760,
  "day": 124,
  "pop": 36,
  "tier": 1,
- "treasury": 319921,
- "reputation": 364,
+ "treasury": 322711,
+ "reputation": 368,
  "policy": {
   "taxPct": 25,
   "welfareAmount": 550,
@@ -176,31 +176,31 @@
  "events7d": [
   {
    "type": "action_started",
-   "n": 2669
+   "n": 2696
   },
   {
    "type": "action_completed",
-   "n": 2288
+   "n": 2297
   },
   {
    "type": "money_changed",
-   "n": 954
+   "n": 936
   },
   {
    "type": "conversation",
-   "n": 687
+   "n": 706
   },
   {
    "type": "lonely",
-   "n": 378
+   "n": 396
   },
   {
    "type": "greeting",
-   "n": 184
+   "n": 190
   },
   {
    "type": "relationship_changed",
-   "n": 130
+   "n": 135
   },
   {
    "type": "road_formed",
@@ -211,15 +211,15 @@
    "n": 19
   },
   {
-   "type": "item_found",
-   "n": 9
-  },
-  {
    "type": "retired_now",
    "n": 8
   },
   {
    "type": "item_spawned",
+   "n": 8
+  },
+  {
+   "type": "item_found",
    "n": 8
   }
  ],
