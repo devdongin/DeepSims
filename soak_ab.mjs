@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import { migrateWorld } from './sim/migrate.js';
+import { advance } from './sim/index.js';
+import { isResidence } from './sim/map.js';
+const raw = JSON.parse(fs.readFileSync('/tmp/ab_fixed.json', 'utf8'));
+const w = migrateWorld(JSON.parse(JSON.stringify(raw)));
+const pop0 = w.sims.length, tre0 = w.treasury;
+const beds0 = w.map.facilities.filter(isResidence).reduce((n,f)=>n+f.resources.length,0);
+const evs = advance(w, {}, 60 * 1440);
+const beds = w.map.facilities.filter(isResidence).reduce((n,f)=>n+f.resources.length,0);
+console.log(`${process.argv[2]}: 인구 ${pop0}→${w.sims.length} 침대 ${beds0}→${beds} 착공 ${evs.filter(e=>e.type==='project_started').length} 완공 ${evs.filter(e=>e.type==='facility_built').length} 이민 ${evs.filter(e=>e.type==='immigrated').length} no_path ${evs.filter(e=>e.type==='action_failed'&&e.payload.reason==='no_path').length} 국고 ${tre0}→${w.treasury}`);
