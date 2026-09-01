@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 27,
+  "logicSchemaVersion": 28,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -461,6 +461,12 @@
   },
   "pollution": {
     "repPerFactoryPerDay": 3
+  },
+  "complaints": {
+    "cap": 64,
+    "lonelyMin": 3,
+    "petitionPct": 40,
+    "petitionRepPenalty": 25
   },
   "transport": {
     "longTripMin": 40,

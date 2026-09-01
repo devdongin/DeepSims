@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
-import { applyRomance, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef } from '../sim/society.js';
+import { applyRomance, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
+import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC } from '../sim/logic.js';
@@ -1065,4 +1066,73 @@ test('S-34. §19.4 순찰 고착 수리: 막힌 지점 회피·실패 시 다음
   tick(w2, []);
   // 후보 자체가 생성되지 않거나(전부 막힘) 다른 행동을 하되, 무한 no_path는 없어야 한다
   assert.ok(cop2.state.facilityId !== 'patrol' || cop2.patrolIdx >= 0, '고착 없음');
+});
+
+test('S-35. §19.5 시민 불만·청원: 커서 집계·문턱 발화·재무장 (Codex 70차 조건)', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const s = w.sims[0];
+  // 외로움 기억 주입 → 회고 시 불만 적재
+  for (let i = 0; i < L.complaints.lonelyMin; i++) {
+    recordFactRef(s, 100, L, 'lonely', { placeId: 'cafe', tags: ['socialize'] });
+  }
+  collectComplaintsRef(w, s, 100, () => {});
+  const c1 = w.complaints.find((x) => x.kind === 'lonely' && x.placeId === 'cafe');
+  assert.ok(c1, '불만 적재');
+  assert.equal(c1.count, L.complaints.lonelyMin);
+  // 커서 이후만 집계 — 같은 기억을 다시 스캔해도 증가하지 않는다 (70차 ①)
+  collectComplaintsRef(w, s, 100, () => {});
+  assert.equal(w.complaints.find((x) => x.kind === 'lonely' && x.placeId === 'cafe').count,
+    L.complaints.lonelyMin, '중복 가산 없음');
+  // 문턱 초과 시 청원 1회, 재발화 없음 (70차 ②)
+  c1.count = 9999;
+  const evs = [];
+  const emit = (type, simId, payload) => evs.push({ type, simId, payload });
+  maybePetitionRef(w, 0, 1, emit);
+  assert.equal(evs.filter((e) => e.type === 'petition').length, 1, '청원 발생');
+  assert.equal(w.petitions.lonely.armed, false, '무장 해제');
+  maybePetitionRef(w, 0, 2, emit);
+  assert.equal(evs.filter((e) => e.type === 'petition').length, 1, '재발화 없음');
+  // 문턱 아래로 내려가면 재무장
+  c1.count = 0;
+  maybePetitionRef(w, 0, 3, emit);
+  assert.equal(w.petitions.lonely.armed, true, '재무장');
+  // 캡: 초과 시 oldest-first 제거 (70차 ④)
+  const w2 = createWorld(SEED);
+  for (let i = 0; i < L.complaints.cap + 5; i++) {
+    w2.complaints.push({ kind: 'lonely', placeId: `p${i}`, severity: 1, sinceDay: i, count: 1 });
+  }
+  const s2 = w2.sims[1];
+  recordFactRef(s2, 100, L, 'starving', { tags: ['eat'] });
+  collectComplaintsRef(w2, s2, 100, () => {});
+  assert.ok(w2.complaints.length <= L.complaints.cap, '캡 준수');
+  assert.ok(!w2.complaints.some((x) => x.placeId === 'p0'), '가장 오래된 것부터 제거');
+});
+
+test('S-36. §19.5 no_facility 불만: 위급한데 갈 곳이 없으면 기록된다 (Codex 71차)', () => {
+  const w = createWorld(SEED);
+  const s = w.sims[0];
+  idleAll(w, []);
+  resetIdle(s);
+  w.reservations = {};
+  // 모든 식사 시설을 제거해 '배고픈데 갈 곳 없음'을 만든다
+  w.map.facilities = w.map.facilities.filter((f) => !['cafe', 'restaurant', 'mall', 'market'].includes(f.type));
+  s.needs = { hunger: 100, energy: 9000, social: 9000, fun: 9000 }; // hunger 위급
+  s.money = 5000;
+  s.groceries = 0;
+  const before = s.memories.length;
+  tick(w, []);
+  const unmet = s.memories.slice(before).find((m) => m.kind === 'unmet');
+  assert.ok(unmet, '시설 부재 기억');
+  assert.ok(unmet.tags.includes('no_facility'), 'no_facility 태그');
+  // 회고 집계 시 no_facility 불만으로 적재된다
+  collectComplaintsRef(w, s, w.worldTick, () => {});
+  const c = w.complaints.find((x) => x.kind === 'no_facility');
+  assert.ok(c, 'no_facility 불만 적재');
+  assert.equal(c.placeId, unmet.placeId, '막힌 행동이 placeId에 기록');
+  // 틱당 최대 1건 (기억 폭발 방지)
+  const before2 = s.memories.length;
+  tick(w, []);
+  const added = s.memories.slice(before2).filter((m) => m.kind === 'unmet').length;
+  assert.ok(added <= 1, `틱당 ≤1건 (실제 ${added})`);
 });

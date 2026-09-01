@@ -133,6 +133,7 @@ function sendSnapshot(ws) {
     lostItems: engine.world.lostItems,
     plots: engine.world.plots,
     projects: engine.world.projects,
+    complaints: engine.world.complaints,
     partners: engine.world.partners,
     partnerStage: engine.world.partnerStage,
     mayorId: engine.world.mayorId,

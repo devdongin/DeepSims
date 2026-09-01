@@ -181,7 +181,7 @@ export function maybeChildren(world, t, day, emit) {
       memories: [], memorySeq: 0, habit: {}, relTiers: {},
       lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
       knownTokens: [], plan: null, lastPlannedDay: -1,
-      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0,
+      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0,
     };
     world.sims.push(child);
     for (const row of world.affinity) row.push(0);
@@ -284,7 +284,7 @@ function immigrateOne(world, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0,
+    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -579,4 +579,68 @@ export function maybeBuyCar(world, sim, t, emit) {
   world.treasury += floorDiv(T.carPrice * world.logic.economy.taxPct, 100); // 취득세 — 국고 순환
   emit('car_bought', sim.id, { price: T.carPrice, longTrips: sim.longTrips, balance: sim.money });
   recordFact(sim, t, world.logic, 'milestone', { tags: ['car'] });
+}
+
+// ---- §19.5 시민 불만 → 집단 청원 (Granovetter 문턱 모델, Codex 70차 조건 반영) ----
+
+// 회고 직후 호출. **커서 이후 신규 기억만** 집계해 중복 가산을 막는다(70차 ①). 드로우 0.
+export function collectComplaints(world, sim, t, emit) {
+  const C = world.logic.complaints;
+  const day = floorDiv(t, 1440);
+  const fresh = sim.memories.filter((m) => m.memorySeq >= sim.complaintCursor);
+  if (fresh.length === 0) return;
+  sim.complaintCursor = sim.memorySeq; // 다음 회고는 이 이후만 본다
+
+  const counts = new Map(); // `${kind}|${placeId}` → n
+  for (const m of fresh) {
+    let kind = null;
+    if (m.kind === 'lonely') kind = 'lonely';
+    else if (m.kind === 'starving') kind = 'hungry';
+    else if (m.kind === 'unmet') kind = 'no_facility'; // §19.5 (71차 ①): 위급한데 갈 곳이 없었다
+    if (!kind) continue;
+    const key = `${kind}|${m.placeId ?? ''}`; // no_facility의 placeId에는 막힌 행동이 들어간다
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  for (const [key, n] of [...counts.entries()].sort()) { // 키 정렬 — 결정적
+    const [kind, placeId] = key.split('|');
+    if (kind === 'lonely' && n < C.lonelyMin) continue;
+    const found = world.complaints.find((x) => x.kind === kind && x.placeId === placeId);
+    if (found) { // 기존 항목은 배열 위치 유지 (70차 ④)
+      found.count += n;
+      found.severity = Math.min(100, found.severity + n);
+    } else {
+      world.complaints.push({ kind, placeId, severity: Math.min(100, n), sinceDay: day, count: n });
+    }
+  }
+  // 캡 초과 시 oldest-first 제거 (sinceDay asc, 동률은 배열 순 — 70차 ④)
+  while (world.complaints.length > C.cap) {
+    let oldest = 0;
+    for (let i = 1; i < world.complaints.length; i++) {
+      if (world.complaints[i].sinceDay < world.complaints[oldest].sinceDay) oldest = i;
+    }
+    world.complaints.splice(oldest, 1);
+  }
+}
+
+// 일일 평가에서 호출 (평판 감쇠 다음·이민 전 — 70차 ③). kind별 문턱 초과 시 1회 청원,
+// 문턱 아래로 내려가야 재무장(70차 ②). RNG 없음.
+export function maybePetition(world, t, day, emit) {
+  const C = world.logic.complaints;
+  const pop = world.sims.length;
+  const threshold = floorDiv(pop * C.petitionPct, 100);
+  const byKind = new Map();
+  for (const c of world.complaints) byKind.set(c.kind, (byKind.get(c.kind) ?? 0) + c.count);
+  for (const kind of [...byKind.keys()].sort()) { // kind asc — 결정적
+    const total = byKind.get(kind);
+    const st = world.petitions[kind] ?? { lastDay: -1, armed: true };
+    if (total > threshold && st.armed) {
+      world.reputation = Math.max(0, world.reputation - C.petitionRepPenalty);
+      emit('petition', null, { kind, total, threshold, pop });
+      world.petitions[kind] = { lastDay: day, armed: false };
+    } else if (total <= threshold && !st.armed) {
+      world.petitions[kind] = { lastDay: st.lastDay, armed: true }; // 재무장
+    } else if (!world.petitions[kind]) {
+      world.petitions[kind] = st;
+    }
+  }
 }

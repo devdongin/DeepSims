@@ -58,6 +58,7 @@ export function createWorld(seed) {
       noPathCool: {},    // §17.23 no_path 쿨다운
       patrolIdx: 0,      // §17.24 순찰 진행 (경찰만 의미)
       hasCar: false,     // §19 R-B 자가용 (이동 속도 배수)
+      complaintCursor: 0, // §19.5 불만 집계 커서 (중복 가산 방지 — 70차 ①)
       longTrips: 0,      // §19 R-B 장거리 이동 횟수 (출발 시점 누적 — 64차 (c))
     });
   }
@@ -91,7 +92,9 @@ export function createWorld(seed) {
     lostItems: [],   // §16.C 동적 오브젝트
     itemCounter: 0,
     plots, // 공터 96곳 (§16.5/16.6/17.0) — 지형 생성 전에 확정해 보호 대상으로 넘긴다
-    projects: [], // §19.3 동시 건설 슬롯 (재정 비례)         // 활성 건설 프로젝트 (최대 1)
+    projects: [], // §19.3 동시 건설 슬롯 (재정 비례)
+    complaints: [], // §19.5 시민 불만: { kind, placeId, severity, sinceDay, count }
+    petitions: {},  // §19.5 kind별 { lastDay, armed } — 재발화 방지 (70차 ②)         // 활성 건설 프로젝트 (최대 1)
     lastPlanDay: -1,       // 도시계획 트리거 일일 가드
     // §17 사회 상태
     partners: {},          // simId -> partnerId (대칭)

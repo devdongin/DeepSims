@@ -1005,3 +1005,19 @@ traits: {
   facilityId === 'patrol'이면 patrolIdx++ — 실패해도 다음 순찰 지점으로 진전.
 - 실측: 같은 고정 스냅샷 60일 — no_path **2,931 → 0**, 인구 38→84 유지, 평판 493(순찰 완료가
   치안 평판으로 정상 전환).
+
+### 19.5 라운드 26 — 시민 불만 → 집단 청원 (이슈 #42, Codex 70차 조건 이행)
+- 근거: Granovetter, *Threshold Models of Collective Behavior* (개인 임계가 집단 결과를 만든다).
+  사용자 지시의 핵심 루프 '심이 스스로 문제를 제기 → 기록 → 이슈 → 수정'의 시뮬 측 절반.
+- world.complaints(세이브 v28): [{kind, placeId, severity, sinceDay, count}] 캡 64.
+  world.petitions: kind별 {lastDay, armed}. sim.complaintCursor: 집계 커서.
+- 적재(회고 직후, 두 sleep 전이 모두): **커서 이후 신규 기억만** 스캔(70차 ① 중복 가산 방지),
+  lonely ≥ lonelyMin(3)·starving ≥ 1·**unmet(위급한데 후보 0)**을 (kind, placeId)로 집계.
+  no_facility의 placeId에는 막힌 행동이 들어간다 — '무엇이 없어서 못 했는지'가 기록된다(71차 ①). 키 정렬 순회로 결정적.
+  기존 항목은 배열 위치 유지, 신규만 push, 캡 초과 시 sinceDay asc oldest-first 제거(70차 ④).
+- 청원(일일 평가, **평판 감쇠 다음**·이민 전 — 70차 ③): kind별 count 합 > floorDiv(pop×petitionPct
+  40, 100)이면 'petition' 이벤트 1회 + 평판 −25. 발화 후 armed=false, 문턱 아래로 내려가야
+  재무장(70차 ②). 드로우 0.
+- 실측(라이브 30일): 불만 20종 구조화(lonely@cafe3×586 등), 청원 2건, 재발화 없음.
+- 루프 연결: 서버 스냅샷·logs/world-snapshot.json에 complaints가 실려 로드맵 에이전트가
+  매 사이클 근거로 사용 — 세계가 스스로 말하고, 그 말이 이슈가 된다.
