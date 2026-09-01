@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 28,
+  "logicSchemaVersion": 29,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -269,7 +269,8 @@
       "club_joined": 4,
       "heroic": 8,
       "celebration": 7,
-      "milestone": 7
+      "milestone": 7,
+      "unmet": 6
     },
     "recencyLut": [
       1000,
@@ -466,7 +467,9 @@
     "cap": 64,
     "lonelyMin": 3,
     "petitionPct": 40,
-    "petitionRepPenalty": 25
+    "petitionRepPenalty": 25,
+    "decayPct": 82,
+    "windowDays": 3
   },
   "transport": {
     "longTripMin": 40,
