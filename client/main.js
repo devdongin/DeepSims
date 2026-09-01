@@ -3,7 +3,8 @@
 import Phaser from 'phaser';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
-const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c };
+const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c,
+  6: 0x3a6b9a, 7: 0x7a6b4a, 8: 0xd4c48a, 9: 0x6b6b72, 10: 0x5a7a4a, 11: 0x8a6a4a }; // §19 R-A
 const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a, restaurant: 0xd4885a, gym: 0x5ad4a8, cinema: 0x6a5ad4, police_station: 0x4a5ad4, fire_station: 0xd44a3a, apartment: 0xb08a5a, factory: 0x8a8a92, mall: 0xd49ad4, university: 0x5ab0d4 };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
 
@@ -62,7 +63,12 @@ const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'house_a', 'hou
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 BLD_KEYS.push(['firework', './ui/fx_firework.png']); // §18.T4 승급 연출
-for (const t of ['grass', 'pavement', 'road']) BLD_KEYS.push([`tile_${t}`, `./props/tile_${t}.png`]); // 지형 (§UI)
+for (const t of ['grass', 'pavement', 'road', 'river', 'river_bank', 'sand', 'mountain', 'hill', 'bridge', 'water_deep']) {
+  BLD_KEYS.push([`tile_${t}`, `./props/tile_${t}.png`]); // 지형 (§UI, §19 R-A)
+}
+// §19 R-A: 타일 코드 → 텍스처 키 (스탬프 레이어가 사용)
+const TILE_TEX = { 1: 'tile_road', 2: 'tile_pavement', 5: 'tile_water_deep', 6: 'tile_river',
+  7: 'tile_river_bank', 8: 'tile_sand', 9: 'tile_mountain', 10: 'tile_hill', 11: 'tile_bridge' };
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
 for (const t of ['house_a', 'cafe', 'office']) for (const d of [1, 2, 3]) {
   BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
@@ -333,8 +339,8 @@ class TownScene extends Phaser.Scene {
     for (let y = 0; y < lim && this.roadSprites.length < STAMP_MAX; y++) {
       for (let x = 0; x < lim && this.roadSprites.length < STAMP_MAX; x++) {
         const t2 = map.tiles[y * map.w + x];
-        if (t2 !== 1 && !(t2 === 2 && hasPave)) continue;
-        const key = t2 === 2 ? 'tile_pavement' : 'tile_road';
+        const key = TILE_TEX[t2];
+        if (!key || !this.textures.exists(key)) continue;
         const im = this.add.image(isoX(x, y), isoY(x, y), key).setDisplaySize(TW, TH).setDepth(-5);
         this.roadSprites.push(im);
         this.stamped.add(y * map.w + x);

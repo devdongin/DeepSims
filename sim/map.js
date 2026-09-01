@@ -1,3 +1,4 @@
+import { rngInt } from './prng.js'; // §19 R-A 지형 생성 (별도 스트림 주입)
 // 고정 저작 맵 48×48 (PLAN §2). rng를 쓰지 않는 순수 상수 데이터 생성.
 // 타일: 0=grass(가능) 1=road(가능) 2=floor(가능,실내) 3=wall(불가) 4=tree(불가) 5=water(불가)
 
@@ -9,7 +10,12 @@ export const MAP_W3 = 128;        // §16.6 2차 확장
 export const MAP_H3 = 128;
 export const MAP_W4 = 512;        // §17.0 3차 확장
 export const MAP_H4 = 512;
-export const TILE = { GRASS: 0, ROAD: 1, FLOOR: 2, WALL: 3, TREE: 4, WATER: 5 };
+export const TILE = { GRASS: 0, ROAD: 1, FLOOR: 2, WALL: 3, TREE: 4, WATER: 5,
+  // §19 R-A 지형 (append-only — 기존 코드 0..5 의미 불변)
+  RIVER: 6, BANK: 7, SAND: 8, MOUNTAIN: 9, HILL: 10, BRIDGE: 11 };
+
+// 통행 가능 여부의 단일 권위 확장: 강·산은 막고, 다리·모래·언덕·강가는 통행 가능
+export const BLOCKING_TILES = new Set([TILE.WATER, TILE.WALL, TILE.RIVER, TILE.MOUNTAIN]);
 
 function rect(tiles, x, y, w, h, v) {
   for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) tiles[j * MAP_W + i] = v;
@@ -493,5 +499,82 @@ export function addBuilding(map, type, plot, dir = 0) {
 export function isWalkable(map, x, y) {
   if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
   const t = map.tiles[y * map.w + x];
-  return t === TILE.GRASS || t === TILE.ROAD || t === TILE.FLOOR;
+  // §19 R-A: 강·산·물·벽만 막는다 (다리·모래·언덕·강가는 통행 가능 — 지형이 도시 형태를 만든다)
+  return !BLOCKING_TILES.has(t) && t !== TILE.TREE;
+}
+
+// §19 R-A 지형 생성 (61차 합의: 별도 rngTerrain 스트림 1회 생성, 결과를 세이브에 고정,
+// 구시가 0..CORE는 절대 재생성 금지). 강은 다리로만 건너고 산은 막는다 — 이동 제약이
+// 도시 형태를 만든다(시티즈 스카이라인의 지형 제약 설계).
+const CORE = 140; // 보존 경계: 구시가 + 여유
+export function generateTerrain(map, seedRng, plots = null) {
+  const W = map.w, H = map.h;
+  const idx = (x, y) => y * W + x;
+  const outside = (x, y) => x >= CORE || y >= CORE; // 구시가 밖에만 조각
+  // §19 R-A (63차 ①): 공터 footprint 보호 — 지형이 공터를 덮으면 plotBuildable(GRASS 전수)이
+  // 영원히 실패해 건설 불가가 된다. 최악 크기 7×5 + 여유 1칸을 금지 영역으로 둔다.
+  const reserved = new Set();
+  for (const p of (plots ?? [])) {
+    for (let j = p.y - 1; j < p.y + 6; j++) for (let i = p.x - 1; i < p.x + 8; i++) {
+      if (i >= 0 && j >= 0 && i < W && j < H) reserved.add(j * W + i);
+    }
+  }
+  const paint = (x, y, t) => {
+    if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) return;
+    if (!outside(x, y)) return;
+    if (reserved.has(idx(x, y))) return; // 공터 보호 (63차 ①)
+    if (map.tiles[idx(x, y)] !== TILE.GRASS) return; // 기존 지물 절대 침범 금지
+    map.tiles[idx(x, y)] = t;
+  };
+
+  // 1) 강 2줄 — 사행(蛇行)하며 남동으로 흐른다. 폭 2~3, 양쪽에 강가.
+  for (let r = 0; r < 2; r++) {
+    let x = CORE + 20 + rngInt(seedRng, 60) + r * 120;
+    for (let y = CORE; y < H - 2; y += 1) {
+      const wobble = rngInt(seedRng, 3) - 1; // -1..1
+      x = Math.max(CORE + 2, Math.min(W - 3, x + wobble));
+      const width = 2 + (rngInt(seedRng, 4) === 0 ? 1 : 0);
+      for (let d = 0; d < width; d++) paint(x + d, y, TILE.RIVER);
+      paint(x - 1, y, TILE.BANK);
+      paint(x + width, y, TILE.BANK);
+    }
+  }
+
+  // 2) 산맥 — 북동 모서리에 덩어리, 주변은 언덕
+  const ridges = 3;
+  for (let k = 0; k < ridges; k++) {
+    let cx = CORE + 60 + rngInt(seedRng, 200);
+    let cy = 10 + rngInt(seedRng, 80);
+    for (let step = 0; step < 90; step++) {
+      cx = Math.max(2, Math.min(W - 3, cx + rngInt(seedRng, 3) - 1));
+      cy = Math.max(2, Math.min(H - 3, cy + rngInt(seedRng, 3) - 1));
+      const rad = 1 + rngInt(seedRng, 3);
+      for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) {
+        const d = Math.abs(dx) + Math.abs(dy);
+        if (d <= rad) paint(cx + dx, cy + dy, TILE.MOUNTAIN);
+        else if (d === rad + 1) paint(cx + dx, cy + dy, TILE.HILL);
+      }
+    }
+  }
+
+  // 3) 남쪽 바다 + 모래 해변 (지도 남단 띠)
+  const shore = H - 24 - rngInt(seedRng, 10);
+  for (let y = shore; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      if (!outside(x, y)) continue;
+      const depth = y - shore;
+      if (depth <= 1) paint(x, y, TILE.SAND);
+      else paint(x, y, TILE.WATER);
+    }
+  }
+
+  // 4) 다리 — 각 강줄기를 가로지르는 통로 (도달성 보장: 강 폭 전체를 BRIDGE로)
+  const bridgeRows = [CORE + 30, CORE + 90, CORE + 160, CORE + 240];
+  for (const by of bridgeRows) {
+    if (by >= H - 2) continue;
+    for (let x = 1; x < W - 1; x++) {
+      if (map.tiles[idx(x, by)] === TILE.RIVER) map.tiles[idx(x, by)] = TILE.BRIDGE;
+    }
+  }
+  return map;
 }

@@ -2,7 +2,8 @@
 // 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
-import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512 } from './map.js';
+import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
+import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -145,11 +146,16 @@ export function migrateWorld(world) {
     world.lostAndFound ??= []; // §17.24
     for (const sim of world.sims) sim.patrolIdx ??= 0;
   }
+  if (from < 25) {
+    // §19 R-A: 기존 세이브에 지형 1회 주입 (구시가 0..140 보존 — generateTerrain 내부 가드)
+    generateTerrain(world.map, makeRng((world.seed ^ 0x7e44a1) >>> 0), world.plots); // 공터 보호 (63차 ①)
+    world.terrainVersion = 1; // 생성 버전 고정 (61차 합의)
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 24;
+  world.schemaVersion = 25;
   return world;
 }
 

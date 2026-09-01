@@ -1,7 +1,7 @@
 import { SCHEMA_VERSION } from './constants.js';
 // 월드 생성 — rngWorldgen만 사용, 이후 런타임은 rngSim (PLAN §2 네임드 스트림).
 // schemaVersion 2: traits(성별·나이·MBTI·직업)·mood·world.logic 포함 (PLAN §12.1).
-import { buildMap, defaultPlots, extraPlots128, extraPlots512 } from './map.js';
+import { buildMap, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng, rngNext, rngInt } from './prng.js';
 import { generateTraits } from './traits.js';
 import { DEFAULT_LOGIC } from './logic.js';
@@ -14,7 +14,9 @@ export const SIM_COUNT = 10;
 
 export function createWorld(seed) {
   const rngWorldgen = makeRng(seed);
+  const plots = [...defaultPlots(), ...extraPlots128(), ...extraPlots512()];
   const map = buildMap();
+  generateTerrain(map, makeRng((seed ^ 0x7e44a1) >>> 0), plots); // §19 R-A 전용 스트림 (rngSim 비소비, 공터 보호)
 
   const sims = [];
   for (let id = 0; id < SIM_COUNT; id++) {
@@ -69,6 +71,7 @@ export function createWorld(seed) {
     incidents: [], // §17.20 사건: { type:'fire', facilityId, sinceTick }
     policy: {},    // §18.T1 시장 정책 오버라이드 (화이트리스트: taxPct, welfareAmount, welfareThreshold)
     zoneOrders: [], // §18.T2 플레이어 건설 주문 FIFO: { plotId, type, dir }
+    terrainVersion: 1, // §19 R-A 지형 생성 버전 (신규·마이그레이션 동일 계약 — 63차 ②)
     cityTier: 0,    // §18.T4 도시 등급 (0 마을 → 3 대도시, 비가역)
     statsHistory: [], // §18.T5 일일 통계 링 (캡 180): {day,pop,treasury,reputation,avgMood,employed,tier}
     lostAndFound: [], // §17.24 분실물 보관: {itemId, finderId, amount, dueDay}
@@ -85,7 +88,7 @@ export function createWorld(seed) {
     weather: { day: 0, kind: 'sunny' }, // §16.D — day 0은 드로우 없이 sunny 고정 (Codex 22차 항목 1)
     lostItems: [],   // §16.C 동적 오브젝트
     itemCounter: 0,
-    plots: [...defaultPlots(), ...extraPlots128(), ...extraPlots512()], // 공터 96곳 (§16.5/16.6/17.0)
+    plots, // 공터 96곳 (§16.5/16.6/17.0) — 지형 생성 전에 확정해 보호 대상으로 넘긴다
     project: null,         // 활성 건설 프로젝트 (최대 1)
     lastPlanDay: -1,       // 도시계획 트리거 일일 가드
     // §17 사회 상태
