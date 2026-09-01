@@ -25,8 +25,8 @@ echo "$ISSUES" | while IFS=$'\t' read -r NUM TITLE; do
   [ -z "$NUM" ] && continue
   [ "$REVIEWED" -ge "$LIMIT" ] && break
 
-  # 이미 Codex 리뷰가 달린 이슈는 건너뛴다 (마커로 식별)
-  if gh issue view "$NUM" --json comments --jq '.comments[].body' 2>/dev/null | grep -q "Codex 이슈 리뷰"; then
+  # 이미 Codex 정식 리뷰가 달린 이슈는 건너뛴다 (푸터 마커로 식별 — 안내 코멘트와 구분)
+  if gh issue view "$NUM" --json comments --jq '.comments[].body' 2>/dev/null | grep -q "자동 리뷰 · 세계 상태와 코드 대조"; then
     continue
   fi
 
