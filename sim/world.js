@@ -54,6 +54,7 @@ export function createWorld(seed) {
       sick: null,        // §17.3: null | { kind, untilTick }
       groceries: 0,      // §16.B 장바구니 (집밥 재료)
       noPathCool: {},    // §17.23 no_path 쿨다운
+      patrolIdx: 0,      // §17.24 순찰 진행 (경찰만 의미)
     });
   }
 
@@ -70,6 +71,7 @@ export function createWorld(seed) {
     zoneOrders: [], // §18.T2 플레이어 건설 주문 FIFO: { plotId, type, dir }
     cityTier: 0,    // §18.T4 도시 등급 (0 마을 → 3 대도시, 비가역)
     statsHistory: [], // §18.T5 일일 통계 링 (캡 180): {day,pop,treasury,reputation,avgMood,employed,tier}
+    lostAndFound: [], // §17.24 분실물 보관: {itemId, finderId, amount, dueDay}
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),

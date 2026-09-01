@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 25,
+  logicSchemaVersion: 26,
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -196,6 +196,9 @@ export const DEFAULT_LOGIC = {
   promotion: { moodBonus: 1000, repBonus: 100 },
   // §18.T3: 공장 공해(전역 평판, 51차 위치 고정 — 복지 다음·이민 전) + 대학 졸업 가중 풀
   pollution: { repPerFactoryPerDay: 3 },
+  // §17.24 순찰·정직 (56차 합의): p(신고) = honesty.base + floorDiv(TF, honesty.tfDiv) — 정수식 고정
+  patrol: { targets: ['cafe', 'park', 'market', 'bar', 'mall'], repPerPatrol: 1 },
+  honesty: { base: 50, tfDiv: 4, reportMood: 200, holdDays: 3 },
   graduation: {
     poolBase: ['office_worker', 'office_worker', 'worker', 'teacher', 'civil_servant'],
     poolUni: ['doctor', 'doctor', 'politician', 'nurse'], // 대학 보유 시 풀에 append — 단일 드로우 유지
@@ -460,6 +463,14 @@ function checkRanges(p, errors) {
   inRange('incidents.heroRadius', p.incidents.heroRadius, 0, 1000);
   for (const k of Object.keys(p.zone.costs)) inRange(`zone.costs.${k}`, p.zone.costs[k], 0, 1000000);
   inRange('pollution.repPerFactoryPerDay', p.pollution.repPerFactoryPerDay, 0, 10000);
+  inRange('patrol.repPerPatrol', p.patrol.repPerPatrol, 0, 1000);
+  inRange('honesty.base', p.honesty.base, 0, 100);
+  if (p.honesty.base + Math.floor(100 / p.honesty.tfDiv) > 100) {
+    errors.push('honesty: base + floor(100/tfDiv) ≤ 100 필요 (신고 확률 상한, 57차)');
+  }
+  inRange('honesty.tfDiv', p.honesty.tfDiv, 1, 1000);
+  inRange('honesty.reportMood', p.honesty.reportMood, 0, 10000);
+  inRange('honesty.holdDays', p.honesty.holdDays, 0, 1000);
   if (!Array.isArray(p.tiers) || p.tiers.length < 1) errors.push('tiers: 배열 필요');
   else p.tiers.forEach((tr, i) => inRange(`tiers[${i}].popMin`, tr.popMin, 0, 1000000));
   inRange('promotion.moodBonus', p.promotion.moodBonus, 0, 10000);

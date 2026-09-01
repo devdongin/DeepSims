@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 25,
+  "logicSchemaVersion": 26,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -193,7 +193,10 @@
     "office_worker": "office",
     "barista": "cafe",
     "freelancer": "office",
-    "student": "school",
+    "student": [
+      "school",
+      "university"
+    ],
     "retired": "office",
     "doctor": "hospital",
     "civil_servant": "city_hall",
@@ -457,6 +460,22 @@
   },
   "pollution": {
     "repPerFactoryPerDay": 3
+  },
+  "patrol": {
+    "targets": [
+      "cafe",
+      "park",
+      "market",
+      "bar",
+      "mall"
+    ],
+    "repPerPatrol": 1
+  },
+  "honesty": {
+    "base": 50,
+    "tfDiv": 4,
+    "reportMood": 200,
+    "holdDays": 3
   },
   "graduation": {
     "poolBase": [
