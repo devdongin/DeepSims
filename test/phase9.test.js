@@ -1191,3 +1191,46 @@ test('S-38. §19.10 불만 원인 분화: 돈이 없어서 막힌 것은 시설 
   const u2 = s2.memories.slice(b2).find((m) => m.kind === 'unmet');
   assert.ok(u2 && u2.tags.includes('no_facility'), '진짜 시설 부재는 no_facility');
 });
+
+test('S-56. §20.1 복지는 필요도 순 — id가 높아도 가장 가난한 심이 먼저 받는다 (#55)', () => {
+  // 회귀 방지: 예전에는 world.sims를 id asc로 훑다 캡에 닿으면 break 해서,
+  // 빈곤층이 캡보다 많으면 id가 높은 빈곤층이 영구히 배제됐다.
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const amount = L.economy.welfareAmount;
+  const cap = L.economy.welfareDailyCap;
+  w.treasury = amount * 100; // 국고는 넉넉 — 캡만 작동하게
+  const threshold = L.economy.welfareThreshold;
+  // 모두 문턱 위로 올려두고, 높은 id 쪽에 더 가난한 심을 심는다.
+  for (const s of w.sims) s.money = threshold + 1000;
+  const n = w.sims.length;
+  const poorest = w.sims[n - 1]; poorest.money = 0;           // 가장 가난 — 가장 높은 id
+  const second = w.sims[n - 2]; second.money = 10;
+  const third = w.sims[n - 3]; third.money = 20;
+  const lowIdOk = w.sims[0]; lowIdOk.money = threshold - 1;   // 자격은 되지만 덜 가난, id는 최저
+  idleAll(w, []);
+  w.worldTick = 1440 - 1; w.weather.day = 1; w.lastDailyDay = 0; w.lastPlanDay = 1;
+  const evs = tick(w, []);
+  const wp = evs.filter((e) => e.type === 'welfare_paid');
+  assert.ok(wp.length > 0 && wp.length <= cap, '캡 이내로 지급');
+  assert.equal(wp[0].simId, poorest.id, '가장 가난한 심이 첫 번째 (id가 가장 높아도)');
+  assert.equal(wp[1].simId, second.id, '그다음 가난한 심');
+  assert.equal(wp[2].simId, third.id, '세 번째');
+  const order = wp.map((e) => e.simId);
+  assert.ok(order.indexOf(poorest.id) < order.indexOf(lowIdOk.id),
+    'id 최저(0)보다 잔고 0원인 심이 먼저 — id 편향이 사라졌다');
+});
+
+test('S-57. §20.1 복지 동점은 id asc로 결정적으로 갈린다', () => {
+  const run = () => {
+    const w = createWorld(SEED);
+    w.treasury = w.logic.economy.welfareAmount * 100;
+    for (const s of w.sims) s.money = 0; // 전원 동점
+    idleAll(w, []);
+    w.worldTick = 1440 - 1; w.weather.day = 1; w.lastDailyDay = 0; w.lastPlanDay = 1;
+    return tick(w, []).filter((e) => e.type === 'welfare_paid').map((e) => e.simId);
+  };
+  const a = run(), b = run();
+  assert.deepEqual(a, b, '두 번 돌려도 동일 (결정적)');
+  assert.deepEqual(a, [...a].sort((x, y) => x - y), '동점이면 id asc');
+});
