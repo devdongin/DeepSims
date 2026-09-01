@@ -62,6 +62,7 @@ const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'house_a', 'hou
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 BLD_KEYS.push(['firework', './ui/fx_firework.png']); // §18.T4 승급 연출
+for (const t of ['grass', 'pavement', 'road']) BLD_KEYS.push([`tile_${t}`, `./props/tile_${t}.png`]); // 지형 (§UI)
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
 for (const t of ['house_a', 'cafe', 'office']) for (const d of [1, 2, 3]) {
   BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
@@ -232,6 +233,27 @@ class TownScene extends Phaser.Scene {
       if (world) { simSprites.forEach((s) => s.destroy()); simSprites.clear(); this.drawWorld(); }
     });
     this.cameras.main.setBackgroundColor('#14121a');
+    // §UI 지형: 잔디 반복 패턴 — 아이소 격자(주기 32×16)에 정렬된 카메라 고정 TileSprite
+    if (this.textures.exists('tile_grass') && !this.textures.exists('grass_cell')) {
+      const src = this.textures.get('tile_grass').getSourceImage();
+      const cell = document.createElement('canvas');
+      cell.width = 32; cell.height = 16;
+      const cx2 = cell.getContext('2d');
+      cx2.imageSmoothingEnabled = false;
+      // 중앙 1 + 네 모서리 1/4 — 마름모 격자 완전 타일링
+      cx2.drawImage(src, 0, 0, 32, 16);
+      for (const [ox, oy] of [[-16, -8], [16, -8], [-16, 8], [16, 8]]) cx2.drawImage(src, ox, oy, 32, 16);
+      this.textures.addCanvas('grass_cell', cell);
+    }
+    if (this.textures.exists('grass_cell')) {
+      // 월드 공간 배치 — 마름모 격자 주기(32×16)와 자연 정렬, 카메라 줌·스크롤 자동
+      const MW = 512;
+      const wpx = (MW + MW) * (TW / 2) + TW * 2;
+      const hpx = (MW + MW) * (TH / 2) + TH * 2;
+      this.grassBg = this.add.tileSprite(-(MW * TW) / 2 - TW, -TH, wpx, hpx, 'grass_cell')
+        .setOrigin(0, 0).setDepth(-10);
+      this.grassBg.tilePositionX = 16; this.grassBg.tilePositionY = 8; // 셀 중심 마름모 = 격자점
+    }
     this.mapLayer = this.add.graphics();
     const center = () => this.cameras.main.centerOn(isoX(32, 32), isoY(32, 32)); // 구시가 중심 (128맵)
     this.cameras.main.setZoom(0.65);
@@ -294,6 +316,8 @@ class TownScene extends Phaser.Scene {
   }
 
   drawWorld() {
+    if (this.roadSprites) for (const r of this.roadSprites) r.destroy();
+    this.roadSprites = [];
     const g = this.mapLayer; g.clear();
     const { map } = world;
     const hasTreeSprite = this.textures.exists('tree');
@@ -310,6 +334,11 @@ class TownScene extends Phaser.Scene {
       const t = map.tiles[y * map.w + x];
       if (t === 0) continue;
       if (t === 4 && hasTreeSprite) continue; // 나무는 스프라이트로
+      if (t === 1 && this.textures.exists('tile_road')) { // §UI 도로 텍스처 스탬프 (전용 레이어)
+        const rd = this.add.image(isoX(x, y), isoY(x, y), 'tile_road').setDisplaySize(TW, TH).setDepth(-5);
+        this.roadSprites.push(rd);
+        continue;
+      }
       const lift = (t === 3 || t === 4) ? 10 : 0; // 벽·나무는 살짝 올림
       this.drawTile(g, x, y, TILE_COLORS[t], lift);
     }
@@ -1030,6 +1059,7 @@ function connect() {
         syncItems();
         syncFires(); // §17.20: 스냅샷·리싱크 시 진행 중 화재 복원/정리 (Codex 43차)
         updateBadge();
+        sparkHist.length = 0; // 재접속 시 이전 세션 잔존 제거 (Codex 48차 P3)
         applyWeather();
         updateStats();
         break;
