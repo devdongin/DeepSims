@@ -1108,3 +1108,31 @@ test('S-35. §19.5 시민 불만·청원: 커서 집계·문턱 발화·재무�
   assert.ok(w2.complaints.length <= L.complaints.cap, '캡 준수');
   assert.ok(!w2.complaints.some((x) => x.placeId === 'p0'), '가장 오래된 것부터 제거');
 });
+
+test('S-36. §19.5 no_facility 불만: 위급한데 갈 곳이 없으면 기록된다 (Codex 71차)', () => {
+  const w = createWorld(SEED);
+  const s = w.sims[0];
+  idleAll(w, []);
+  resetIdle(s);
+  w.reservations = {};
+  // 모든 식사 시설을 제거해 '배고픈데 갈 곳 없음'을 만든다
+  w.map.facilities = w.map.facilities.filter((f) => !['cafe', 'restaurant', 'mall', 'market'].includes(f.type));
+  s.needs = { hunger: 100, energy: 9000, social: 9000, fun: 9000 }; // hunger 위급
+  s.money = 5000;
+  s.groceries = 0;
+  const before = s.memories.length;
+  tick(w, []);
+  const unmet = s.memories.slice(before).find((m) => m.kind === 'unmet');
+  assert.ok(unmet, '시설 부재 기억');
+  assert.ok(unmet.tags.includes('no_facility'), 'no_facility 태그');
+  // 회고 집계 시 no_facility 불만으로 적재된다
+  collectComplaintsRef(w, s, w.worldTick, () => {});
+  const c = w.complaints.find((x) => x.kind === 'no_facility');
+  assert.ok(c, 'no_facility 불만 적재');
+  assert.equal(c.placeId, unmet.placeId, '막힌 행동이 placeId에 기록');
+  // 틱당 최대 1건 (기억 폭발 방지)
+  const before2 = s.memories.length;
+  tick(w, []);
+  const added = s.memories.slice(before2).filter((m) => m.kind === 'unmet').length;
+  assert.ok(added <= 1, `틱당 ≤1건 (실제 ${added})`);
+});

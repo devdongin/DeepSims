@@ -1017,6 +1017,11 @@ export function tick(world, inputsForThisTick = []) {
     if (critical.length > 0) {
       cands = collectCandidates(world, sim, critical, t, false, { shortlist, prep, urgency: true });
       urgency = cands.length > 0;
+      // §19.5 (71차 ①): 위급한데 갈 곳이 없다 = 시설 부재. 첫 위급 행동 하나만 기록(틱당 ≤1,
+      // ACTIONS 순이라 결정적) → 회고에서 no_facility 불만으로 집계된다.
+      if (cands.length === 0) {
+        recordFact(sim, t, L, 'unmet', { placeId: critical[0], tags: [critical[0], 'no_facility'] });
+      }
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });
     const best = pickBest(cands);

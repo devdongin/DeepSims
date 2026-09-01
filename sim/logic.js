@@ -73,7 +73,7 @@ export const DEFAULT_LOGIC = {
       drank: 3, binge: 3, hole_up: 2, workout: 3, built_bed: 5,
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
       sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
-      new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7 },
+      new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7, unmet: 6 },
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
     posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프

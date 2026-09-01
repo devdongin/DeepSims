@@ -1012,7 +1012,8 @@ traits: {
 - world.complaints(세이브 v28): [{kind, placeId, severity, sinceDay, count}] 캡 64.
   world.petitions: kind별 {lastDay, armed}. sim.complaintCursor: 집계 커서.
 - 적재(회고 직후, 두 sleep 전이 모두): **커서 이후 신규 기억만** 스캔(70차 ① 중복 가산 방지),
-  lonely ≥ lonelyMin(3)·starving ≥ 1을 (kind, placeId)로 집계. 키 정렬 순회로 결정적.
+  lonely ≥ lonelyMin(3)·starving ≥ 1·**unmet(위급한데 후보 0)**을 (kind, placeId)로 집계.
+  no_facility의 placeId에는 막힌 행동이 들어간다 — '무엇이 없어서 못 했는지'가 기록된다(71차 ①). 키 정렬 순회로 결정적.
   기존 항목은 배열 위치 유지, 신규만 push, 캡 초과 시 sinceDay asc oldest-first 제거(70차 ④).
 - 청원(일일 평가, **평판 감쇠 다음**·이민 전 — 70차 ③): kind별 count 합 > floorDiv(pop×petitionPct
   40, 100)이면 'petition' 이벤트 1회 + 평판 −25. 발화 후 armed=false, 문턱 아래로 내려가야
