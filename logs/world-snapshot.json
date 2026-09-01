@@ -1,17 +1,17 @@
 {
- "exportedAtTick": 180778,
- "day": 125,
- "pop": 36,
+ "exportedAtTick": 184907,
+ "day": 128,
+ "pop": 38,
  "tier": 1,
- "treasury": 320871,
- "reputation": 349,
+ "treasury": 334291,
+ "reputation": 323,
  "policy": {
   "taxPct": 25,
   "welfareAmount": 550,
   "welfareThreshold": 300
  },
  "facilities": {
-  "house": 18,
+  "house": 19,
   "office": 3,
   "cafe": 5,
   "park": 5,
@@ -28,40 +28,10 @@
   "fire_station": 1,
   "police_station": 1
  },
- "plotsFree": 72,
+ "plotsFree": 71,
  "incidents": 0,
  "complaints": [],
  "stats14": [
-  {
-   "avgMood": -60,
-   "day": 112,
-   "employed": 29,
-   "incidents": 0,
-   "pop": 33,
-   "reputation": 266,
-   "tier": 1,
-   "treasury": 244801
-  },
-  {
-   "avgMood": -3,
-   "day": 113,
-   "employed": 29,
-   "incidents": 0,
-   "pop": 33,
-   "reputation": 254,
-   "tier": 1,
-   "treasury": 254786
-  },
-  {
-   "avgMood": -77,
-   "day": 114,
-   "employed": 29,
-   "incidents": 0,
-   "pop": 33,
-   "reputation": 241,
-   "tier": 1,
-   "treasury": 263621
-  },
   {
    "avgMood": -70,
    "day": 115,
@@ -171,24 +141,54 @@
    "reputation": 349,
    "tier": 1,
    "treasury": 320001
+  },
+  {
+   "avgMood": -66,
+   "day": 126,
+   "employed": 23,
+   "incidents": 0,
+   "pop": 38,
+   "reputation": 331,
+   "tier": 1,
+   "treasury": 320551
+  },
+  {
+   "avgMood": -64,
+   "day": 127,
+   "employed": 23,
+   "incidents": 0,
+   "pop": 38,
+   "reputation": 338,
+   "tier": 1,
+   "treasury": 327841
+  },
+  {
+   "avgMood": -59,
+   "day": 128,
+   "employed": 23,
+   "incidents": 0,
+   "pop": 38,
+   "reputation": 323,
+   "tier": 1,
+   "treasury": 333781
   }
  ],
  "events7d": [
   {
    "type": "action_started",
-   "n": 2695
+   "n": 2788
   },
   {
    "type": "action_completed",
-   "n": 2298
+   "n": 2391
   },
   {
    "type": "money_changed",
-   "n": 926
+   "n": 989
   },
   {
    "type": "conversation",
-   "n": 714
+   "n": 719
   },
   {
    "type": "lonely",
@@ -196,31 +196,31 @@
   },
   {
    "type": "greeting",
-   "n": 182
+   "n": 204
   },
   {
    "type": "relationship_changed",
-   "n": 131
-  },
-  {
-   "type": "road_formed",
-   "n": 29
+   "n": 121
   },
   {
    "type": "welfare_paid",
-   "n": 21
+   "n": 23
   },
   {
-   "type": "retired_now",
-   "n": 8
+   "type": "road_formed",
+   "n": 19
+  },
+  {
+   "type": "fish_caught",
+   "n": 10
   },
   {
    "type": "item_spawned",
-   "n": 8
+   "n": 9
   },
   {
    "type": "item_found",
-   "n": 8
+   "n": 9
   }
  ],
  "topFails7d": []
