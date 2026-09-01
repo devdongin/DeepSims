@@ -1040,6 +1040,12 @@ function connect() {
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
         if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
+        if (msg.statsToday) { // §18.T5 증분 upsert (54차: 동일 day는 교체)
+          world.statsHistory ??= [];
+          const last = world.statsHistory[world.statsHistory.length - 1];
+          if (last && last.day === msg.statsToday.day) world.statsHistory[world.statsHistory.length - 1] = msg.statsToday;
+          else { world.statsHistory.push(msg.statsToday); while (world.statsHistory.length > 180) world.statsHistory.shift(); }
+        }
         // §18.T1: 정책 변경 이벤트로 클라 상태 동기화 — 슬라이더가 낡은 값을 재전송하지 않도록 (Codex 46차)
         for (const e of msg.events) {
           if (e.type === 'policy_changed') world.policy = { ...(world.policy ?? {}), ...e.payload.changes };
@@ -1184,4 +1190,41 @@ setInterval(pushSpark, 5000);
     document.getElementById('zone-msg').textContent = res.ok ? '지시했습니다. 심들이 착공합니다.' : `거부: ${j.error}`;
     if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
   });
+})();
+
+// ---- §18.T5 시정 대시보드 ----
+(() => {
+  const modal = document.getElementById('dash-modal');
+  const btn = document.getElementById('dash-btn');
+  if (!btn) return;
+  const SERIES = [
+    ['pop', '#8fd48a', (v) => v + '명'],
+    ['treasury', '#c9a86a', (v) => v.toLocaleString() + '원'],
+    ['reputation', '#7ab5e8', (v) => v],
+  ];
+  function drawDash() {
+    const hist = world?.statsHistory ?? [];
+    const cv = document.getElementById('dash-canvas');
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (hist.length < 2) { ctx.fillStyle = '#9c8a6a'; ctx.font = '12px sans-serif'; ctx.fillText('데이터를 모으는 중… (하루 1점)', 20, 60); return; }
+    ctx.strokeStyle = '#3a2e1d'; ctx.strokeRect(0.5, 0.5, cv.width - 1, cv.height - 1);
+    for (const [key, color] of SERIES) {
+      const max = Math.max(1, ...hist.map((p) => p[key]));
+      ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.beginPath();
+      hist.forEach((p, i) => {
+        const x = 6 + (i / (hist.length - 1)) * (cv.width - 12);
+        const y = cv.height - 8 - (p[key] / max) * (cv.height - 20);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+    const last = hist[hist.length - 1];
+    const happiness = Math.round(((last.avgMood + 10000) / 200)); // mood -10000..10000 → 0..100%
+    const emp = last.pop > 0 ? Math.round(last.employed * 100 / last.pop) : 0;
+    document.getElementById('dash-cards').textContent =
+      `😊 행복도 ${happiness}% · 💼 고용률 ${emp}% · 👥 ${last.pop}명 · 🏛️ ${last.treasury.toLocaleString()}원 · ⭐ 평판 ${last.reputation} · ${['🏡 마을','🏘️ 읍','🏙️ 시','🌆 대도시'][last.tier]}`;
+  }
+  btn.addEventListener('click', () => { modal.style.display = 'flex'; drawDash(); });
+  document.getElementById('dash-close').addEventListener('click', () => { modal.style.display = 'none'; });
 })();

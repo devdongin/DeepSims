@@ -69,6 +69,7 @@ export function createWorld(seed) {
     policy: {},    // §18.T1 시장 정책 오버라이드 (화이트리스트: taxPct, welfareAmount, welfareThreshold)
     zoneOrders: [], // §18.T2 플레이어 건설 주문 FIFO: { plotId, type, dir }
     cityTier: 0,    // §18.T4 도시 등급 (0 마을 → 3 대도시, 비가역)
+    statsHistory: [], // §18.T5 일일 통계 링 (캡 180): {day,pop,treasury,reputation,avgMood,employed,tier}
     seed,
     worldTick: 0,
     rngSim: makeRng(rngNext(rngWorldgen)),
