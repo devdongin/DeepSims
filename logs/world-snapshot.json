@@ -1,10 +1,10 @@
 {
- "exportedAtTick": 187559,
- "day": 130,
+ "exportedAtTick": 191248,
+ "day": 132,
  "pop": 40,
  "tier": 1,
- "treasury": 348981,
- "reputation": 290,
+ "treasury": 366971,
+ "reputation": 263,
  "policy": {
   "taxPct": 25,
   "welfareAmount": 550,
@@ -32,26 +32,6 @@
  "incidents": 0,
  "complaints": [],
  "stats14": [
-  {
-   "avgMood": 61,
-   "day": 117,
-   "employed": 29,
-   "incidents": 0,
-   "pop": 33,
-   "reputation": 207,
-   "tier": 1,
-   "treasury": 285761
-  },
-  {
-   "avgMood": -37,
-   "day": 118,
-   "employed": 29,
-   "incidents": 0,
-   "pop": 33,
-   "reputation": 196,
-   "tier": 1,
-   "treasury": 287706
-  },
   {
    "avgMood": -60,
    "day": 119,
@@ -171,56 +151,76 @@
    "reputation": 290,
    "tier": 1,
    "treasury": 348336
+  },
+  {
+   "avgMood": -27,
+   "day": 131,
+   "employed": 25,
+   "incidents": 0,
+   "pop": 40,
+   "reputation": 277,
+   "tier": 1,
+   "treasury": 355971
+  },
+  {
+   "avgMood": -47,
+   "day": 132,
+   "employed": 25,
+   "incidents": 0,
+   "pop": 40,
+   "reputation": 263,
+   "tier": 1,
+   "treasury": 360296
   }
  ],
  "events7d": [
   {
    "type": "action_started",
-   "n": 2860
+   "n": 2997
   },
   {
    "type": "action_completed",
-   "n": 2381
+   "n": 2492
   },
   {
    "type": "money_changed",
-   "n": 1006
+   "n": 1062
   },
   {
    "type": "conversation",
-   "n": 658
+   "n": 675
   },
   {
    "type": "lonely",
-   "n": 475
+   "n": 501
   },
   {
    "type": "greeting",
-   "n": 198
+   "n": 201
   },
   {
    "type": "relationship_changed",
-   "n": 123
+   "n": 130
   },
   {
    "type": "welfare_paid",
-   "n": 25
-  },
-  {
-   "type": "road_formed",
-   "n": 18
+   "n": 26
   },
   {
    "type": "fish_caught",
+   "n": 22
+  },
+  {
+   "type": "road_formed",
    "n": 17
+  },
+  {
+   "type": "car_bought",
+   "n": 10
   },
   {
    "type": "item_spawned",
    "n": 8
-  },
-  {
-   "type": "weather_changed",
-   "n": 7
   }
  ],
  "topFails7d": []
