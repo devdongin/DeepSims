@@ -326,6 +326,7 @@ function startAction(world, sim, cand, t, emit, reason) {
   // onEnterPerforming(sleep) 훅 — 경로 0으로 즉시 수행 진입하는 경우 (PLAN §2 전이 훅)
   if (sim.state.kind === 'performing' && cand.action === 'sleep') {
     runReflection(world, sim, world.worldTick + 1, emit);
+    maybeBuyCar(world, sim, world.worldTick + 1, emit); // §19 R-B: 두 sleep 전이 지점 모두 (65차)
   }
   return true;
 }
