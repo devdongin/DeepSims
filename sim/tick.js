@@ -840,7 +840,8 @@ export function tick(world, inputsForThisTick = []) {
           const employed = world.sims.filter((s2) => world.logic.occupations[s2.traits.occupation].wagePct > 0
             && s2.traits.occupation !== 'student').length;
           world.statsHistory.push({ day, pop, treasury: world.treasury, reputation: world.reputation,
-            avgMood: pop > 0 ? floorDiv(sumMood, pop) : 0, employed, tier: world.cityTier });
+            avgMood: pop > 0 ? floorDiv(sumMood, pop) : 0, employed, tier: world.cityTier,
+            incidents: world.incidents.length }); // 오늘의 사건 수 (55차)
           while (world.statsHistory.length > 180) world.statsHistory.shift();
         }
         for (const s2 of world.sims) { // §17.23 쿨다운 청소

@@ -876,6 +876,7 @@ test('S-30. §18.T5 일일 통계: 링 적재·산식·캡·결정성', () => {
   const sum = w.sims.reduce((n, s2) => n + s2.mood, 0);
   assert.equal(st.avgMood, Math.floor(sum / w.sims.length), 'avgMood floorDiv');
   assert.ok(st.employed <= st.pop);
+  assert.equal(typeof st.incidents, 'number', '사건 수 필드 (55차)');
   // 캡 180
   const w2 = createWorld(SEED);
   for (let i = 0; i < 200; i++) w2.statsHistory.push({ day: i, pop: 1, treasury: 0, reputation: 0, avgMood: 0, employed: 0, tier: 0 });
