@@ -943,3 +943,13 @@ traits: {
 - 전송: 스냅샷 전체 + tickBatch statsToday 증분(클라 동일 day upsert — 54차).
 - 클라 📊 지표 모달: 3중 라인 그래프(인구·국고·평판) + 지표 카드(행복도=(avgMood+10000)/200%,
   고용률, 등급). §18 타이쿤 로드맵 T1~T5 전 단계 완료.
+
+### 17.24 라운드 21 — 경찰 순찰·분실물 신고 (#14 2단계, Codex 56차 조건부 GO 이행)
+- 순찰: 경찰 work = patrol 가상 스팟(대상: cafe·park·market·bar·mall, byType 배열 순 결합) —
+  sim.patrolIdx(세이브 v24, 56차 (a)) % 대상 수 지점의 문 앞. 완료 정산에서 patrolIdx++ +
+  평판 +repPerPatrol(1, 캡) — 공해의 대칭(치안이 마을 매력 유지).
+- 정직 신고: 동전 습득 지점에서 경찰 존재 시 p = honesty.base(50) + floorDiv(TF, tfDiv 4) %
+  (정수식 고정, dayHash salt 7 — rng 비소비) → 신고면 소지 대신 world.lostAndFound(v24)
+  {itemId, finderId, amount, dueDay=day+holdDays(3)}, mood +200, honest(6) 기억.
+- 귀속(56차): 일일 블록 복지 다음(공해 전) — dueDay ≤ day, itemId asc, 신고 시점 경찰 존재만
+  검사(이후 경찰 감소 무관). item_reported/item_returned 이벤트. 로직 v26(patrol/honesty).

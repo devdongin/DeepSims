@@ -141,11 +141,15 @@ export function migrateWorld(world) {
   if (from < 23) {
     world.statsHistory ??= []; // §18.T5
   }
+  if (from < 24) {
+    world.lostAndFound ??= []; // §17.24
+    for (const sim of world.sims) sim.patrolIdx ??= 0;
+  }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 23;
+  world.schemaVersion = 24;
   return world;
 }
 

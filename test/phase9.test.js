@@ -8,7 +8,7 @@ import { SCHEMA_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC } from '../sim/logic.js';
 import { workWindowFor as workWindowForRef, sleepWindowFor as sleepWindowForRef, slotMatches as slotMatchesRef, chronoValue as chronoValueRef } from '../sim/chrono.js';
 import { buildDailyPlan as buildDailyPlanRef } from '../sim/planning.js';
-import { circadianEnergyPct as circadianEnergyPctRef } from '../sim/chrono.js';
+import { circadianEnergyPct as circadianEnergyPctRef, dayHash as dayHashRef } from '../sim/chrono.js';
 import { addBuilding as addBuildingRef, plotBuildable as plotBuildableRef } from '../sim/map.js';
 import { bfsPath as bfsPathRef } from '../sim/pathfind.js';
 
@@ -884,4 +884,45 @@ test('S-30. §18.T5 일일 통계: 링 적재·산식·캡·결정성', () => {
   w2.worldTick = 1440 - 1; w2.weather.day = 1; w2.lastDailyDay = 0; w2.lastPlanDay = 1;
   tick(w2, []);
   assert.equal(w2.statsHistory.length, 180, '캡 shift');
+});
+
+test('S-31. §17.24 순찰·정직: 경찰 순찰 정산·정직 신고·3일 귀속', () => {
+  const w = createWorld(SEED);
+  const cop = w.sims[0];
+  cop.traits = { ...cop.traits, age: 30, occupation: 'police' };
+  // 순찰 후보: work 시간대(주간조 id 0)로 점프
+  idleAll(w, []);
+  resetIdle(cop);
+  w.reservations = {};
+  cop.needs = { hunger: 9000, energy: 9000, social: 9000, fun: 9000 };
+  cop.money = 100; // 돈 부족 → work 급함
+  w.worldTick = 600; // 10:00 주간조
+  tick(w, []);
+  assert.equal(cop.state.facilityId, 'patrol', `순찰 (실제: ${cop.state.facilityId}/${cop.state.action})`);
+  const idx0 = cop.patrolIdx;
+  const rep0 = w.reputation;
+  for (let i = 0; i < 400 && cop.patrolIdx === idx0; i++) tick(w, []);
+  assert.equal(cop.patrolIdx, idx0 + 1, '순찰 완료 idx++');
+  assert.ok(w.reputation >= rep0, '치안 평판');
+  // 정직 신고: TF 100(F 최대) → p=75; dayHash 결정적이라 여러 심으로 신고 발생 확인
+  const w2 = createWorld(SEED);
+  w2.sims[1].traits.occupation = 'police'; // 경찰 존재
+  let reported = 0; let kept = 0;
+  for (const s2 of w2.sims) {
+    s2.traits.mbti.TF = 100;
+    const day = 5;
+    const p = w2.logic.honesty.base + Math.floor(100 / w2.logic.honesty.tfDiv);
+    if (dayHashRef(s2.id, day, 7) < p) reported++; else kept++;
+  }
+  assert.ok(reported > 0, '일부는 신고 (의사확률)');
+  // 귀속: dueDay 도래 시 finder에게
+  const w3 = createWorld(SEED);
+  w3.lostAndFound.push({ itemId: 1, finderId: 0, amount: 500, dueDay: 1 });
+  const m0 = w3.sims[0].money;
+  idleAll(w3, []);
+  w3.worldTick = 1440 - 1; w3.weather.day = 1; w3.lastDailyDay = 0; w3.lastPlanDay = 1;
+  const evs = tick(w3, []);
+  assert.ok(evs.some((e) => e.type === 'item_returned' && e.simId === 0), '귀속 이벤트');
+  assert.equal(w3.sims[0].money, m0 + 500);
+  assert.equal(w3.lostAndFound.length, 0);
 });

@@ -8,7 +8,7 @@ import {
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
-import { workWindowFor, slotMatches, circadianEnergyPct } from './chrono.js';
+import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits } from './traits.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist } from './cognition.js';
@@ -188,6 +188,26 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
         };
         if (cand.score <= 0 && !includeZeroScore) continue;
         out.push(cand);
+      }
+      continue;
+    }
+    // §17.24: 경찰 work = 순찰 — patrolIdx 순회 지점(공공시설 문 앞) 가상 스팟
+    if (action === 'work' && sim.traits.occupation === 'police') {
+      const spots = [];
+      for (const pt of L.patrol.targets) for (const f of (byType.get(pt) ?? [])) spots.push(f);
+      if (spots.length > 0) {
+        const fac2 = spots[sim.patrolIdx % spots.length];
+        const res = { id: `patrol:${fac2.id}`, x: fac2.door.x, y: fac2.door.y - 1 >= 0 ? fac2.door.y - 1 : fac2.door.y };
+        const holder = world.reservations[resKey('patrol', res.id)];
+        if (holder === undefined || holder === sim.id) {
+          const sc = scoreCandidate(sim, action, res, L);
+          const cand = {
+            action, facilityId: 'patrol', resourceId: res.id, res,
+            ...sc, planFactor: 100, partyPull: false, weatherFactor: 100,
+            score: sc.core + sc.moodMod, memoryMod: 0, stateMod: 0, habitMod: 0, cited: [],
+          };
+          if (cand.score > 0 || includeZeroScore) out.push(cand);
+        }
       }
       continue;
     }
@@ -380,7 +400,7 @@ function applyCreatePlayer(world, inp, t, emit) {
     memories: [], memorySeq: 0, habit: {}, relTiers: {},
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, noPathCool: {},
+    hangoverUntil: -1, noPathCool: {}, patrolIdx: 0,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -519,11 +539,22 @@ export function tick(world, inputsForThisTick = []) {
       if (idx !== -1) {
         const it = world.lostItems[idx];
         world.lostItems.splice(idx, 1);
-        sim.money += it.amount;
-        applyMood(sim, world.logic.items.pickupMood);
         emit('item_found', sim.id, { itemId: it.itemId, amount: it.amount, x: it.x, y: it.y });
-        emit('money_changed', sim.id, { delta: it.amount, balance: sim.money, action: 'found' });
-        recordFact(sim, t, world.logic, 'found_item', { tags: ['luck'] });
+        // §17.24 정직 신고 (56차): 경찰이 있는 마을에서만, p = base + floorDiv(TF, tfDiv) — dayHash 비소비
+        const H = world.logic.honesty;
+        const day2 = floorDiv(t, 1440);
+        const hasPolice = world.sims.some((s2) => s2.traits.occupation === 'police');
+        if (hasPolice && dayHash(sim.id, day2, 7) < H.base + floorDiv(sim.traits.mbti.TF, H.tfDiv)) {
+          world.lostAndFound.push({ itemId: it.itemId, finderId: sim.id, amount: it.amount, dueDay: day2 + H.holdDays });
+          applyMood(sim, H.reportMood); // 뿌듯함
+          emit('item_reported', sim.id, { itemId: it.itemId, amount: it.amount });
+          recordFact(sim, t, world.logic, 'honest', { tags: ['luck'] });
+        } else {
+          sim.money += it.amount;
+          applyMood(sim, world.logic.items.pickupMood);
+          emit('money_changed', sim.id, { delta: it.amount, balance: sim.money, action: 'found' });
+          recordFact(sim, t, world.logic, 'found_item', { tags: ['luck'] });
+        }
       }
     }
     if (s.path.length === 0) {
@@ -685,6 +716,10 @@ export function tick(world, inputsForThisTick = []) {
       emit('money_changed', sim.id, { delta: net, balance: sim.money, action: 'work', tax });
       applyMood(sim, L.mood.moneyGain);
       if (tax > 0) applyMood(sim, -floorDiv(tax * L.economy.taxMoodPer, 10)); // §18.T1 납세 불만 (그라데이션)
+      if (sim.traits.occupation === 'police' && s.facilityId === 'patrol') { // §17.24 순찰 정산
+        sim.patrolIdx++;
+        world.reputation = Math.min(L.growth.repCap, world.reputation + L.patrol.repPerPatrol);
+      }
     }
     if (s.action === 'socialize' && s.pairedTicks === 0) {
       emit('lonely', sim.id, { facilityId: s.facilityId });
@@ -824,6 +859,17 @@ export function tick(world, inputsForThisTick = []) {
         maybeElection(world, t, day, emit);
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
+        { // §17.24 분실물 귀속 (56차: dueDay ≤ day, itemId asc — 신고 시점 경찰 존재만 검사)
+          const due = world.lostAndFound.filter((lf) => lf.dueDay <= day).sort((a, b) => a.itemId - b.itemId);
+          for (const lf of due) {
+            world.lostAndFound.splice(world.lostAndFound.indexOf(lf), 1);
+            const finder = world.sims.find((s2) => s2.id === lf.finderId);
+            if (finder) {
+              finder.money += lf.amount;
+              emit('item_returned', finder.id, { itemId: lf.itemId, amount: lf.amount, balance: finder.money });
+            }
+          }
+        }
         { // §18.T3 공장 공해 (51차: 복지 다음·이민 전 고정) — 전역 평판 감소
           const nf = world.map.facilities.filter((f) => f.type === 'factory').length;
           if (nf > 0) world.reputation = Math.max(0, world.reputation - nf * L.pollution.repPerFactoryPerDay);
