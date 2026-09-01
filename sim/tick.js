@@ -5,7 +5,7 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
@@ -204,9 +204,20 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
       const spots = world.map.facilities.filter((f) => L.patrol.targets.includes(f.type));
       if (spots.length > 0) {
         const fac2 = spots[sim.patrolIdx % spots.length];
-        const res = { id: `patrol:${fac2.id}`, x: fac2.door.x, y: fac2.door.y - 1 >= 0 ? fac2.door.y - 1 : fac2.door.y };
-        const holder = world.reservations[resKey('patrol', res.id)];
-        if (holder === undefined || holder === sim.id) {
+        // §19.4: 순찰 지점은 문 주변의 **도달 가능한** 칸 — 북→남→동→서 고정 순서(결정적).
+        // 문 북쪽이 나무·벽이면 영원히 no_path가 나던 고착 수리 (이슈 #40).
+        const around = [
+          { x: fac2.door.x, y: fac2.door.y - 1 },
+          { x: fac2.door.x, y: fac2.door.y + 1 },
+          { x: fac2.door.x + 1, y: fac2.door.y },
+          { x: fac2.door.x - 1, y: fac2.door.y },
+          { x: fac2.door.x, y: fac2.door.y }, // 최후: 문 자체
+        ];
+        const spot = around.find((p) => isWalkable(world.map, p.x, p.y));
+        const res = spot ? { id: `patrol:${fac2.id}`, x: spot.x, y: spot.y } : null;
+        const cool = res ? sim.noPathCool[`patrol:${res.id}`] : undefined;
+        const holder = res ? world.reservations[resKey('patrol', res.id)] : undefined;
+        if (res && !(cool !== undefined && t < cool) && (holder === undefined || holder === sim.id)) {
           const sc = scoreCandidate(sim, action, res, L);
           const cand = {
             action, facilityId: 'patrol', resourceId: res.id, res,
@@ -314,6 +325,8 @@ function startAction(world, sim, cand, t, emit, reason) {
     emit('action_failed', sim.id, { action: cand.action, reason: 'no_path' });
     // §17.23 no_path 쿨다운: 같은 자원 재선택 고착 방지 — 다음 틱엔 차순위 후보로
     sim.noPathCool[`${cand.facilityId}:${cand.resourceId}`] = t + world.logic.construct.noPathCoolTicks;
+    // §19.4: 순찰이 실패하면 다음 순찰 지점으로 넘어간다 (같은 곳 무한 재시도 방지 — 이슈 #40)
+    if (cand.facilityId === 'patrol') sim.patrolIdx++;
     return false;
   }
   // §19 R-B: 장거리 이동 통계 — **출발 시점** 누적(64차 (c) 계약 고정)
