@@ -1045,3 +1045,13 @@ traits: {
   collectComplaints가 태그로 kind를 분화한다. 드로우 0.
 - 실측(라이브 20일 재수집): no_money:eat ×382, lonely 270, hungry 11 — no_facility는 0.
   로드맵이 '식당 증설'이 아니라 '빈곤 대책'을 가리키게 됐다.
+
+### 20 라운드 29 — 시뮬레이션 배속 (x1/x2/x3)
+- 시간 권위 computeTarget에 speed(기본 1) 도입: target = floor((now − epoch) × speed / TICK_DURATION_MS).
+  **틱 내용은 불변** — 같은 틱을 더 자주 돌릴 뿐이라 state[t] = simulate(state[t−1], inputs[t])
+  계약과 결정성에 영향이 없다(테스트 T-8이 못박음).
+- engine.setSpeed(1..3): 변경 시 epoch를 현재 틱 기준으로 **재기준화**
+  (epoch = now − floor(worldTick × TICK_DURATION_MS / speed))해 시간축 점프를 막는다.
+- 배속은 **서버 런타임 설정**이며 시뮬 상태가 아니다 — 세이브·입력 로그에 들어가지 않고
+  리플레이에 영향을 주지 않는다. POST /api/speed로 변경, WS 'speed'로 전 뷰어에 즉시 반영.
+- 클라 상단바 ×1/×2/×3 버튼(현재 배속 강조). 실측: x3에서 초당 3틱 확인.

@@ -2,7 +2,7 @@
 // 라이브 루프도 매 반복 computeTarget으로 목표를 재계산한다 (PLAN §1).
 import fs from 'node:fs';
 import { advance } from '../sim/tick.js';
-import { computeTarget } from '../sim/time.js';
+import { computeTarget, TICK_DURATION_MS } from '../sim/time.js';
 import { TICKS_PER_DAY } from '../sim/constants.js';
 import { validateLogic, logicHash } from '../sim/logic.js';
 
@@ -37,6 +37,7 @@ export class Engine {
     this.catchupPromise = (async () => {
       const cap = computeTarget({
         nowUtcMs: this.now(), epochUtcMs: this.epochUtcMs, lastSimulatedTick: this.world.worldTick,
+        speed: this.speed ?? 1,
       });
       if (cap.clamped) {
         this.storage.opsLog(this.now(), 'catchup_clamped', {
@@ -75,6 +76,7 @@ export class Engine {
     });
     this.pendingEvents = [];
     this.uncommittedFrom = this.world.worldTick;
+    this.speed ??= 1; // §20 배속 (서버 런타임 — 시뮬 상태 아님)
     return { fromTick, toTick: this.world.worldTick, events };
   }
 
@@ -106,6 +108,16 @@ export class Engine {
     this.pendingEvents = [];
     this.pendingApplied = [];
     this.uncommittedFrom = this.world.worldTick;
+    this.speed ??= 1; // §20 배속 (서버 런타임 — 시뮬 상태 아님)
+  }
+
+  // §20 배속: 변경 시 epoch를 현재 틱 기준으로 재기준화해 시간축이 튀지 않게 한다.
+  setSpeed(speed) {
+    const s = Math.max(1, Math.min(3, Math.floor(Number(speed) || 1)));
+    if (s === this.speed) return this.speed;
+    this.speed = s;
+    this.epochUtcMs = this.now() - Math.floor((this.world.worldTick * TICK_DURATION_MS) / s);
+    return this.speed;
   }
 
   startLive() {
@@ -114,13 +126,14 @@ export class Engine {
       if (this.catchingUp) return;
       const cap = computeTarget({
         nowUtcMs: this.now(), epochUtcMs: this.epochUtcMs, lastSimulatedTick: this.world.worldTick,
+        speed: this.speed ?? 1,
       });
       this.epochUtcMs = cap.newEpochUtcMs;
       // 반복당 최대 1일치 — 긴 슬립 후에도 이벤트 루프를 블록하지 않고 다음 반복에서 이어 따라잡음
       const n = Math.min(cap.target - this.world.worldTick, BATCH_TICKS);
       if (n <= 0) return;
       const batch = this.runLive(n);
-      this.emit({ type: 'tickBatch', ...batch, sims: this.world.sims, treasury: this.world.treasury, incidents: this.world.incidents, cityTier: this.world.cityTier, projects: this.world.projects, statsToday: this.world.statsHistory[this.world.statsHistory.length - 1] ?? null });
+      this.emit({ type: 'tickBatch', ...batch, sims: this.world.sims, treasury: this.world.treasury, incidents: this.world.incidents, cityTier: this.world.cityTier, projects: this.world.projects, statsToday: this.world.statsHistory[this.world.statsHistory.length - 1] ?? null, speed: this.speed ?? 1 });
     }, 250);
   }
 

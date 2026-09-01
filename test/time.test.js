@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeTarget } from '../sim/time.js';
+import { createWorld, advance, hashWorld } from '../sim/index.js';
 
 const TICK = 1000;
 const MAX = 30 * 1440;
@@ -32,4 +33,23 @@ test('6c. 30일 클램프 + 앵커 재고정: 재계산 시 target 불변', () =
 test('6d. 전진 점프 = 오프라인 경과와 동일 취급', () => {
   const r = computeTarget({ nowUtcMs: 5000 * TICK, epochUtcMs: 0, lastSimulatedTick: 100 });
   assert.equal(r.target, 5000);
+});
+
+test('T-8. §20 배속: 목표 틱만 배율, 시뮬 결과는 불변', () => {
+  const base = { nowUtcMs: 60_000, epochUtcMs: 0, lastSimulatedTick: 0 };
+  assert.equal(computeTarget({ ...base }).target, 60, 'x1 = 60틱');
+  assert.equal(computeTarget({ ...base, speed: 2 }).target, 120, 'x2 = 2배');
+  assert.equal(computeTarget({ ...base, speed: 3 }).target, 180, 'x3 = 3배');
+  // 같은 틱 수를 진행하면 배속과 무관하게 세계가 동일하다 (결정성 계약)
+  const a = createWorld(4242);
+  const b = createWorld(4242);
+  advance(a, {}, 500);
+  advance(b, {}, 500);
+  assert.equal(hashWorld(a), hashWorld(b), '틱 수가 같으면 결과 동일');
+  // 배속 변경 시 epoch 재기준화가 시간축을 연속으로 유지한다
+  const t1 = computeTarget({ nowUtcMs: 100_000, epochUtcMs: 0, lastSimulatedTick: 100, speed: 1 });
+  const rebased = 100_000 - Math.floor((100 * 1000) / 2); // setSpeed(2)의 재기준화 공식
+  const t2 = computeTarget({ nowUtcMs: 100_000, epochUtcMs: rebased, lastSimulatedTick: 100, speed: 2 });
+  assert.equal(t2.target, 100, '재기준화 직후 목표는 현재 틱 (시간축 점프 없음)');
+  assert.ok(t1.target >= 100);
 });

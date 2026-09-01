@@ -1090,8 +1090,12 @@ function connect() {
       case 'catchingUp':
         $('status').textContent = `세계 따라잡는 중… ${msg.progress.current}${msg.progress.target ? '/' + msg.progress.target : ''}`;
         break;
+      case 'speed': // §20
+        if (window.__paintSpeed) window.__paintSpeed(msg.speed);
+        break;
       case 'snapshot':
         world = msg.world;
+        if (msg.world?.speed && window.__paintSpeed) window.__paintSpeed(msg.world.speed);
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
@@ -1113,6 +1117,7 @@ function connect() {
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
         if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
         if (msg.projects !== undefined) world.projects = msg.projects; // §19.3
+        if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.statsToday) { // §18.T5 증분 upsert (54차: 동일 day는 교체)
           world.statsHistory ??= [];
@@ -1301,4 +1306,36 @@ setInterval(pushSpark, 5000);
   }
   btn.addEventListener('click', () => { modal.style.display = 'flex'; drawDash(); });
   document.getElementById('dash-close').addEventListener('click', () => { modal.style.display = 'none'; });
+})();
+
+// ---- §20 시뮬레이션 배속 (x1/x2/x3) ----
+// 틱 내용은 바뀌지 않는다 — 같은 시뮬레이션이 더 빨리 흐를 뿐이다(결정성 무관).
+(() => {
+  const btns = [...document.querySelectorAll('.spd')];
+  if (btns.length === 0) return;
+  function paint(speed) {
+    for (const b of btns) {
+      const on = Number(b.dataset.s) === speed;
+      b.style.background = on ? '#ffcf6a' : '#3a2e1d';
+      b.style.color = on ? '#171310' : '#ead9b0';
+      b.style.borderColor = on ? '#ffcf6a' : '#6b5638';
+      b.style.fontWeight = on ? 'bold' : 'normal';
+    }
+  }
+  window.__paintSpeed = paint;
+  paint(1);
+  for (const b of btns) {
+    b.addEventListener('click', async () => {
+      const s = Number(b.dataset.s);
+      paint(s); // 낙관적 반영 — 서버 확인은 WS 'speed'로 온다
+      try {
+        const res = await fetch('/api/speed', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ speed: s }),
+        });
+        const j = await res.json();
+        if (j.speed) paint(j.speed);
+      } catch { /* 네트워크 실패 시 다음 스냅샷이 바로잡는다 */ }
+    });
+  }
 })();
