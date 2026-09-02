@@ -626,7 +626,9 @@
     "welfareAmount": 200,
     "welfareDailyCap": 5,
     "privateWageOccupations": [
-      "barista"
+      "barista",
+      "chef",
+      "clerk"
     ],
     "publicFacilityTypes": [
       "hospital",

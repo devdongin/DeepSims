@@ -21,6 +21,9 @@ export class Engine {
     const loaded = storage.loadOrCreate({ seed, nowUtcMs: now() });
     this.world = loaded.world;
     this.epochUtcMs = loaded.epochUtcMs;
+    // §22.11 배속은 epoch와 한 쌍이다 — 저장된 값으로 복원하지 않으면 ×48 기준
+    // epoch에 ×1로 붙어 rawTarget이 현재 틱 아래로 떨어지고 세계가 멈춘다.
+    this.speed = loaded.speed ?? 1;
     this.createdNow = loaded.created === true; // §22.7 이번 실행에서 새 마을을 만들었는가
     storage.retargetStaleInputs(this.world.worldTick, now());
     storage.pruneEvents(this.world.worldTick);
@@ -45,9 +48,17 @@ export class Engine {
         nowUtcMs: this.now(), epochUtcMs: this.epochUtcMs, lastSimulatedTick: this.world.worldTick,
         speed: this.speed ?? 1,
       });
-      if (cap.clamped) {
+      // 두 클램프는 원인이 다르다 — 로그가 둘을 구분해야 진단이 된다 (§22.11).
+      // ahead는 초과분을 실제로 폐기한 것이고, behind는 아무것도 안 버리고 epoch만
+      // 다시 고정한 것이다. 하나로 뭉뚱그리면 "따라잡기 완료"라는 태연한 로그 뒤에서
+      // 세계가 멈춰 있어도 아무도 모른다.
+      if (cap.clampedAhead) {
         this.storage.opsLog(this.now(), 'catchup_clamped', {
           discardedToTick: cap.target, epochReanchored: cap.newEpochUtcMs,
+        });
+      } else if (cap.clampedBehind) {
+        this.storage.opsLog(this.now(), 'epoch_reanchored', {
+          atTick: cap.target, epochReanchored: cap.newEpochUtcMs, speed: this.speed ?? 1,
         });
       }
       this.epochUtcMs = cap.newEpochUtcMs; // 첫 배치 커밋에 포함 (PLAN §1)
@@ -139,6 +150,7 @@ export class Engine {
     const s = Math.max(1, Math.min(MAX_SPEED, Math.floor(Number(speed) || 1)));
     if (s === this.speed) return this.speed;
     this.speed = s;
+    this.storage.setMetaInt('speed', s); // §22.11 epoch와 짝을 맞춰 저장
     if (this.catchingUp) this.speedChangedDuringCatchup = true;
     else this.rebaseEpoch();
     return this.speed;

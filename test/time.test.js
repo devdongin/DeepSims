@@ -125,3 +125,62 @@ test('T-11. §22.1 따라잡기 클램프는 ×48에서도 2시간 부재를 버
   });
   assert.equal(next.target, MAX, '재기준화 직후 목표 = 현재 틱');
 });
+
+test('T-12. §22.11 배속 epoch 불일치 → 세계 영구 정지 (플레이테스트 블로커 A)', () => {
+  // 가상 플레이어 2인이 독립적으로 밟은 블로커. ×48로 돌던 세계를 재시작하면
+  // speed는 1로 리셋되는데 epoch는 ×48 기준으로 DB에 박혀 있다. rawTarget이
+  // worldTick 한참 아래로 나오고 역행 클램프가 전진량을 0으로 만드는데,
+  // clamped가 **전진** 클램프에서만 켜져 epoch 재고정이 안 일어난다 → 스스로 회복 못 함.
+  const tick = 32092;
+  const now = 10_000_000_000;
+  const epoch48 = now - Math.ceil((tick * TICK) / 48); // rebaseEpoch의 ×48 결과
+  const r = computeTarget({ nowUtcMs: now, epochUtcMs: epoch48, lastSimulatedTick: tick, speed: 1 });
+  assert.equal(r.target, tick, '전진량 0 — 여기까지는 올바른 클램프');
+  assert.equal(r.clamped, true, 'epoch가 현재 틱보다 뒤 → 재고정이 필요함을 알려야 한다');
+
+  // 재고정된 epoch로 20초 뒤 → 20틱 전진해야 한다. 고치기 전에는 영원히 0이다.
+  const later = now + 20 * TICK;
+  const r2 = computeTarget({
+    nowUtcMs: later, epochUtcMs: r.newEpochUtcMs, lastSimulatedTick: tick, speed: 1,
+  });
+  assert.equal(r2.target, tick + 20, '재고정 후에는 실시간만큼 흐른다');
+});
+
+test('T-13. §22.11 배속은 재시작 후에도 유지된다 — epoch와 짝이 맞아야 한다', () => {
+  // 근본 원인: epoch는 저장되는데 speed는 안 됐다. 둘은 한 쌍이라 따로 두면 어긋난다.
+  // 저장돼야 "접속하지 않아도 세계가 흘러간다"는 약속이 배속을 만진 사람에게도 지켜진다.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-speed-persist-'));
+  const dbPath = path.join(dir, 't.db');
+  let nowMs = 10_000_000;
+
+  const st1 = new Storage(dbPath);
+  const e1 = new Engine(st1, { seed: 4242, now: () => nowMs });
+  e1.setSpeed(48);
+  assert.equal(e1.speed, 48);
+  st1.close();
+
+  // 재시작 — 같은 DB를 다시 연다
+  const st2 = new Storage(dbPath);
+  const e2 = new Engine(st2, { seed: 4242, now: () => nowMs });
+  assert.equal(e2.speed, 48, '배속이 재시작을 넘어 유지된다');
+
+  // 그리고 세계가 실제로 흐른다 (블로커 A의 최종 증상)
+  nowMs += 20 * TICK;
+  const t = computeTarget({
+    nowUtcMs: nowMs, epochUtcMs: e2.epochUtcMs,
+    lastSimulatedTick: e2.world.worldTick, speed: e2.speed,
+  });
+  assert.ok(t.target > e2.world.worldTick, '재시작 후에도 시간이 흐른다');
+  st2.close();
+});
+
+test('T-14. §22.11 커밋된 logic/params.json이 자기 검증기를 통과한다 (블로커 B)', async () => {
+  // 실제 배포 파일을 검증하는 테스트가 하나도 없어서, DEFAULT_LOGIC에 배열 항목이
+  // 추가됐는데 커밋된 params가 갱신되지 않은 것을 168개 테스트가 전부 놓쳤다.
+  // (test/phase2.test.js는 임시 디렉터리에 자기가 만든 params.json만 쓴다.)
+  // 결과: 새로 clone한 사람은 핫스왑이 처음부터 죽어 있고, 콘솔은 아무 말도 안 한다.
+  const { validateLogic } = await import('../sim/logic.js');
+  const shipped = JSON.parse(fs.readFileSync(new URL('../logic/params.json', import.meta.url), 'utf8'));
+  const r = validateLogic(shipped);
+  assert.equal(r.ok, true, `커밋된 logic/params.json 검증 실패: ${JSON.stringify(r.errors)}`);
+});

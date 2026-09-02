@@ -49,7 +49,7 @@ export class Storage {
       });
       init();
       // §22.7 created: 이번 실행에서 세계를 **새로 만들었는지**. 호출자가 시드를 안내하는 데 쓴다.
-      return { world, epochUtcMs: nowUtcMs, lastSimulatedTick: 0, created: true };
+      return { world, epochUtcMs: nowUtcMs, lastSimulatedTick: 0, speed: 1, created: true };
     }
     const epochUtcMs = Number(epochRow.value);
     const lastSimulatedTick = Number(metaGet.get('lastSimulatedTick').value);
@@ -72,7 +72,10 @@ export class Storage {
       });
       tx();
     }
-    return { world, epochUtcMs, lastSimulatedTick };
+    // §22.11 speed는 시뮬 상태가 아니지만 **epoch와 한 쌍**이다 — epoch는 speed를
+    // 기준으로 고정되므로 둘을 따로 두면 재시작 때 어긋나 세계가 멈춘다. meta에
+    // 함께 두어 짝을 유지한다 (틱 내용은 여전히 배속과 무관 — 결정성 불변).
+    return { world, epochUtcMs, lastSimulatedTick, speed: this.getMetaInt('speed', 1) };
   }
 
   getMetaInt(key, def = 0) {
