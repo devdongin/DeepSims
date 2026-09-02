@@ -1234,3 +1234,77 @@ test('S-57. §20.1 복지 동점은 id asc로 결정적으로 갈린다', () => 
   assert.deepEqual(a, b, '두 번 돌려도 동일 (결정적)');
   assert.deepEqual(a, [...a].sort((x, y) => x - y), '동점이면 id asc');
 });
+
+test('S-58. §20.2 소비금은 소멸하지 않고 그 시설 매출로 간다 (#43)', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+  const sim = w.sims[0];
+  sim.money = 10000;
+  cafe.revenue = 0;
+  idleAll(w, []);
+  const seat = cafe.resources[0];
+  sim.state = { kind: 'performing', action: 'eat', facilityId: cafe.id, resourceId: seat.id, path: [], ticksLeft: 1, pairedTicks: 0 };
+  const before = sim.money;
+  tick(w, []);
+  const cost = L.actions.eat.cost;
+  assert.equal(sim.money, before - cost, '심은 밥값을 낸다');
+  assert.equal(cafe.revenue, cost, '그 돈은 사라지지 않고 카페 매출이 된다');
+});
+
+test('S-59. §20.2 민간 임금은 시설 매출에서 나오고, 모자라면 부분 지급된다 (#43)', () => {
+  const L0 = createWorld(SEED).logic;
+  assert.ok(L0.economy.privateWageOccupations.includes('barista'), '바리스타는 민간 임금 직군');
+  const gross = Math.floor(L0.actions.work.wageBase * L0.occupations.barista.wagePct / 100);
+
+  const run = (revenue) => {
+    const w = createWorld(SEED);
+    const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+    const sim = w.sims.find((s) => s.traits.occupation === 'barista') ?? w.sims[0];
+    sim.traits.occupation = 'barista';
+    sim.money = 0;
+    cafe.revenue = revenue;
+    idleAll(w, []);
+    sim.state = { kind: 'performing', action: 'work', facilityId: cafe.id, resourceId: cafe.resources[0].id, path: [], ticksLeft: 1, pairedTicks: 0 };
+    const evs = tick(w, []);
+    return { money: sim.money, revenue: cafe.revenue, evs, sim };
+  };
+
+  // 매출이 넉넉하면 전액 — 매출에서 정확히 gross만큼 빠진다
+  const rich = run(gross * 5);
+  assert.equal(rich.revenue, gross * 4, '임금만큼 매출이 줄어든다');
+  assert.equal(rich.evs.filter((e) => e.type === 'wage_shortfall').length, 0, '부족 신호 없음');
+
+  // 매출이 모자라면 있는 만큼만 — 카페가 빚을 지지 않는다
+  const poor = run(100);
+  assert.equal(poor.revenue, 0, '매출을 다 써도 0 아래로 내려가지 않는다');
+  const sf = poor.evs.find((e) => e.type === 'wage_shortfall');
+  assert.ok(sf, '부족분 이벤트 발생');
+  assert.equal(sf.payload.paid, 100);
+  assert.equal(sf.payload.shortfall, gross - 100);
+  assert.ok(poor.money < rich.money, '손님 없는 가게는 임금을 다 못 준다');
+
+  // 매출이 0이어도 음수가 되지 않는다
+  const empty = run(0);
+  assert.equal(empty.revenue, 0);
+  assert.equal(empty.money, 0, '지급액 0 → 실수령 0');
+});
+
+test('S-60. §20.2 공공·기반 부문 임금은 매출과 무관하게 그대로 (77차 합의)', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const hosp = w.map.facilities.find((f) => f.type === 'hospital');
+  const sim = w.sims[0];
+  sim.traits.occupation = 'doctor';
+  sim.money = 0;
+  if (hosp) hosp.revenue = 0; // 매출 0이어도
+  idleAll(w, []);
+  const fid = hosp?.id ?? w.map.facilities[0].id;
+  const fac = w.map.facilities.find((f) => f.id === fid);
+  sim.state = { kind: 'performing', action: 'work', facilityId: fid, resourceId: fac.resources[0].id, path: [], ticksLeft: 1, pairedTicks: 0 };
+  const evs = tick(w, []);
+  const gross = Math.floor(L.actions.work.wageBase * L.occupations.doctor.wagePct / 100);
+  const net = Math.floor(gross * (100 - L.economy.taxPct) / 100);
+  assert.equal(sim.money, net, '의사는 매출 0이어도 전액 받는다 (기반/공공 부문)');
+  assert.equal(evs.filter((e) => e.type === 'wage_shortfall').length, 0);
+});
