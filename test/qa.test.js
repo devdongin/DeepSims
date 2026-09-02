@@ -231,3 +231,28 @@ test('QA-14. §22.33 모든 직업에 work_gripe 대사가 있다', async () => 
   assert.deepEqual(missing, [],
     `대사 없는 직업(기본 문장 세 줄로 뭉개진다): ${missing.join(', ')}`);
 });
+
+// §22.35 가족 대화 짝 표가 온전한지 — 발화와 응답이 어긋날 자리를 구조로 없앴는지 확인.
+//
+// 예전에는 발화 배열과 응답 배열이 따로 있었고, pick()이 tick으로 각각 뽑았다.
+// 그래서 "또 언성이 높아졌어"에 "가족이 최고지"가 돌아갈 수 있었고, 한쪽 배열에만
+// 줄을 더하면 조용히 어긋났다. 지금은 [발화, 응답] 한 줄이 최소 단위다.
+test('QA-15. §22.35 가족 대화 표가 [발화, 응답] 짝으로만 이뤄져 있다', () => {
+  const m = CLIENT.match(/const FAMILY_TALK = \{[\s\S]*?\n\};/);
+  assert.ok(m, 'FAMILY_TALK 표를 찾지 못했다');
+  const helpers = "const ga=(w)=>w+'이',wa=(w)=>w+'와',eul=(w)=>w+'을',"
+    + "eun=(w)=>w+'는',rang=(w)=>w+'랑',ne=(w)=>w+'네';";
+  const FAMILY_TALK = new Function(`${helpers}${m[0]}; return FAMILY_TALK;`)();
+
+  for (const rel of ['child', 'parent']) {
+    const rows = FAMILY_TALK[rel];
+    assert.ok(Array.isArray(rows) && rows.length >= 8, `${rel} 표가 비었다`);
+    rows.forEach((row, i) => {
+      assert.equal(row.length, 2, `${rel}[${i}]는 [발화, 응답] 두 칸이어야 한다`);
+      assert.equal(typeof row[0], 'function', `${rel}[${i}] 발화는 이름을 받는 함수여야 한다`);
+      assert.equal(typeof row[1], 'string', `${rel}[${i}] 응답은 문자열이어야 한다`);
+      assert.ok(row[0]('아무개').length > 0, `${rel}[${i}] 발화가 빈 문자열이다`);
+      assert.ok(row[1].length > 0, `${rel}[${i}] 응답이 빈 문자열이다`);
+    });
+  }
+});
