@@ -206,6 +206,9 @@ export function migrateWorld(world) {
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
   }
+  if (from < 49) {
+    world.lastPublicWorksDay ??= -1; // §22.26
+  }
   if (from < 48) {
     // §22.22 시장 재정 리뷰 가드 + 플레이어 정책 존중 창
     world.lastFiscalDay ??= -1;
