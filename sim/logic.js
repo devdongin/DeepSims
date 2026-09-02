@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 31, // §20.2 economy.privateWageOccupations 추가 (시설 매출 → 민간 임금)
+  logicSchemaVersion: 32, // §20.3 social.gravityPull*/WalkingPct 추가 (사회적 중력 — 이슈 #33)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -83,6 +83,13 @@ export const DEFAULT_LOGIC = {
     rivalAffinity: -2000, rivalInteractions: 30,
     acquaintanceInteractions: 15,
     friendStateBonus: 150000000000,   // stateMod: 친구가 그 시설에 있으면 (±2.5e11 클램프)
+    // §20.3 사회적 중력 (이슈 #33): '사람이 있는 곳'이 사교에는 낫다. 낯선 사람도 포함해
+    // 그 시설에서 사교 중인 인원 + 사교하러 오는 중인 인원을 센다.
+    // **곱셈**이라야 한다 — 가산 슬롯(stateMod)은 전형 점수 ~3e12 대비 클램프가 ±2.5e11(약 8%)뿐이라
+    // 거리 항을 못 이기고, 실제로 그 형태는 세 번 반증됐다 (§20.3 기록).
+    gravityPullPct: 60,               // 사교 중인 1명당 점수 가중 (%)
+    gravityPullCap: 200,              // 총 상한 (%) — 3~4명에서 포화. 150%대에서 no_path 절벽이 있다
+    gravityWalkingPct: 50,            // '오는 중'인 심의 가중치 (%). 쏠림 폭주를 막는 감쇠 신호다
     rivalStatePenalty: 200000000000,  // 라이벌이 있으면 감점 (양수로 저장, 적용 시 부호)
     reflectionMoodScale: 60,          // pendingMood = clamp(Σ 부호 importance × scale, ±10000)
     habitIncrement: 10000000000,      // 회고당(=하루당) 습관 증가 상한 (PLAN §G: 1e10/일)
@@ -392,6 +399,16 @@ function checkRanges(p, errors) {
   inRange('social.rivalInteractions', p.social.rivalInteractions, 0, 1000000);
   inRange('social.acquaintanceInteractions', p.social.acquaintanceInteractions, 0, 1000000);
   inRange('social.friendStateBonus', p.social.friendStateBonus, 0, 250000000000);
+  // §20.3 (80차 ③): 상한은 임의로 두지 않고 **최대 점수에서 역산**한다.
+  // 점수 상한 = deficit(NEED_MAX)² × 16 × SCORE_SCALE / den(최소 16) × persFactor(≤300%)
+  //           + mods(memory 5e11 + state 2.5e11 + habit 2.5e11) ≈ 3.10e13 (실측 계산).
+  // 여기에 (100 + cap)/100 을 곱해도 Number.MAX_SAFE_INTEGER(9.007e15)를 넘으면 안 되므로
+  // cap ≤ 100 × (9.007e15 / 3.10e13 - 1) ≈ 28,000. 훨씬 보수적으로 500으로 제한한다
+  // (cap=500이면 최대 1.86e14로 안전 정수의 2% 수준).
+  // (관측된 no_path 절벽은 150 부근이므로 이 상한은 정수 안전성 전용 방어다.)
+  inRange('social.gravityPullPct', p.social.gravityPullPct, 0, 500);
+  inRange('social.gravityPullCap', p.social.gravityPullCap, 0, 500);
+  inRange('social.gravityWalkingPct', p.social.gravityWalkingPct, 0, 100);
   inRange('social.rivalStatePenalty', p.social.rivalStatePenalty, 0, 250000000000);
   inRange('social.reflectionMoodScale', p.social.reflectionMoodScale, 0, 1000);
   inRange('social.habitIncrement', p.social.habitIncrement, 0, 10000000000);

@@ -5,13 +5,13 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion} from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits } from './traits.js';
-import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist } from './cognition.js';
+import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
@@ -27,6 +27,45 @@ bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진�
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function resKey(facilityId, resourceId) { return `${facilityId}:${resourceId}`; }
+
+// §20.3 사회적 중력 (이슈 #33, 79차 합의).
+// 실측: 동시에 사교 중인 심이 6~8명인데 10여 개 장소로 흩어져, cafe5는 체류 틱의 99%가 혼자였다.
+// 과거 두 번 반증된 가설이지만 당시엔 동시 사교자가 2~3명뿐이라 중력이 작동할 물질이 없었다.
+// 이번의 결정적 차이는 **오는 중인 심도 센다**는 것이다 — 지금은 의도가 보이지 않아
+// 랑데부가 성립하지 못한다(A가 도착하면 B는 이미 떠났다).
+// 심 전체를 시설마다 훑지 않고 **한 번만** 훑어 Map으로 만든다 (성능 이슈 #17 고려).
+export function socialPresence(world, selfId) {
+  const m = new Map();
+  for (const o of world.sims) {
+    if (o.id === selfId) continue;
+    const st = o.state;
+    if (st.action !== 'socialize' || st.facilityId === null) continue;
+    if (st.kind !== 'performing' && st.kind !== 'walking') continue;
+    let e = m.get(st.facilityId);
+    if (e === undefined) { e = { here: 0, coming: 0 }; m.set(st.facilityId, e); }
+    if (st.kind === 'performing') e.here++; else e.coming++;
+  }
+  return m;
+}
+
+// 점수에 **곱하는** 끌림(%). 가산 슬롯(stateMod)으로는 안 된다 — 전형 점수 ~3e12 대비
+// 클램프가 ±2.5e11(약 8%)이라 거리 항을 못 이긴다. 실제로 가산 형태는 3번째 반증됐다.
+// 좌석이 다 찼으면 0 — 몰려가도 앉을 자리가 없으면 헛걸음만 는다 (79차 ③).
+export function socialPullPct(world, fac, presence, L, sim = null) {
+  const p = presence.get(fac.id);
+  if (p === undefined) return 0;
+  // §20.3 (80차 ②): 갈 수 없는 곳은 아무리 붐벼도 끌리지 않는다. 강 건너·산 너머 시설이
+  // 중력으로 거리 항을 이기면 no_path가 폭증한다(끌림 150%에서 1,880건).
+  // 심은 타일을 막지 않으므로 연결성은 타일에만 의존하고, 결과는 결정적이다.
+  if (sim !== null && !sameRegion(world.map, sim.x, sim.y, fac.door.x, fac.door.y)) return 0;
+  const S = L.social;
+  let free = 0;
+  for (const r of fac.resources) if (world.reservations[resKey(fac.id, r.id)] === undefined) free++;
+  if (free <= 0) return 0;
+  const units = p.here + floorDiv(p.coming * S.gravityWalkingPct, 100);
+  return Math.min(units * S.gravityPullPct, S.gravityPullCap);
+}
+
 
 function needValueFor(sim, action, L) {
   if (action === 'work') return Math.min(sim.money, NEED_MAX); // 돈 0 → deficit 최대
@@ -143,6 +182,7 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
   const out = [];
   const byType = facilitiesByType(world.map);
   const stateModCache = new Map(); // 같은 결정 내 시설별 캐시 (심 상태 불변 구간 — 결과 동일)
+  let presence = null;             // §20.3 사교 후보가 처음 나올 때 한 번만 만든다
   const memoCache = new Map(); // (action|facility) → {mm, pl} — 자원들이 공유 (결과 동일, §17.22)
   const candTags = ['', '']; // 재사용 버퍼 (memoryModFast는 동기 소비)
   for (const action of actions) {
@@ -278,9 +318,23 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
             cand.cited = mm.cited;
             let sm = stateModCache.get(fac.id);
             if (sm === undefined) { sm = stateModFor(world, sim, fac.id, L); stateModCache.set(fac.id, sm); }
+            // §20.3 사교 후보에만 사회적 중력을 더한다 (먹기·놀기는 붐빈다고 끌리지 않는다).
+            // 기존 stateMod 클램프(±2.5e11) 안에서 합산한다.
             cand.stateMod = sm;
             if (!ctx.urgency) cand.habitMod = Math.min(sim.habit[`${action}:${fac.id}`] ?? 0, L.social.habitCap);
             cand.score += cand.memoryMod + cand.stateMod + cand.habitMod;
+            // §20.3 사회적 중력 — 사교 후보에만 붙는 **곱셈 인자** (이슈 #33).
+            // **§G 순서에서 벗어나 mods 이후에 곱한다.** 의도적이며, 근거는 실측이다:
+            // plan·weather와 같은 자리(mods 이전)에 두면 헛걸음은 29%까지만 내려가고
+            // no_path가 1,375건 터진다. mods까지 함께 곱하면 memoryMod·habitMod —
+            // 즉 '내가 실제로 가본 곳'의 기여 — 도 같이 커져, 중력이 가본 적 없는 먼 시설로
+            // 심을 내던지지 않는다. 결과: 헛걸음 14.5%, no_path 0.
+            // 먹기·놀기는 붐빈다고 끌리지 않으므로 socialize에만 적용한다.
+            if (action === 'socialize') {
+              presence ??= socialPresence(world, sim.id);
+              const pull = socialPullPct(world, fac, presence, L, sim);
+              if (pull > 0) cand.score += floorDiv(cand.score * pull, 100);
+            }
           }
           if (cand.score <= 0 && !includeZeroScore) continue;
           out.push(cand);
