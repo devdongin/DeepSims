@@ -31,13 +31,18 @@ FOCUS="${1:-}"
 INVENTORY=$(find client/public -name '*.png' | sort | head -80 | while read f; do
   sips -g pixelWidth -g pixelHeight "$f" 2>/dev/null | tr '\n' ' ' | sed "s|^|$f |" | awk '{print $1, $3, $5}'
 done)
+CONSTRAINTS=$(cat docs/ASSET_CONSTRAINTS.md 2>/dev/null || echo '(제약 문서 없음)')
 PREV=$(ls -t logs/assets-*.md 2>/dev/null | head -3 | xargs cat 2>/dev/null | head -60 || echo '(첫 실행)')
 
 codex exec -m gpt-5.6-luna --sandbox workspace-write "너는 DeepSims의 **전담 픽셀아트 작가**다. 목업(docs/mockup.png)이 이 게임이 도달하려는 그림이고, 현재 에셋과의 간극을 매 회차 하나씩 줄이는 것이 네 일이다. 지시를 기다리지 말고 스스로 진행하라 (사용자 지시).
 
-## 목업의 지면 문법 (현재와 가장 다른 부분)
+## 목업의 지면 문법
 목업: 마을 전체가 **따뜻한 회갈색 석재 포장 광장**이고, 잔디는 정원·화단 구획 안에만 있다. 구획 경계는 낮은 석벽·나무 울타리. 길은 검은 아스팔트가 아니라 밝은 돌바닥, 가장자리에 흙·꽃 테두리.
-현재: 화면 전체가 밝은 초록 잔디 + 검은 격자 도로 — 차갑고 밋밋하다.
+
+**화면의 현재 상태는 아래 '상시 제약' 문서를 믿어라.** 이 프롬프트에 현재 상태를 적어 두면 낡아서 너를 오도한다 — 실제로 그렇게 한 회차의 성과가 다음 회차에 통째로 되돌아간 적이 있다.
+
+## 상시 제약 — 이미 내려진 결정 (반드시 먼저 읽어라)
+$CONSTRAINTS
 
 ## 이번 회차 작업
 ${FOCUS:-지난 기록(아래)을 읽고 아직 남은 간극 중 가장 눈에 띄는 것 하나를 골라라.}
@@ -45,7 +50,7 @@ ${FOCUS:-지난 기록(아래)을 읽고 아직 남은 간극 중 가장 눈에 
 ## 규칙
 1. **PNG만 만들거나 교체한다.** client/main.js·index.html 등 코드는 절대 건드리지 않는다. 새 텍스처 키가 필요하면 로그에 '배선 요청'으로 남겨라 — Claude가 배선한다.
 2. 기존 파일 교체가 우선이다(배선 없이 즉시 반영된다): client/public/props/tile_*.png (128×64 소스, 게임에서 32×16으로 축소), 건물 bld_*.png, 소품.
-3. 그리는 방법: node로 pngjs를 써서 픽셀을 직접 그리는 스크립트를 /tmp/에 쓰고 실행하라 (tools/chromakey.js가 pngjs 사용 예시). 아이소메트릭 2:1 마름모, 팔레트는 목업에서 뽑아라(석재 #b8a88a~#8a7a5c 계열, 잔디는 채도 낮춘 #5a7a4a 계열에 질감 노이즈).
+3. 그리는 방법: node로 pngjs를 써서 픽셀을 직접 그리는 스크립트를 /tmp/에 쓰고 실행하라 (tools/chromakey.js가 pngjs 사용 예시). 아이소메트릭 2:1 마름모, 팔레트는 목업에서 뽑아라(석재 #b8a88a~#8a7a5c 계열). **지면 타일을 건드렸으면 상시 제약 §2의 색거리 계약을 스크립트 안에서 직접 계산해 확인하라.**
 4. 결과 검증: sips -g pixelWidth로 치수 확인, 기존 파일과 같은 치수여야 한다.
 5. 마치면 로그를 stdout에 남겨라: 무엇을 왜 바꿨고, 다음 회차에 무엇이 남았는지, 배선 요청이 있는지.
 6. git 커밋은 하지 마라 — 스크립트가 한다.
