@@ -10,8 +10,12 @@ import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
-import { validateTraits } from './traits.js';
+import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor } from './abilities.js'; // §21.1
+import { makeSim, emptyState } from './simfactory.js';
+import { recordIndustryDemand, recordCapacityShortfall } from './industry.js';
+import { makeAbilities } from './abilities.js';
+import { surnameFor, surnameHash } from './surnames.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
@@ -20,7 +24,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -137,6 +141,52 @@ function scoreCandidate(sim, action, res, L) {
 // 아이는 먹고 자고 놀고 어울리고 배운다.
 const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol',
   'drink', 'binge_eat', 'shop', 'see_doctor', 'fish']);
+
+// §22.18 (Codex 110차 ①) **'갈 곳이 없다'와 '자리가 다 찼다'는 다르다.**
+// actionBlockReason이 null을 돌려줘도 그 안에는 시설 부재·만석·도달 불가가 섞여 있다.
+// 셋을 한 원장에 넣으면 "병원을 지어라"와 "병원을 키워라"가 구분되지 않는다.
+//   no_facility   — 이 행동을 제공하는 시설이 세계에 하나도 없다
+//   capacity_full — 시설은 있는데 자리가 전부 예약돼 있다
+//   unreachable   — 자리는 있는데 길이 막혀 있다 (§17.23 no_path 쿨다운)
+// rng 미소비, 세계를 바꾸지 않는다.
+export function facilityShortfallKind(world, sim, action, t) {
+  const L = world.logic;
+  // **가상 자원을 쓰는 행동은 시설 수로 판정할 수 없다** (Codex 111차 ①②).
+  // 경찰의 근무는 patrol.targets에서 patrolIdx로 고른 좌표 하나를, 소방 대응은
+  // firesite를 자원으로 쓴다. 후보 생성이 그 특수 분기를 타는데 여기서 시설을 세면
+  // 두 경로가 어긋나 **원장이 거짓말을 한다** — 순찰 지점 하나가 막혀도 경찰서
+  // 자리가 비어 있으면 '부족 없음'으로 보고된다.
+  // 억지로 판정하는 대신 명시적으로 비대상으로 둔다. 판정할 수 없는 것을 판정하지
+  // 않는 것이 틀린 답을 내는 것보다 낫다.
+  if (action === 'respond_fire') return null;
+  if (action === 'work' && sim.traits.occupation === 'police') return null;
+  const ftypes = action === 'work'
+    ? [].concat(L.workplace[sim.traits.occupation] ?? [])
+    : (ACTION_FACILITY[action] ?? []);
+  if (ftypes.length === 0) return null; // 시설을 쓰지 않는 행동
+  let anyFacility = false, anyFree = false;
+  for (const ftype of ftypes) {
+    for (const fac of world.map.facilities) {
+      if (fac.type !== ftype) continue;
+      if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue;
+      if (world.incidents.some((inc) => inc.facilityId === fac.id)) continue;
+      anyFacility = true;
+      for (const res of fac.resources) {
+        if (fac.type === 'mall'
+          && ((action === 'shop' && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
+        const holder = world.reservations[resKey(fac.id, res.id)];
+        if (holder !== undefined && holder !== sim.id) continue;
+        anyFree = true;
+        const cool = sim.noPathCool[`${fac.id}:${res.id}`];
+        if (cool !== undefined && t < cool) continue;
+        return null; // 갈 수 있는 자리를 찾았다 — 더 볼 필요가 없다 (111차 ⑤ 성능)
+      }
+    }
+  }
+  if (!anyFacility) return 'no_facility';
+  if (!anyFree) return 'capacity_full';
+  return 'unreachable'; // 자리는 있는데 전부 길이 막혀 있다 (§17.23 쿨다운)
+}
 
 export function actionBlockReason(world, sim, action, t) {
   const L = world.logic;
@@ -413,14 +463,17 @@ function startAction(world, sim, cand, t, emit, reason) {
   }
   // §19 R-B: 장거리 이동 통계 — **출발 시점** 누적(64차 (c) 계약 고정)
   if (path.length >= world.logic.transport.longTripMin) sim.longTrips++;
+  // §22.16 emptyState를 펼쳐서 만든다. 예전에는 여기서 필드를 손으로 나열해
+  // sideTalkTicks가 빠졌고(§22.14), 읽는 쪽의 `?? 0` 가드 덕에 우연히 버티고 있었다.
+  // 필드를 하나 늘릴 때마다 이런 자리를 찾아다녀야 하는 구조는 언젠가 반드시 어긋난다.
   sim.state = {
+    ...emptyState(),
     kind: path.length === 0 ? 'performing' : 'walking',
     action: cand.action,
     facilityId: cand.facilityId,
     resourceId: cand.resourceId,
     path,
     ticksLeft: actionDuration(cand.action, world.logic),
-    pairedTicks: 0,
   };
   emit('action_started', sim.id, {
     action: cand.action, facilityId: cand.facilityId, resourceId: cand.resourceId, reason,
@@ -434,9 +487,6 @@ function startAction(world, sim, cand, t, emit, reason) {
   return true;
 }
 
-function emptyState() {
-  return { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 };
-}
 
 function startIdle(sim, L, emit) {
   sim.state = { ...emptyState(), kind: 'performing', action: 'idle', ticksLeft: actionDuration('idle', L) };
@@ -486,7 +536,25 @@ function applyCreatePlayer(world, inp, t, emit) {
   const name = typeof p.name === 'string' ? p.name : '';
   const nameLen = [...name].length; // 유니코드 코드포인트
   if (nameLen < 1 || nameLen > 12) return reject('invalid_name');
-  const traits = { gender: p.gender, age: p.age, mbti: p.mbti, occupation: p.occupation };
+  // §22.17 주인공은 **이름·성별·MBTI만** 고른다 (사용자 지시). 나이와 직업은 세계가 정한다 —
+  // 이 마을에 이사 오는 사람이 자기 나이를 고르지 않듯이, 그리고 직업은 이 세계에서
+  // 무엇이 필요한지·내가 무엇을 잘하는지로 정해지는 것이지 메뉴에서 고르는 게 아니다.
+  //
+  // 나이: (seed, id) 해시로 25~44세 사이. 난수를 소비하지 않는다.
+  // 직업: 능력치 적성이 가장 높은 직업. 동점은 OCCUPATIONS 등재 순 — 완전 순서다.
+  const id = nextSimId(world);
+  const age = 25 + (surnameHash(world.seed, id * 7 + 3) % 20);
+  const abilities = makeAbilities(world.seed, id);
+  const pickable = OCCUPATIONS.filter((o) => occupationAllowed(o, age)
+    && !SWITCH_ONLY_OCCUPATIONS.includes(o) && !BIRTH_STAGE_OCCUPATIONS.includes(o));
+  let occupation = pickable[0];
+  let best = -1;
+  for (const o of pickable) {
+    const key = world.logic.abilities.keyAbility[o];
+    const v = key === undefined ? 50 : (abilities[key] ?? 50);
+    if (v > best) { best = v; occupation = o; }
+  }
+  const traits = { gender: p.gender, age, mbti: p.mbti, occupation };
   const traitErr = validateTraits(traits);
   if (traitErr) return reject(`invalid_traits: ${traitErr}`);
 
@@ -496,31 +564,28 @@ function applyCreatePlayer(world, inp, t, emit) {
   for (const s of world.sims) if (counts.has(s.homeId)) counts.set(s.homeId, counts.get(s.homeId) + 1);
   const home = [...houses].sort((a, b) => (counts.get(a.id) - counts.get(b.id)) || (a.id < b.id ? -1 : 1))[0];
 
-  const id = world.sims[world.sims.length - 1].id + 1;
-  const sim = {
-    id, name, homeId: home.id, isPlayer: true, traits, mood: 0,
-    x: home.door.x, y: home.door.y + 1,
+
+  // §22.16 플레이어도 같은 창구로 만든다. 예전에는 여기만 필드가 달라서 groceries·sick이
+  // 빠졌고, 그게 결정성 계약을 깨뜨렸다 (§22.13). 이제 그럴 자리가 없다.
+  const sim = makeSim({
+    id,
+    name,
+    surname: typeof p.surname === 'string' && p.surname.length >= 1 && p.surname.length <= 2
+      ? p.surname
+      : surnameFor(world.seed, id), // 플레이어가 성을 안 고르면 분포에서 뽑아 준다
+    homeId: home.id,
+    isPlayer: true,
+    traits,
+    seed: world.seed,
+    x: home.door.x,
+    y: home.door.y + 1,
     needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 }, // 고정, rng 미소비
     money: world.logic.occupations[traits.occupation].startMoney,   // 고정분만
-    state: emptyState(),
-    memories: [], memorySeq: 0, habit: {}, relTiers: {},
-    lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
-    knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
-    // §22.13 이 두 필드가 없어서 결정성 계약이 깨져 있었다 (플레이테스트 S2-1).
-    // 이민자(society.js)와 신생아는 설정하는데 플레이어만 빠져 있었다. groceries가
-    // 없으면 `sim.groceries + n`이 NaN이 되고, NaN은 serialize에서 null이 되므로
-    // **서버 재시작이 세계를 바꾼다**. 게다가 `NaN < 1`이 false라 장보기 게이트가
-    // 항상 열려 플레이어만 장바구니 없이 무한히 집밥을 먹었다.
-    groceries: 0, sick: null,
-  };
+  });
   world.sims.push(sim);
-  for (const row of world.affinity) row.push(0);
-  world.affinity.push(new Array(world.sims.length).fill(0));
-  for (const row of world.interactions) row.push(0);
-  world.interactions.push(new Array(world.sims.length).fill(0));
-  for (const row of world.lastGreetDay) row.push(-1);
-  world.lastGreetDay.push(new Array(world.sims.length).fill(-1));
+  // 행렬은 **id 공간** 기준으로 늘린다. sims.length 기준으로 늘리면 사망으로 심이
+  // 빠진 뒤 첨자가 어긋난다 (§22.2에서 같은 이유로 growIdMatrices를 만들었다).
+  growIdMatrices(world);
   emit('player_created', id, { name, occupation: traits.occupation, homeId: home.id });
 }
 
@@ -754,7 +819,8 @@ export function tick(world, inputsForThisTick = []) {
 
   // §22.6 먼저 말 걸기 (이슈 #69) — 페어링이 끝난 뒤, 혼자 남은 심이 옆 사람에게 청한다.
   // 페어링 다음에 두는 이유: 누가 혼자인지 확정된 뒤라야 말을 걸 대상이 정해진다.
-  maybeApproach(world, t, floorDiv(t, 1440), emit);
+  // §22.14 승낙하면 그 자리에서 바로 말이 트인다 — pairedThisTick을 넘겨 이중 계산을 막는다.
+  const sideTalked = maybeApproach(world, t, floorDiv(t, 1440), emit, pairedThisTick);
 
   // 2c) performing 전진 + 회복 (id 오름차순)
   for (const sim of world.sims) {
@@ -764,9 +830,12 @@ export function tick(world, inputsForThisTick = []) {
     const def = L.actions[s.action];
     const need = NEED_OF_ACTION[s.action];
     if (need && def.recoverPerTick) {
-      const recovers = s.action !== 'socialize' || pairedThisTick.has(sim.id);
+      const sideOnly = s.action === 'socialize' && !pairedThisTick.has(sim.id) && sideTalked.has(sim.id);
+      const recovers = s.action !== 'socialize' || pairedThisTick.has(sim.id) || sideOnly;
       if (recovers) {
         let amt = def.recoverPerTick;
+        // §22.14 곁다리 대화는 마주 앉은 대화보다 약하다
+        if (sideOnly) amt = floorDiv(amt * L.social.sideTalkFactorPct, 100);
         // §17.5: 연인과의 수다는 더 달콤하다
         if (s.action === 'socialize' && pairedWith.get(sim.id) === world.partners[sim.id]) {
           amt = floorDiv(amt * L.romance.partnerSocialPct, 100);
@@ -914,7 +983,8 @@ export function tick(world, inputsForThisTick = []) {
         world.reputation = Math.min(L.growth.repCap, world.reputation + L.patrol.repPerPatrol);
       }
     }
-    if (s.action === 'socialize' && s.pairedTicks === 0) {
+    // §22.14 옆 사람과 말이 트였으면 헛걸음이 아니다
+    if (s.action === 'socialize' && s.pairedTicks === 0 && (s.sideTalkTicks ?? 0) === 0) {
       emit('lonely', sim.id, { facilityId: s.facilityId });
       applyMood(sim, L.mood.lonely);
       recordFact(sim, t, L, 'lonely', { placeId: s.facilityId, tags: ['socialize', `facility:${s.facilityId}`] });
@@ -1205,6 +1275,30 @@ export function tick(world, inputsForThisTick = []) {
         const why = actionBlockReason(world, sim, critical[0], t);
         const kindTag = why === 'no_money' ? 'no_money' : (why === 'off_hours' ? 'blocked' : 'no_facility');
         recordFact(sim, t, L, 'unmet', { placeId: critical[0], tags: [critical[0], kindTag] });
+        // §22.18 **시설이 없어서** 못 한 것만 산업 수요로 적립한다. 돈이 없어서(no_money)나
+        // 영업시간이 아니어서(blocked) 못 한 것은 시설 수요가 아니다 — 그걸 섞으면
+        // '식당을 더 지어라'는 잘못된 처방이 나온다. §19.10에서 같은 이유로 불만 원인을
+        // 분화했고, 지금 살아 있는 세계의 no_money 불만 452건이 정확히 그 함정이다.
+      }
+      // §22.18 (109차 ①) 원장은 **critical 각각을** 본다. 예전에는 위급 후보가 하나도
+      // 없을 때 critical[0]만 적립해서, 다른 위급 행동은 후보가 있고 병원만 막힌 경우를
+      // 통째로 놓쳤다 — 실측으로 병원·도서관·시장을 지운 세계를 40,000틱 돌려도
+      // 원장이 비어 있었다. 돈·영업시간 때문에 막힌 것은 여전히 제외한다.
+      const day18 = floorDiv(t, 1440);
+      for (const act of critical) {
+        if (cands.some((c) => c.action === act)) continue; // 갈 곳이 있었다
+        // **사유가 붙은 실패는 시설 수요가 아니다.** 돈이 없어서(no_money),
+        // 영업시간이 아니어서(off_hours), 장바구니가 비어서(no_groceries),
+        // 아직 필요하지 않아서(not_needed), 아파야 가는 곳이라(healthy) 못 한 것은
+        // 전부 '갈 곳이 없다'와 다르다. 실측으로 이 필터가 없을 때 집밥 실패
+        // 196건이 '가구내 산업 수요'로 잘못 잡혔다.
+        // 사유 없이 후보만 없는 경우 = 그 일을 할 자리가 세계에 없다.
+        if (actionBlockReason(world, sim, act, t) !== null) continue;
+        // 시설 부재만 산업 수요다. 만석은 **같은 산업을 키우라**는 다른 신호이므로
+        // 따로 센다 — 섞으면 "병원을 지어라"와 "병원을 키워라"가 구분되지 않는다.
+        const kind18 = facilityShortfallKind(world, sim, act, t);
+        if (kind18 === 'no_facility') recordIndustryDemand(world, act, day18);
+        else if (kind18 === 'capacity_full') recordCapacityShortfall(world, act, day18);
       }
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });

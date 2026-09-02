@@ -7,6 +7,7 @@ import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 import { SCHEMA_VERSION } from './constants.js';
+import { surnameFor } from './surnames.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -204,6 +205,53 @@ export function migrateWorld(world) {
     // 세이브 구조는 그대로지만 **같은 스냅샷에서 다른 궤적**이 나오므로, 구 로그 재생이
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
+  }
+  if (from < 45) {
+    // §22.18 산업 수요 원장. `??=`만으로는 배열·문자열 같은 손상 값을 못 고친다
+    // (109차 ⑤) — 순수 객체가 아니면 버리고 새로 만든다. 각 항목의 카운터도 검사한다.
+    world.capacityShortfall ??= {};
+    const d = world.industryDemand;
+    if (d === null || typeof d !== 'object' || Array.isArray(d)) world.industryDemand = {};
+    else {
+      for (const [k, v] of Object.entries(d)) {
+        if (v === null || typeof v !== 'object' || Array.isArray(v)
+          || !Number.isSafeInteger(v.unmet) || v.unmet < 0) delete d[k];
+      }
+    }
+  }
+  if (from < 44) {
+    // §22.16 성씨 백필/재계산.
+    //
+    // **살아 있는 인구에 기대면 안 된다** (설계 검증 ②). 사망한 심은 world.sims에서
+    // 제거되므로, 부모가 죽은 뒤에 마이그레이션을 돌리면 상속 분기가 통째로 건너뛰어져
+    // 같은 심이 다른 성을 받는다 — 실측으로 형제끼리 성이 갈렸다.
+    // world.parents는 사망 뒤에도 남으므로 **계보만 보고** 뿌리를 찾는다. 생사와 무관하다.
+    //
+    // 44에서 다시 도는 이유: 43의 표는 한자별 인구를 썼는데 심 이름은 한글로만 보이므로
+    // 한글 단위로 합산해야 맞다(유 = 柳+劉+兪 → 1.1%가 아니라 1.9%). 표가 바뀌면
+    // 저장된 세계와 같은 시드의 새 세계가 갈리므로 **강제로 다시 계산한다**.
+    const rootOf = (startId) => {
+      let cur = startId;
+      const seen = new Set();
+      while (!seen.has(cur)) {
+        seen.add(cur);
+        const pr = world.parents?.[cur];
+        if (!Array.isArray(pr) || pr.length < 2) break;
+        // 명명 부모: id가 작은 쪽. 성별로 고르면 죽은 부모의 성별을 알 수 없어
+        // 마이그레이션이 생사에 다시 의존하게 된다. 뿌리 추적은 완전 순서라야 한다.
+        const next = Math.min(pr[0], pr[1]);
+        if (next === cur) break;
+        cur = next;
+      }
+      return cur;
+    };
+    for (const sim of world.sims) sim.surname = surnameFor(world.seed, rootOf(sim.id));
+    // invitedTo를 모든 심에게 명시적으로 심는다 (없으면 심마다 키가 갈린다)
+    for (const sim of world.sims) if (sim.invitedTo === undefined) sim.invitedTo = null;
+  }
+  if (from < 42) {
+    // §22.14 동석 대화 카운터. undefined면 직렬화 왕복이 고정점이 아니게 되므로 0으로 심는다.
+    for (const sim of world.sims) if (sim.state && sim.state.sideTalkTicks === undefined) sim.state.sideTalkTicks = 0;
   }
   if (from < 41) {
     // §22.13 플레이어 심의 groceries·sick 미초기화 복구 (플레이테스트 S2-1).

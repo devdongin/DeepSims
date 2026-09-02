@@ -1,6 +1,8 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
+import { makeSim } from './simfactory.js';
+import { surnameFor } from './surnames.js';
 import { generateTraits, occupationAllowed } from './traits.js';
 import { makeAbilities, aptitudeFor } from './abilities.js'; // §21.1 (RNG 미소비)
 import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
@@ -188,21 +190,24 @@ export function maybeChildren(world, t, day, emit) {
     const name = IMMIGRANT_NAMES[world.immigrantCounter % IMMIGRANT_NAMES.length];
     world.immigrantCounter++;
     const L = world.logic;
-    const child = {
-      id, name, homeId: pa.homeId, isPlayer: false, traits, mood: 0,
-      x: home.door.x, y: home.door.y + 1,
+    // §22.16 자녀는 부모의 성을 따른다. 한국 민법 제781조는 부의 성을 원칙으로 하고
+    // 혼인신고 시 협의로 모의 성을 따를 수 있게 한다. 게임은 결정적이어야 하므로
+    // **남성 부모가 정확히 한 명이면 그 성**, 아니면 id가 작은 쪽의 성을 따른다.
+    // (동성 부부·성별 X인 경우에도 규칙이 갈리지 않게 하는 완전 순서다.)
+    const dads = [pa, pb].filter((p) => p.traits.gender === 'M');
+    const nameParent = dads.length === 1 ? dads[0] : (pa.id <= pb.id ? pa : pb);
+    const child = makeSim({
+      id,
+      name,
+      surname: nameParent.surname ?? surnameFor(world.seed, nameParent.id),
+      homeId: pa.homeId,
+      traits,
+      seed: world.seed,
+      x: home.door.x,
+      y: home.door.y + 1,
       needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 },
       money: L.occupations.child.startMoney,
-      state: { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 },
-      memories: [], memorySeq: 0, habit: {}, relTiers: {},
-      lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
-      knownTokens: [], plan: null, lastPlannedDay: -1,
-      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
-      abilities: makeAbilities(world.seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
-      sharedDay: -1, sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
-      hungerZeroTicks: 0, // §22.2
-      approachedDay: -1, approachedTo: [], // §22.6
-    };
+    });
     world.sims.push(child);
     growIdMatrices(world); // §22.2 id 공간 기준 확장 (sims.length는 사망 후 어긋난다)
     world.parents[id] = [a, b];
@@ -301,19 +306,20 @@ function immigrateOne(world, t, emit) {
   world.immigrantCounter++;
   const id = nextSimId(world); // §22.2 (위와 동일)
   const L = world.logic;
-  const sim = {
-    id, name, homeId: home.id, isPlayer: false, traits, mood: 0,
-    x: 2, y: 23, // 서쪽 도로 끝에서 걸어 들어온다
+  // §22.16 이민자는 한국 성씨 분포에서 성을 받아 온다 — 마을에 새 성씨가 생기는 통로다.
+  // rngSim을 소비하지 않으므로(해시 유도) 기존 리플레이가 어긋나지 않는다.
+  const sim = makeSim({
+    id,
+    name,
+    surname: surnameFor(world.seed, id),
+    homeId: home.id,
+    traits,
+    seed: world.seed,
+    x: 2,
+    y: 23, // 서쪽 도로 끝에서 걸어 들어온다
     needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 },
     money: L.occupations[traits.occupation].startMoney,
-    state: { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 },
-    memories: [], memorySeq: 0, habit: {}, relTiers: {},
-    lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
-    knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
-      abilities: makeAbilities(world.seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
-      sharedDay: -1, sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
-  };
+  });
   world.sims.push(sim);
   // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).
   world.externalInflow = (world.externalInflow ?? 0) + sim.money;
@@ -962,7 +968,8 @@ export function remitPublicRevenue(world, t, emit) {
 // 응하면 그 자리로 마음이 기울 뿐(점수 가중), 하던 일을 강제로 끊지 않는다.
 //
 // pairHash 의사확률이라 rngSim 미소비. 인구 조작 없음. lonely 수치를 직접 깎지 않는다(§0.1).
-export function maybeApproach(world, t, day, emit) {
+export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
+  const sideTalked = new Map(); // §22.14 이번 틱에 곁다리로 말이 트인 쌍 (심당 1회)
   const S = world.logic.social;
   if (S.approachBasePct === 0) return;
   // 시설별로 '혼자 사교 중인 심'과 '사교 중이 아닌 심'을 모은다 (심 전체 1회 순회)
@@ -1009,8 +1016,34 @@ export function maybeApproach(world, t, day, emit) {
     if (accepted) {
       target.invitedTo = { facilityId: sim.state.facilityId, untilTick: t + S.inviteTtlTicks };
       emit('invited', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
+      // §22.14 동석 대화 — 승낙했으면 **지금 이 자리에서** 말이 트인다.
+      // 예전에는 invitedTo(미래 선택에 대한 가중)만 줬다. 그래서 청한 심은 그대로
+      // 혼자 socialize를 마치고 헛걸음으로 기록됐다 — 실측 헛걸음의 46.7%가
+      // 옆에 사람이 있는데도 혼자 돌아온 경우였다.
+      //
+      // 상대의 행동은 바꾸지 않는다. 밥 먹던 사람은 계속 먹고 일하던 사람은 계속 일한다.
+      // 그래서 경제·허기·예약·임금에 손대지 않는다 (Codex 106차 ④).
+      // 호감도·상호작용 행렬도 건드리지 않는다: 관계 형성은 마주 앉은 대화의 몫으로 두고,
+      // 곁다리 대화는 외로움만 던다. 같으면 '아무나 붙잡기'가 최적 전략이 된다 (106차 ③).
+      const both = pairedThisTick.has(sim.id) || pairedThisTick.has(target.id)
+        || sideTalked.has(sim.id) || sideTalked.has(target.id);
+      if (S.sideTalkFactorPct > 0 && !both) {
+        sideTalked.set(sim.id, target.id);
+        sideTalked.set(target.id, sim.id);
+        sim.state.sideTalkTicks = (sim.state.sideTalkTicks ?? 0) + 1;
+        target.state.sideTalkTicks = (target.state.sideTalkTicks ?? 0) + 1;
+        // 청한 쪽의 사교 회복은 tick의 회복 루프가 감쇠해서 처리한다(행동이 socialize라서).
+        // 상대는 행동이 다르니 여기서 직접, 같은 비율로 채운다.
+        const amt = floorDiv(world.logic.actions.socialize.recoverPerTick * S.sideTalkFactorPct, 100);
+        target.needs.social = Math.min(NEED_MAX_REF, target.needs.social + amt);
+        emit('side_talk', sim.id, { withSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
+        const fid = sim.state.facilityId;
+        recordFact(sim, t, world.logic, 'small_talk', { subjectSimId: target.id, placeId: fid, tags: ['socialize', `facility:${fid}`, `sim:${target.id}`] });
+        recordFact(target, t, world.logic, 'small_talk', { subjectSimId: sim.id, placeId: fid, tags: ['socialize', `facility:${fid}`, `sim:${sim.id}`] });
+      }
     } else {
       emit('invite_declined', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
     }
   }
+  return sideTalked;
 }
