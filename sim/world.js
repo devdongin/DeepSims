@@ -31,6 +31,8 @@ export function createWorld(seed) {
       isPlayer: false,
       traits,
       abilities: makeAbilities(seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
+      sharedDay: -1,
+      sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
       mood: 0,
       x: home.door.x,
       y: home.door.y + 1, // 문 앞 도로변
