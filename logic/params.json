@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 41,
+  "logicSchemaVersion": 42,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -347,7 +347,8 @@
       "unmet": 6,
       "welfare": 6,
       "helped": 5,
-      "was_helped": 6
+      "was_helped": 6,
+      "governed": 4
     },
     "recencyLut": [
       1000,
@@ -695,6 +696,12 @@
     "decayFactorNum": 1,
     "decayFactorDen": 2,
     "doctorDeficit": 8500
+  },
+  "fiscal": {
+    "reviewIntervalDays": 5,
+    "stepTaxPct": 3,
+    "stepWelfare": 100,
+    "lowRatioPct": 10
   },
   "election": {
     "intervalDays": 15,

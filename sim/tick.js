@@ -24,7 +24,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -623,7 +623,10 @@ function applyPolicy(world, inp, t, emit) {
     before[k] = world.policy[k] ?? world.logic.economy[k];
     world.policy[k] = inp.payload[k];
   }
-  emit('policy_changed', null, { changes: inp.payload, before });
+  // §22.22 플레이어의 정책 입력을 기록한다 — 시장이 이 창 안에서는 조정을 삼간다.
+  // 내구 입력을 NPC가 곧바로 되돌리면 입력의 의미가 훼손된다 (117차 ⑤).
+  world.playerPolicyDay = floorDiv(t, 1440);
+  emit('policy_changed', null, { changes: inp.payload, before, source: 'player' });
 }
 
 // §18.T2: 건설 지시 — 주문 시 국고 차감·FIFO 적재 (47차 합의: 취소 없음, 착공 시 재검증)
@@ -1129,6 +1132,7 @@ export function tick(world, inputsForThisTick = []) {
         dailyFireDraws(world, t, emit); // §17.20 (①.5 — 질병 다음, 시설당 1드로우)
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
+        maybeFiscalReview(world, t, day, emit); // §22.22 선거 직후 고정 위치 — 그날 복지 정산부터 새 정책
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
         // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야

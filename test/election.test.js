@@ -240,3 +240,119 @@ test('H-4. 챙김이 결정적이고 왕복을 견딘다', () => {
   assert.equal(hashWorld(a), hashWorld(w2));
   assert.deepEqual(findNonFinite(a, 5), []);
 });
+
+// ---- §22.22 시장의 재정 행동 ----
+import { maybeFiscalReview } from '../sim/society.js';
+
+function fiscalStage(w, { treasury, mayor = 3 }) {
+  w.mayorId = mayor;
+  w.treasury = treasury;
+  w.lastFiscalDay = -1;
+  w.playerPolicyDay = -1;
+  return w;
+}
+
+test('F-1. 국고가 쌓였고 굶는 사람이 있으면 복지를 늘린다 (사용자 지시의 핵심)', async () => {
+  const w = createWorld(4242);
+  const cash = w.sims.reduce((n, s) => n + s.money, 0);
+  fiscalStage(w, { treasury: cash * 3 }); // 사재기 상태
+  w.sims[0].hungerZeroTicks = 100;        // 굶은 사람이 있다
+  const evs = [];
+  maybeFiscalReview(w, 5 * 1440, 5, (t2, s2, p2) => evs.push({ type: t2, simId: s2, payload: p2 }));
+  const pol = evs.find((e) => e.type === 'policy_changed');
+  assert.ok(pol, '시장이 아무것도 안 했다');
+  assert.equal(pol.payload.source, 'mayor');
+  assert.equal(pol.payload.reason, 'hoard_welfare');
+  assert.equal(w.policy.welfareAmount, (w.logic.economy.welfareAmount) + w.logic.fiscal.stepWelfare);
+  // §22.20 통합 — 시장이 움직였으니 다음 선거에서 '대응함'이 된다 (루프가 닫힌다)
+  w.termStartPolicy = { taxPct: w.logic.economy.taxPct, welfareAmount: w.logic.economy.welfareAmount, welfareThreshold: w.logic.economy.welfareThreshold };
+  const { policyResponded } = await import('../sim/society.js');
+  assert.equal(policyResponded(w), true, '시장의 조정이 회고 투표의 대응으로 안 잡힌다');
+});
+
+test('F-2. 국고가 마르면 긴축한다 — 지출 먼저, 세율은 최후 (Helm & Stuhler 2024)', () => {
+  // 처음엔 세율부터 올리게 짰다가, 문헌 조사에서 지자체 실증(지출은 수년 내 적응,
+  // 세율은 10년 이상 최후순위)과 반대임을 확인하고 순서를 뒤집었다.
+  const w = createWorld(4242);
+  fiscalStage(w, { treasury: 0 });
+  const evs = [];
+  maybeFiscalReview(w, 5 * 1440, 5, (t2, s2, p2) => evs.push({ type: t2, payload: p2 }));
+  const pol = evs.find((e) => e.type === 'policy_changed');
+  assert.ok(pol);
+  assert.equal(pol.payload.reason, 'runway_welfarecut', '지출 조정이 먼저여야 한다');
+  assert.ok(w.policy.welfareAmount >= w.logic.fiscal.stepWelfare, '복지를 0까지 깎았다 — 안전망 한 칸은 남긴다');
+  // 복지가 이미 바닥이면 그제야 세율을 올린다
+  const w2 = createWorld(4242);
+  fiscalStage(w2, { treasury: 0 });
+  w2.policy = { welfareAmount: w2.logic.fiscal.stepWelfare }; // 바닥
+  const evs2 = [];
+  maybeFiscalReview(w2, 5 * 1440, 5, (t2, s2, p2) => evs2.push({ type: t2, payload: p2 }));
+  assert.equal(evs2[0].payload.reason, 'runway_taxraise');
+  assert.ok(w2.policy.taxPct <= 30, '세율 상한 초과');
+});
+
+test('F-3. 선거일에는 쉬고, 하루 1회이며, 리뷰 주기 밖에서는 움직이지 않는다', () => {
+  const w = createWorld(4242);
+  const cash = w.sims.reduce((n, s) => n + s.money, 0);
+  fiscalStage(w, { treasury: cash * 3 });
+  w.sims[0].hungerZeroTicks = 100;
+  const fire = (day) => {
+    const evs = [];
+    maybeFiscalReview(w, day * 1440, day, (t2, s2, p2) => evs.push(p2));
+    return evs.length;
+  };
+  assert.equal(fire(15), 0, '선거일(15의 배수)에 움직였다');
+  assert.equal(fire(4), 0, '리뷰 주기(5)도 유세 시작일도 아닌데 움직였다');
+  assert.equal(fire(5), 1, '리뷰 주기에 안 움직였다');
+  assert.equal(fire(5), 0, '같은 날 두 번 움직였다');
+  // 유세 시작일(15-3=12일)에도 발화한다 (Rogoff 정치적 예산 순환)
+  w.lastFiscalDay = -1;
+  assert.equal(fire(12), 1, '유세 시작일에 안 움직였다');
+});
+
+test('F-4. 플레이어를 존중한다 — 플레이어 시장이거나 방금 정책을 만졌으면 쉰다', () => {
+  const w = createWorld(4242);
+  const cash = w.sims.reduce((n, s) => n + s.money, 0);
+  fiscalStage(w, { treasury: cash * 3 });
+  w.sims[0].hungerZeroTicks = 100;
+  // 플레이어 시장
+  w.sims.find((s) => s.id === 3).isPlayer = true;
+  const evs = [];
+  maybeFiscalReview(w, 5 * 1440, 5, (t2, s2, p2) => evs.push(p2));
+  assert.equal(evs.length, 0, '플레이어 시장인데 NPC 로직이 통치했다');
+  // 플레이어가 정책을 방금 만졌다
+  const w2 = createWorld(4242);
+  fiscalStage(w2, { treasury: cash * 3 });
+  w2.sims[0].hungerZeroTicks = 100;
+  w2.playerPolicyDay = 3; // 5 - 3 < reviewIntervalDays(5)
+  const evs2 = [];
+  maybeFiscalReview(w2, 5 * 1440, 5, (t2, s2, p2) => evs2.push(p2));
+  assert.equal(evs2.length, 0, '플레이어의 내구 입력을 시장이 곧바로 되돌렸다');
+});
+
+test('F-5. 재정 행동이 결정적이고 왕복을 견딘다', () => {
+  const a = createWorld(777); const b = createWorld(777);
+  advance(a, {}, 30 * 1440); advance(b, {}, 30 * 1440);
+  assert.equal(hashWorld(a), hashWorld(b));
+  const w2 = deserialize(serialize(a));
+  assert.equal(hashWorld(a), hashWorld(w2));
+  advance(a, {}, 3000); advance(w2, {}, 3000);
+  assert.equal(hashWorld(a), hashWorld(w2), '왕복 뒤 세계가 갈라졌다');
+});
+
+test('H-5. 챙김은 곁다리 수다 스위치와 독립이다 (117차 A)', () => {
+  // 예전에는 도움 분기가 sideTalkFactorPct > 0 게이트 안에 있어서 수다를 끄면
+  // 챙김까지 조용히 죽었다.
+  const w = createWorld(4242);
+  w.logic.social.sideTalkFactorPct = 0; // 수다를 꺼도
+  const giver = w.sims[0]; const target = w.sims[1];
+  const fac = w.map.facilities.find((f) => f.type === 'cafe');
+  giver.state = { ...giver.state, kind: 'performing', action: 'socialize', facilityId: fac.id, pairedTicks: 0, sideTalkTicks: 0 };
+  target.state = { ...target.state, kind: 'performing', action: 'eat', facilityId: fac.id, pairedTicks: 0, sideTalkTicks: 0 };
+  target.sick = { kind: 'cold', untilTick: 99999 };
+  w.logic.social.approachBasePct = 100;
+  const evs = [];
+  maybeApproach(w, 1000, 0, (t2, s2, p2) => evs.push({ type: t2 }), new Set());
+  assert.ok(evs.some((e) => e.type === 'helped'), '수다를 끄니 챙김까지 죽었다');
+  assert.equal(evs.some((e) => e.type === 'side_talk'), false);
+});

@@ -861,6 +861,94 @@ export function maybeShare(world, a, b, t, day, emit) {
   }
 }
 
+// ---- §22.22 시장의 재정 행동 (사용자 지시: "수장이 하는 행동이 아무것도 없으니까
+// 정부의 정책이 바뀌는 게 없어서 국고가 계속 쌓이는 게 아니야?") ----
+//
+// 정확한 진단이었다. §22.20으로 유권자는 재임자를 심판하는데 NPC 시장은 응답할
+// 행동이 없었다 — 정책은 플레이어 입력으로만 바뀌었고, 국고 75%가 그 결과다.
+//
+// 이론 근거 (문헌 조사 병행, docs/REFERENCES.md):
+//   Bohn 1998 — 정부는 재정 상태에 체계적으로 반응한다 (재정 반응 함수)
+//   Downs 1957 — 재선을 원하는 재임자는 유권자 심판에 반응한다 (관직 추구)
+//   Nordhaus 1975·Rogoff 1990 — 선거가 다가오면 재정이 느슨해진다 (정치적 예산 순환)
+//
+// 시장은 **유권자가 심판하는 §22.20과 정확히 같은 조건**(hoardRatioPct)을 보고
+// 플레이어와 같은 레버(POLICY_FIELDS 범위)를 한 걸음씩 움직인다. 잔고를 직접 깎지
+// 않는다 — 정책을 고르고 결과는 세계가 만든다 (§0.1). rng 미소비.
+//
+// 순서 계약: 일 경계 블록에서 maybeElection **직후**에 불린다. 그날의 복지 정산은
+// 이미 새 정책을 본다 — 시장이 아침에 조정하면 그날 저녁 지급부터 반영되는 셈이다.
+export function maybeFiscalReview(world, t, day, emit) {
+  const F = world.logic.fiscal;
+  const E = world.logic.election;
+  if (F.stepTaxPct === 0 && F.stepWelfare === 0) return; // A/B 대조군 스위치
+  if (world.mayorId === null) return;                    // 통치할 사람이 없다
+  if (world.lastFiscalDay === day) return;               // 하루 1회
+  if (day % E.intervalDays === 0) return;                // 선거일에는 선거가 우선이다
+  // 리뷰 주기 또는 유세 시작일(Rogoff — 재선을 노리는 재임자는 선거 앞에서 움직인다)
+  const campaignStart = (day % E.intervalDays) === (E.intervalDays - E.campaignDays);
+  if (day % F.reviewIntervalDays !== 0 && !campaignStart) return;
+  const mayor = world.sims.find((s) => s.id === world.mayorId);
+  if (!mayor) return;
+  if (mayor.isPlayer) return; // 플레이어 시장은 UI로 직접 통치한다 (117차 ⑤)
+  // 플레이어가 이번 리뷰 주기 안에 정책을 만졌으면 존중한다 — 내구 입력을 시장이
+  // 곧바로 되돌리면 입력의 의미가 훼손된다 (117차 ⑤).
+  if (world.playerPolicyDay >= 0 && day - world.playerPolicyDay < F.reviewIntervalDays) return;
+  world.lastFiscalDay = day;
+
+  const Ec = world.logic.economy;
+  const cur = {
+    taxPct: world.policy.taxPct ?? Ec.taxPct,
+    welfareAmount: world.policy.welfareAmount ?? Ec.welfareAmount,
+    welfareThreshold: world.policy.welfareThreshold ?? Ec.welfareThreshold,
+  };
+  const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
+  const hoard = world.treasury > floorDiv(cashTotal * E.hoardRatioPct, 100);
+  const runway = world.treasury < floorDiv(cashTotal * F.lowRatioPct, 100);
+  // 빈곤 신호 — 세계가 이미 집계한 불만과 심의 굶은 시간에서 읽는다 (새 계측 없음)
+  const hungry = world.sims.some((s) => (s.hungerZeroTicks ?? 0) > 0)
+    || (world.complaints ?? []).some((c) => c.kind === 'hungry');
+  const noMoney = (world.complaints ?? []).some((c) => c.kind === 'no_money');
+
+  const changes = {};
+  let reason = null;
+  if (hoard && (hungry || noMoney)) {
+    // 완화 — 굶는 사람이 있으면 복지부터, 구매력 문제면 문턱을 넓히거나 감세 (117차 ③)
+    if (hungry && cur.welfareAmount < 1000) {
+      changes.welfareAmount = Math.min(1000, cur.welfareAmount + F.stepWelfare);
+      reason = 'hoard_welfare';
+    } else if (noMoney && cur.welfareThreshold < 2000) {
+      changes.welfareThreshold = Math.min(2000, cur.welfareThreshold + F.stepWelfare);
+      reason = 'hoard_threshold';
+    } else if (cur.taxPct > 5) {
+      changes.taxPct = Math.max(5, cur.taxPct - F.stepTaxPct);
+      reason = 'hoard_taxcut';
+    }
+  } else if (runway) {
+    // 긴축 — **지출 조정이 먼저, 세율은 최후 수단이다** (Helm & Stuhler 2024:
+    // 독일 지자체 준실험에서 지출은 충격에 수년 안에 적응하지만 세율은 10년 이상
+    // 걸리는 가장 느린 도구였다). 처음엔 세율부터 올리게 짰다가 문헌 조사에서
+    // 순서가 실증과 반대임을 확인하고 뒤집었다.
+    // 단 복지를 0까지 깎지는 않는다 — 최후의 안전망 한 칸은 남긴다.
+    if (cur.welfareAmount > F.stepWelfare) {
+      changes.welfareAmount = Math.max(F.stepWelfare, cur.welfareAmount - F.stepWelfare);
+      reason = 'runway_welfarecut';
+    } else if (cur.taxPct < 30) {
+      changes.taxPct = Math.min(30, cur.taxPct + F.stepTaxPct);
+      reason = 'runway_taxraise';
+    }
+  }
+  if (reason === null) return; // 현상 유지도 선택이다
+
+  world.policy = { ...world.policy, ...changes };
+  emit('policy_changed', world.mayorId, {
+    source: 'mayor', reason, changes,
+    treasury: world.treasury, cashTotal,
+    campaign: campaignStart, // Rogoff 순환 관측용
+  });
+  recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', reason] });
+}
+
 // ---- §21.3 전직 — 손님은 있는데 일할 사람이 없다 (이슈 #63, 사용자 규칙 §0.1) ----
 //
 // §20.2 매출 원장이 문제를 드러냈다: restaurant에 24,400원, market에 4,200원이 쌓이는데
@@ -1143,7 +1231,11 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
       // 곁다리 대화는 외로움만 던다. 같으면 '아무나 붙잡기'가 최적 전략이 된다 (106차 ③).
       const both = pairedThisTick.has(sim.id) || pairedThisTick.has(target.id)
         || sideTalked.has(sim.id) || sideTalked.has(target.id);
-      if (S.sideTalkFactorPct > 0 && !both) {
+      // §22.21 (117차 A) **챙김은 곁다리 수다의 하위 기능이 아니다.** 예전에는 도움 분기가
+      // sideTalkFactorPct > 0 게이트 안에 있어서, 수다를 끄면 챙김까지 조용히 죽었다 —
+      // 독립 기능이 남의 스위치에 묶여 있었다. 슬롯 가드(both)만 공유한다.
+      // 슬롯이 이미 찬 상대는 이번 틱에 챙길 수 없다 — invited(미래 가중)만 남는다.
+      if (!both && (distress || S.sideTalkFactorPct > 0)) {
         sideTalked.set(sim.id, target.id);
         sideTalked.set(target.id, sim.id);
         sim.state.sideTalkTicks = (sim.state.sideTalkTicks ?? 0) + 1;

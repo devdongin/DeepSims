@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 41, // §22.21 먼저 돕기 (주는 쪽의 외로움이 준다)
+  logicSchemaVersion: 42, // §22.22 시장의 재정 행동 (통치가 시작된다)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -135,7 +135,8 @@ export const DEFAULT_LOGIC = {
       sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
       new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7, unmet: 6,
       welfare: 6, // §22.20 정부가 나를 도왔다 — 회고 투표의 재료
-      helped: 5, was_helped: 6 }, // §22.21 이웃을 챙겼다 / 이웃이 나를 챙겼다
+      helped: 5, was_helped: 6, // §22.21 이웃을 챙겼다 / 이웃이 나를 챙겼다
+      governed: 4 }, // §22.22 정책을 조정했다 — 시장 자신의 통치 기록
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
     posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프
@@ -358,6 +359,15 @@ export const DEFAULT_LOGIC = {
     decayFactorNum: 1,       // 감쇠 가산 d += floorDiv(d × num, den) → +50%
     decayFactorDen: 2,
     doctorDeficit: 8500,     // see_doctor needValue = NEED_MAX - deficit (아플 때 최우선급)
+  },
+  // §22.22 시장의 재정 행동 — Bohn 1998 재정 반응 함수, Downs 1957 관직 추구,
+  // Nordhaus 1975·Rogoff 1990 정치적 예산 순환. 시장은 §22.20의 hoardRatioPct와
+  // 같은 조건을 보고 POLICY_FIELDS 범위 안에서 한 걸음씩 움직인다.
+  fiscal: {
+    reviewIntervalDays: 5,   // 15일 임기에 조정 기회 2~3회
+    stepTaxPct: 3,           // 세율 한 걸음 (%p)
+    stepWelfare: 100,        // 복지 금액·문턱 한 걸음
+    lowRatioPct: 10,         // 국고 < 시민총현금 × 10% → 재정 위험(긴축)
   },
   election: {
     intervalDays: 15,
@@ -761,6 +771,10 @@ function checkRanges(p, errors) {
   inRange('election.hoardRatioPct', p.election.hoardRatioPct, 1, 10000);
   inRange('election.hoardMultPct', p.election.hoardMultPct, 100, 1000);
   inRange('election.retroCap', p.election.retroCap, 0, 10000);
+  inRange('fiscal.reviewIntervalDays', p.fiscal.reviewIntervalDays, 1, 120);
+  inRange('fiscal.stepTaxPct', p.fiscal.stepTaxPct, 0, 25);
+  inRange('fiscal.stepWelfare', p.fiscal.stepWelfare, 0, 1000);
+  inRange('fiscal.lowRatioPct', p.fiscal.lowRatioPct, 0, 100);
   for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {
     inRange(`disease.${k}`, p.disease[k], 0, 1000);
   }
