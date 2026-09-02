@@ -690,23 +690,53 @@ function conversationLine(e) {
         `${ga(about)} 나쁜 사람은 아닌데 나랑은 영 안 맞아`,
       ], t);
     }
+    // §22.28 자기 공개 — 가장 자주 쓰이면서 변형이 하나뿐이던 자리.
+    // 13개 하위 종류 중 11개가 고정 문장 1개였다(라이브 800건 중 memory_share 122건).
+    // 자기 공개는 되받아야 관계가 되므로 replyLine에도 상호 공개 분기를 뒀다.
     case 'memory_share': {
       const place = placeKo(d.placeId);
       switch (d.kind) {
-        case 'argument': return about ? `오늘 ${place}에서 ${about}랑 말다툼했어… 아직도 속상해` : `오늘 ${place}에서 크게 싸웠어…`;
-        case 'fishing': return pick([`오늘 낚시터에서 손맛 좀 봤지~`, `아까 낚시하는데 월척인 줄 알았다니까`], t);
-        case 'drank': return `어제 술집에서 좀 달렸더니 아직도 어질어질해`;
-        case 'workout': return `오늘 공원에서 운동했는데 개운하다!`;
-        case 'work_done': return pick([`오늘 일 진짜 많았어…`, `드디어 오늘치 일 끝냈다`], t);
-        case 'meal': return `아까 ${place}에서 먹은 거 괜찮더라`;
-        case 'home_meal': return `요즘 집밥 해먹는데 생각보다 할 만해`;
-        case 'starving': return `오늘 하루종일 쫄쫄 굶었어… 죽는 줄`;
-        case 'lonely': return `아까 ${place}에서 혼자 뻘쭘하게 있었잖아…`;
-        case 'party_info': return `요즘 ${place} 모임 얘기가 돌던데?`;
-        case 'found_item': return `오늘 길에서 돈 주웠다? 완전 럭키`;
-        case 'built_bed': return `집에 침대 하나 새로 만들었어. 뿌듯해`;
-        case 'relationship_changed': return about ? `${about}랑 요즘 사이가 달라진 것 같아` : `요즘 인간관계가 좀 변했어`;
-        default: return `오늘 ${place}에서 별일이 다 있었어`;
+        case 'argument': return about
+          ? pick([`오늘 ${place}에서 ${rang(about)} 말다툼했어… 아직도 속상해`,
+            `${rang(about)} 오늘 좀 부딪혔어. 마음이 안 풀리네`,
+            `아까 ${about} 얼굴 보고 말이 세게 나갔어. 후회돼`,
+            `${wa(about)} 말이 안 통해서 답답했어`], t)
+          : pick([`오늘 ${place}에서 크게 싸웠어…`, `아까 언성이 높아졌어. 좀 창피하다`,
+            `싸우고 나니 기운이 하나도 없다`], t);
+        case 'fishing': return pick([`오늘 낚시터에서 손맛 좀 봤지~`, `아까 낚시하는데 월척인 줄 알았다니까`,
+          `물가에 앉아 있으면 시간 가는 줄 몰라`, `오늘은 입질이 영 없더라`,
+          `낚싯대만 담가놔도 마음이 조용해져`], t);
+        case 'drank': return pick([`어제 술집에서 좀 달렸더니 아직도 어질어질해`,
+          `어제 한잔이 두잔 되고… 오늘 하루 다 갔다`, `술기운에 별 얘길 다 했나 봐`,
+          `해장이 급하다 진짜`, `어제 그렇게 웃어본 거 오랜만이야`], t);
+        case 'workout': return pick([`오늘 공원에서 운동했는데 개운하다!`, `땀 빼고 나니까 머리가 맑아`,
+          `며칠 쉬었더니 몸이 무겁더라`, `오늘은 좀 무리했나 봐. 다리가 후들거려`,
+          `운동하고 나면 밥이 두 배로 맛있어`], t);
+        case 'work_done': return pick([`오늘 일 진짜 많았어…`, `드디어 오늘치 일 끝냈다`,
+          `퇴근길 공기가 제일 달아`, `오늘은 손이 착착 맞더라`,
+          `일 끝내고 앉으니 이제야 숨 쉬는 것 같아`], t);
+        case 'meal': return pick([`아까 ${place}에서 먹은 거 괜찮더라`, `${place} 밥이 오늘따라 잘 넘어가더라`,
+          `혼자 먹었는데도 맛있더라`, `${place}에서 한 그릇 비우고 나니 살 것 같다`], t);
+        case 'home_meal': return pick([`요즘 집밥 해먹는데 생각보다 할 만해`, `장 봐다 해먹으니 돈이 덜 들더라`,
+          `오늘은 대충 차렸는데 그게 더 맛있네`, `집에서 먹으면 마음이 편해`], t);
+        // 굶주림·외로움은 진지한 자리다 — 농담으로 만들지 않는다.
+        case 'starving': return pick([`오늘 하루종일 아무것도 못 먹었어`,
+          `배가 고픈 걸 넘어서 이제 기운이 없다`, `먹을 걸 살 돈이 모자랐어`,
+          `하루 굶으니까 아무 생각도 안 나더라`], t);
+        case 'lonely': return pick([`아까 ${place}에서 혼자 앉아만 있었어`,
+          `${place}에 사람은 많은데 말 붙일 데가 없더라`, `요즘 하루에 한마디도 안 할 때가 있어`,
+          `혼자 있는 게 익숙해지는 게 좀 그래`], t);
+        case 'party_info': return pick([`요즘 ${place} 모임 얘기가 돌던데?`,
+          `${place}에서 뭐 한다는 것 같던데 들었어?`, `모임 얘기가 여기저기서 나오더라`], t);
+        case 'found_item': return pick([`오늘 길에서 돈 주웠다? 완전 럭키`,
+          `길에 떨어진 걸 주웠는데 기분이 묘하네`, `오늘은 운이 좀 따라주는 날인가 봐`], t);
+        case 'built_bed': return pick([`집에 침대 하나 새로 만들었어. 뿌듯해`,
+          `손수 만들어 놓으니 이제 집 같아졌어`, `밤새 뚝딱거렸는데 그래도 쓸 만해`], t);
+        case 'relationship_changed': return about
+          ? pick([`${rang(about)} 요즘 사이가 달라진 것 같아`, `${wa(about)} 예전 같지가 않네`,
+            `${about} 생각하면 마음이 좀 복잡해`], t)
+          : pick([`요즘 인간관계가 좀 변했어`, `사람 사이라는 게 참 알 수가 없어`], t);
+        default: return pick([`오늘 ${place}에서 별일이 다 있었어`, `오늘 ${place} 얘기 하나 해줄까?`], t);
       }
     }
     case 'work_gripe': {
@@ -813,6 +843,35 @@ function replyLine(e) {
   if (e.payload.topic === 'food') {
     return warm >= 0 ? pick(['오 어디 거?', '나도 배고파졌어', '다음엔 같이 가자'], t)
       : pick(['난 방금 먹었어', '입맛이 없네'], t);
+  }
+  // §22.28 상호 자기 공개 (Brummelman et al. 2024, Dev Sci; CC BY).
+  // 자기 공개는 **되받는 공개**로 받을 때 관계가 된다 — 실험에서 서로 번갈아 털어놓은
+  // 쪽이 그냥 듣기만 한 쪽보다 상대에게 사랑받는다고 느꼈다. 그래서 호감이 있는 청자는
+  // "응응"이 아니라 **자기 얘기로 되받는다**. 호감이 없으면 되받지 않고 인정만 한다 —
+  // 비상호(non-reciprocal) 조건이 대조군인 그대로다.
+  if (e.payload.topic === 'memory_share') {
+    const k = (e.payload.detail ?? {}).kind;
+    const back = {
+      argument: ['나도 지난주에 비슷한 일 있었어', '나도 그런 날엔 잠이 안 오더라',
+        '말이 세게 나가는 날이 있더라. 나도 그래'],
+      starving: ['나도 며칠 전에 그랬어', '나도 돈 떨어졌을 때 하루 굶어봤어', '그 기분 알아. 나도 겪었어'],
+      lonely: ['나도 요즘 그래', '나도 혼자 앉아 있던 날이 있었어', '그럴 땐 나한테 말 걸어도 돼'],
+      fishing: ['나도 어릴 때 자주 갔었는데', '나도 한번 같이 가볼까', '나는 앉아만 있다 온 적도 많아'],
+      drank: ['나도 어제 좀 마셨어', '나도 그런 날 있었지', '나는 요즘 줄이는 중이야'],
+      workout: ['나도 몸이 무거워서 요즘 시작했어', '나도 아침에 좀 걸어', '나는 며칠째 미루고만 있네'],
+      work_done: ['나도 오늘 겨우 끝냈어', '나도 요즘 일이 몰려', '나는 아직 남았어…'],
+      meal: ['나도 거기 가봤어', '나도 오늘 밖에서 먹었어', '나는 요즘 집에서 해먹어'],
+      home_meal: ['나도 요즘 해먹어', '나도 장 봐다 하는 게 낫더라', '나는 아직 서툴러'],
+      party_info: ['나도 그 얘기 들었어', '나도 가볼까 생각 중이야'],
+      found_item: ['나도 예전에 그런 적 있어', '나는 그런 운이 없더라'],
+      built_bed: ['나도 집에 하나 만들어볼까', '나도 손으로 뭐 만드는 거 좋아해'],
+      relationship_changed: ['나도 요즘 그런 생각 해', '사람 사이가 변하는 건 나도 겪어봤어'],
+    }[k];
+    if (warm >= 0 && back) return pick(back, t);
+    // 무거운 얘기는 호감이 없어도 가볍게 넘기지 않는다.
+    return (k === 'starving' || k === 'lonely' || k === 'argument')
+      ? pick(['그랬구나…', '힘들었겠다', '음…'], t)
+      : pick(['아 그랬어?', '그렇구나', '그럴 수도 있지', '음…'], t);
   }
   if (e.payload.topic === 'family_talk') {
     return warm >= 0 ? pick(['좋겠다…', '가족이 최고지', '나도 오랜만에 연락해봐야겠다'], t)

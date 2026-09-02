@@ -33,6 +33,7 @@ DeepSims가 설계 근거로 인용한 학술 문헌·정부 보고서의 **출�
 | The KIND Challenge community intervention to reduce loneliness and social isolation | Michelle H. Lim, Alexandra Hennessey, Pamela Qualter, Ben J. Smith, Lily Thurston, Robert Eres, Julianne Holt-Lunstad | 2025 | **CC BY 4.0** (Springer, OA 고지 직접 확인) | [DOI 10.1007/s00127-024-02740-z](https://doi.org/10.1007/s00127-024-02740-z) | **#69** 먼저 돕기 — 3개국 4,284명 RCT에서 '주 1회 작은 친절 행동'이 4주 뒤 외로움을 유의하게 감소(효과는 국가별 상이, 장기 지속 미확인). 시설 방문이 아니라 **자발적 도움 행동**(offer_help)이 외로움을 더는 근거 |
 | Interpersonal lending network dataset of a Hungarian village in a disadvantaged region | Márton Gosztonyi, Dániel Havran, Zoltán Pollák, Edina Berlinger | 2023 | **CC BY 4.0** (Elsevier Data in Brief, 본문 고지 확인) | [DOI 10.1016/j.dib.2023.108946](https://doi.org/10.1016/j.dib.2023.108946) | **#57·#76** 관계 기반 소액 차입 — 낙후 지역 마을의 대인 대출망 실측. no_money 불만 415건을 복지 증액이 아니라 **요청·승낙·상환이 있는 차입 행동**(request_loan/lend_money)으로 푸는 근거. 후보 우선순위(가구원→친족→친구→반복 접촉)의 실증 |
 | The fiscal response to revenue shocks | Simon Berset, Martin Huber, Mark Schelker | 2023 | **CC BY 4.0** (Springer, © The Author(s) 2022, 출판사 페이지 고지 직접 확인) | [DOI 10.1007/s10797-022-09727-z](https://doi.org/10.1007/s10797-022-09727-z) | **§22.22** 시장 재정 행동 — 취리히 지자체는 수입 충격을 평활화(양의 충격은 이월, 음의 충격은 지출 삭감). '국고 잉여 → 전액 지출'이 아니라 한 걸음씩 반응하는 설계의 실증 근거 |
+| Reciprocal self-disclosure makes children feel more loved by their parents in the moment: A proof-of-concept experiment | Eddie Brummelman, Peter A. Bos, Eva de Boer, Barbara Nevicka, Constantine Sedikides | 2024 | **CC BY** (Wiley 조판본 1쪽 고지 직접 추출 — "This is an open access article under the terms of the Creative Commons Attribution License"; © 2024 The Authors, Developmental Science published by John Wiley & Sons Ltd) | [DOI 10.1111/desc.13516](https://doi.org/10.1111/desc.13516) · [UvA-DARE 조판본 PDF](https://pure.uva.nl/ws/files/239110449/Developmental_Science_-_2024_-_Brummelman_-_Reciprocal_self_disclosure_makes_children_feel_more_loved_by_their_parents_in.pdf) | **§22.28** 상호 자기 공개 — 218쌍의 부모·자녀가 9분간 번갈아 질문을 주고받는 실험에서, 깊은 자기 공개 조건의 아이가 잡담 조건보다 그 순간 더 사랑받는다고 느꼈다. 자기 공개(memory_share)를 맞장구가 아니라 **청자 자신의 얘기로 되받게** 만든 근거. 호감 없는 청자는 되받지 않고 인정만 하게 두어 비상호 조건을 대조군으로 남겼다 |
 
 ### 전문을 올릴 때 지켜야 할 것
 
@@ -103,6 +104,7 @@ Anno 1800, Civilization 시리즈, Cities: Skylines 같은 **상용 게임의 �
 | Jing, Canter & Haas 2019 | [MDPI 페이지](https://www.mdpi.com/2413-8851/3/4/107) (HTML·PDF 모두) | 출판사가 기탁한 Crossref license 레코드(CC BY 4.0, VoR) + Unpaywall(`gold`, cc-by) + OpenAlex 3중 확인 |
 | Brown et al. 2013 | ieeexplore.ieee.org | arXiv abs 페이지 라이선스 블록 + Crossref(publisher=IEEE, license=null) |
 | Surgeon General Advisory | hhs.gov PDF 직접 접근 | [NCBI Bookshelf 전문 재수록본](https://www.ncbi.nlm.nih.gov/books/NBK595227/)의 퍼블릭 도메인 고지 |
+| Brummelman et al. 2024 | [Wiley Online Library 논문 페이지](https://onlinelibrary.wiley.com/doi/10.1111/desc.13516) (HTTP 403) | **출판사 조판본 PDF 1쪽의 Wiley 자체 라이선스 고지를 직접 추출**해 CC BY 확인. UvA-DARE 표지의 "License: CC BY"는 리포지터리 메타데이터라 단독 근거로 쓰지 않았다(§4.1) |
 | Induced travel demand (DfT) | rand.org의 RAND Europe external publication 페이지 | 발행 주체인 DfT의 GOV.UK 공식 게시본 푸터 OGL v3.0 표기 + PDF 전문 권리 유보 문구 전수 검색(없음) |
 
 ### 4.3 서지정보 중 미확인 필드
