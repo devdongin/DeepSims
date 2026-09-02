@@ -20,6 +20,10 @@ const topFails7d = db.prepare(
 // 상한을 두면 하위 이벤트가 잘려 리뷰어가 '0건'으로 오독한다 (실제로 Codex가
 // car_bought를 0건으로 잘못 읽었다 — 7일 5건인데 상위 12종 밖이었다).
 // 종류 수는 수십 개 수준이라 전부 실어도 스냅샷이 커지지 않는다.
+// §21.1 (82차 ④): 능력치로 민간 임금이 오르면 매출 부족이 잦아질 수 있다 — 계측한다.
+const shortfall7d = db.prepare(
+  \"SELECT COUNT(*) n, COALESCE(SUM(json_extract(payload,'\$.shortfall')),0) sum FROM events WHERE type='wage_shortfall' AND tick > ?\"
+).get(since);
 const events7d = db.prepare(
   'SELECT type, COUNT(*) n FROM events WHERE tick > ? GROUP BY type ORDER BY n DESC'
 ).all(since);
@@ -48,6 +52,7 @@ fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
       ? { ...c, kind: 'no_facility(legacy-오라벨가능)' } : c)),
   stats14: (w.statsHistory ?? []).slice(-14),
   events7d, topFails7d,
+  wageShortfall7d: { count: shortfall7d.n, total: shortfall7d.sum },
 }, null, 1) + '\n');
 console.log('logs/world-snapshot.json 갱신: Day ' + day + ' 인구 ' + w.sims.length);
 "

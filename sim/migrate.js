@@ -1,6 +1,7 @@
 // 세이브 마이그레이션 (PLAN §12.1): 입력 처리 전 로드 시점에 완료.
 // 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
+import { makeAbilities } from './abilities.js'; // §21.1
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
@@ -153,6 +154,11 @@ export function migrateWorld(world) {
     // §19.10 (73차 ②): 원인 분화 시행일 — 이전 no_facility 항목은 외부 노출에서 legacy 표시
     world.complaintReasonDay = Math.floor(world.worldTick / 1440);
   }
+  if (from < 34) {
+    // §21.1 능력치 (이슈 #62): seed·simId에서 결정적으로 유도하므로 rngSim을 소비하지 않는다.
+    // 기존 심도 즉시 같은 값을 갖고, 리플레이 스트림이 어긋나지 않는다.
+    for (const sim of world.sims) sim.abilities ??= makeAbilities(world.seed, sim.id);
+  }
   if (from < 33) {
     // §20.3 사회적 중력: 새 파라미터는 mergeLogicDefaults가 설치한다. 세계 데이터 이관은 없다 —
     // 거동이 바뀌므로 구 로그 재생 불일치를 '버전 차이'로 식별하기 위한 표식이다 (75차 ①).
@@ -194,7 +200,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 33;
+  world.schemaVersion = 34;
   return world;
 }
 

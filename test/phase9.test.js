@@ -3,6 +3,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } from '../sim/index.js';
 import { sameRegion, TILE } from '../sim/map.js';
+import { aptitudeFor, makeAbilities, ABILITIES, FALLBACK_SEED } from '../sim/abilities.js';
+
+// §21.1: 임금은 직업 기본급에 **능력치 보정**이 곱해진다 (이슈 #62). 테스트 공용 계산.
+function grossWageOf(sim, L) {
+  const base = Math.floor(L.actions.work.wageBase * L.occupations[sim.traits.occupation].wagePct / 100);
+  const apt = aptitudeFor(sim, sim.traits.occupation, L);
+  return Math.floor(base * (100 + Math.floor((apt - 50) * L.abilities.wageSpanPct / 100)) / 100);
+}
 import { applyRomance, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
 import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
@@ -513,7 +521,7 @@ test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () 
   idleAll(w, []);
   s.state = { kind: 'performing', action: 'work', facilityId: 'office', resourceId: 'desk0', path: [], ticksLeft: 1, pairedTicks: 0 };
   const before = s.money;
-  const wage = Math.floor(L.actions.work.wageBase * L.occupations[s.traits.occupation].wagePct / 100);
+  const wage = grossWageOf(s, L);
   const net = Math.floor(wage * (100 - L.economy.taxPct) / 100);
   const evs = tick(w, []);
   const mc = evs.find((e) => e.type === 'money_changed' && e.simId === s.id);
@@ -740,7 +748,7 @@ test('S-26. §18.T1 시정: policy 내구 입력 → 세율·복지 오버라이
   idleAll(w, []);
   s.state = { kind: 'performing', action: 'work', facilityId: 'office', resourceId: 'desk0', path: [], ticksLeft: 1, pairedTicks: 0 };
   const moodBefore = s.mood;
-  const wage = Math.floor(L.actions.work.wageBase * L.occupations[s.traits.occupation].wagePct / 100);
+  const wage = grossWageOf(s, L);
   const net = Math.floor(wage * 70 / 100);
   const tax = wage - net;
   const evs2 = tick(w, []);
@@ -1256,7 +1264,11 @@ test('S-58. §20.2 소비금은 소멸하지 않고 그 시설 매출로 간다 
 test('S-59. §20.2 민간 임금은 시설 매출에서 나오고, 모자라면 부분 지급된다 (#43)', () => {
   const L0 = createWorld(SEED).logic;
   assert.ok(L0.economy.privateWageOccupations.includes('barista'), '바리스타는 민간 임금 직군');
-  const gross = Math.floor(L0.actions.work.wageBase * L0.occupations.barista.wagePct / 100);
+  // §21.1: 임금에 능력치 보정이 붙으므로 대상 심에서 직접 계산한다.
+  const probe = createWorld(SEED);
+  const probeSim = probe.sims.find((s) => s.traits.occupation === 'barista') ?? probe.sims[0];
+  probeSim.traits.occupation = 'barista';
+  const gross = grossWageOf(probeSim, probe.logic);
 
   const run = (revenue) => {
     const w = createWorld(SEED);
@@ -1304,7 +1316,7 @@ test('S-60. §20.2 공공·기반 부문 임금은 매출과 무관하게 그대
   const fac = w.map.facilities.find((f) => f.id === fid);
   sim.state = { kind: 'performing', action: 'work', facilityId: fid, resourceId: fac.resources[0].id, path: [], ticksLeft: 1, pairedTicks: 0 };
   const evs = tick(w, []);
-  const gross = Math.floor(L.actions.work.wageBase * L.occupations.doctor.wagePct / 100);
+  const gross = grossWageOf(sim, L);
   const net = Math.floor(gross * (100 - L.economy.taxPct) / 100);
   assert.equal(sim.money, net, '의사는 매출 0이어도 전액 받는다 (기반/공공 부문)');
   assert.equal(evs.filter((e) => e.type === 'wage_shortfall').length, 0);
@@ -1398,4 +1410,89 @@ test('S-63. §20.3 갈 수 없는 곳은 붐벼도 끌리지 않는다 (80차 �
   w.map.reachVersion = (w.map.reachVersion ?? 0) + 1; // 타일이 바뀌면 도달 영역 캐시 무효화
   assert.equal(sameRegion(w.map, sim.x, sim.y, d.x, d.y), false, '문이 막혀 도달 불가');
   assert.equal(socialPullPct(w, cafe, presence, L, sim), 0, '갈 수 없으면 끌림 0');
+});
+
+test('S-64. §21.1 능력치는 결정적이고 RNG를 소비하지 않는다 (#62)', () => {
+  const a = createWorld(SEED);
+  const b = createWorld(SEED);
+  for (const s of a.sims) {
+    assert.ok(s.abilities, '모든 심이 능력치를 갖는다');
+    for (const k of ABILITIES) {
+      assert.ok(Number.isInteger(s.abilities[k]) && s.abilities[k] >= 0 && s.abilities[k] < 100,
+        `${k}는 0~99 정수`);
+    }
+  }
+  // 같은 시드 → 같은 능력치
+  for (let i = 0; i < a.sims.length; i++) {
+    assert.deepEqual(a.sims[i].abilities, b.sims[i].abilities, '같은 시드면 같은 능력치');
+  }
+  // 사람마다 다르다 (전원 동일하면 능력치가 무의미하다)
+  const distinct = new Set(a.sims.map((s) => ABILITIES.map((k) => s.abilities[k]).join(',')));
+  assert.ok(distinct.size > a.sims.length / 2, '능력치 조합이 사람마다 갈린다');
+
+  // RNG 미소비: 능력치 유도가 rngSim 스트림을 건드리지 않는다
+  const before = JSON.stringify(a.rngSim);
+  makeAbilities(a.seed, 999);
+  assert.equal(JSON.stringify(a.rngSim), before, 'makeAbilities는 rngSim을 소비하지 않는다');
+});
+
+test('S-65. §21.1 임금은 능력에 따라 완만히 갈린다 — 이분법이 아니다 (#62)', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const wageOf = (apt) => {
+    const sim = { traits: { occupation: 'doctor' }, abilities: { intellect: apt } };
+    const base = Math.floor(L.actions.work.wageBase * L.occupations.doctor.wagePct / 100);
+    const a = aptitudeFor(sim, 'doctor', L);
+    return Math.floor(base * (100 + Math.floor((a - 50) * L.abilities.wageSpanPct / 100)) / 100);
+  };
+  const low = wageOf(0), mid = wageOf(50), high = wageOf(99);
+  assert.ok(low < mid && mid < high, '능력이 높을수록 많이 번다');
+  assert.equal(mid, Math.floor(L.actions.work.wageBase * L.occupations.doctor.wagePct / 100),
+    '능력 50은 기준선 — 보정 0');
+  // 계단이 아니라 기울기: 중간값들이 단조 증가해야 한다
+  let prev = -1;
+  for (let a = 0; a < 100; a += 7) {
+    const v = wageOf(a);
+    assert.ok(v >= prev, '단조 증가 (이분 컷 없음)');
+    prev = v;
+  }
+  // 진폭이 과하지 않다 — 능력만으로 직업 격차를 뒤집으면 안 된다
+  assert.ok(high - low <= Math.floor(mid * L.abilities.wageSpanPct / 100) + 2, '진폭은 wageSpanPct 이내');
+});
+
+test('S-66. §21.1 적성 가중 졸업 — 드로우 수는 1회 그대로 (§17.8 계약)', () => {
+  // 졸업 시 적성 높은 직업이 뽑힐 확률이 오르되, rngInt 호출 횟수는 바뀌지 않아야 한다.
+  const run = (weight) => {
+    const w = createWorld(SEED);
+    w.logic.abilities.aptitudePoolWeight = weight;
+    const S = w.logic.society;
+    for (const s of w.sims) { s.traits.occupation = 'student'; s.traits.age = S.graduateAge; }
+    // 새해 틱으로 졸업 발동
+    w.worldTick = S.yearDays * 1440 - 1;
+    w.weather.day = S.yearDays - 1;
+    w.lastDailyDay = S.yearDays - 2;
+    w.lastPlanDay = S.yearDays;
+    idleAll(w, []);
+    const evs = tick(w, []);
+    return { grads: evs.filter((e) => e.type === 'graduated'), rng: JSON.stringify(w.rngSim) };
+  };
+  const flat = run(0);      // 가중 없음 = 균등
+  const tilted = run(2000); // 강한 가중
+  assert.ok(flat.grads.length > 0, '졸업이 발생한다');
+  assert.equal(flat.grads.length, tilted.grads.length, '졸업자 수는 같다');
+  // 가중을 주면 배정 결과가 달라진다 (적성 쪽으로 기운다)
+  const same = flat.grads.every((g, i) => g.payload.to === tilted.grads[i].payload.to);
+  assert.ok(!same, '적성 가중이 실제로 배정을 바꾼다');
+});
+
+test('S-67. §21.1 seed 없는 구세이브도 조용히 같은 값이 되지 않는다 (82차 ②)', () => {
+  // seed가 undefined면 undefined+1 = NaN → Math.imul(NaN,x) = 0 이 되어
+  // **다른 시드의 세계가 같은 능력치를 갖는** 조용한 오류가 난다. 명시적 폴백으로 막는다.
+  const missing = makeAbilities(undefined, 7);
+  const zero = makeAbilities(0, 7);
+  assert.notDeepEqual(missing, zero, 'seed 없음이 seed 0과 같은 값이 되면 안 된다');
+  assert.deepEqual(missing, makeAbilities(FALLBACK_SEED, 7), '폴백 시드로 결정적으로 유도된다');
+  for (const k of ABILITIES) {
+    assert.ok(Number.isInteger(missing[k]) && missing[k] >= 0 && missing[k] < 100, k + ' 범위 유지');
+  }
 });

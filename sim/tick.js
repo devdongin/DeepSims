@@ -11,6 +11,7 @@ import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits } from './traits.js';
+import { aptitudeFor } from './abilities.js'; // §21.1
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
@@ -811,6 +812,13 @@ export function tick(world, inputsForThisTick = []) {
       emit('bed_built', sim.id, { facilityId: home.id, resourceId: newRes.id, x: slot.x, y: slot.y });
     } else if (s.action === 'work') {
       let wage = floorDiv(L.actions.work.wageBase * L.occupations[sim.traits.occupation].wagePct, 100);
+      // §21.1 능력치 임금 반영 (이슈 #62): 잘하는 사람이 더 번다. 이분법이 아니라 완만한 기울기 —
+      // 능력 0 → -(span/2)%, 50 → 0%, 99 → +(span/2)%. 정수 연산, rngSim 미소비.
+      {
+        const A = L.abilities;
+        const apt = aptitudeFor(sim, sim.traits.occupation, L);
+        wage = floorDiv(wage * (100 + floorDiv((apt - 50) * A.wageSpanPct, 100)), 100);
+      }
       // §20.2 민간 서비스 직군(화이트리스트)은 임금이 무에서 나지 않고 **일한 시설의 매출**에서 나온다.
       // 매출이 모자라면 있는 만큼만 받는다 — 손님 없는 가게는 임금을 다 못 준다 (이슈 #43).
       // 나머지 직군(사무·공공)은 이번 슬라이스에서 그대로 둔다: 경제기반이론의 기반 부문,

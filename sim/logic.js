@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 32, // §20.3 social.gravityPull*/WalkingPct 추가 (사회적 중력 — 이슈 #33)
+  logicSchemaVersion: 33, // §21.1 abilities 추가 (심 능력치 — 이슈 #62)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -62,6 +62,21 @@ export const DEFAULT_LOGIC = {
   mood: {
     argument: -800, lonely: -400, starving: -1000, actionCompleted: 50, moneyGain: 100,
     decayPerTick: 5, lethargyThreshold: -5000, reliefScale: 25000000, lethargyScale: 50000000,
+  },
+  // §21.1 심 능력치 (이슈 #62). 효과는 이분법이 아니라 **가중치**다.
+  abilities: {
+    // 직업이 요구하는 핵심 능력. 없는 직업은 중립(50) 취급 — 능력이 무의미한 직업도 있다.
+    keyAbility: {
+      office_worker: 'intellect', barista: 'dexterity', freelancer: 'intellect',
+      student: 'intellect', doctor: 'intellect', civil_servant: 'intellect',
+      teacher: 'charisma', police: 'stamina', firefighter: 'stamina',
+      nurse: 'charisma', politician: 'charisma', worker: 'stamina',
+    },
+    // 임금 진폭(%): 능력 0 → -(span/2)%, 50 → 0%, 99 → +(span/2)% 로 완만하게 갈린다.
+    wageSpanPct: 40,
+    // 졸업 시 적성이 높은 직업이 뽑힐 확률을 얼마나 올릴지. 풀에 중복 삽입하는 방식이라
+    // **rngInt 드로우 수는 1회 그대로**다 (§17.8 계약 불변).
+    aptitudePoolWeight: 300,
   },
   needCritical: 2000,
   // Phase 3 (logicSchemaVersion 2): 기억·회고·관계 티어 (PLAN §2.5 B/C/E + D2 델타)
@@ -409,6 +424,14 @@ function checkRanges(p, errors) {
   inRange('social.gravityPullPct', p.social.gravityPullPct, 0, 500);
   inRange('social.gravityPullCap', p.social.gravityPullCap, 0, 500);
   inRange('social.gravityWalkingPct', p.social.gravityWalkingPct, 0, 100);
+  inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
+  inRange('abilities.aptitudePoolWeight', p.abilities.aptitudePoolWeight, 0, 2000);
+  for (const [o, k] of Object.entries(p.abilities.keyAbility)) {
+    if (!(o in p.occupations)) errors.push(`abilities.keyAbility: 알 수 없는 직업 ${o}`);
+    if (!['stamina', 'dexterity', 'intellect', 'charisma'].includes(k)) {
+      errors.push(`abilities.keyAbility.${o}: 알 수 없는 능력 ${k}`);
+    }
+  }
   inRange('social.rivalStatePenalty', p.social.rivalStatePenalty, 0, 250000000000);
   inRange('social.reflectionMoodScale', p.social.reflectionMoodScale, 0, 1000);
   inRange('social.habitIncrement', p.social.habitIncrement, 0, 10000000000);
