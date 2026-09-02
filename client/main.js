@@ -625,6 +625,23 @@ function showEmoteAt(x, y, text, ms = 3000) {
 }
 
 const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', site: '공사장' };
+// §22.12 한국어 조사 — 종성(받침)으로 고른다.
+// 예전에는 이름 뒤에 조사를 하드코딩해 "수아이(가)", "은지이(가)", "수아과(와)"가
+// 나왔다. 이벤트 피드는 가상 플레이어 3인이 모두 이 게임 최고의 자산으로 꼽은
+// 주 서사 화면이라, 여기서 글이 어색하면 그 자산이 그만큼 깎인다 (QA #15).
+function hasJong(word) {
+  const ch = String(word ?? '').trim().slice(-1);
+  if (!ch) return false;
+  const code = ch.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 !== 0; // 한글 음절
+  if (ch >= '0' && ch <= '9') return '0136780'.includes(ch); // 영·일·삼·육·칠·팔
+  return false; // 판별 불가(영문 등)는 받침 없는 형태로 — 이 게임의 이름은 전부 한글이다
+}
+const ga = (w) => `${w}${hasJong(w) ? '이' : '가'}`;
+const wa = (w) => `${w}${hasJong(w) ? '과' : '와'}`;
+const eul = (w) => `${w}${hasJong(w) ? '을' : '를'}`;
+const eun = (w) => `${w}${hasJong(w) ? '은' : '는'}`;
+
 function placeKo(id) {
   if (!id) return '동네';
   if (id.startsWith('house')) return '집';
@@ -706,7 +723,7 @@ function conversationLine(e) {
     }
     case 'politics': {
       if (d.phase === 'campaign') {
-        return pick([`이번 선거, ${about} 어때? 나쁘지 않던데`, `${about}이(가) 요즘 인사를 그렇게 하고 다닌대`, '이번엔 투표 꼭 하자'], t);
+        return pick([`이번 선거, ${about} 어때? 나쁘지 않던데`, `${ga(about)} 요즘 인사를 그렇게 하고 다닌대`, '이번엔 투표 꼭 하자'], t);
       }
       return pick([`${simName(d.mayorId)} 시장, 일 잘할까?`, '새 시장 됐다며? 공사가 빨라진대', '시장님 공약 기억하지?'], t);
     }
@@ -714,12 +731,12 @@ function conversationLine(e) {
       const other = simName(d.otherId);
       return d.kind === 'married'
         ? pick([`${about}랑 ${other} 결혼했대!! 대박`, `${about}네 결혼식 얘기 들었어?`], t)
-        : pick([`${about}랑 ${other} 사귄대!`, `${about}이(가) 요즘 ${other}만 만난다?`], t);
+        : pick([`${about}랑 ${other} 사귄대!`, `${ga(about)} 요즘 ${other}만 만난다?`], t);
     }
     case 'family_talk': {
       return d.relation === 'child'
-        ? pick([`우리 ${about} 벌써 학교에 다녀. 시간 참 빠르지`, `${about}이(가) 요즘 낚시에 빠졌다니까`, `애 키우는 게 보통이 아니야`], t)
-        : pick([`부모님이 어제 집밥 해주셨어`, `${about}이(가) 잔소리는 해도 고마운 분이지`], t);
+        ? pick([`우리 ${about} 벌써 학교에 다녀. 시간 참 빠르지`, `${ga(about)} 요즘 낚시에 빠졌다니까`, `애 키우는 게 보통이 아니야`], t)
+        : pick([`부모님이 어제 집밥 해주셨어`, `${ga(about)} 잔소리는 해도 고마운 분이지`], t);
     }
     case 'weather': {
       return pick({
@@ -911,13 +928,19 @@ function eventText(e) {
     case 'money_changed': return `${n}: ${e.payload.delta > 0 ? '+' : ''}${e.payload.delta}원${e.payload.tax ? ` (세금 ${e.payload.tax}원)` : ''} (잔액 ${e.payload.balance})`;
     case 'welfare_paid': return `🏛️ 정부가 ${n}에게 생계 지원 +${e.payload.amount}원 (국고 ${e.payload.treasury}원)`;
     case 'fire_started': return `🔥 ${PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId}에 불이 났다!`;
-    case 'fire_out': return e.payload.by === 'self' ? `💨 ${e.payload.facilityId}의 불이 겨우 잦아들었다… (아무도 안 왔다)` : `🚒 ${simName(e.payload.by)}이(가) ${e.payload.facilityId} 화재를 진압했다!`;
+    // QA #C: fire_started는 시설 종류를 한국어로 보여주는데 fire_out만 원시 id가 새고 있었다
+    case 'fire_out': {
+      const fp = PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId;
+      return e.payload.by === 'self'
+        ? `💨 ${fp}의 불이 겨우 잦아들었다… (아무도 안 왔다)`
+        : `🚒 ${ga(simName(e.payload.by))} ${fp} 화재를 진압했다!`;
+    }
     case 'heroic_save': return `🎖️ ${n}: 영웅이 됐다`;
     case 'petition': {
       const ko = { lonely: '외롭다', hungry: '배고프다' };
       return `📢 주민 청원: "${ko[e.payload.kind] ?? e.payload.kind}" (${e.payload.total}건, 문턱 ${e.payload.threshold})`;
     }
-    case 'car_bought': return `🚗 ${n}이(가) 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
+    case 'car_bought': return `🚗 ${ga(n)} 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
     case 'city_promoted': return `🏙️ 해솔${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
@@ -925,16 +948,16 @@ function eventText(e) {
       const parts = Object.entries(e.payload.changes).map(([k, v2]) => `${ko[k] ?? k} ${e.payload.before[k]}→${v2}${k === 'taxPct' ? '%' : '원'}`);
       return `🏛️ 시정 발표: ${parts.join(', ')}`;
     }
-    case 'starving': return `⚠️ ${n}이(가) 굶고 있습니다!`;
-    case 'lonely': return `${n}이(가) 혼자 시간을 보냈습니다…`;
-    case 'argument': return `💢 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 말다툼했습니다`;
+    case 'starving': return `⚠️ ${ga(n)} 굶고 있습니다!`;
+    case 'lonely': return `${ga(n)} 혼자 시간을 보냈습니다…`;
+    case 'argument': return `💢 ${wa(n)} ${ga(simName(e.payload.withSimId))} 말다툼했습니다`;
     case 'input_rejected': return `지시 거부됨 (${e.payload.reason})`;
-    case 'player_created': return `🏠 ${e.payload.name}이(가) 마을에 이사 왔습니다! (${OCC_KO[e.payload.occupation]})`;
+    case 'player_created': return `🏠 ${ga(e.payload.name)} 마을에 이사 왔습니다! (${OCC_KO[e.payload.occupation]})`;
     case 'logic_changed': return `🔧 심들의 판단 로직이 갱신되었습니다 (${e.payload.hash})`;
     case 'token_created': {
       const place = e.payload.placeId === 'cafe' ? '카페' : '공원';
       return e.payload.announced
-        ? `📣 ${n}이(가) ${place} 모임을 공지했습니다! (${fmtClock(e.payload.scheduledTick)})`
+        ? `📣 ${ga(n)} ${place} 모임을 공지했습니다! (${fmtClock(e.payload.scheduledTick)})`
         : `📅 ${place}에서 모임 소문이 돌기 시작했습니다 (${fmtClock(e.payload.scheduledTick)})`;
     }
     case 'gathering': {
@@ -942,39 +965,39 @@ function eventText(e) {
       return `🎉 ${place} 모임에 ${e.payload.count}명이 모였습니다!`;
     }
     case 'conversation': return `💬 ${n} → ${simName(e.payload.withSimId)}: "${conversationLine(e)}"`;
-    case 'hangover': return `🥴 ${n}이(가) 과음했습니다… 내일이 걱정입니다`;
+    case 'hangover': return `🥴 ${ga(n)} 과음했습니다… 내일이 걱정입니다`;
     case 'weather_changed': return { sunny: '☀️ 화창한 아침입니다', cloudy: '☁️ 날이 흐립니다', rain: '🌧️ 비가 내리기 시작했습니다' }[e.payload.kind];
     case 'item_spawned': return null; // 어디 떨어졌는지는 비밀 — 발견의 재미
-    case 'item_found': return `✨ ${n}이(가) 길에서 ${e.payload.amount}원을 주웠습니다!`;
-    case 'fish_caught': return `🎣 ${n}이(가) ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
+    case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
+    case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
     case 'project_started': {
       const tp = { house: '새 집', cafe: '새 카페', park: '새 공원' }[e.payload.type];
       return `🏗️ 마을에 ${tp} 공사가 시작됐습니다! 심들이 힘을 보탭니다`;
     }
     case 'facility_built': {
       const tp = { house: '집', cafe: '카페', park: '공원' }[e.payload.type];
-      return `🎊 ${tp}이(가) 완공됐습니다! 마을이 넓어졌어요`;
+      return `🎊 ${ga(tp)} 완공됐습니다! 마을이 넓어졌어요`;
     }
-    case 'moved_home': return `📦 ${n}이(가) 새 집으로 이사했습니다`;
-    case 'child_settled': return `👶 ${simName(e.payload.parentA)}·${simName(e.payload.parentB)} 부부의 자녀 ${e.payload.name}이(가) 마을에서 자립을 시작했습니다!`;
-    case 'immigrated': return `🚌 ${e.payload.name}이(가) 해솔마을로 이사 왔습니다! (${OCC_KO[e.payload.occupation] ?? e.payload.occupation})`;
-    case 'fell_sick': return `🤒 ${n}이(가) 감기에 걸렸습니다`;
-    case 'recovered': return e.payload.how === 'doctor' ? `💊 ${n}이(가) 진료를 받고 나았습니다` : `🌤️ ${n}이(가) 감기에서 회복했습니다`;
-    case 'election': return `🗳️ 선거 결과 — ${n}이(가) 해솔마을 시장이 되었습니다! (득표 ${e.payload.votes.join(':')})`;
-    case 'started_dating': return `💕 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 사귀기 시작했습니다!`;
-    case 'married': return `💒 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 결혼했습니다! 🎉`;
-    case 'broke_up': return `💔 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 헤어졌습니다…`;
+    case 'moved_home': return `📦 ${ga(n)} 새 집으로 이사했습니다`;
+    case 'child_settled': return `👶 ${simName(e.payload.parentA)}·${simName(e.payload.parentB)} 부부의 자녀 ${ga(e.payload.name)} 마을에서 자립을 시작했습니다!`;
+    case 'immigrated': return `🚌 ${ga(e.payload.name)} 해솔마을로 이사 왔습니다! (${OCC_KO[e.payload.occupation] ?? e.payload.occupation})`;
+    case 'fell_sick': return `🤒 ${ga(n)} 감기에 걸렸습니다`;
+    case 'recovered': return e.payload.how === 'doctor' ? `💊 ${ga(n)} 진료를 받고 나았습니다` : `🌤️ ${ga(n)} 감기에서 회복했습니다`;
+    case 'election': return `🗳️ 선거 결과 — ${ga(n)} 해솔마을 시장이 되었습니다! (득표 ${e.payload.votes.join(':')})`;
+    case 'started_dating': return `💕 ${wa(n)} ${ga(simName(e.payload.withSimId))} 사귀기 시작했습니다!`;
+    case 'married': return `💒 ${wa(n)} ${ga(simName(e.payload.withSimId))} 결혼했습니다! 🎉`;
+    case 'broke_up': return `💔 ${wa(n)} ${ga(simName(e.payload.withSimId))} 헤어졌습니다…`;
     case 'new_year': return `🎆 해솔마을의 새해가 밝았습니다! (${e.payload.year}년차)`;
     case 'festival': return `🏮 해솔마을 축제가 오늘 저녁 공원에서 열립니다! 모두 오세요!`;
-    case 'graduated': return `🎓 ${n}이(가) 학교를 졸업하고 취직했습니다`;
-    case 'retired_now': return `🌅 ${n}이(가) 은퇴했습니다. 수고하셨습니다`;
+    case 'graduated': return `🎓 ${ga(n)} 학교를 졸업하고 취직했습니다`;
+    case 'retired_now': return `🌅 ${ga(n)} 은퇴했습니다. 수고하셨습니다`;
     case 'joined_club': {
       const cn = { book_club: '독서회', fishing_club: '낚시회', fitness_club: '운동모임', drinking_pals: '술벗' }[e.payload.clubId];
-      return `🎪 ${n}이(가) ${cn}에 가입했습니다`;
+      return `🎪 ${ga(n)} ${cn}에 가입했습니다`;
     }
     case 'road_formed': return `🛤️ 많이 다니던 길이 도로가 되었습니다 (${e.payload.x}, ${e.payload.y})`;
-    case 'bed_built': return `🛏️ ${n}이(가) 집에 침대를 새로 만들었습니다!`;
-    case 'greeting': return `👋 ${n}과(와) ${simName(e.payload.withSimId)}이(가) 지나가며 인사했습니다`;
+    case 'bed_built': return `🛏️ ${ga(n)} 집에 침대를 새로 만들었습니다!`;
+    case 'greeting': return `👋 ${wa(n)} ${ga(simName(e.payload.withSimId))} 지나가며 인사했습니다`;
     default: return null;
   }
 }

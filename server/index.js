@@ -64,8 +64,28 @@ function acquireLock(retry = true) {
 }
 
 acquireLock();
-const storage = new Storage(DB_PATH);
-const engine = new Engine(storage, { seed: SEED });
+
+// §22.12 손상 DB 안내 (QA #4). README는 "부팅 시 손상이 감지되면 서버가 **안내와 함께**
+// 정지합니다"라고 약속하는데, 실제로는 raw 스택트레이스로 죽었다 — 잘린 파일은
+// `SqliteError: database disk image is malformed`, 깨진 스냅샷은 `SyntaxError`.
+// 마을을 잃은 사람에게 필요한 건 스택트레이스가 아니라 다음에 뭘 하면 되는지다.
+let storage, engine;
+try {
+  storage = new Storage(DB_PATH);
+  engine = new Engine(storage, { seed: SEED });
+} catch (err) {
+  console.error('');
+  console.error('  ✖ 마을 데이터를 열 수 없습니다.');
+  console.error(`     파일: ${DB_PATH}`);
+  console.error(`     원인: ${String(err?.message ?? err).split('\n')[0]}`);
+  console.error('');
+  console.error('     복구를 시도하려면 README의 "손상 복구" 절을 따르세요 (snapshot id=2 되돌리기).');
+  console.error('     이 마을을 포기하고 새로 시작하려면 위 파일을 지운 뒤 다시 실행하세요.');
+  console.error('     같은 마을을 다시 만들고 싶다면 시드를 알고 있어야 합니다:');
+  console.error('       DEEPSIMS_SEED=<시드> npm start');
+  console.error('');
+  process.exit(1);
+}
 
 // 판단 로직 파일 (PLAN §14.1): 없으면 기본값 생성, 변경 감지 시 logic_update 입력으로 등록
 const PARAMS_PATH = process.env.DEEPSIMS_LOGIC || path.join(ROOT, 'logic', 'params.json');
@@ -117,7 +137,15 @@ if (fs.existsSync(DIST)) app.use(express.static(DIST));
 else app.get('/', (_req, res) => res.status(503).send('클라이언트가 빌드되지 않았습니다: npm run build 를 먼저 실행하세요.'));
 
 app.get('/api/report', (req, res) => {
-  const cursor = Math.max(0, Number(req.query.cursor || 0));
+  // §22.12 NaN 커서가 SQL에 NULL로 바인딩돼 200 + **빈 리포트**가 나갔다 (QA #6).
+  // "부재중 아무 일도 없었습니다"와 구분이 안 되는 침묵이라 400으로 끊는다.
+  // (?cursor=1&cursor=2 처럼 배열로 오는 경우도 여기서 걸린다.)
+  const rawCursor = req.query.cursor;
+  const parsed = rawCursor === undefined ? 0 : Number(rawCursor);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    return res.status(400).json({ error: 'cursor는 0 이상의 정수여야 합니다' });
+  }
+  const cursor = parsed;
   // §17.8: 리포트는 커밋된 틱까지만 — 30틱 캐던스의 미커밋 상태를 노출하지 않는다
   const committed = storage.getMetaInt('lastSimulatedTick', 0);
   res.json(storage.getReport(Math.min(cursor, committed), committed));
@@ -149,7 +177,9 @@ app.post('/api/screenshot', (req, res) => {
 // §20 배속: 서버 런타임 설정 (시뮬 상태 아님 — 입력 로그·세이브에 들어가지 않는다).
 // 틱 내용은 불변이므로 결정성·리플레이에 영향 없음.
 app.post('/api/speed', (req, res) => {
-  const s = Number(req.body?.speed);
+  // §22.12 Number()는 [48]·"48"·" 48 "·true를 전부 삼킨다 (QA #5). 숫자만 받는다.
+  const raw = req.body?.speed;
+  const s = typeof raw === 'number' ? raw : NaN;
   if (!Number.isInteger(s) || s < 1 || s > MAX_SPEED) {
     return res.status(400).json({ error: `speed는 1~${MAX_SPEED} 정수여야 합니다` });
   }
@@ -178,6 +208,18 @@ app.post('/api/input', async (req, res) => {
   }
   const result = await engine.submitInput({ clientInputId, command, payload });
   res.json(result); // insert 커밋 후에만 응답 (PLAN §3)
+});
+
+// §22.12 오류 핸들러 (QA #7). 없으면 express 기본 핸들러가 절대경로가 박힌 10줄짜리
+// 스택트레이스를 **HTTP 응답 본문으로** 내보낸다 — 잘못된 JSON 하나, 과대 바디 하나에.
+// 클라이언트에는 짧은 JSON만 주고 상세는 서버 콘솔에만 남긴다.
+app.use((err, _req, res, _next) => {
+  const status = err?.status || err?.statusCode || 500;
+  if (status >= 500) console.error('요청 처리 실패:', err);
+  const msg = err?.type === 'entity.too.large' ? '요청 본문이 너무 큽니다'
+    : status === 400 ? '요청 본문을 읽을 수 없습니다 (JSON 형식 확인)'
+      : '요청을 처리하지 못했습니다';
+  res.status(status).json({ error: msg });
 });
 
 const server = http.createServer(app);
@@ -255,8 +297,16 @@ wss.on('connection', async (ws) => {
   if (clients.size > 0) engine.startLive();
 });
 
-server.listen(PORT, async () => {
+// §22.12 바인딩 주소 (QA #8). 예전에는 host를 안 줘서 모든 인터페이스에 열렸다 —
+// README는 "전부 로컬"이라고 하는데 실제로는 같은 Wi-Fi의 아무나 /api/input으로
+// 세율·건설을 바꾸고 /api/screenshot으로 디스크에 파일을 쓸 수 있었다. 인증이 없으므로
+// 기본은 루프백이고, LAN 공개는 **명시적으로 선택**해야 한다.
+const HOST = process.env.DEEPSIMS_HOST || '127.0.0.1';
+server.listen(PORT, HOST, async () => {
   console.log(`DeepSims 서버: http://localhost:${PORT} (db: ${DB_PATH}, tick: ${engine.world.worldTick})`);
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+    console.warn(`  ⚠️  ${HOST} 로 열려 있습니다 — 인증이 없으므로 같은 망의 누구나 이 마을을 조작할 수 있습니다`);
+  }
   // §22.7 시드 안내 — 새 마을이면 크게, 이어가는 마을이면 한 줄로.
   if (engine.createdNow) {
     console.log(`\n  🌱 당신만의 마을이 생겼습니다 — 시드 ${engine.world.seed}`);
