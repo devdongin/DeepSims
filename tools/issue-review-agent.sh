@@ -21,9 +21,9 @@ ISSUES=$(gh issue list --state open --limit 40 --json number,title,createdAt \
   --jq 'sort_by(.createdAt) | .[] | "\(.number)\t\(.title)"')
 
 REVIEWED=0
-echo "$ISSUES" | while IFS=$'\t' read -r NUM TITLE; do
-  [ -z "$NUM" ] && continue
-  [ "$REVIEWED" -ge "$LIMIT" ] && break
+while IFS=$'\t' read -r NUM TITLE; do
+  if [ -z "$NUM" ]; then continue; fi
+  if [ "$REVIEWED" -ge "$LIMIT" ]; then break; fi
 
   # 이미 Codex 정식 리뷰가 달린 이슈는 건너뛴다 (푸터 마커로 식별 — 안내 코멘트와 구분)
   if gh issue view "$NUM" --json comments --jq '.comments[].body' 2>/dev/null | grep -q "자동 리뷰 · 세계 상태와 코드 대조"; then
@@ -48,7 +48,7 @@ $WORLD
 3. **우선순위**: P1/P2/P3 중 하나와 이유. 다른 열린 이슈와의 선후 관계.
 4. **다음 행동**: 구현자가 바로 착수할 수 있는 구체적 한 걸음.
 
-규칙: 인구를 직접 조작하는 제안 금지. 결정적 tick·내구 입력·드로우 순서 계약을 깨는 제안 금지. 코드를 읽어 확인한 사실과 추측을 구분해 표기하라." 2>&1 | awk '/^codex$/{buf=""; f=1; next} /^(exec|thinking|web search)/{f=0} f{buf=buf $0 "\n"} END{printf "%s", buf}' | head -c 5500)
+규칙: 인구를 직접 조작하는 제안 금지. 결정적 tick·내구 입력·드로우 순서 계약을 깨는 제안 금지. 코드를 읽어 확인한 사실과 추측을 구분해 표기하라." </dev/null 2>&1 | awk '/^codex$/{buf=""; f=1; next} /^(exec|thinking|web search)/{f=0} f{buf=buf $0 "\n"} END{printf "%s", buf}' | head -c 5500)
 
   if [ -n "$OUT" ]; then
     printf '## 🔍 Codex 이슈 리뷰\n\n%s\n\n---\n<sub>`tools/issue-review-agent.sh` 자동 리뷰 · 세계 상태와 코드 대조</sub>\n' "$OUT" \
@@ -57,6 +57,6 @@ $WORLD
   else
     echo "  → Codex 응답 없음, 건너뜀"
   fi
-done
+done <<< "$ISSUES"
 
-echo "이슈 리뷰 회차 종료"
+echo "이슈 리뷰 회차 종료 (${REVIEWED}건)"
