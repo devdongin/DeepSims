@@ -20,7 +20,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -345,6 +345,12 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
               presence ??= socialPresence(world, sim.id);
               const pull = socialPullPct(world, fac, presence, L, sim);
               if (pull > 0) cand.score += floorDiv(cand.score * pull, 100);
+            }
+            // §22.6 청을 받아들였으면 그 자리로 마음이 기운다 (이슈 #69).
+            // 하던 일을 강제로 끊지 않고 **다음 선택에서** 그리로 가게 하는 가중이다.
+            if (action === 'socialize' && sim.invitedTo
+                && sim.invitedTo.untilTick > t && sim.invitedTo.facilityId === fac.id) {
+              cand.score += floorDiv(cand.score * L.social.invitePullPct, 100);
             }
           }
           if (cand.score <= 0 && !includeZeroScore) continue;
@@ -697,6 +703,15 @@ export function tick(world, inputsForThisTick = []) {
         pairedThisTick.add(a.id); pairedThisTick.add(b.id);
         pairedWith.set(a.id, b.id); pairedWith.set(b.id, a.id);
         a.state.pairedTicks++; b.state.pairedTicks++;
+        // §22.6 (95차 ②) 초대가 실제 만남으로 이어졌는지 계측한다.
+        // 청을 받아들여도 그 자리로 가는 사이 초대한 쪽이 떠나 있을 수 있다 —
+        // 지표가 없으면 '행동은 있는데 왜 외로움이 그대로인지' 알 수 없다.
+        for (const p of [a, b]) {
+          if (p.invitedTo && p.invitedTo.untilTick > t && p.invitedTo.facilityId === facId) {
+            emit('invite_fulfilled', p.id, { facilityId: facId, withSimId: p === a ? b.id : a.id });
+            p.invitedTo = undefined;
+          }
+        }
         // §17.8 페어링 서브순서: ① 전파 → ② 전염 → ③ 대화(험담 영향 포함) → ④ 델타
         const transferred = transferTokens(world, a, b, t, emit);
         contagionDraw(world, a, b, t, emit);
@@ -730,6 +745,10 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
   }
+
+  // §22.6 먼저 말 걸기 (이슈 #69) — 페어링이 끝난 뒤, 혼자 남은 심이 옆 사람에게 청한다.
+  // 페어링 다음에 두는 이유: 누가 혼자인지 확정된 뒤라야 말을 걸 대상이 정해진다.
+  maybeApproach(world, t, floorDiv(t, 1440), emit);
 
   // 2c) performing 전진 + 회복 (id 오름차순)
   for (const sim of world.sims) {
@@ -1036,6 +1055,14 @@ export function tick(world, inputsForThisTick = []) {
         maybeElection(world, t, day, emit);
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
+        // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야
+        // '왜 관계는 느는데 외로움은 그대로인지'를 가릴 수 있다.
+        for (const sim of world.sims) {
+          if (sim.invitedTo && sim.invitedTo.untilTick <= t) {
+            emit('invite_expired', sim.id, { facilityId: sim.invitedTo.facilityId });
+            sim.invitedTo = undefined;
+          }
+        }
         remitPublicRevenue(world, t, emit);
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)

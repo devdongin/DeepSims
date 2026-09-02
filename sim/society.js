@@ -3,6 +3,7 @@ import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
 import { generateTraits, occupationAllowed } from './traits.js';
 import { makeAbilities, aptitudeFor } from './abilities.js'; // §21.1 (RNG 미소비)
+import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
 import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 · §22.2 사망 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
@@ -200,6 +201,7 @@ export function maybeChildren(world, t, day, emit) {
       abilities: makeAbilities(world.seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
       sharedDay: -1, sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
       hungerZeroTicks: 0, // §22.2
+      approachedDay: -1, approachedTo: [], // §22.6
     };
     world.sims.push(child);
     growIdMatrices(world); // §22.2 id 공간 기준 확장 (sims.length는 사망 후 어긋난다)
@@ -946,4 +948,69 @@ export function remitPublicRevenue(world, t, emit) {
     emit('public_revenue_remitted', null, { facilityId: f.id, type: f.type, amount: amt, treasury: world.treasury });
   }
   return total;
+}
+
+// ---- §22.6 먼저 말 걸기 (이슈 #69) ----
+//
+// 관찰: 카페·공원이 16곳인데도 외로움이 쌓인다. §20.3 사회적 중력이 **같은 장소로 모으는 데는**
+// 성공했지만(헛걸음 46.8%→16%), 사교는 여전히 **수동**이다 — 같은 시설에서 socialize 중인
+// 심끼리 id 순으로 자동 페어링될 뿐이라, 옆에서 밥 먹거나 책 읽는 사람은 영원히 남이다.
+// 홀수로 남은 한 명은 아무도 말을 걸지 않아 혼자 끝난다.
+//
+// 그래서 **행동을 준다**: 혼자 남은 심이 같은 시설의 다른 사람에게 먼저 다가가 청한다.
+// 상대는 관계·자기 사교 욕구에 따라 응하거나 거절한다 — **거절도 결과다.**
+// 응하면 그 자리로 마음이 기울 뿐(점수 가중), 하던 일을 강제로 끊지 않는다.
+//
+// pairHash 의사확률이라 rngSim 미소비. 인구 조작 없음. lonely 수치를 직접 깎지 않는다(§0.1).
+export function maybeApproach(world, t, day, emit) {
+  const S = world.logic.social;
+  if (S.approachBasePct === 0) return;
+  // 시설별로 '혼자 사교 중인 심'과 '사교 중이 아닌 심'을 모은다 (심 전체 1회 순회)
+  const alone = [];
+  const bystanders = new Map(); // facilityId -> 심 배열
+  for (const sim of world.sims) {
+    const st = sim.state;
+    if (st.kind !== 'performing' || st.facilityId === null) continue;
+    if (st.action === 'socialize') {
+      if (st.pairedTicks === 0) alone.push(sim);
+    } else if (st.action !== 'sleep' && sim.traits.occupation !== 'child') {
+      // 자는 사람은 깨우지 않는다. 아이에게 먼저 말 걸게 하지도 않는다.
+      let arr = bystanders.get(st.facilityId);
+      if (arr === undefined) { arr = []; bystanders.set(st.facilityId, arr); }
+      arr.push(sim);
+    }
+  }
+  const day2 = day;
+  for (const sim of alone) { // alone은 sims 순서라 id asc — 결정적
+    // 하루에 같은 사람에게 거듭 말을 걸지는 않는다. pairHash는 (쌍, 날짜) 상수라
+    // 매 틱 평가하면 **같은 거절이 하루 종일 반복**된다 (첫 소크에서 거절 5,924건).
+    if (sim.approachedDay !== day2) { sim.approachedDay = day2; sim.approachedTo = []; }
+    const cands = bystanders.get(sim.state.facilityId);
+    if (cands === undefined || cands.length === 0) continue;
+    // 후보 정렬: 거리 → id (전순서라 정렬 안정성에 기대지 않는다)
+    const sorted = cands.slice().sort((a, b) => {
+      const da = Math.abs(a.x - sim.x) + Math.abs(a.y - sim.y);
+      const db = Math.abs(b.x - sim.x) + Math.abs(b.y - sim.y);
+      return (da - db) || (a.id - b.id);
+    });
+    const target = sorted.find((c) => !sim.approachedTo.includes(c.id));
+    if (target === undefined) continue; // 오늘 이 자리 사람들에게는 이미 다 청해봤다
+    sim.approachedTo.push(target.id); // 95차 ③: 건너뛰는 경우도 기록해야 매 틱 재검사를 막는다
+    if (target.invitedTo && target.invitedTo.untilTick > t) continue; // 이미 청을 받았다
+    // 응할 확률: 관계가 가까울수록, 상대도 사교가 고플수록 (이분 컷이 아니라 가중)
+    let pct = S.approachBasePct;
+    const tier = target.relTiers[sim.id];
+    if (tier === 'friend') pct += S.approachFriendBonusPct;
+    else if (tier === 'acquaintance') pct += S.approachAcquaintanceBonusPct;
+    else if (tier === 'rival') continue; // 사이가 나쁘면 말을 걸지 않는다
+    const deficit = NEED_MAX_REF - Math.min(NEED_MAX_REF, target.needs.social);
+    pct += floorDiv(deficit * S.approachNeedBonusMax, NEED_MAX_REF);
+    const accepted = pairHash(sim.id, target.id, day, 83) < Math.min(100, pct);
+    if (accepted) {
+      target.invitedTo = { facilityId: sim.state.facilityId, untilTick: t + S.inviteTtlTicks };
+      emit('invited', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
+    } else {
+      emit('invite_declined', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
+    }
+  }
 }

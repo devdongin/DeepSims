@@ -155,6 +155,10 @@ export function migrateWorld(world) {
     // §19.10 (73차 ②): 원인 분화 시행일 — 이전 no_facility 항목은 외부 노출에서 legacy 표시
     world.complaintReasonDay = Math.floor(world.worldTick / 1440);
   }
+  if (from < 39) {
+    // §22.6 먼저 말 걸기 — 하루 1회 제한 상태의 결정적 기본값.
+    for (const sim of world.sims) { sim.approachedDay ??= -1; sim.approachedTo ??= []; }
+  }
   if (from < 38) {
     // §22.4 경계 유입 누계 — 기반 부문(마을 밖) 소득을 명시적으로 센다 (G1 폐쇄 회계).
     world.externalInflow ??= 0;
@@ -221,7 +225,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 38;
+  world.schemaVersion = 39;
   return world;
 }
 

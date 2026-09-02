@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 37, // §22.4 공공 부문 회계 폐쇄 (경제 순환 — 이슈 #43, G1)
+  logicSchemaVersion: 38, // §22.6 approach 추가 (먼저 말 거는 행동 — 이슈 #69)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -150,6 +150,15 @@ export const DEFAULT_LOGIC = {
     gravityPullPct: 60,               // 사교 중인 1명당 점수 가중 (%)
     gravityPullCap: 200,              // 총 상한 (%) — 3~4명에서 포화. 150%대에서 no_path 절벽이 있다
     gravityWalkingPct: 50,            // '오는 중'인 심의 가중치 (%). 쏠림 폭주를 막는 감쇠 신호다
+    // §22.6 먼저 말 걸기 (이슈 #69). 지금 사교는 **수동**이다 — 같은 시설에서 socialize 중인
+    // 심끼리 id 순으로 자동 페어링될 뿐이라, 옆에서 밥 먹는 사람은 영원히 남이다.
+    // 혼자 남은 심이 **먼저 다가가 청한다**. 거절도 결과다 — 수치를 직접 깎지 않는다(§0.1).
+    approachBasePct: 20,              // 낯선 사람도 가끔은 응한다
+    approachFriendBonusPct: 45,       // 친구면 훨씬 잘 응한다
+    approachAcquaintanceBonusPct: 20,
+    approachNeedBonusMax: 25,         // 상대도 사교가 고플수록 잘 응한다 (결핍 비례, 이분 컷 아님)
+    inviteTtlTicks: 240,              // 청을 받아들이면 이만큼 그 자리로 마음이 기운다 (4시간)
+    invitePullPct: 120,               // 초대받은 곳의 사교 점수 가중 (%) — §20.3과 같은 곱셈 축
     rivalStatePenalty: 200000000000,  // 라이벌이 있으면 감점 (양수로 저장, 적용 시 부호)
     reflectionMoodScale: 60,          // pendingMood = clamp(Σ 부호 importance × scale, ±10000)
     habitIncrement: 10000000000,      // 회고당(=하루당) 습관 증가 상한 (PLAN §G: 1e10/일)
@@ -480,6 +489,11 @@ function checkRanges(p, errors) {
   inRange('social.gravityPullPct', p.social.gravityPullPct, 0, 500);
   inRange('social.gravityPullCap', p.social.gravityPullCap, 0, 500);
   inRange('social.gravityWalkingPct', p.social.gravityWalkingPct, 0, 100);
+  for (const k of ['approachBasePct', 'approachFriendBonusPct', 'approachAcquaintanceBonusPct', 'approachNeedBonusMax']) {
+    inRange(`social.${k}`, p.social[k], 0, 100);
+  }
+  inRange('social.inviteTtlTicks', p.social.inviteTtlTicks, 0, 100000);
+  inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);
   inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
   inRange('sharing.needyBelow', p.sharing.needyBelow, 0, 100000);
   inRange('sharing.giverKeepMin', p.sharing.giverKeepMin, 0, 1000000);

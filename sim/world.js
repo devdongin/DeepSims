@@ -34,6 +34,8 @@ export function createWorld(seed) {
       sharedDay: -1,
       sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
       hungerZeroTicks: 0, // §22.2 굶은 채 머문 시간
+      approachedDay: -1,
+      approachedTo: [], // §22.6 하루에 같은 사람에게 거듭 말 걸지 않기
       mood: 0,
       x: home.door.x,
       y: home.door.y + 1, // 문 앞 도로변
