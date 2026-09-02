@@ -59,7 +59,8 @@ export const KSIC = [
   {
     code: 'H', nameKo: '운수 및 창고업',
     facilityTypes: [], occupations: [], actions: [],
-    note: '차는 개인 소유물일 뿐 운수업이 아니다. 창고·대중교통이 없다.',
+    note: '차는 개인 소유물일 뿐 운수업이 아니다. 창고·대중교통이 없다. '
+      + '이동 수요는 transit 필드로 따로 관측한다(§19.12) — 시설 부재 좌절(directUnmet)과 다른 축이다.',
   },
   {
     code: 'I', nameKo: '숙박 및 음식점업',
@@ -281,6 +282,20 @@ export function industryStatus(world) {
       firstDay: dem?.firstDay ?? -1,
       lastDay: dem?.lastDay ?? -1,
       note: s.note,
+      // §19.12 H(운수·창고업)에만: **이동 수요** — directUnmet(시설이 없어서 못 한 좌절)과
+      // 다른 축이다. 심은 '역이 없어서 못 갔다'고 좌절한 적이 없지만(걷거나 차로 갔다),
+      // 장거리 이동의 누적 자체가 운수업이 설 자리를 말한다. 섞지 않고 따로 싣는다.
+      ...(s.code === 'H' ? { transit: {
+        stationUnlocked: world.transit?.stationUnlocked ?? false,
+        unlockedDay: world.transit?.unlockedDay ?? -1,
+        fulfillmentPct: world.transit?.fulfillmentPct ?? 0,
+        demand: world.transit?.demand ?? 0,
+        stationDemand: world.logic?.transport?.stationDemand ?? 0,
+        totalLongTrips: world.transit?.totalLongTrips ?? 0,
+        weightedTrips: world.transit?.weightedTrips ?? 0,
+        carsOwned: world.transit?.carsOwned ?? 0,
+        avgTripTiles: world.transit?.avgTripTiles ?? 0,
+      } } : {}),
     };
   });
 }

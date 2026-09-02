@@ -16,6 +16,21 @@ export const IMMIGRANT_NAMES = ['재현', '소민', '우진', '하늘', '규리'
   '보라', '준서', '유나', '시우', '가온', '민재', '채원', '건우', '나윤', '태양'];
 export const SIM_COUNT = 10;
 
+// §19.12 (이슈 #52) 역 수요 관측·언락 상태의 단일 정의 — 신규 월드와 마이그레이션이
+// 같은 모양을 쓴다. 값은 전부 유한 정수/불리언 (undefined/NaN 금지 — 직렬화 왕복 고정점).
+export function makeTransitState() {
+  return {
+    stationUnlocked: false, // 비가역 — 언락 뒤 수요가 줄어도 다시 잠그지 않는다
+    unlockedDay: -1,        // 언락된 날 (-1 = 아직)
+    fulfillmentPct: 0,      // stationDemand 대비 충족도 % (이분 컷이 아니라 %를 남긴다)
+    demand: 0,              // 가중 수요 = floorDiv(weightedTrips × 거리계수, 100)
+    totalLongTrips: 0,      // Σ sim.longTrips (관측)
+    weightedTrips: 0,       // 차 보유 할인 적용 후 (관측)
+    carsOwned: 0,           // 차 보유 심 수 (관측)
+    avgTripTiles: 0,        // 장거리 이동 평균 칸수 (거리 분포 관측)
+  };
+}
+
 export function createWorld(seed) {
   const rngWorldgen = makeRng(seed);
   const plots = [...defaultPlots(), ...extraPlots128(), ...extraPlots512()];
@@ -80,6 +95,7 @@ export function createWorld(seed) {
     industryDemand: {},
     capacityShortfall: {}, // §22.18 만석 — '키우라'는 신호 (짓는 것과 다르다)
     industryWant: {},      // §22.19 일상 수요 — 위급하지 않은 아쉬움 (섞지 않는다)
+    transit: makeTransitState(), // §19.12 역 수요 관측·언락 (이슈 #52 — 일일 판정이 갱신)
     termStartPolicy: null, // §22.20 임기 시작 정책 스냅샷 — '조정하지 않았다'의 기준선
     lastFiscalDay: -1,     // §22.22 시장 재정 리뷰 하루 1회 가드
     playerPolicyDay: -1,   // §22.22 플레이어 정책 입력을 시장이 존중하는 창

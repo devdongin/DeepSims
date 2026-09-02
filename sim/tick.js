@@ -24,7 +24,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview, evalStationDemand } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -462,7 +462,11 @@ function startAction(world, sim, cand, t, emit, reason) {
     return false;
   }
   // §19 R-B: 장거리 이동 통계 — **출발 시점** 누적(64차 (c) 계약 고정)
-  if (path.length >= world.logic.transport.longTripMin) sim.longTrips++;
+  // §19.12: 칸수도 같은 자리에서 누적 — 거리 분포가 역 수요 판정의 입력이다 (이슈 #52)
+  if (path.length >= world.logic.transport.longTripMin) {
+    sim.longTrips++;
+    sim.longTripTiles = (sim.longTripTiles ?? 0) + path.length;
+  }
   // §22.16 emptyState를 펼쳐서 만든다. 예전에는 여기서 필드를 손으로 나열해
   // sideTalkTicks가 빠졌고(§22.14), 읽는 쪽의 `?? 0` 가드 덕에 우연히 버티고 있었다.
   // 필드를 하나 늘릴 때마다 이런 자리를 찾아다녀야 하는 구조는 언젠가 반드시 어긋난다.
@@ -1196,6 +1200,9 @@ export function tick(world, inputsForThisTick = []) {
             incidents: world.incidents.length }); // 오늘의 사건 수 (55차)
           while (world.statsHistory.length > 180) world.statsHistory.shift();
         }
+        // §19.12 역 수요 판정 (일일 통계 다음 — 서브순서 고정). RNG 미소비라 드로우
+        // 순서 계약과 무관하고, world.transit 관측 필드와 1회성 언락 이벤트만 만든다.
+        evalStationDemand(world, t, emit);
         for (const s2 of world.sims) { // §17.23 쿨다운 청소
           for (const k of Object.keys(s2.noPathCool)) if (s2.noPathCool[k] <= t) delete s2.noPathCool[k];
         }

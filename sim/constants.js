@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 48; // §22.22 시장의 재정 행동 (lastFiscalDay·playerPolicyDay)
+export const SCHEMA_VERSION = 49; // §19.12 역 수요 관측·언락 (world.transit, sim.longTripTiles)
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분

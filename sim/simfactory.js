@@ -71,6 +71,7 @@ export function makeSim({
     patrolIdx: 0,
     hasCar: false,
     longTrips: 0,
+    longTripTiles: 0,     // §19.12 장거리 이동 칸수 누적 (거리 분포 관측 — 이슈 #52)
     complaintCursor: 0,
     complaintDays: {},
     sharedDay: -1,
