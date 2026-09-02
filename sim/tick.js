@@ -52,16 +52,21 @@ export function socialPresence(world, selfId) {
 // 클램프가 ±2.5e11(약 8%)이라 거리 항을 못 이긴다. 실제로 가산 형태는 3번째 반증됐다.
 // 좌석이 다 찼으면 0 — 몰려가도 앉을 자리가 없으면 헛걸음만 는다 (79차 ③).
 export function socialPullPct(world, fac, presence, L, sim = null) {
+  const S = L.social;
+  if (S.gravityPullPct === 0) return 0;   // 끄면 아래 비용을 아예 치르지 않는다
   const p = presence.get(fac.id);
-  if (p === undefined) return 0;
+  if (p === undefined) return 0;          // 아무도 없는 곳이 대부분 — 가장 싼 컷을 먼저
+  // 자리가 남는지만 알면 된다 — 몇 개 남았는지는 쓰지 않으므로 첫 빈자리에서 끊는다.
+  let free = false;
+  for (const r of fac.resources) {
+    if (world.reservations[resKey(fac.id, r.id)] === undefined) { free = true; break; }
+  }
+  if (!free) return 0;                    // 자리가 다 찼으면 끌림 0 (79차 ③)
   // §20.3 (80차 ②): 갈 수 없는 곳은 아무리 붐벼도 끌리지 않는다. 강 건너·산 너머 시설이
   // 중력으로 거리 항을 이기면 no_path가 폭증한다(끌림 150%에서 1,880건).
   // 심은 타일을 막지 않으므로 연결성은 타일에만 의존하고, 결과는 결정적이다.
+  // 셋 중 가장 비싸므로 맨 뒤에 둔다 (성능 이슈 #17).
   if (sim !== null && !sameRegion(world.map, sim.x, sim.y, fac.door.x, fac.door.y)) return 0;
-  const S = L.social;
-  let free = 0;
-  for (const r of fac.resources) if (world.reservations[resKey(fac.id, r.id)] === undefined) free++;
-  if (free <= 0) return 0;
   const units = p.here + floorDiv(p.coming * S.gravityWalkingPct, 100);
   return Math.min(units * S.gravityPullPct, S.gravityPullCap);
 }
@@ -330,7 +335,7 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
             // 즉 '내가 실제로 가본 곳'의 기여 — 도 같이 커져, 중력이 가본 적 없는 먼 시설로
             // 심을 내던지지 않는다. 결과: 헛걸음 14.5%, no_path 0.
             // 먹기·놀기는 붐빈다고 끌리지 않으므로 socialize에만 적용한다.
-            if (action === 'socialize') {
+            if (action === 'socialize' && L.social.gravityPullPct > 0) {
               presence ??= socialPresence(world, sim.id);
               const pull = socialPullPct(world, fac, presence, L, sim);
               if (pull > 0) cand.score += floorDiv(cand.score * pull, 100);

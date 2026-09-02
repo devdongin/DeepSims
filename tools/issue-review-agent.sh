@@ -6,27 +6,42 @@
 #   - 이미 해결됐다면 닫을 근거
 #   - 우선순위 재평가와 구체적 다음 행동
 #
-# 사용: ./tools/issue-review-agent.sh [최대개수]   (기본 6개, 오래된 것부터)
+# 사용: ./tools/issue-review-agent.sh [최대개수] [--recheck]
+#   기본     : 아직 리뷰가 없는 이슈만, 오래된 것부터
+#   --recheck: 이미 리뷰된 이슈도 **다시** 본다 (가장 오래 손대지 않은 것부터).
+#              세계가 계속 바뀌므로 한 번 붙인 리뷰는 금방 낡는다 — 예를 들어 §20.2 매출 원장,
+#              §20.3 사회적 중력, §21.1 능력치, §21.2 나눔이 머지된 뒤에는 이전 리뷰의
+#              수치·처방이 더 이상 맞지 않는다.
 set -e
 cd "$(dirname "$0")/.."
 LIMIT="${1:-6}"
+RECHECK=""
+for arg in "$@"; do if [ "$arg" = "--recheck" ]; then RECHECK="1"; fi; done
 mkdir -p logs
 
 # 세계 상태 (이슈 주장 검증의 근거)
 ./tools/export-world-snapshot.sh >/dev/null 2>&1 || true
 WORLD=$(cat logs/world-snapshot.json 2>/dev/null || echo '{}')
+RECENT=$(git log --oneline -12 2>/dev/null || echo '')
 
 # 이번 회차에 리뷰할 이슈: Codex 리뷰 코멘트가 아직 없는 것 우선, 오래된 순
-ISSUES=$(gh issue list --state open --limit 40 --json number,title,createdAt \
-  --jq 'sort_by(.createdAt) | .[] | "\(.number)\t\(.title)"')
+if [ -n "$RECHECK" ]; then
+  # 가장 오래 손대지 않은 이슈부터 — 그만큼 리뷰가 낡았을 가능성이 크다
+  ISSUES=$(gh issue list --state open --limit 40 --json number,title,updatedAt \
+    --jq 'sort_by(.updatedAt) | .[] | "\(.number)\t\(.title)"')
+else
+  ISSUES=$(gh issue list --state open --limit 40 --json number,title,createdAt \
+    --jq 'sort_by(.createdAt) | .[] | "\(.number)\t\(.title)"')
+fi
 
 REVIEWED=0
 while IFS=$'\t' read -r NUM TITLE; do
   if [ -z "$NUM" ]; then continue; fi
   if [ "$REVIEWED" -ge "$LIMIT" ]; then break; fi
 
-  # 이미 Codex 정식 리뷰가 달린 이슈는 건너뛴다 (푸터 마커로 식별 — 안내 코멘트와 구분)
-  if gh issue view "$NUM" --json comments --jq '.comments[].body' 2>/dev/null | grep -q "자동 리뷰 · 세계 상태와 코드 대조"; then
+  # 이미 Codex 정식 리뷰가 달린 이슈는 건너뛴다 (푸터 마커로 식별 — 안내 코멘트와 구분).
+  # --recheck 면 건너뛰지 않는다: 세계가 바뀌면 예전 리뷰의 수치·처방이 낡기 때문이다.
+  if [ -z "$RECHECK" ] && gh issue view "$NUM" --json comments --jq '.comments[].body' 2>/dev/null | grep -q "자동 리뷰 · 세계 상태와 코드 대조"; then
     continue
   fi
 
@@ -42,6 +57,9 @@ $BODY
 ## 현재 세계 상태 (logs/world-snapshot.json)
 $WORLD
 
+## 최근 머지 (이 이슈에 예전 리뷰가 있다면 그 수치·처방이 낡았을 수 있다)
+$RECENT
+
 ## 요구 출력 (마크다운, 250단어 이내)
 1. **유효성**: 이슈가 주장하는 문제가 지금도 실재하는가? 세계 수치로 근거를 대라. 이미 해결됐다면 '닫기 권고'와 그 근거.
 2. **정확성**: 진단이나 처방에 오류·오진이 있는가? (예: 원인을 잘못 지목, 이미 다른 이슈가 다루는 중복)
@@ -51,7 +69,9 @@ $WORLD
 규칙: (0) **지표를 누르는 처방 금지** — 오류 수치(no_path·lonely·불만·starving)를 낮추려 파라미터를 튜닝하거나 실패를 억제하는 제안은 하지 마라. 대신 **사람이 할 법한 행동을 하나 더 추가**해 세계가 스스로 풀게 하고, 그렇게 풀리는지 관찰할 지표를 함께 제시하라. 단 계약 위반(결정성·오버플로·리플레이 불일치)과 명백한 구현 결함은 그대로 고친다. 인구를 직접 조작하는 제안 금지. 결정적 tick·내구 입력·드로우 순서 계약을 깨는 제안 금지. 코드를 읽어 확인한 사실과 추측을 구분해 표기하라." </dev/null 2>&1 | awk '/^codex$/{buf=""; f=1; next} /^(exec|thinking|web search)/{f=0} f{buf=buf $0 "\n"} END{printf "%s", buf}' | head -c 5500)
 
   if [ -n "$OUT" ]; then
-    printf '## 🔍 Codex 이슈 리뷰\n\n%s\n\n---\n<sub>`tools/issue-review-agent.sh` 자동 리뷰 · 세계 상태와 코드 대조</sub>\n' "$OUT" \
+    HEAD_TXT='## 🔍 Codex 이슈 리뷰'
+    if [ -n "$RECHECK" ]; then HEAD_TXT='## 🔁 Codex 재리뷰 (세계가 바뀐 뒤 다시 봄)'; fi
+    printf '%s\n\n%s\n\n---\n<sub>`tools/issue-review-agent.sh` 자동 리뷰 · 세계 상태와 코드 대조</sub>\n' "$HEAD_TXT" "$OUT" \
       | gh issue comment "$NUM" --body-file - >/dev/null 2>&1 && echo "  → 코멘트 게시 완료"
     REVIEWED=$((REVIEWED + 1))
   else
