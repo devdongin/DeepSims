@@ -48,7 +48,7 @@ $WORLD
 3. **우선순위**: P1/P2/P3 중 하나와 이유. 다른 열린 이슈와의 선후 관계.
 4. **다음 행동**: 구현자가 바로 착수할 수 있는 구체적 한 걸음.
 
-규칙: 인구를 직접 조작하는 제안 금지. 결정적 tick·내구 입력·드로우 순서 계약을 깨는 제안 금지. 코드를 읽어 확인한 사실과 추측을 구분해 표기하라." </dev/null 2>&1 | awk '/^codex$/{buf=""; f=1; next} /^(exec|thinking|web search)/{f=0} f{buf=buf $0 "\n"} END{printf "%s", buf}' | head -c 5500)
+규칙: (0) **지표를 누르는 처방 금지** — 오류 수치(no_path·lonely·불만·starving)를 낮추려 파라미터를 튜닝하거나 실패를 억제하는 제안은 하지 마라. 대신 **사람이 할 법한 행동을 하나 더 추가**해 세계가 스스로 풀게 하고, 그렇게 풀리는지 관찰할 지표를 함께 제시하라. 단 계약 위반(결정성·오버플로·리플레이 불일치)과 명백한 구현 결함은 그대로 고친다. 인구를 직접 조작하는 제안 금지. 결정적 tick·내구 입력·드로우 순서 계약을 깨는 제안 금지. 코드를 읽어 확인한 사실과 추측을 구분해 표기하라." </dev/null 2>&1 | awk '/^codex$/{buf=""; f=1; next} /^(exec|thinking|web search)/{f=0} f{buf=buf $0 "\n"} END{printf "%s", buf}' | head -c 5500)
 
   if [ -n "$OUT" ]; then
     printf '## 🔍 Codex 이슈 리뷰\n\n%s\n\n---\n<sub>`tools/issue-review-agent.sh` 자동 리뷰 · 세계 상태와 코드 대조</sub>\n' "$OUT" \
