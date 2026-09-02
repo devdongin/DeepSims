@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 44,
+  "logicSchemaVersion": 45,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -591,7 +591,10 @@
     "carTripsMin": 12,
     "carPrice": 6000,
     "carSpeedTiles": 2,
-    "stationDemand": 300
+    "stationDemand": 300,
+    "stationCarOwnerPct": 50,
+    "stationDistBoostMin": 60,
+    "stationDistBoostPct": 25
   },
   "patrol": {
     "targets": [

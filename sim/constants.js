@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 49; // §22.26 공공사업 (lastPublicWorksDay)
+export const SCHEMA_VERSION = 50; // §19.12 역 수요 관측·언락 (49=공공사업과 번호 충돌 → 50으로)
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
