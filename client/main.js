@@ -880,9 +880,16 @@ function conversationLine(e) {
       const other = simName(d.otherId);
       return d.kind === 'married'
         ? pick([`${rang(about)} ${other} 결혼했대!! 대박`, `${ne(about)} 결혼식 얘기 들었어?`,
-          `${rang(about)} ${other}, 잘 어울리더라`, `둘이 언제부터 그랬대?`], t)
+          `${rang(about)} ${other}, 잘 어울리더라`, `둘이 언제부터 그랬대?`,
+          `${about} 결혼한다는 소식 들었어?`, `${ga(about)} 결혼했다니 아직도 안 믿겨`,
+          `${wa(about)} ${other}, 식장에서 둘 다 울더라`,
+          `${rang(about)} ${other} 얘기 들었지? 나만 늦게 안 거야?`,
+          `요즘 경사가 있네. ${about} 소식 말이야`], t)
         : pick([`${rang(about)} ${other} 사귄대!`, `${ga(about)} 요즘 ${other}만 만난다?`,
-          `${rang(about)} ${other} 같이 있는 거 봤어`, `어쩐지 요즘 표정이 좋더라니`], t);
+          `${rang(about)} ${other} 같이 있는 거 봤어`, `어쩐지 요즘 표정이 좋더라니`,
+          `${about} 소식 들었어? ${rang(other)} 잘 되나 봐`,
+          `${ga(about)} 요즘 부쩍 꾸미고 다니더라`, `${wa(about)} ${other} 어제 같이 걷더라`,
+          `${eun(about)} 아직 아무 말 없던데, 티가 나`, `둘이 사귄다는 게 사실이야?`], t);
     }
     case 'family_talk': {
       return d.relation === 'child'
@@ -913,23 +920,67 @@ function replyLine(e) {
   const t = e.tick;
   const warm = e.payload.listenerWarmth ?? 0;
   if (e.payload.topic === 'party_invite') {
-    return warm >= 0 ? pick(['갈래갈래!', '오 좋아, 시간 비워둘게', '누구누구 와?', '그때 보자!'], t)
+    return warm >= 0 ? pick(['갈래갈래!', '오 좋아, 시간 비워둘게', '누구누구 와?', '그때 보자!',
+      '뭐 가져갈까?', '몇 시까지 가면 돼?'], t)
       : pick(['음… 생각해볼게', '가면 보고', '그날 좀 애매한데', '나는 다음에'], t);
   }
+  // §22.29 후속 질문 (Huang, Yeomans, Brooks, Minson & Gino 2017, JPSP 113(3) 430-452).
+  // 세 건의 실제 대화 실험에서 **질문을, 특히 앞말을 받아 묻는 후속 질문을** 많이 한
+  // 사람이 상대에게 더 호감을 샀다. 기제는 반응성(responsiveness) — 듣고 있고,
+  // 이해했고, 관심이 있다는 신호다. 스피드데이팅에서는 후속 질문을 많이 한 쪽이
+  // 두 번째 만남 승낙을 더 받아냈다.
+  //
+  // 소식 전달(couple_news)은 대화의 21%인데 응답 분기가 아예 없어서 "응응"·"ㅋㅋㅋ 맞아"
+  // 같은 맞장구로만 받고 있었다. 소식은 원래 **되묻는** 자리다.
+  // 되묻는 말은 앞말의 실제 내용(누가·어떤 관계)을 가리켜야 반응성이 된다 — 그래서
+  // 이름과 kind를 문장에 넣는다. 호감이 없으면 되묻지 않고 화제를 닫는다.
+  if (e.payload.topic === 'couple_news') {
+    const cd = e.payload.detail ?? {};
+    const who = e.payload.aboutSimId !== null && e.payload.aboutSimId !== undefined
+      ? simName(e.payload.aboutSimId) : null;
+    const partner = cd.otherId !== null && cd.otherId !== undefined ? simName(cd.otherId) : null;
+    if (warm >= 0) {
+      return cd.kind === 'married'
+        ? pick([`언제부터 만난 거래?`, who ? `${who} 표정 어땠어?` : `분위기 어땠어?`,
+          `식은 어디서 했대?`, `너도 갔었어?`, `누가 먼저 마음이 있었대?`,
+          `둘이 어떻게 만난 거래?`], t)
+        : pick([`언제부터래?`, `누가 먼저 좋아했대?`,
+          who ? `${who} 본인이 얘기한 거야?` : `본인들이 얘기한 거야?`,
+          partner ? `${partner} 어떤 사람이야?` : `상대는 어떤 사람이야?`,
+          `둘이 어디서 만났대?`, `너는 어떻게 알았어?`], t);
+    }
+    return pick([`그런가 보네`, `본인들 일이지 뭐`, `나는 잘 모르겠어`, `그렇구나`], t);
+  }
+  // 연인끼리의 말은 되묻는 방향이 다르다 — 소식을 캐는 게 아니라 상대 쪽으로 돌린다.
+  if (e.payload.topic === 'sweet_talk') {
+    const st = (e.payload.detail ?? {}).stage;
+    if (warm >= 0) {
+      return st === 'married'
+        ? pick([`당신은 오늘 어땠는데?`, `좋지. 몇 시에 볼까?`, `장은 내가 볼게. 뭐 필요해?`,
+          `그 얘기 좀 더 해줘`, `저녁은 뭐 먹고 싶어?`], t)
+        : pick([`나도 보고 싶었어. 언제 시간 돼?`, `어디서 볼까?`, `무슨 좋은 일 있었길래?`,
+          `그래서? 더 얘기해줘`, `오늘은 어떻게 지냈어?`], t);
+    }
+    return pick([`응…`, `나중에 얘기하자`, `그래`], t);
+  }
   if (e.payload.topic === 'gossip') {
-    return warm >= 0 ? pick(['헐 진짜?', '그니까 말이야', '더 얘기해봐', '어쩐지…', '나도 그런 느낌 받았어'], t)
+    return warm >= 0 ? pick(['헐 진짜?', '그니까 말이야', '더 얘기해봐', '어쩐지…', '나도 그런 느낌 받았어',
+      '어쩌다 그렇게 됐대?', '너는 어떻게 알았어?', '그래서 지금은 어때?'], t)
       : pick(['글쎄…', '남 얘긴 그만하자', '직접 물어보지 그래', '뭐 사정이 있겠지'], t);
   }
   if (e.payload.topic === 'work_gripe') {
-    return warm >= 0 ? pick(['고생 많았다…', '그래도 오늘 끝났잖아', '한잔 하러 갈까?', '내일은 좀 낫겠지'], t)
+    return warm >= 0 ? pick(['고생 많았다…', '그래도 오늘 끝났잖아', '한잔 하러 갈까?', '내일은 좀 낫겠지',
+      '오늘은 몇 시에 끝났어?', '제일 힘든 게 뭐야?', '내일도 그래?'], t)
       : pick(['다들 그렇지 뭐', '그래도 일이 있는 게 어디야'], t);
   }
   if (e.payload.topic === 'weather') {
-    return warm >= 0 ? pick(['그러게, 딱 좋다', '나도 방금 그 생각 했어', '이따 좀 걸을까?'], t)
+    return warm >= 0 ? pick(['그러게, 딱 좋다', '나도 방금 그 생각 했어', '이따 좀 걸을까?',
+      '이따 뭐 할 거야?', '우산은 챙겼어?'], t)
       : pick(['그런가…', '난 잘 모르겠던데'], t);
   }
   if (e.payload.topic === 'food') {
-    return warm >= 0 ? pick(['오 어디 거?', '나도 배고파졌어', '다음엔 같이 가자'], t)
+    return warm >= 0 ? pick(['오 어디 거?', '나도 배고파졌어', '다음엔 같이 가자',
+      '맛이 어땠는데?', '거긴 뭐가 제일 나아?'], t)
       : pick(['난 방금 먹었어', '입맛이 없네'], t);
   }
   // §22.28 상호 자기 공개 (Brummelman et al. 2024, Dev Sci; CC BY).
@@ -984,7 +1035,8 @@ function replyLine(e) {
       : pick(['아 그랬어?', '그렇구나', '그럴 수도 있지', '음…'], t);
   }
   if (e.payload.topic === 'family_talk') {
-    return warm >= 0 ? pick(['좋겠다…', '가족이 최고지', '나도 오랜만에 연락해봐야겠다'], t)
+    return warm >= 0 ? pick(['좋겠다…', '가족이 최고지', '나도 오랜만에 연락해봐야겠다',
+      '요즘 어떻게 지내신대?', '자주 보러 가?', '이제 몇 살이야?'], t)
       : pick(['그렇구나', '집집마다 사정이 있지'], t);
   }
   if (warm > 0) return pick(['응응!', '완전 공감해', 'ㅋㅋㅋ 맞아', '오 진짜?', '역시 너다', '나도 나도'], t);
