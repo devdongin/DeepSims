@@ -24,7 +24,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -623,7 +623,10 @@ function applyPolicy(world, inp, t, emit) {
     before[k] = world.policy[k] ?? world.logic.economy[k];
     world.policy[k] = inp.payload[k];
   }
-  emit('policy_changed', null, { changes: inp.payload, before });
+  // §22.22 플레이어의 정책 입력을 기록한다 — 시장이 이 창 안에서는 조정을 삼간다.
+  // 내구 입력을 NPC가 곧바로 되돌리면 입력의 의미가 훼손된다 (117차 ⑤).
+  world.playerPolicyDay = floorDiv(t, 1440);
+  emit('policy_changed', null, { changes: inp.payload, before, source: 'player' });
 }
 
 // §18.T2: 건설 지시 — 주문 시 국고 차감·FIFO 적재 (47차 합의: 취소 없음, 착공 시 재검증)
@@ -956,16 +959,29 @@ export function tick(world, inputsForThisTick = []) {
         if (payer) payer.revenue = avail - paid;
         wage = paid;
       } else if (pub) {
-        // 국고는 절대 음수가 되지 않는다 (89차 ④ invariant)
-        const avail = Math.max(0, world.treasury);
-        const paid = Math.min(wage, avail);
-        if (paid < wage) {
-          emit('wage_shortfall', sim.id, {
-            facilityId: s.facilityId, asked: wage, paid, shortfall: wage - paid, source: 'treasury',
-          });
+        // §22.23 공공 임금은 **전액 보장**이다 (사용자 지시). 예전에는
+        // "국고는 절대 음수가 되지 않는다(89차 ④)"를 지키느라 paid=min(wage,국고)로
+        // 깎았고, 그 결과가 지급률 11.2%·교사 실수령 0원이었다 — 가상 플레이어
+        // 전원이 지적한 부정의다. 그 invariant를 **의도적으로 폐기**한다:
+        // 일을 했으면 받는다. 국고가 모자라면 음수(공채)로 내려가고, §22.22의
+        // runway 반응이 부채에 작동한다 (Bohn 1998이 정확히 부채 반응 함수다).
+        // §22.4 폐쇄 회계는 유지된다 — 국고가 합산 항이므로 총합 불변식은 음수여도 성립.
+        const before = world.treasury;
+        const cap = -(L.economy.maxDebt ?? 0);
+        if (before - wage < cap) {
+          // maxDebt는 오버플로 가드다(1e12) — 여기 걸리는 건 사실상 버그 상황이고,
+          // 그때만 부분 지급하며 관측 가능하게 알린다 (118차 C).
+          const paid = Math.max(0, before - cap);
+          emit('insolvent', sim.id, { asked: wage, paid, treasury: before });
+          world.treasury = before - paid;
+          wage = paid;
+        } else {
+          world.treasury = before - wage;
+          // 0 하향 돌파 전이에만 알린다 — 매 지급마다가 아니라 빚이 시작될 때
+          if (before >= 0 && world.treasury < 0) {
+            emit('treasury_debt', sim.id, { treasury: world.treasury, firstWage: wage });
+          }
         }
-        world.treasury = avail - paid;
-        wage = paid;
       } else {
         // 기반 부문 — 마을 밖에서 벌어오는 소득. 경계 유입으로 **명시해 기록한다**(G1 폐쇄 회계).
         world.externalInflow = (world.externalInflow ?? 0) + wage;
@@ -1129,6 +1145,7 @@ export function tick(world, inputsForThisTick = []) {
         dailyFireDraws(world, t, emit); // §17.20 (①.5 — 질병 다음, 시설당 1드로우)
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
+        maybeFiscalReview(world, t, day, emit); // §22.22 선거 직후 고정 위치 — 그날 복지 정산부터 새 정책
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
         // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야
@@ -1198,9 +1215,11 @@ export function tick(world, inputsForThisTick = []) {
         emit('input_rejected', null, { command: 'zone', reason: 'stale_order', plotId: order.plotId });
         continue;
       }
+      // §22.23 공기 차등 — 타입별 노동량. 시장 행정력 할인은 그대로 곱한다.
+      const base4 = L.construct.requiredByType?.[order.type] ?? L.construct.laborRequired;
       const required = world.mayorId !== null
-        ? floorDiv(L.construct.laborRequired * L.election.mayorLaborPct, 100)
-        : L.construct.laborRequired;
+        ? floorDiv(base4 * L.election.mayorLaborPct, 100)
+        : base4;
       world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true });
       emit('project_started', null, { plotId: order.plotId, type: order.type, dir: order.dir, x: plot.x, y: plot.y, required, zoned: true });
     }
@@ -1243,9 +1262,10 @@ export function tick(world, inputsForThisTick = []) {
         if (!type) break;
         {
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
+          const base5 = L.construct.requiredByType?.[type] ?? L.construct.laborRequired;
           const required = world.mayorId !== null
-            ? floorDiv(L.construct.laborRequired * L.election.mayorLaborPct, 100)
-            : L.construct.laborRequired;
+            ? floorDiv(base5 * L.election.mayorLaborPct, 100)
+            : base5;
           world.projects.push({ plotId: freePlot.plotId, type, progress: 0, required });
           emit('project_started', null, { plotId: freePlot.plotId, type, x: freePlot.x, y: freePlot.y, required });
         }

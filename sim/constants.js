@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 47; // §22.20 회고 투표 (termStartPolicy·현직 출마 규칙)
+export const SCHEMA_VERSION = 48; // §22.22 시장의 재정 행동 (lastFiscalDay·playerPolicyDay)
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -43,7 +43,7 @@ export const AFFINITY_MAX = 10000;
 
 export const EVENT_TYPES = [
   'action_started', 'action_completed', 'action_failed', 'input_rejected',
-  'starving', 'lonely', 'argument', 'money_changed', 'welfare_paid', 'wage_shortfall', 'money_shared', 'job_changed', 'died', 'bereaved', 'grew_up', 'public_revenue_remitted', 'invited', 'invite_declined', 'invite_fulfilled', 'invite_expired', 'side_talk', 'fire_started', 'fire_out', 'heroic_save', 'policy_changed', 'zoned', 'city_promoted', 'item_reported', 'item_returned', 'car_bought', 'petition',
+  'starving', 'lonely', 'argument', 'money_changed', 'welfare_paid', 'wage_shortfall', 'money_shared', 'job_changed', 'died', 'bereaved', 'grew_up', 'public_revenue_remitted', 'invited', 'invite_declined', 'invite_fulfilled', 'invite_expired', 'side_talk', 'helped', 'treasury_debt', 'insolvent', 'fire_started', 'fire_out', 'heroic_save', 'policy_changed', 'zoned', 'city_promoted', 'item_reported', 'item_returned', 'car_bought', 'petition',
   'player_created', 'logic_changed', 'relationship_changed',
   'token_created', 'gathering', 'conversation', 'greeting',
   'road_formed', 'bed_built', 'hangover',

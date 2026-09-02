@@ -835,6 +835,10 @@ function handleVisualEvent(e) {
       }
       break;
     }
+    case 'helped':
+      showBubble(e.simId, '🤝', 2500);
+      showBubble(e.payload.toSimId, '😊', 2500);
+      break;
     case 'greeting':
       showBubble(e.simId, '👋', 2000);
       showBubble(e.payload.withSimId, '👋', 2000);
@@ -1067,6 +1071,11 @@ function eventText(e) {
     }
     case 'road_formed': return `🛤️ 많이 다니던 길이 도로가 되었습니다 (${e.payload.x}, ${e.payload.y})`;
     case 'bed_built': return `🛏️ ${ga(n)} 집에 침대를 새로 만들었습니다!`;
+    case 'side_talk': return `💬 ${ga(n)} 옆자리 ${wa(simName(e.payload.withSimId))} 말을 텄습니다`;
+    case 'helped': {
+      const why = { sick: '아픈', hungry: '배곯는', broke: '주머니가 빈' }[e.payload.why] ?? '';
+      return `🤝 ${ga(n)} ${why} ${eul(simName(e.payload.toSimId))} 챙겼습니다`;
+    }
     case 'greeting': return `👋 ${wa(n)} ${ga(simName(e.payload.withSimId))} 지나가며 인사했습니다`;
     default: return null;
   }

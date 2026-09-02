@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 40, // §22.20 회고 투표 (표에 성과가 들어간다)
+  logicSchemaVersion: 43, // §22.23 공공 임금 보장·공기 차등
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -134,7 +134,9 @@ export const DEFAULT_LOGIC = {
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
       sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
       new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7, unmet: 6,
-      welfare: 6 }, // §22.20 정부가 나를 도왔다 — 회고 투표의 재료
+      welfare: 6, // §22.20 정부가 나를 도왔다 — 회고 투표의 재료
+      helped: 5, was_helped: 6, // §22.21 이웃을 챙겼다 / 이웃이 나를 챙겼다
+      governed: 4 }, // §22.22 정책을 조정했다 — 시장 자신의 통치 기록
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
     posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프
@@ -166,6 +168,17 @@ export const DEFAULT_LOGIC = {
     // 끊기지 않으므로 경제·허기에 부작용이 없다. 정면 페어링보다 약하게 친다 —
     // 곁다리 대화가 마주 앉은 대화와 같으면 '아무나 붙잡기'가 최적 전략이 된다.
     sideTalkFactorPct: 30,            // 곁다리 대화의 사교 회복 강도 (정면 대비 %)
+    // §22.21 먼저 돕기 (이슈 #69, 로드맵 P1). 혼자 남은 심이 말을 걸었는데 상대가
+    // **곤경**(아픔·허기 위급·복지 문턱 미만)이면, 수다가 아니라 챙김이 된다.
+    // KIND Challenge RCT(4,284명, CC BY)의 핵심은 **주는 쪽의 외로움이 준다**는 것 —
+    // 그래서 회복 보정이 받는 쪽이 아니라 주는 쪽에 붙는다. 받는 쪽은 고마움을
+    // 기억하고(was_helped) 호감이 한쪽 방향으로만 오른다 — 주는 쪽 호감은 그대로라
+    // '아무나 붙잡고 돕기'가 사교 최적 전략이 되지 않는다.
+    helpAcceptBonusPct: 25,           // 곤경일 때 승낙 확률 가산 (사람은 챙김을 더 잘 받는다)
+    helpGiverSocialPct: 100,          // 주는 쪽 사교 회복 (정면 대비 %) — 곁다리(30)보다 크다
+    helpGratitudeAffinity: 300,       // 받는 쪽 → 주는 쪽 호감 (한 방향)
+    helpMoodGiver: 40,                // 챙긴 쪽 기분
+    helpMoodTaker: 60,                // 챙김 받은 쪽 기분
     rivalStatePenalty: 200000000000,  // 라이벌이 있으면 감점 (양수로 저장, 적용 시 부호)
     reflectionMoodScale: 60,          // pendingMood = clamp(Σ 부호 importance × scale, ±10000)
     habitIncrement: 10000000000,      // 회고당(=하루당) 습관 증가 상한 (PLAN §G: 1e10/일)
@@ -227,7 +240,20 @@ export const DEFAULT_LOGIC = {
   },
   market: { maxGroceries: 6 },
   construct: {
-    laborRequired: 600,  // 완공까지 누적 수행 틱
+    laborRequired: 600,  // 완공까지 누적 수행 틱 — requiredByType에 없는 타입의 폴백
+    // §22.23 건물은 단숨에 지어지지 않는다 (사용자 지시). 실측으로 집 한 채가 게임
+    // 10~24시간(×48 관람 0.2~0.5분)에 완공됐다 — required 540이 전 타입 동일했기 때문.
+    // 현장은 이미 작업 스팟 4개로 동시 인원이 제한되므로(§16.5.B), 타입·규모별로
+    // 노동량을 차등해 공기(工期)를 만든다. 목표: 집 ~7게임일, 대형 ~20게임일.
+    // 진행 중 프로젝트는 시작 때 스냅샷한 required를 그대로 쓴다 — 소급하지 않는다(118차 D).
+    requiredByType: {
+      park: 3000, house: 5000,
+      cafe: 6000, restaurant: 6000, market: 6000, bar: 6000,
+      office: 8000, school: 8000, gym: 8000, library: 8000,
+      hospital: 10000, city_hall: 10000, police_station: 10000, fire_station: 10000, cinema: 10000,
+      apartment: 14000, mall: 14000,
+      university: 20000, factory: 20000,
+    },
     deficit: 4000,       // needValue = NEED_MAX - deficit (고정 급함)
     persJDiv: 4,         // persFactor = 100 + floorDiv(100 - JP, persJDiv)
     cafeRatio: 2,        // 심 수 > 좌석합×ratio → cafe 프로젝트
@@ -332,6 +358,11 @@ export const DEFAULT_LOGIC = {
     // 그러면 소비 → 국고 → 공공 임금 → 시민 → 소비 고리가 닫힌다.
     publicFacilityTypes: ['hospital', 'city_hall', 'school', 'police_station', 'fire_station'],
     publicWageOccupations: ['doctor', 'nurse', 'teacher', 'civil_servant', 'politician', 'police', 'firefighter'],
+    // §22.23 공공 임금 완전 보장 (사용자 지시: "공무원도 예외없이 일을 하면 반드시
+    // 돈을 줘야 되고 공무원이면 국고에서 월급이 지급되어야 해"). 국고가 모자라면
+    // 음수(공채)로 내려간다. maxDebt는 게임 장치가 아니라 **오버플로 가드**다 —
+    // 여기 걸리면 insolvent 이벤트가 나고 그때만 부분 지급이 된다.
+    maxDebt: 1000000000000, // 1e12
     taxMoodPer: 5,          // §18.T1: 납세 시점 mood 델타 = -floorDiv(tax×taxMoodPer, 10) (그라데이션)
   },
   // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
@@ -346,6 +377,15 @@ export const DEFAULT_LOGIC = {
     decayFactorNum: 1,       // 감쇠 가산 d += floorDiv(d × num, den) → +50%
     decayFactorDen: 2,
     doctorDeficit: 8500,     // see_doctor needValue = NEED_MAX - deficit (아플 때 최우선급)
+  },
+  // §22.22 시장의 재정 행동 — Bohn 1998 재정 반응 함수, Downs 1957 관직 추구,
+  // Nordhaus 1975·Rogoff 1990 정치적 예산 순환. 시장은 §22.20의 hoardRatioPct와
+  // 같은 조건을 보고 POLICY_FIELDS 범위 안에서 한 걸음씩 움직인다.
+  fiscal: {
+    reviewIntervalDays: 5,   // 15일 임기에 조정 기회 2~3회
+    stepTaxPct: 3,           // 세율 한 걸음 (%p)
+    stepWelfare: 100,        // 복지 금액·문턱 한 걸음
+    lowRatioPct: 10,         // 국고 < 시민총현금 × 10% → 재정 위험(긴축)
   },
   election: {
     intervalDays: 15,
@@ -515,6 +555,11 @@ function checkRanges(p, errors) {
   }
   inRange('social.inviteTtlTicks', p.social.inviteTtlTicks, 0, 100000);
   inRange('social.sideTalkFactorPct', p.social.sideTalkFactorPct, 0, 100);
+  inRange('social.helpAcceptBonusPct', p.social.helpAcceptBonusPct, 0, 100);
+  inRange('social.helpGiverSocialPct', p.social.helpGiverSocialPct, 0, 300);
+  inRange('social.helpGratitudeAffinity', p.social.helpGratitudeAffinity, 0, 5000);
+  inRange('social.helpMoodGiver', p.social.helpMoodGiver, 0, 1000);
+  inRange('social.helpMoodTaker', p.social.helpMoodTaker, 0, 1000);
   inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);
   inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
   inRange('sharing.needyBelow', p.sharing.needyBelow, 0, 100000);
@@ -632,6 +677,11 @@ function checkRanges(p, errors) {
   inRange('items.pickupMood', p.items.pickupMood, 0, 10000);
   inRange('market.maxGroceries', p.market.maxGroceries, 1, 100);
   inRange('actions.construct.duration', p.actions.construct.duration, 1, 10000);
+  // 119차 후속: MAX_SAFE_INTEGER까지 열면 차감 연산이 안전 정수를 벗어날 수 있다
+  inRange('economy.maxDebt', p.economy.maxDebt, 0, 1e15);
+  for (const [ft, req] of Object.entries(p.construct.requiredByType)) {
+    inRange(`construct.requiredByType.${ft}`, req, 1, 10000000);
+  }
   inRange('construct.laborRequired', p.construct.laborRequired, 1, 1000000);
   inRange('construct.deficit', p.construct.deficit, 0, 10000);
   inRange('construct.persJDiv', p.construct.persJDiv, 1, 100);
@@ -744,6 +794,10 @@ function checkRanges(p, errors) {
   inRange('election.hoardRatioPct', p.election.hoardRatioPct, 1, 10000);
   inRange('election.hoardMultPct', p.election.hoardMultPct, 100, 1000);
   inRange('election.retroCap', p.election.retroCap, 0, 10000);
+  inRange('fiscal.reviewIntervalDays', p.fiscal.reviewIntervalDays, 1, 120);
+  inRange('fiscal.stepTaxPct', p.fiscal.stepTaxPct, 0, 25);
+  inRange('fiscal.stepWelfare', p.fiscal.stepWelfare, 0, 1000);
+  inRange('fiscal.lowRatioPct', p.fiscal.lowRatioPct, 0, 100);
   for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {
     inRange(`disease.${k}`, p.disease[k], 0, 1000);
   }
