@@ -88,3 +88,17 @@ export function circadianEnergyPct(sim, L, t) {
   tod = ((tod % 1440) + 1440) % 1440;
   return L.circadian.energyPct[floorDiv(tod, 60)];
 }
+
+// §21.2 (83차 ④): 쌍 전용 의사확률. dayHash(a*97+b)는 서로 다른 쌍이 같은 키로 충돌해
+// (예: 1*97+194 = 2*97+97) 쌍 간 확률이 상관된다. 두 id를 **각각 다른 상수로** 섞어 분리한다.
+// 방향(주는 쪽/받는 쪽)도 구분한다 — A가 B를 돕는 것과 B가 A를 돕는 것은 다른 사건이다.
+// rngSim 미소비.
+export function pairHash(fromId, toId, day, salt) {
+  let h = Math.imul(fromId + 1, 2654435761)
+    ^ Math.imul(toId + 1, 1597334677)
+    ^ Math.imul(day + 1, 40503)
+    ^ Math.imul(salt + 1, 97919);
+  h = Math.imul(h ^ (h >>> 15), 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 3266489917);
+  return ((h ^ (h >>> 16)) >>> 0) % 100;
+}

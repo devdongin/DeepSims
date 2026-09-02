@@ -441,5 +441,9 @@
  "wageShortfall7d": {
   "count": 5,
   "total": 2681
+ },
+ "hungerNow": {
+  "atZero": 7,
+  "belowCritical": 9
  }
 }

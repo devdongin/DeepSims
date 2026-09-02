@@ -154,6 +154,10 @@ export function migrateWorld(world) {
     // §19.10 (73차 ②): 원인 분화 시행일 — 이전 no_facility 항목은 외부 노출에서 legacy 표시
     world.complaintReasonDay = Math.floor(world.worldTick / 1440);
   }
+  if (from < 35) {
+    // §21.2 나눔: 쌍당 하루 1회를 위한 결정적 기본값 (83차 ③).
+    for (const sim of world.sims) { sim.sharedDay ??= -1; sim.sharedTo ??= []; }
+  }
   if (from < 34) {
     // §21.1 능력치 (이슈 #62): seed·simId에서 결정적으로 유도하므로 rngSim을 소비하지 않는다.
     // 기존 심도 즉시 같은 값을 갖고, 리플레이 스트림이 어긋나지 않는다.
@@ -200,7 +204,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 34;
+  world.schemaVersion = 35;
   return world;
 }
 

@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 33, // §21.1 abilities 추가 (심 능력치 — 이슈 #62)
+  logicSchemaVersion: 34, // §21.2 sharing 추가 (나눔 행동 — 사용자 규칙 §0.1)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -77,6 +77,17 @@ export const DEFAULT_LOGIC = {
     // 졸업 시 적성이 높은 직업이 뽑힐 확률을 얼마나 올릴지. 풀에 중복 삽입하는 방식이라
     // **rngInt 드로우 수는 1회 그대로**다 (§17.8 계약 불변).
     aptitudePoolWeight: 300,
+  },
+  // §21.2 나눔 (사용자 규칙 §0.1: 지표를 누르지 말고 행동을 준다).
+  // 은퇴자는 소득이 0이라 저축을 쓰면 굶는다 — 복지 캡을 올리는 대신 '만나서 나눠주는' 행동을 준다.
+  sharing: {
+    needyBelow: 300,        // 이 잔고 미만이면 곤경으로 본다 (복지 문턱과 같은 눈높이)
+    giverKeepMin: 1500,     // 주는 쪽이 남겨야 할 최소 — 나눔이 새 빈곤을 만들면 안 된다
+    amount: 400,            // 1회 나눔 액수 (끼니 두 번)
+    basePct: 5,             // 낯선 사람이라도 아주 가끔은 돕는다
+    friendBonusPct: 35,     // 친구면 훨씬 잘 돕는다
+    householdBonusPct: 55,  // 한집 식구가 가장 잘 돕는다
+    partnerBonusPct: 45,    // 연인·배우자
   },
   needCritical: 2000,
   // Phase 3 (logicSchemaVersion 2): 기억·회고·관계 티어 (PLAN §2.5 B/C/E + D2 델타)
@@ -343,7 +354,11 @@ export function validateLogic(params) {
     return { ok: false, errors: ['params는 객체여야 함'] };
   }
   const json = JSON.stringify(params);
-  if (Buffer.byteLength(json, 'utf8') > 8192) errors.push('params 전문 > 8KB');
+  // 내구 입력 로그 비대화 방지용 상한. 세계가 시스템을 얻을 때마다 파라미터가 자라므로
+  // (§21.2 나눔 추가 시점에 8,286 bytes로 8KB를 넘었다) 한도를 16KB로 올린다.
+  // 이건 세계의 지표가 아니라 저장 계약의 상한이라 §0.1(지표를 누르지 않는다)의 대상이 아니다.
+  // 로직 파일은 사람이 읽고 고치는 노브 모음이지 대용량 데이터가 아니므로 16KB면 충분히 넉넉하다.
+  if (Buffer.byteLength(json, 'utf8') > 16384) errors.push('params 전문 > 16KB');
   if (params.logicSchemaVersion !== DEFAULT_LOGIC.logicSchemaVersion) {
     errors.push(`logicSchemaVersion 불일치 (기대 ${DEFAULT_LOGIC.logicSchemaVersion})`);
   }
@@ -425,6 +440,12 @@ function checkRanges(p, errors) {
   inRange('social.gravityPullCap', p.social.gravityPullCap, 0, 500);
   inRange('social.gravityWalkingPct', p.social.gravityWalkingPct, 0, 100);
   inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
+  inRange('sharing.needyBelow', p.sharing.needyBelow, 0, 100000);
+  inRange('sharing.giverKeepMin', p.sharing.giverKeepMin, 0, 1000000);
+  inRange('sharing.amount', p.sharing.amount, 0, 100000);
+  for (const k of ['basePct', 'friendBonusPct', 'householdBonusPct', 'partnerBonusPct']) {
+    inRange(`sharing.${k}`, p.sharing[k], 0, 100);
+  }
   inRange('abilities.aptitudePoolWeight', p.abilities.aptitudePoolWeight, 0, 2000);
   for (const [o, k] of Object.entries(p.abilities.keyAbility)) {
     if (!(o in p.occupations)) errors.push(`abilities.keyAbility: 알 수 없는 직업 ${o}`);

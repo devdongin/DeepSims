@@ -20,8 +20,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren,
-} from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -710,6 +709,9 @@ export function tick(world, inputsForThisTick = []) {
           recordFact(a, t, L, 'argument', { subjectSimId: b.id, placeId: facId, tags: ['argument', `facility:${facId}`, `sim:${b.id}`] });
           recordFact(b, t, L, 'argument', { subjectSimId: a.id, placeId: facId, tags: ['argument', `facility:${facId}`, `sim:${a.id}`] });
         }
+        // ⑤ §21.2 나눔 — 만나서 곤경에 처한 가까운 사람에게 나눠준다.
+        // 만남의 첫 틱에만 (같은 자리에서 반복 이체 방지). dayHash라 rngSim 미소비.
+        if (a.state.pairedTicks === 1) maybeShare(world, a, b, t, floorDiv(t, 1440), emit); // 틱 내부 날짜 규약
       }
     }
   }

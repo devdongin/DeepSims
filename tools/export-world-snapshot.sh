@@ -53,6 +53,12 @@ fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
   stats14: (w.statsHistory ?? []).slice(-14),
   events7d, topFails7d,
   wageShortfall7d: { count: shortfall7d.n, total: shortfall7d.sum },
+  // §21.2: starving 이벤트는 '0으로 떨어지는 전이'만 센다 — 자주 먹을수록 더 많이 찍히므로
+  // 복지 지표로 쓰면 방향을 거꾸로 읽는다. 지금 굶고 있는 사람 수를 함께 노출한다.
+  hungerNow: {
+    atZero: w.sims.filter((s) => s.needs.hunger === 0).length,
+    belowCritical: w.sims.filter((s) => s.needs.hunger < (w.logic?.needCritical ?? 2000)).length,
+  },
 }, null, 1) + '\n');
 console.log('logs/world-snapshot.json 갱신: Day ' + day + ' 인구 ' + w.sims.length);
 "
