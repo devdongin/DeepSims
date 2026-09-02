@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 34,
+  "logicSchemaVersion": 35,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -187,6 +187,20 @@
       "workEnd": 1080,
       "wagePct": 95,
       "startMoney": 1000
+    },
+    "chef": {
+      "workStart": 600,
+      "workEnd": 1260,
+      "wagePct": 100,
+      "startMoney": 1000,
+      "weekendWork": true
+    },
+    "clerk": {
+      "workStart": 540,
+      "workEnd": 1140,
+      "wagePct": 85,
+      "startMoney": 1000,
+      "weekendWork": true
     }
   },
   "workplace": {
@@ -205,7 +219,9 @@
     "firefighter": "fire_station",
     "nurse": "hospital",
     "politician": "city_hall",
-    "worker": "factory"
+    "worker": "factory",
+    "chef": "restaurant",
+    "clerk": "market"
   },
   "persFactor": {
     "socializeBase": 150,
@@ -243,6 +259,8 @@
       "teacher": "charisma",
       "police": "stamina",
       "firefighter": "stamina",
+      "chef": "dexterity",
+      "clerk": "charisma",
       "nurse": "charisma",
       "politician": "charisma",
       "worker": "stamina"
@@ -258,6 +276,17 @@
     "friendBonusPct": 35,
     "householdBonusPct": 55,
     "partnerBonusPct": 45
+  },
+  "industry": {
+    "openings": {
+      "restaurant": "chef",
+      "market": "clerk"
+    },
+    "minRevenueToHire": 5000,
+    "workersPerFacility": 1,
+    "switchPctPerApt": 40,
+    "switchMaxPct": 40,
+    "minAptGain": 10
   },
   "needCritical": 2000,
   "memory": {
