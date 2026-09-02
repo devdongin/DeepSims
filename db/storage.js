@@ -48,7 +48,8 @@ export class Storage {
         this.db.prepare('INSERT INTO snapshot(id, tick, state) VALUES (1, 0, ?)').run(serialize(world));
       });
       init();
-      return { world, epochUtcMs: nowUtcMs, lastSimulatedTick: 0 };
+      // §22.7 created: 이번 실행에서 세계를 **새로 만들었는지**. 호출자가 시드를 안내하는 데 쓴다.
+      return { world, epochUtcMs: nowUtcMs, lastSimulatedTick: 0, created: true };
     }
     const epochUtcMs = Number(epochRow.value);
     const lastSimulatedTick = Number(metaGet.get('lastSimulatedTick').value);

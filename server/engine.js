@@ -20,6 +20,7 @@ export class Engine {
     const loaded = storage.loadOrCreate({ seed, nowUtcMs: now() });
     this.world = loaded.world;
     this.epochUtcMs = loaded.epochUtcMs;
+    this.createdNow = loaded.created === true; // §22.7 이번 실행에서 새 마을을 만들었는가
     storage.retargetStaleInputs(this.world.worldTick, now());
     storage.pruneEvents(this.world.worldTick);
     this.catchingUp = false;

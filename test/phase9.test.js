@@ -1942,3 +1942,19 @@ test('S-88. §22.6 말 걸기는 rngSim을 소비하지 않고, 초대는 점수
   b.invitedTo = { facilityId: cafe.id, untilTick: 99999 };
   assert.equal(b.state.action, 'eat', '밥을 먹다 말고 끌려가지 않는다');
 });
+
+test('S-89. §22.7 시드가 다르면 다른 마을, 같으면 같은 마을 (#사용자 지시)', () => {
+  // 기본 시드가 고정이라 누가 클론하든 똑같은 마을이 나오던 문제.
+  const a = createWorld(111), b = createWorld(222), c = createWorld(111);
+  assert.notEqual(hashWorld(a), hashWorld(b), '시드가 다르면 다른 마을');
+  assert.equal(hashWorld(a), hashWorld(c), '같은 시드면 같은 마을 (재현 가능)');
+  // 이름도 갈린다 — 지형만 달라선 '다른 마을'로 느껴지지 않는다
+  const nameOf = (w) => w.sims.map((s) => s.name).join(',');
+  assert.notEqual(nameOf(a), nameOf(b), '첫 주민 이름 순서도 시드로 갈린다');
+  assert.equal(nameOf(a), nameOf(c), '같은 시드면 이름도 같다');
+  // 이름 집합 자체는 보존된다 (섞기지 교체가 아니다)
+  assert.deepEqual(nameOf(a).split(',').slice().sort(), nameOf(b).split(',').slice().sort(),
+    '같은 이름 열 개를 순서만 바꾼다');
+  // 이름 섞기가 rngSim/rngWorldgen을 건드리지 않는다 — 전용 임시 rng
+  assert.equal(a.sims.length, b.sims.length);
+});

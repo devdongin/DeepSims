@@ -19,6 +19,19 @@ export function createWorld(seed) {
   const map = buildMap();
   generateTerrain(map, makeRng((seed ^ 0x7e44a1) >>> 0), plots); // §19 R-A 전용 스트림 (rngSim 비소비, 공터 보호)
 
+  // §22.7 첫 주민 이름도 시드로 갈린다. 고정 순서면 지형·성격이 달라도 '민수·지연·하준'이
+  // 늘 같은 자리에 서 있어 다른 마을처럼 느껴지지 않는다.
+  // **전용 임시 rng**를 써서 rngWorldgen/rngSim 스트림을 건드리지 않는다 — 드로우 순서 계약 불변.
+  const nameOrder = (() => {
+    const r = makeRng((seed ^ 0x9e3779b9) >>> 0);
+    const arr = SIM_NAMES.slice();
+    for (let i = arr.length - 1; i > 0; i--) { // Fisher–Yates, 결정적
+      const j = rngInt(r, i + 1);
+      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  })();
+
   const sims = [];
   for (let id = 0; id < SIM_COUNT; id++) {
     const homeId = `house${Math.floor(id / 2)}`;
@@ -26,7 +39,7 @@ export function createWorld(seed) {
     const traits = generateTraits(rngWorldgen);
     sims.push({
       id,
-      name: SIM_NAMES[id],
+      name: nameOrder[id], // §22.7 시드로 섞인 순서
       homeId,
       isPlayer: false,
       traits,

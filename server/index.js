@@ -3,6 +3,7 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
 import fs from 'node:fs';
+import { randomInt } from 'node:crypto'; // §22.7 첫 실행 시드 추첨 (시뮬 밖 — 결정성 무관)
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
@@ -15,7 +16,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PORT || 3000);
 const DB_PATH = process.env.DEEPSIMS_DB || path.join(ROOT, 'deepsims.db');
-const SEED = Number(process.env.DEEPSIMS_SEED || 20260831);
+// §22.7 시드 (사용자 지시: "모든 사용자가 최초에 프로젝트를 시작하면 같은 환경일테니 시드를 적용하자")
+// 기본값이 고정이라 **누가 클론하든 똑같은 마을**이 나왔다 — 같은 지형, 같은 열 명, 같은 이름.
+// 이제 첫 실행에서 시드를 무작위로 뽑아 **각자의 마을**이 생긴다.
+// 시드는 세계 생성에만 쓰이고 DB에 박히므로, 한 번 만들어진 마을은 이후 실행에서 그대로다.
+// 결정성은 그대로다 — 같은 시드 + 같은 입력 = 같은 세계라는 계약은 변하지 않는다.
+// DEEPSIMS_SEED를 주면 그 값을 쓴다 (친구와 같은 마을을 만들거나, 버그를 재현할 때).
+const SEED = process.env.DEEPSIMS_SEED
+  ? Number(process.env.DEEPSIMS_SEED)
+  : randomInt(1, 2 ** 31 - 1);
 const LOCK_PATH = DB_PATH + '.lock.pid';
 
 // 단일 인스턴스 락 (PLAN §4): O_EXCL 배타 생성으로 원자적 획득. 죽은 pid면 스테일 제거 후 1회 재시도.
@@ -224,6 +233,13 @@ wss.on('connection', async (ws) => {
 
 server.listen(PORT, async () => {
   console.log(`DeepSims 서버: http://localhost:${PORT} (db: ${DB_PATH}, tick: ${engine.world.worldTick})`);
+  // §22.7 시드 안내 — 새 마을이면 크게, 이어가는 마을이면 한 줄로.
+  if (engine.createdNow) {
+    console.log(`\n  🌱 당신만의 마을이 생겼습니다 — 시드 ${engine.world.seed}`);
+    console.log(`     같은 마을을 다시 만들려면: DEEPSIMS_SEED=${engine.world.seed} npm start\n`);
+  } else {
+    console.log(`  시드 ${engine.world.seed} (이어가는 중)`);
+  }
   await engine.catchUp(); // 부팅 따라잡기
   engine.assertLogicSynced(PARAMS_PATH); // 부팅 정합 ⑤
   console.log(`따라잡기 완료: tick ${engine.world.worldTick}`);
