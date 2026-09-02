@@ -263,12 +263,16 @@ export class Storage {
       .all(cursorTick, uptoTick, ...CHRONICLE_PRIORITY)
       .map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
     // 죽은 사람은 world.sims에 없어 클라이언트가 이름을 못 찾는다. 이름은 커서 구간이
-    // 아니라 **보존 창(30일) 전체**의 died payload에서 모은다 (Codex 지적: 지난 리포트
-    // 구간에서 죽은 부모를 이번 구간의 자립 문장이 참조할 수 있다). 프루닝보다 오래된
-    // 사망은 이름이 남지 않아 클라이언트가 '심N'으로 접는다 — 정직한 한계.
+    // 아니라 **보존 창(30일)**의 died payload에서 모은다 (Codex 지적 ①: 지난 리포트
+    // 구간에서 죽은 부모를 이번 구간의 자립 문장이 참조할 수 있다). 창의 하한은
+    // pruneEvents와 같은 30일 기준이라 (Codex 지적 ②) 프루닝이 아직 안 돌았어도
+    // 리포트 내용이 같고, 장기 실행 중 무한 누적도 없다. 커서가 그보다 과거를 보면
+    // 그 구간 안의 사망은 항상 포함한다. 창 밖 사망은 클라이언트가 '심N'으로 접는다.
+    const nameFloor = Math.min(cursorTick, uptoTick - 30 * TICKS_PER_DAY);
     const deadNames = {};
     for (const r of this.db.prepare(
-      `SELECT sim_id, json_extract(payload, '$.name') AS name FROM events WHERE type = 'died'`).all()) {
+      `SELECT sim_id, json_extract(payload, '$.name') AS name FROM events
+       WHERE type = 'died' AND tick > ?`).all(nameFloor)) {
       deadNames[r.sim_id] = r.name;
     }
     const chronicle = selectChronicle(chronicleRows);

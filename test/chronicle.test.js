@@ -106,6 +106,17 @@ test('C3. 죽은 사람의 이름: deadNames가 보존 창 전체에서 모인�
   st.close();
 });
 
+test('C3b. deadNames 보존 창: 30일(프루닝 기준)보다 오래된 사망 이름은 전송하지 않는다', () => {
+  const events = [ev(300, 'died', 9, { name: '연희', age: 84, cause: 'age', pop: 60 })];
+  const st = storageWith(events);
+  assert.equal(st.getReport(100, 2000).deadNames[9], '연희', '창 안');
+  const far = st.getReport(45000, 50000); // upto-30일 = 6800 > 사망 tick 300
+  assert.ok(!(9 in far.deadNames), '창 밖 — 프루닝 시점과 무관하게 같은 출력');
+  const wide = st.getReport(100, 50000); // 커서가 더 과거를 보면 그 구간의 사망은 포함
+  assert.equal(wide.deadNames[9], '연희');
+  st.close();
+});
+
 test('C4. 커서 경계 (cursor, upto] + 멱등', () => {
   const events = [
     ev(1000, 'married', 1, { withSimId: 2 }),
