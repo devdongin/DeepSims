@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 36, // §22.2 mortality·child 추가 (사망과 출생 — 사용자 지시)
+  logicSchemaVersion: 37, // §22.4 공공 부문 회계 폐쇄 (경제 순환 — 이슈 #43, G1)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -310,6 +310,12 @@ export const DEFAULT_LOGIC = {
     // §20.2 임금이 '일한 시설의 매출'에서 나오는 민간 서비스 직군 (화이트리스트).
     // 여기 없는 직군은 기반 부문(외부 소득)·공공 부문으로 보고 기존대로 지급한다.
     privateWageOccupations: ['barista', 'chef', 'clerk'], // §21.3: 매출에서 임금이 나온다
+    // §22.4 (이슈 #43, 대목표 G1) 공공 부문 회계를 닫는다.
+    // 시민이 병원·시청·학교에 낸 돈이 시설 원장에 고이기만 했다 — 라이브에서 hospital 매출이
+    // 전체의 70%를 빨아들였다. 그 매출을 국고로 보내고, 공공 임금을 국고에서 지급한다.
+    // 그러면 소비 → 국고 → 공공 임금 → 시민 → 소비 고리가 닫힌다.
+    publicFacilityTypes: ['hospital', 'city_hall', 'school', 'police_station', 'fire_station'],
+    publicWageOccupations: ['doctor', 'nurse', 'teacher', 'civil_servant', 'politician', 'police', 'firefighter'],
     taxMoodPer: 5,          // §18.T1: 납세 시점 mood 델타 = -floorDiv(tax×taxMoodPer, 10) (그라데이션)
   },
   // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
@@ -489,6 +495,20 @@ function checkRanges(p, errors) {
   // §21.3 (86차 ②) 교차 검증: 일자리를 여는 직업은 반드시
   //   ① 존재하는 직업이고 ② 그 시설에서 매출로 임금을 받으며 ③ 근무지 매핑이 일치해야 한다.
   // 하나라도 어긋나면 '손님은 있는데 임금이 안 나오는' 조용한 고장이 된다.
+  // §22.4 공공 임금 직군은 민간 임금 화이트리스트와 겹치면 안 된다 — 재원이 둘로 갈린다
+  for (const occ of p.economy.publicWageOccupations) {
+    if (!(occ in p.occupations)) errors.push(`economy.publicWageOccupations: 알 수 없는 직업 ${occ}`);
+    if (p.economy.privateWageOccupations.includes(occ)) {
+      errors.push(`economy: ${occ}가 공공·민간 임금 양쪽에 있다 (재원이 모호해진다)`);
+    }
+    // §22.4 (93차 ⑤) 공공 임금 직군의 근무지는 공공 시설이어야 한다.
+    // 어긋나면 '민간 시설에서 일하는데 국고가 임금을 대는' 모순이 된다.
+    const wp = p.workplace[occ];
+    const places = Array.isArray(wp) ? wp : [wp];
+    if (!places.some((f) => p.economy.publicFacilityTypes.includes(f))) {
+      errors.push(`economy.publicWageOccupations: ${occ}의 근무지(${places.join('|')})가 공공 시설이 아니다`);
+    }
+  }
   for (const [facType, occ] of Object.entries(p.industry.openings)) {
     if (!(occ in p.occupations)) {
       errors.push(`industry.openings.${facType}: 알 수 없는 직업 ${occ}`);

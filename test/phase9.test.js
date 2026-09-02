@@ -14,7 +14,7 @@ function grossWageOf(sim, L) {
   const apt = aptitudeFor(sim, sim.traits.occupation, L);
   return Math.floor(base * (100 + Math.floor((apt - 50) * L.abilities.wageSpanPct / 100)) / 100);
 }
-import { applyRomance, maybeShare as maybeShareRef, maybeJobSwitch as maybeJobSwitchRef, maybeDeaths as maybeDeathsRef, deathRiskPer100k as deathRiskRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
+import { applyRomance, maybeShare as maybeShareRef, maybeJobSwitch as maybeJobSwitchRef, maybeDeaths as maybeDeathsRef, deathRiskPer100k as deathRiskRef, remitPublicRevenue as remitPublicRevenueRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
 import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
@@ -524,6 +524,7 @@ test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () 
   const L = w.logic;
   // 근무 정산: 원천징수
   const s = w.sims.find((x) => x.traits.occupation !== 'retired' && x.traits.occupation !== 'student') ?? w.sims[0];
+  s.traits.occupation = 'office_worker'; // §22.4 기반 부문 — 임금이 마을 밖에서 온다 (공공직은 국고에서)
   idleAll(w, []);
   s.state = { kind: 'performing', action: 'work', facilityId: 'office', resourceId: 'desk0', path: [], ticksLeft: 1, pairedTicks: 0 };
   const before = s.money;
@@ -751,6 +752,7 @@ test('S-26. §18.T1 시정: policy 내구 입력 → 세율·복지 오버라이
   assert.equal(w.policy.taxPct, 30, '거부 시 불변');
   // 납세 정산: 유효 세율 30% + 납세 불만 mood 델타
   const s = w.sims.find((x) => L.occupations[x.traits.occupation].wagePct > 0);
+  s.traits.occupation = 'office_worker'; // §22.4 기반 부문 — 재원 부족으로 임금이 깎이지 않게
   idleAll(w, []);
   s.state = { kind: 'performing', action: 'work', facilityId: 'office', resourceId: 'desk0', path: [], ticksLeft: 1, pairedTicks: 0 };
   const moodBefore = s.mood;
@@ -1309,23 +1311,39 @@ test('S-59. §20.2 민간 임금은 시설 매출에서 나오고, 모자라면 
   assert.equal(empty.money, 0, '지급액 0 → 실수령 0');
 });
 
-test('S-60. §20.2 공공·기반 부문 임금은 매출과 무관하게 그대로 (77차 합의)', () => {
-  const w = createWorld(SEED);
-  const L = w.logic;
-  const hosp = w.map.facilities.find((f) => f.type === 'hospital');
-  const sim = w.sims[0];
-  sim.traits.occupation = 'doctor';
-  sim.money = 0;
-  if (hosp) hosp.revenue = 0; // 매출 0이어도
-  idleAll(w, []);
-  const fid = hosp?.id ?? w.map.facilities[0].id;
-  const fac = w.map.facilities.find((f) => f.id === fid);
-  sim.state = { kind: 'performing', action: 'work', facilityId: fid, resourceId: fac.resources[0].id, path: [], ticksLeft: 1, pairedTicks: 0 };
-  const evs = tick(w, []);
-  const gross = grossWageOf(sim, L);
-  const net = Math.floor(gross * (100 - L.economy.taxPct) / 100);
-  assert.equal(sim.money, net, '의사는 매출 0이어도 전액 받는다 (기반/공공 부문)');
-  assert.equal(evs.filter((e) => e.type === 'wage_shortfall').length, 0);
+test('S-60. §22.4 공공 임금은 국고에서 나온다 — 국고가 마르면 부분 지급', () => {
+  // 77차에서는 공공 임금을 '마을 밖 소득'으로 뒀지만, §20.2 매출 원장이 생겨
+  // 공공 시설 매출이 국고로 들어오면서 89차 ④에서 판단을 번복했다.
+  const run = (treasury) => {
+    const w = createWorld(SEED);
+    const hosp = w.map.facilities.find((f) => f.type === 'hospital');
+    const sim = w.sims[0];
+    sim.traits.occupation = 'doctor';
+    sim.money = 0;
+    if (hosp) hosp.revenue = 0;      // 시설 매출과 무관해야 한다 — 재원은 국고다
+    w.treasury = treasury;
+    idleAll(w, []);
+    const fid = hosp?.id ?? w.map.facilities[0].id;
+    const fac = w.map.facilities.find((f) => f.id === fid);
+    sim.state = { kind: 'performing', action: 'work', facilityId: fid, resourceId: fac.resources[0].id, path: [], ticksLeft: 1, pairedTicks: 0 };
+    const evs = tick(w, []);
+    return { w, sim, evs, gross: grossWageOf(sim, w.logic), L: w.logic };
+  };
+
+  // 국고가 넉넉하면 전액 — 그리고 그만큼 국고에서 빠진다
+  const rich = run(1000000);
+  const netRich = Math.floor(rich.gross * (100 - rich.L.economy.taxPct) / 100);
+  assert.equal(rich.sim.money, netRich, '국고가 있으면 전액 (세후)');
+  assert.equal(rich.evs.filter((e) => e.type === 'wage_shortfall').length, 0, '부족 신호 없음');
+  assert.ok(rich.w.treasury < 1000000, '국고에서 임금이 나간다');
+
+  // 국고가 비면 부분 지급 — 그리고 국고는 음수가 되지 않는다
+  const poor = run(0);
+  assert.equal(poor.sim.money, 0, '재원이 없으면 받지 못한다');
+  assert.equal(poor.w.treasury, 0, '국고는 음수가 되지 않는다');
+  const sf = poor.evs.find((e) => e.type === 'wage_shortfall');
+  assert.ok(sf, '부족분 이벤트');
+  assert.equal(sf.payload.source, 'treasury', '재원이 국고임을 밝힌다');
 });
 
 test('S-61. §20.3 사회적 중력: 사람 수에 비례해 끌리고 상한에서 포화한다 (#33)', () => {
@@ -1802,4 +1820,58 @@ test('S-82. §22.2 (91차 ②) 아이는 연애하지 않고, 연애 상대도 �
   applyRomance(w, adult, 1440, (type, simId, payload) => out.push({ type, simId, payload }));
   assert.equal(w.partners[kid.id], undefined, '아이에게 연인이 생기지 않는다');
   assert.equal(w.partners[adult.id], undefined, '어른도 아이와 맺어지지 않는다');
+});
+
+test('S-83. §22.4 공공 시설 매출은 국고로 간다 (소비 → 국고 고리)', () => {
+  const w = createWorld(SEED);
+  const E = w.logic.economy;
+  const hosp = w.map.facilities.find((f) => f.type === 'hospital');
+  const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+  assert.ok(hosp && cafe);
+  hosp.revenue = 5000;
+  cafe.revenue = 7000;          // 민간 시설 매출은 건드리면 안 된다
+  const before = w.treasury;
+  const out = [];
+  const moved = remitPublicRevenueRef(w, 1440, (type, simId, payload) => out.push({ type, simId, payload }));
+  assert.equal(moved, 5000);
+  assert.equal(hosp.revenue, 0, '공공 시설 매출은 비워진다');
+  assert.equal(cafe.revenue, 7000, '민간 시설 매출은 그대로');
+  assert.equal(w.treasury, before + 5000, '국고로 들어간다');
+  const ev = out.find((e) => e.type === 'public_revenue_remitted');
+  assert.ok(ev && ev.payload.facilityId === hosp.id && ev.payload.amount === 5000);
+  // 공공 시설 타입만 대상
+  for (const t of E.publicFacilityTypes) assert.ok(typeof t === 'string');
+});
+
+test('S-84. §22.4 폐쇄 회계: 경계 유입을 빼면 내부에서 돈이 생기거나 사라지지 않는다', () => {
+  const w = createWorld(SEED);
+  const total = (x) => x.sims.reduce((a, s) => a + s.money, 0) + x.treasury
+    + x.map.facilities.reduce((a, f) => a + (f.revenue ?? 0), 0);
+  // 소비가 시설로, 공공 매출이 국고로, 공공 임금이 국고에서 — 전부 '이동'이어야 한다.
+  const start = total(w);
+  const startInflow = w.externalInflow ?? 0;
+  const startOutflow = w.externalOutflow ?? 0;
+  advance(w, {}, 5 * 1440);
+  const end = total(w);
+  const inflow = (w.externalInflow ?? 0) - startInflow;
+  const outflow = (w.externalOutflow ?? 0) - startOutflow;
+  assert.ok(inflow >= 0 && outflow >= 0, '경계 유입·유출은 음수가 될 수 없다');
+  // **완전한 보존식** (93차 ②): 끝 = 시작 + 유입 − 유출.
+  // 경계 밖 이동을 전부 세면 내부에서는 돈이 생기지도 사라지지도 않는다.
+  assert.equal(end, start + inflow - outflow,
+    `폐쇄 회계 불변식 위반 (start=${start} inflow=${inflow} outflow=${outflow} end=${end})`);
+  assert.ok(w.treasury >= 0, '국고는 음수가 되지 않는다');
+});
+
+test('S-85. §22.4 공공·민간 임금 재원이 겹치면 로직 검증이 거부한다', () => {
+  const base = createWorld(SEED).logic;
+  const bad = JSON.parse(JSON.stringify(base));
+  // 길이를 유지한 채 한 항목만 민간 직군으로 바꾼다 — checkShape(길이 검사)를 통과시켜
+  // 교차 검증이 실제로 잡는지 확인한다.
+  bad.economy.publicWageOccupations = [...bad.economy.publicWageOccupations];
+  bad.economy.publicWageOccupations[0] = 'barista'; // 민간 임금 직군과 중복
+  const r = validateLogicRef(bad);
+  assert.equal(r.ok, false);
+  assert.ok(r.errors.some((e) => e.includes('공공·민간')),
+    `재원이 둘로 갈리는 설정을 막아야 한다 — 실제: ${JSON.stringify(r.errors)}`);
 });
