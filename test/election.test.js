@@ -94,20 +94,26 @@ test('E-6. 회고 투표가 결정적이다 — 같은 세계, 같은 결과', (
   assert.equal(a.mayorId, b.mayorId);
 });
 
-test('E-7. 나쁜 정치는 표를 잃는다 (A/B 방향성)', () => {
-  // Codex 113차 검증 설계: 정책 경로만 바꾼 A/B. 국고를 쌓아두고 복지를 끊은
-  // 재임자는 회고 감점을 받아야 한다.
+test('E-7. 나쁜 정치는 표를 잃는다 — 쌓아두고 안 쓰는 정부 vs 푸는 정부', () => {
+  // §22.23(공공 임금 보장) 이후 "복지를 끊으면 굶는다"는 전제가 무너졌다 — 임금
+  // 보장이 적자 재정으로 노동자 주머니를 채워서, 복지 없이도 굶주림이 늘지 않는다
+  // (실측 33 vs 23). 그래서 이 테스트는 새 경제에서의 심판 축을 잰다:
+  // **국고가 두둑한데 복지를 끊은 정부**는, 같은 국고로 복지를 푸는 정부보다
+  // 회고 점수가 나빠야 한다 (사재기 배수 + welfare 가점의 부재).
   const run = (policy) => {
     const w = createWorld(4242);
+    // 시장이 나쁜 정책을 스스로 고쳐버리지 않게 재정 행동을 끄고 유권자 축만 잰다.
+    w.logic.fiscal.stepTaxPct = 0; w.logic.fiscal.stepWelfare = 0;
+    w.treasury = 1000000; // 두둑한 국고 — 사재기 조건이 성립할 무대
     if (policy) w.policy = policy;
     const evs = advance(w, {}, 60 * 1440);
     const els = evs.filter((e) => e.type === 'election' && e.payload.incumbent !== null);
     return els.reduce((n, e) => n + e.payload.retroTotal, 0);
   };
-  const base = run(null);
-  const hoard = run({ taxPct: 30, welfareAmount: 0, welfareThreshold: 0 });
-  assert.ok(hoard < base,
-    `복지를 끊고 국고를 쌓은 정부의 회고합(${hoard})이 기본(${base})보다 나쁘지 않다`);
+  const spends = run(null); // 기본 복지가 국고를 푼다
+  const hoards = run({ taxPct: 30, welfareAmount: 0, welfareThreshold: 0 });
+  assert.ok(hoards < spends,
+    `국고를 쌓아두고 복지를 끊은 정부(${hoards})가 푸는 정부(${spends})보다 나쁘게 심판받지 않았다`);
 });
 
 test('E-8. 국고가 쌓여도 정책을 움직인 정부는 배수를 면한다 (114차 ⑥)', async () => {

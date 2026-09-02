@@ -128,7 +128,9 @@ test('S-4. 선거: 인기 기반 후보·투표·시장, 수당과 공사 가속
   const PLAYER = { name: '동', gender: 'X', age: 30, mbti: { EI: 50, SN: 50, TF: 50, JP: 50 }, occupation: 'freelancer' };
   const evs2 = tick(w, [{ sequence: 0, command: 'create_player', payload: PLAYER }]);
   const pr = evs2.find((e) => e.type === 'project_started');
-  assert.ok(pr && pr.payload.required === Math.floor(600 * 90 / 100), `시장 가속 (${pr?.payload.required})`);
+  // §22.23 공기 차등 — required는 타입별이고 시장 할인 90%가 곱해진다
+  const base = w.logic.construct.requiredByType?.[pr?.payload.type] ?? w.logic.construct.laborRequired;
+  assert.ok(pr && pr.payload.required === Math.floor(base * 90 / 100), `시장 가속 (${pr?.payload.required} vs ${base}×0.9)`);
 });
 
 test('S-5. 이민: 빈 침대가 있어야 오고, 인구가 늘고, 이웃 기억이 생긴다', () => {
@@ -1311,39 +1313,26 @@ test('S-59. §20.2 민간 임금은 시설 매출에서 나오고, 모자라면 
   assert.equal(empty.money, 0, '지급액 0 → 실수령 0');
 });
 
-test('S-60. §22.4 공공 임금은 국고에서 나온다 — 국고가 마르면 부분 지급', () => {
-  // 77차에서는 공공 임금을 '마을 밖 소득'으로 뒀지만, §20.2 매출 원장이 생겨
-  // 공공 시설 매출이 국고로 들어오면서 89차 ④에서 판단을 번복했다.
-  const run = (treasury) => {
-    const w = createWorld(SEED);
-    const hosp = w.map.facilities.find((f) => f.type === 'hospital');
-    const sim = w.sims[0];
-    sim.traits.occupation = 'doctor';
-    sim.money = 0;
-    if (hosp) hosp.revenue = 0;      // 시설 매출과 무관해야 한다 — 재원은 국고다
-    w.treasury = treasury;
-    idleAll(w, []);
-    const fid = hosp?.id ?? w.map.facilities[0].id;
-    const fac = w.map.facilities.find((f) => f.id === fid);
-    sim.state = { kind: 'performing', action: 'work', facilityId: fid, resourceId: fac.resources[0].id, path: [], ticksLeft: 1, pairedTicks: 0 };
-    const evs = tick(w, []);
-    return { w, sim, evs, gross: grossWageOf(sim, w.logic), L: w.logic };
-  };
-
-  // 국고가 넉넉하면 전액 — 그리고 그만큼 국고에서 빠진다
-  const rich = run(1000000);
-  const netRich = Math.floor(rich.gross * (100 - rich.L.economy.taxPct) / 100);
-  assert.equal(rich.sim.money, netRich, '국고가 있으면 전액 (세후)');
-  assert.equal(rich.evs.filter((e) => e.type === 'wage_shortfall').length, 0, '부족 신호 없음');
-  assert.ok(rich.w.treasury < 1000000, '국고에서 임금이 나간다');
-
-  // 국고가 비면 부분 지급 — 그리고 국고는 음수가 되지 않는다
-  const poor = run(0);
-  assert.equal(poor.sim.money, 0, '재원이 없으면 받지 못한다');
-  assert.equal(poor.w.treasury, 0, '국고는 음수가 되지 않는다');
-  const sf = poor.evs.find((e) => e.type === 'wage_shortfall');
-  assert.ok(sf, '부족분 이벤트');
-  assert.equal(sf.payload.source, 'treasury', '재원이 국고임을 밝힌다');
+test('S-60. §22.23 공공 임금은 전액 보장 — 국고가 마르면 공채로 내려간다', () => {
+  // 예전 계약(부분 지급)은 지급률 11.2%·교사 실수령 0원을 낳았고, 사용자 지시로
+  // 폐기됐다: "공무원도 예외없이 일을 하면 반드시 돈을 줘야 되고".
+  const w = createWorld(SEED);
+  const teacher = w.sims.find((s2) => s2.traits.occupation === 'teacher')
+    ?? w.sims.find((s2) => w.logic.economy.publicWageOccupations.includes(s2.traits.occupation));
+  assert.ok(teacher, '공공 직군 심이 있어야 한다');
+  w.treasury = 0; // 국고가 비어도
+  idleAll(w, []);
+  const school = w.map.facilities.find((f) => [].concat(w.logic.workplace[teacher.traits.occupation])[0] === f.type);
+  teacher.state = { ...teacher.state, kind: 'performing', action: 'work', facilityId: school.id, ticksLeft: 1 };
+  const before = teacher.money;
+  const evs = tick(w, []);
+  const paidEv = evs.find((e) => e.type === 'money_changed' && e.simId === teacher.id && e.payload.action === 'work');
+  assert.ok(paidEv, '근무 정산이 있어야 한다');
+  assert.ok(teacher.money > before, '일을 했는데 한 푼도 못 받았다');
+  assert.equal(evs.some((e) => e.type === 'wage_shortfall' && e.payload.source === 'treasury'), false,
+    '공공 임금 부족이 더는 존재하면 안 된다');
+  assert.ok(w.treasury < 0, '국고가 공채로 내려가야 한다');
+  assert.ok(evs.some((e) => e.type === 'treasury_debt'), '빚이 시작될 때 알려야 한다');
 });
 
 test('S-61. §20.3 사회적 중력: 사람 수에 비례해 끌리고 상한에서 포화한다 (#33)', () => {
@@ -1860,7 +1849,10 @@ test('S-84. §22.4 폐쇄 회계: 경계 유입을 빼면 내부에서 돈이 �
   // 경계 밖 이동을 전부 세면 내부에서는 돈이 생기지도 사라지지도 않는다.
   assert.equal(end, start + inflow - outflow,
     `폐쇄 회계 불변식 위반 (start=${start} inflow=${inflow} outflow=${outflow} end=${end})`);
-  assert.ok(w.treasury >= 0, '국고는 음수가 되지 않는다');
+  // §22.23 '국고 ≥ 0'(89차 ④)은 **의도적으로 폐기됐다** — 그 invariant가 공공 임금
+  // 지급률 11.2%의 원인이었다. 이제 공공 임금은 전액 보장이고 국고는 공채(음수)로
+  // 내려갈 수 있다. 보존식은 음수여도 성립한다 — 국고가 합산 항이기 때문이다.
+  assert.ok(Number.isSafeInteger(w.treasury), '국고는 안전 정수여야 한다');
 });
 
 test('S-85. §22.4 공공·민간 임금 재원이 겹치면 로직 검증이 거부한다', () => {

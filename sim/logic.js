@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 42, // §22.22 시장의 재정 행동 (통치가 시작된다)
+  logicSchemaVersion: 43, // §22.23 공공 임금 보장·공기 차등
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -240,7 +240,20 @@ export const DEFAULT_LOGIC = {
   },
   market: { maxGroceries: 6 },
   construct: {
-    laborRequired: 600,  // 완공까지 누적 수행 틱
+    laborRequired: 600,  // 완공까지 누적 수행 틱 — requiredByType에 없는 타입의 폴백
+    // §22.23 건물은 단숨에 지어지지 않는다 (사용자 지시). 실측으로 집 한 채가 게임
+    // 10~24시간(×48 관람 0.2~0.5분)에 완공됐다 — required 540이 전 타입 동일했기 때문.
+    // 현장은 이미 작업 스팟 4개로 동시 인원이 제한되므로(§16.5.B), 타입·규모별로
+    // 노동량을 차등해 공기(工期)를 만든다. 목표: 집 ~7게임일, 대형 ~20게임일.
+    // 진행 중 프로젝트는 시작 때 스냅샷한 required를 그대로 쓴다 — 소급하지 않는다(118차 D).
+    requiredByType: {
+      park: 3000, house: 5000,
+      cafe: 6000, restaurant: 6000, market: 6000, bar: 6000,
+      office: 8000, school: 8000, gym: 8000, library: 8000,
+      hospital: 10000, city_hall: 10000, police_station: 10000, fire_station: 10000, cinema: 10000,
+      apartment: 14000, mall: 14000,
+      university: 20000, factory: 20000,
+    },
     deficit: 4000,       // needValue = NEED_MAX - deficit (고정 급함)
     persJDiv: 4,         // persFactor = 100 + floorDiv(100 - JP, persJDiv)
     cafeRatio: 2,        // 심 수 > 좌석합×ratio → cafe 프로젝트
@@ -345,6 +358,11 @@ export const DEFAULT_LOGIC = {
     // 그러면 소비 → 국고 → 공공 임금 → 시민 → 소비 고리가 닫힌다.
     publicFacilityTypes: ['hospital', 'city_hall', 'school', 'police_station', 'fire_station'],
     publicWageOccupations: ['doctor', 'nurse', 'teacher', 'civil_servant', 'politician', 'police', 'firefighter'],
+    // §22.23 공공 임금 완전 보장 (사용자 지시: "공무원도 예외없이 일을 하면 반드시
+    // 돈을 줘야 되고 공무원이면 국고에서 월급이 지급되어야 해"). 국고가 모자라면
+    // 음수(공채)로 내려간다. maxDebt는 게임 장치가 아니라 **오버플로 가드**다 —
+    // 여기 걸리면 insolvent 이벤트가 나고 그때만 부분 지급이 된다.
+    maxDebt: 1000000000000, // 1e12
     taxMoodPer: 5,          // §18.T1: 납세 시점 mood 델타 = -floorDiv(tax×taxMoodPer, 10) (그라데이션)
   },
   // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
@@ -659,6 +677,10 @@ function checkRanges(p, errors) {
   inRange('items.pickupMood', p.items.pickupMood, 0, 10000);
   inRange('market.maxGroceries', p.market.maxGroceries, 1, 100);
   inRange('actions.construct.duration', p.actions.construct.duration, 1, 10000);
+  inRange('economy.maxDebt', p.economy.maxDebt, 0, Number.MAX_SAFE_INTEGER);
+  for (const [ft, req] of Object.entries(p.construct.requiredByType)) {
+    inRange(`construct.requiredByType.${ft}`, req, 1, 10000000);
+  }
   inRange('construct.laborRequired', p.construct.laborRequired, 1, 1000000);
   inRange('construct.deficit', p.construct.deficit, 0, 10000);
   inRange('construct.persJDiv', p.construct.persJDiv, 1, 100);
