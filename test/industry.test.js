@@ -234,3 +234,45 @@ test('I-14. 만석 원장이 부재 원장과 섞이지 않는다', () => {
   assert.equal(l.facilities, 0, '집이 부동산업 시설로 세어졌다');
   assert.ok(l.housing > 0, '집이 30채나 있는데 housing이 0이다 — 부재와 주택 부족이 혼동된다');
 });
+
+test('I-15. 만석이 tick을 통해 실제로 적립된다 (110차 ④ 통합)', () => {
+  // I-13은 판정 함수만 본다. 실제 `tick → 후보 탈락 → 원장 적립`까지 가는지 확인한다.
+  // 원장은 **위급한 필요**에만 걸리므로(needCritical 미만) 위급해지는 행동을 써야 한다 —
+  // 진료(see_doctor)는 위급 목록에 없어서 병원 자리를 없애도 원장이 안 탄다.
+  // 외식 자리를 없애면 '식당은 서 있는데 앉을 데가 없다'가 된다.
+  const w = createWorld(4242);
+  const eateries = w.map.facilities.filter((f) => ['cafe', 'restaurant'].includes(f.type));
+  assert.ok(eateries.length > 0, '이 세계에 외식 시설이 있어야 한다');
+  for (const f of eateries) f.resources = []; // 건물은 서 있는데 자리가 없다
+  advance(w, {}, 40000);
+
+  const cap = w.capacityShortfall.I?.full ?? 0;
+  const dem = w.industryDemand.I?.unmet ?? 0;
+  assert.ok(cap > 0, `자리가 없는데 만석이 안 잡혔다 (만석 ${cap})`);
+  assert.equal(dem, 0, `식당이 서 있는데 '시설 부재'로 잡혔다 (부재 ${dem})`);
+
+  const st = industryStatus(w).find((s) => s.code === 'I');
+  assert.ok(st.capacityFull > 0, '현황이 만석을 보고하지 않는다');
+  assert.equal(st.directUnmet, 0);
+  assert.ok(st.facilities > 0, '식당은 여전히 세어져야 한다');
+});
+
+test('I-16. 가상 자원을 쓰는 행동은 판정 대상이 아니다 (111차 ①②)', async () => {
+  // 경찰 근무는 patrol.targets의 좌표를, 소방 대응은 firesite를 자원으로 쓴다.
+  // 시설을 세어 판정하면 후보 생성 경로와 어긋나 원장이 거짓말을 한다.
+  const { facilityShortfallKind } = await import('../sim/tick.js');
+  const w = createWorld(4242);
+  const sim = w.sims[0];
+  assert.equal(facilityShortfallKind(w, sim, 'respond_fire', 100), null);
+
+  const police = { ...sim, traits: { ...sim.traits, occupation: 'police' } };
+  // 경찰서를 통째로 지워도 판정하지 않는다 — 판정할 수 없는 것이기 때문이다
+  const w2 = createWorld(4242);
+  w2.map.facilities = w2.map.facilities.filter((f) => f.type !== 'police_station');
+  assert.equal(facilityShortfallKind(w2, police, 'work', 100), null);
+  // 반면 일반 직업의 근무는 정상 판정된다
+  const office = { ...sim, traits: { ...sim.traits, occupation: 'office_worker' } };
+  const w3 = createWorld(4242);
+  w3.map.facilities = w3.map.facilities.filter((f) => f.type !== 'office');
+  assert.equal(facilityShortfallKind(w3, office, 'work', 100), 'no_facility');
+});

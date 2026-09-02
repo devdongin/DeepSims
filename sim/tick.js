@@ -151,11 +151,20 @@ const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'pa
 // rng 미소비, 세계를 바꾸지 않는다.
 export function facilityShortfallKind(world, sim, action, t) {
   const L = world.logic;
+  // **가상 자원을 쓰는 행동은 시설 수로 판정할 수 없다** (Codex 111차 ①②).
+  // 경찰의 근무는 patrol.targets에서 patrolIdx로 고른 좌표 하나를, 소방 대응은
+  // firesite를 자원으로 쓴다. 후보 생성이 그 특수 분기를 타는데 여기서 시설을 세면
+  // 두 경로가 어긋나 **원장이 거짓말을 한다** — 순찰 지점 하나가 막혀도 경찰서
+  // 자리가 비어 있으면 '부족 없음'으로 보고된다.
+  // 억지로 판정하는 대신 명시적으로 비대상으로 둔다. 판정할 수 없는 것을 판정하지
+  // 않는 것이 틀린 답을 내는 것보다 낫다.
+  if (action === 'respond_fire') return null;
+  if (action === 'work' && sim.traits.occupation === 'police') return null;
   const ftypes = action === 'work'
     ? [].concat(L.workplace[sim.traits.occupation] ?? [])
     : (ACTION_FACILITY[action] ?? []);
   if (ftypes.length === 0) return null; // 시설을 쓰지 않는 행동
-  let anyFacility = false, anyFree = false, anyReachable = false;
+  let anyFacility = false, anyFree = false;
   for (const ftype of ftypes) {
     for (const fac of world.map.facilities) {
       if (fac.type !== ftype) continue;
@@ -170,14 +179,13 @@ export function facilityShortfallKind(world, sim, action, t) {
         anyFree = true;
         const cool = sim.noPathCool[`${fac.id}:${res.id}`];
         if (cool !== undefined && t < cool) continue;
-        anyReachable = true;
+        return null; // 갈 수 있는 자리를 찾았다 — 더 볼 필요가 없다 (111차 ⑤ 성능)
       }
     }
   }
   if (!anyFacility) return 'no_facility';
   if (!anyFree) return 'capacity_full';
-  if (!anyReachable) return 'unreachable';
-  return null;
+  return 'unreachable'; // 자리는 있는데 전부 길이 막혀 있다 (§17.23 쿨다운)
 }
 
 export function actionBlockReason(world, sim, action, t) {
