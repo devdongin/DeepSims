@@ -13,7 +13,7 @@ function grossWageOf(sim, L) {
   const apt = aptitudeFor(sim, sim.traits.occupation, L);
   return Math.floor(base * (100 + Math.floor((apt - 50) * L.abilities.wageSpanPct / 100)) / 100);
 }
-import { applyRomance, maybeShare as maybeShareRef, maybeJobSwitch as maybeJobSwitchRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
+import { applyRomance, maybeShare as maybeShareRef, maybeJobSwitch as maybeJobSwitchRef, maybeDeaths as maybeDeathsRef, deathRiskPer100k as deathRiskRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
 import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
@@ -367,7 +367,10 @@ test('S-13. §17.11 가족: 동거 부부 새해 자녀 정착 + 가족 대화·
   assert.ok(born, '자녀 정착');
   assert.deepEqual([born.payload.parentA, born.payload.parentB], [0, 1]);
   const child = w.sims[w.sims.length - 1];
-  assert.equal(child.traits.age, 15, '새해(나이+1)가 먼저, 정착이 나중 — 15 유지');
+  // §22.2: 아기로 태어난다. 예전엔 15세 청소년이 즉시 나타났다 (자라는 시간이 없었다).
+  assert.equal(child.traits.age, 0, '0세로 태어난다 — 새해(나이+1)가 먼저, 정착이 나중');
+  assert.equal(child.traits.occupation, 'child', '아동기로 시작한다');
+  assert.equal(child.money, 0, '아기는 돈이 없다');
   const { w: w2 } = run();
   assert.equal(hashWorld(w), hashWorld(w2), '결정적');
   assert.equal(w.parents[child.id]?.length, 2);
@@ -1666,4 +1669,82 @@ test('S-76. §21.3 (86차 ②) 일자리 직업은 매출 임금·근무지와 �
   const r2 = validateLogicRef(badPlace);
   assert.equal(r2.ok, false);
   assert.ok(r2.errors.some((e) => e.includes('workplace.chef')), '근무지 불일치를 잡는다');
+});
+
+test('S-77. §22.2 사망 위험은 나이·체력·질병·굶은 시간의 가중 합이다 (이분 컷 아님)', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const mk = (over) => ({ traits: { age: 50 }, abilities: { stamina: 50 }, sick: null, hungerZeroTicks: 0, ...over });
+  const R = (s) => deathRiskRef(w, s, L);
+
+  // 나이: ageFloor 아래는 0, 위로는 단조 증가
+  assert.equal(R(mk({ traits: { age: L.mortality.ageFloor } })), 0, 'ageFloor에서는 노화 위험 0');
+  let prev = -1;
+  for (let age = 40; age <= 95; age += 5) {
+    const v = R(mk({ traits: { age } }));
+    assert.ok(v >= prev, `나이 ${age}: 단조 증가`);
+    prev = v;
+  }
+  assert.ok(R(mk({ traits: { age: 90 } })) > R(mk({ traits: { age: 70 } })), '90세가 70세보다 위험');
+
+  // 체력: 낮을수록 위험 (기울기)
+  const old = { traits: { age: 80 } };
+  assert.ok(R(mk({ ...old, abilities: { stamina: 0 } })) > R(mk({ ...old, abilities: { stamina: 99 } })),
+    '체력이 낮으면 더 위험하다');
+
+  // 질병·굶주림은 외부 요인으로 위험을 더한다
+  assert.ok(R(mk({ ...old, sick: { kind: 'flu' } })) > R(mk(old)), '아프면 더 위험');
+  const starved = mk({ traits: { age: 20 }, hungerZeroTicks: L.mortality.starveGraceTicks * 4 });
+  assert.ok(R(starved) > 0, '젊어도 오래 굶으면 죽을 수 있다 — 나이만의 문제가 아니다');
+
+  // 상한이 있다 — 아무리 나빠도 즉사하지 않는다
+  const worst = mk({ traits: { age: 120 }, abilities: { stamina: 0 }, sick: { kind: 'x' }, hungerZeroTicks: 1e6 });
+  assert.equal(R(worst), L.mortality.maxPer100k, '위험은 상한에서 포화');
+});
+
+test('S-78. §22.2 사망 시 참조가 정리되고 id는 재사용되지 않는다', () => {
+  const w = createWorld(SEED);
+  const a = w.sims[0], b = w.sims[1];
+  // 배우자로 묶고, 자리를 예약하고, 시장으로 세운다
+  w.partners[a.id] = b.id; w.partners[b.id] = a.id;
+  w.partnerStage[a.id] = 'married'; w.partnerStage[b.id] = 'married';
+  w.mayorId = a.id;
+  const fac = w.map.facilities[0];
+  a.state = { kind: 'performing', action: 'socialize', facilityId: fac.id, resourceId: fac.resources[0].id, path: [], ticksLeft: 5, pairedTicks: 0 };
+  w.reservations[`${fac.id}:${fac.resources[0].id}`] = a.id;
+  w.lostAndFound.push({ itemId: 1, finderId: a.id, amount: 100, dueDay: 999 });
+  // 반드시 죽게 만든다
+  a.traits.age = 200; a.abilities.stamina = 0; a.sick = { kind: 'x' }; a.hungerZeroTicks = 1e6;
+  const before = w.sims.length;
+  const idBefore = w.nextSimId;
+  const evs = [];
+  for (let d = 1; d < 200 && w.sims.some((s) => s.id === a.id); d++) {
+    maybeDeathsRef(w, d * 1440, d, (type, simId, payload) => evs.push({ type, simId, payload }));
+  }
+  const died = evs.find((e) => e.type === 'died');
+  assert.ok(died, '언젠가 죽는다');
+  assert.equal(died.simId, a.id);
+  assert.equal(w.sims.length, before - 1, '심이 실제로 제거된다');
+  assert.equal(w.sims.find((s) => s.id === a.id), undefined);
+  // 정리 확인
+  assert.equal(w.partners[a.id], undefined, '배우자 관계 해제');
+  assert.equal(w.partners[b.id], undefined, '남은 배우자도 해제');
+  assert.ok(evs.some((e) => e.type === 'bereaved' && e.simId === b.id), '사별 이벤트');
+  assert.equal(w.mayorId, null, '시장직 공석');
+  assert.equal(w.reservations[`${fac.id}:${fac.resources[0].id}`], undefined, '예약 해제');
+  assert.equal(w.lostAndFound.filter((lf) => lf.finderId === a.id).length, 0, '분실물 보관 해제');
+  assert.equal(w.parents[a.id], undefined);
+  // 행렬은 묘비로 남는다 (행을 지우면 id 인덱싱이 무너진다)
+  assert.ok(Array.isArray(w.affinity[a.id]), '행렬 행은 유지');
+  // id 재사용 금지
+  assert.equal(w.nextSimId, idBefore, '사망만으로는 카운터가 변하지 않는다');
+  assert.ok(w.nextSimId > a.id, '다음 id는 죽은 id보다 크다');
+});
+
+test('S-79. §22.2 사망 판정은 rngSim을 소비하지 않는다', () => {
+  const w = createWorld(SEED);
+  for (const s of w.sims) { s.traits.age = 95; s.abilities.stamina = 0; }
+  const before = JSON.stringify(w.rngSim);
+  for (let d = 1; d <= 30; d++) maybeDeathsRef(w, d * 1440, d, () => {});
+  assert.equal(JSON.stringify(w.rngSim), before, 'riskHash 의사확률 — 드로우 미소비');
 });

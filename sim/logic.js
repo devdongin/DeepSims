@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 35, // §21.3 industry 추가 (수요가 일자리를 만든다 — 이슈 #63)
+  logicSchemaVersion: 36, // §22.2 mortality·child 추가 (사망과 출생 — 사용자 지시)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -48,6 +48,8 @@ export const DEFAULT_LOGIC = {
     worker: { workStart: 540, workEnd: 1080, wagePct: 95, startMoney: 1000 }, // §18.T3 공장
     // §21.3 민간 서비스 — 손님이 있는 시설에서 일한다. 주말에도 문을 연다.
     chef: { workStart: 600, workEnd: 1260, wagePct: 100, startMoney: 1000, weekendWork: true },
+    // §22.2 아동기 — 일하지 않는다. 먹고 자고 놀고 어울리며 자란다.
+    child: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 0 },
     clerk: { workStart: 540, workEnd: 1140, wagePct: 85, startMoney: 1000, weekendWork: true },
   },
   // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
@@ -57,6 +59,7 @@ export const DEFAULT_LOGIC = {
     police: 'police_station', firefighter: 'fire_station', nurse: 'hospital', politician: 'city_hall',
     worker: 'factory', // §18.T3
     chef: 'restaurant', clerk: 'market', // §21.3
+    child: 'school', // §22.2 (근무하지 않지만 매핑 완결성)
   },
   persFactor: { socializeBase: 150, playBase: 100, workBase: 150 },
   affinity: {
@@ -75,6 +78,7 @@ export const DEFAULT_LOGIC = {
       student: 'intellect', doctor: 'intellect', civil_servant: 'intellect',
       teacher: 'charisma', police: 'stamina', firefighter: 'stamina',
       chef: 'dexterity', clerk: 'charisma', // §21.3
+      child: 'stamina', // §22.2 (임금이 0이라 실효 없음 — 매핑 완결성용)
       nurse: 'charisma', politician: 'charisma', worker: 'stamina',
     },
     // 임금 진폭(%): 능력 0 → -(span/2)%, 50 → 0%, 99 → +(span/2)% 로 완만하게 갈린다.
@@ -104,6 +108,20 @@ export const DEFAULT_LOGIC = {
     switchPctPerApt: 40,      // 적성 100이면 하루 40% — 이분 컷이 아니라 기울기
     switchMaxPct: 40,
     minAptGain: 10,           // 지금 일보다 이만큼은 더 잘해야 옮긴다 (잦은 이직 방지)
+  },
+  // §22.2 사망 (사용자 지시: "능력치나 외부 요인등으로 사망하는 시나리오").
+  // 이분 컷이 아니라 **위험도의 가중 합**이다 — 나이·체력·질병·굶은 시간이 함께 작용한다.
+  // 단위는 10만분율(per 100k), 하루 단위 판정. riskHash라 rngSim을 소비하지 않는다.
+  mortality: {
+    ageFloor: 40,            // 이 나이까지는 노화로 인한 위험이 0
+    ageDivisor: 750,         // (나이-ageFloor)³ / 이 값 = 일일 노화 위험
+                             //   50세 ≈ 0.16%/년, 60세 ≈ 1.3%/년, 90세 ≈ 20%/년
+    starveGraceTicks: 2880,  // 굶은 채 이만큼(게임 2일)은 버틴다
+    starvePer100kPer100Ticks: 3, // 그 뒤로는 굶은 시간에 비례해 위험이 붙는다
+    sickMultPct: 250,        // 아프면 노화 위험 2.5배
+    sickFlat: 4,             // 아프면 나이와 무관하게 붙는 기본 위험
+    staminaSpanPct: 80,      // 체력 0 → +40%, 50 → 0%, 99 → -39% (기울기, 이분 컷 아님)
+    maxPer100k: 3000,        // 하루 3% 상한 — 아무리 나빠도 즉사하지는 않는다
   },
   needCritical: 2000,
   // Phase 3 (logicSchemaVersion 2): 기억·회고·관계 티어 (PLAN §2.5 B/C/E + D2 델타)
@@ -204,6 +222,7 @@ export const DEFAULT_LOGIC = {
   society: {
     immigrationIntervalDays: 3,
     yearDays: 120,           // §17.9 새해 주기 (전원 age+1) — 실시간 관람 페이싱(v0.9.1)
+    schoolAge: 15,           // §22.2 child → student (0세로 태어나 여기서 학생이 된다)
     graduateAge: 26,         // student → office_worker
     retireAge: 65,           // → retired
     festivalDays: 30,        // §17.10 마을 축제 주기
@@ -650,6 +669,15 @@ function checkRanges(p, errors) {
   inRange('chrono.daySleepEnd', p.chrono.daySleepEnd, 1, 1440);
   inRange('society.yearDays', p.society.yearDays, 30, 100000);
   inRange('society.graduateAge', p.society.graduateAge, 15, 90);
+  inRange('society.schoolAge', p.society.schoolAge, 0, 90);
+  inRange('mortality.ageFloor', p.mortality.ageFloor, 0, 120);
+  inRange('mortality.ageDivisor', p.mortality.ageDivisor, 1, 10000000);
+  inRange('mortality.starveGraceTicks', p.mortality.starveGraceTicks, 0, 10000000);
+  inRange('mortality.starvePer100kPer100Ticks', p.mortality.starvePer100kPer100Ticks, 0, 100000);
+  inRange('mortality.sickMultPct', p.mortality.sickMultPct, 100, 10000);
+  inRange('mortality.sickFlat', p.mortality.sickFlat, 0, 100000);
+  inRange('mortality.staminaSpanPct', p.mortality.staminaSpanPct, 0, 200);
+  inRange('mortality.maxPer100k', p.mortality.maxPer100k, 0, 100000);
   inRange('society.retireAge', p.society.retireAge, 15, 91);
   inRange('society.festivalDays', p.society.festivalDays, 7, 100000);
   inRange('family.childPermille', p.family.childPermille, 0, 1000);

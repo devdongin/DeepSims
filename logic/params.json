@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 35,
+  "logicSchemaVersion": 36,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -195,6 +195,12 @@
       "startMoney": 1000,
       "weekendWork": true
     },
+    "child": {
+      "workStart": -1,
+      "workEnd": -1,
+      "wagePct": 0,
+      "startMoney": 0
+    },
     "clerk": {
       "workStart": 540,
       "workEnd": 1140,
@@ -221,7 +227,8 @@
     "politician": "city_hall",
     "worker": "factory",
     "chef": "restaurant",
-    "clerk": "market"
+    "clerk": "market",
+    "child": "school"
   },
   "persFactor": {
     "socializeBase": 150,
@@ -261,6 +268,7 @@
       "firefighter": "stamina",
       "chef": "dexterity",
       "clerk": "charisma",
+      "child": "stamina",
       "nurse": "charisma",
       "politician": "charisma",
       "worker": "stamina"
@@ -287,6 +295,16 @@
     "switchPctPerApt": 40,
     "switchMaxPct": 40,
     "minAptGain": 10
+  },
+  "mortality": {
+    "ageFloor": 40,
+    "ageDivisor": 750,
+    "starveGraceTicks": 2880,
+    "starvePer100kPer100Ticks": 3,
+    "sickMultPct": 250,
+    "sickFlat": 4,
+    "staminaSpanPct": 80,
+    "maxPer100k": 3000
   },
   "needCritical": 2000,
   "memory": {
@@ -448,6 +466,7 @@
   "society": {
     "immigrationIntervalDays": 3,
     "yearDays": 120,
+    "schoolAge": 15,
     "graduateAge": 26,
     "retireAge": 65,
     "festivalDays": 30,

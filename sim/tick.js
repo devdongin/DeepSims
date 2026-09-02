@@ -20,7 +20,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -761,6 +761,7 @@ export function tick(world, inputsForThisTick = []) {
     const s = sim.state;
     if (s.kind !== 'performing' || s.ticksLeft > 0) continue;
     if (s.action === 'eat' || s.action === 'drink' || s.action === 'binge_eat') {
+      if (s.action !== 'drink') sim.hungerZeroTicks = 0; // §22.2 먹으면 굶은 시계가 멈춘다
       const cost = L.actions[s.action].cost;
       sim.money -= cost;
       payToFacility(world, s.facilityId, cost); // §20.2 소멸 → 시설 매출
@@ -800,6 +801,7 @@ export function tick(world, inputsForThisTick = []) {
       emit('money_changed', sim.id, { delta: -L.actions.shop.cost, balance: sim.money, action: 'shop' });
       sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.shop.groceriesGain);
     } else if (s.action === 'cook_eat') {
+      sim.hungerZeroTicks = 0; // §22.2
       sim.groceries = Math.max(0, sim.groceries - 1);
     } else if (s.action === 'build') {
       // 완료 시 게이트 재검증 (같은 집 동시 건설 초과 방지, Codex 20차 항목 3)
@@ -901,6 +903,11 @@ export function tick(world, inputsForThisTick = []) {
       if (sim.sick && (need === 'energy' || need === 'fun')) d += floorDiv(d * L.disease.decayFactorNum, L.disease.decayFactorDen); // 병 (§17.3)
       const before = sim.needs[need];
       sim.needs[need] = Math.max(0, before - d);
+      if (need === 'hunger' && sim.needs[need] === 0) {
+        // §22.2 굶은 채 머문 시간 — 사망 위험과 G5 고통 지표의 근거가 된다.
+        // 전이 횟수(starving 이벤트)는 자주 먹을수록 더 찍히므로 복지 지표로 못 쓴다(§21.2).
+        sim.hungerZeroTicks = (sim.hungerZeroTicks ?? 0) + 1;
+      }
       if (need === 'hunger' && before > 0 && sim.needs[need] === 0) {
         emit('starving', sim.id, {});
         applyMood(sim, L.mood.starving);
@@ -990,6 +997,8 @@ export function tick(world, inputsForThisTick = []) {
       const day = floorDiv(t, 1440);
       if (world.lastDailyDay !== day) {
         world.lastDailyDay = day;
+        // §22.2 사망 판정 — 선거·수당·이민보다 **먼저** (89차 ③). id asc, riskHash라 RNG 미소비.
+        maybeDeaths(world, t, day, emit);
         dailyDiseaseDraws(world, t, emit);
         dailyFireDraws(world, t, emit); // §17.20 (①.5 — 질병 다음, 시설당 1드로우)
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)

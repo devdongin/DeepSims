@@ -77,7 +77,7 @@ fs.watch(path.dirname(PARAMS_PATH), (_ev, file) => {
 });
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '12mb' })); // §22.3 화면 캡처(data URL) 수용
 
 const DIST = path.join(ROOT, 'client', 'dist');
 if (fs.existsSync(DIST)) app.use(express.static(DIST));
@@ -88,6 +88,29 @@ app.get('/api/report', (req, res) => {
   // §17.8: 리포트는 커밋된 틱까지만 — 30틱 캐던스의 미커밋 상태를 노출하지 않는다
   const committed = storage.getMetaInt('lastSimulatedTick', 0);
   res.json(storage.getReport(Math.min(cursor, committed), committed));
+});
+
+// §22.3 화면 캡처 — 사용자 지시: "브라우저에 띄워져 있을 게임 화면을 캡처해서 보여줘,
+// 1시간마다 최소 한 번". 헤드리스 브라우저는 Phaser 캔버스를 그리지 못해서,
+// **이미 렌더링 중인 페이지**가 자기 캔버스를 PNG로 올리는 경로를 둔다.
+// 로컬 개발 도구다 — 시뮬 상태를 건드리지 않고 logs/screens/ 에만 쓴다.
+app.post('/api/screenshot', (req, res) => {
+  const dataUrl = req.body?.dataUrl;
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) {
+    return res.status(400).json({ error: 'data:image/png;base64, 로 시작하는 dataUrl이 필요합니다' });
+  }
+  const b64 = dataUrl.slice('data:image/png;base64,'.length);
+  if (b64.length > 12 * 1024 * 1024) return res.status(413).json({ error: '캡처가 너무 큽니다' });
+  const dir = path.join(ROOT, 'logs', 'screens');
+  fs.mkdirSync(dir, { recursive: true });
+  const day = Math.floor(engine.world.worldTick / 1440);
+  const file = path.join(dir, `world-day${String(day).padStart(5, '0')}.png`);
+  try {
+    fs.writeFileSync(file, Buffer.from(b64, 'base64'));
+  } catch (e) {
+    return res.status(500).json({ error: String(e.message ?? e) });
+  }
+  res.json({ file, day, tick: engine.world.worldTick, pop: engine.world.sims.length });
 });
 
 // §20 배속: 서버 런타임 설정 (시뮬 상태 아님 — 입력 로그·세이브에 들어가지 않는다).

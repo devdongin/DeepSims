@@ -33,6 +33,7 @@ export function createWorld(seed) {
       abilities: makeAbilities(seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
       sharedDay: -1,
       sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
+      hungerZeroTicks: 0, // §22.2 굶은 채 머문 시간
       mood: 0,
       x: home.door.x,
       y: home.door.y + 1, // 문 앞 도로변
@@ -80,6 +81,7 @@ export function createWorld(seed) {
     policy: {},    // §18.T1 시장 정책 오버라이드 (화이트리스트: taxPct, welfareAmount, welfareThreshold)
     zoneOrders: [], // §18.T2 플레이어 건설 주문 FIFO: { plotId, type, dir }
     terrainVersion: 1, // §19 R-A 지형 생성 버전 (신규·마이그레이션 동일 계약 — 63차 ②)
+    nextSimId: SIM_COUNT, // §22.2 새 심 id 카운터 (사망 후 id 재사용 방지)
     cityTier: 0,    // §18.T4 도시 등급 (0 마을 → 3 대도시, 비가역)
     statsHistory: [], // §18.T5 일일 통계 링 (캡 180): {day,pop,treasury,reputation,avgMood,employed,tier}
     lostAndFound: [], // §17.24 분실물 보관: {itemId, finderId, amount, dueDay}
