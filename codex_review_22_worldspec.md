@@ -1,1 +1,0 @@
-GO — §15.1 implementation is ready to commit.

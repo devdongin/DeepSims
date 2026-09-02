@@ -17,3 +17,11 @@ client/public/props/raw7/
 
 logs/*
 !logs/world-snapshot.json
+
+# Codex 교차 리뷰 산출물 — 작업 중 주고받은 기록이라 저장소에 남길 필요가 없다.
+# 리뷰의 결론은 PR 코멘트와 PLAN.md에 남고, 로컬 파일은 참고용으로만 둔다.
+codex_review_*.md
+
+# 일회성 A/B 소크 스크립트 (임시 스냅샷을 읽는 작업용)
+soak_*.mjs
+ab_*.mjs

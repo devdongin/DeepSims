@@ -1,1 +1,0 @@
-GO — no remaining determinism, ordering, migration, persistence, romance/election, sparse-wear, report-cadence, or §G issues found. The 102/102 suite and 512×512 benchmark support release readiness.
