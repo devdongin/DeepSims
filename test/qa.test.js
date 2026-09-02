@@ -109,3 +109,41 @@ test('QA-8. 플레이어 심이 NPC와 같은 필드를 갖는다', () => {
   }
   assert.equal(Number.isSafeInteger(player.groceries), true);
 });
+
+test('QA-9. 해시 인코딩이 문자열 사칭에 속지 않는다 (Codex 102차 ①)', () => {
+  // 센티널 문자열 방식이면 세계 안의 진짜 문자열이 NaN·undefined를 사칭해
+  // 오라클이 다시 눈이 먼다 — 고치려던 바로 그 부류의 버그다.
+  // **같은 필드**에 넣고 비교해야 사칭 검사가 된다 — 다른 필드면 애초에 해시가 다르다.
+  const mk = (v) => { const w = createWorld(4242); w.sims[0].groceries = v; return w; };
+  const hNaN = hashWorld(mk(NaN));
+  const hUndef = hashWorld(mk(undefined));
+  const hNull = hashWorld(mk(null));
+  for (const s of [' NaN', 'NaN', ' undefined', 'undefined', 'N', 'u', 'z', ' Infinity', 'n0']) {
+    assert.notEqual(hashWorld(mk(s)), hNaN, `문자열 ${JSON.stringify(s)}가 NaN을 사칭한다`);
+    assert.notEqual(hashWorld(mk(s)), hUndef, `문자열 ${JSON.stringify(s)}가 undefined를 사칭한다`);
+    assert.notEqual(hashWorld(mk(s)), hNull, `문자열 ${JSON.stringify(s)}가 null을 사칭한다`);
+  }
+  // 숫자·불리언과 그 문자열 표기도 구분된다
+  assert.notEqual(hashWorld(mk('7')), hashWorld(mk(7)), "문자열 '7'과 숫자 7이 같게 보인다");
+  assert.notEqual(hashWorld(mk('true')), hashWorld(mk(true)), "문자열 'true'와 boolean이 같게 보인다");
+  // 길이 접두가 없으면 붙어 보이는 경계 — 키/값 경계 모호성
+  const a = createWorld(4242); a.sims[0].name = 'ab'; a.sims[0].nickname = 'c';
+  const b = createWorld(4242); b.sims[0].name = 'a'; b.sims[0].nickname = 'bc';
+  assert.notEqual(hashWorld(a), hashWorld(b), '문자열 경계가 뭉개진다');
+});
+
+test('QA-10. 해시가 직렬화가 뭉개는 나머지 값도 구분한다 (Codex 102차 ④)', () => {
+  const mk = (v) => { const w = createWorld(4242); w.sims[0].groceries = v; return w; };
+  const seen = new Map();
+  for (const [label, v] of [['0', 0], ['-0', -0], ['NaN', NaN], ['Inf', Infinity], ['-Inf', -Infinity], ['null', null], ['undefined', undefined]]) {
+    const h = hashWorld(mk(v));
+    assert.equal(seen.has(h), false, `${label}이 ${seen.get(h)}와 같은 해시다`);
+    seen.set(h, label);
+  }
+  // Date·Map·Set은 Object.keys가 []라 예전엔 전부 같은 빈 객체로 보였다
+  const mkObj = (v) => { const w = createWorld(4242); w.sims[0].habit = v; return w; };
+  const hs = [mkObj({}), mkObj(new Map()), mkObj(new Set())].map(hashWorld);
+  assert.equal(new Set(hs).size, 3, 'Date·Map·Set이 빈 객체와 구분되지 않는다');
+  // 그리고 findNonFinite가 그걸 경로와 함께 지목한다
+  assert.deepEqual(findNonFinite(mkObj(new Map())), [{ path: 'world.sims[0].habit', value: '[object Map]' }]);
+});
