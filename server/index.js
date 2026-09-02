@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { Storage } from '../db/storage.js';
 import { Engine, MAX_SPEED } from './engine.js';
+import { simsView } from './view.js'; // §22.8 전송용 투영
 import { PROTOCOL_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC, validatePolicy } from '../sim/logic.js';
 
@@ -181,7 +182,7 @@ function sendSnapshot(ws) {
   send(ws, { type: 'snapshot', world: {
     worldTick: engine.world.worldTick,
     map: engine.world.map,
-    sims: engine.world.sims,
+    sims: simsView(engine.world.sims), // §22.8 화면이 쓰는 필드만
     affinity: engine.world.affinity,
     weather: engine.world.weather,
     lostItems: engine.world.lostItems,
