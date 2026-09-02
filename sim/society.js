@@ -2,6 +2,7 @@
 import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
 import { generateTraits, occupationAllowed } from './traits.js';
+import { makeAbilities, aptitudeFor } from './abilities.js'; // §21.1 (RNG 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
 import { isResidence } from './map.js';
@@ -129,7 +130,15 @@ export function maybeNewYear(world, t, day, emit) {
       const raw = hasUni ? [...G2.poolBase, ...G2.poolUni] : G2.poolBase;
       let pool = raw.filter((o) => occupationAllowed(o, sim.traits.age)); // §18.T3: 나이 제약 (52차)
       if (pool.length === 0) pool = ['office_worker']; // 폴백 풀 — 드로우 1회 계약 유지 (53차)
-      sim.traits.occupation = pool[rngInt(world.rngSim, pool.length)];
+      // §21.1 적성 가중 (이슈 #62): 잘하는 쪽으로 기울되 이분법은 아니다.
+      // 적성 높은 직업을 풀에 **여러 번 넣어** 확률을 올린다 — rngInt 드로우는 1회 그대로다.
+      const A = world.logic.abilities;
+      const weighted = [];
+      for (const o of pool) {
+        const reps = 1 + floorDiv(aptitudeFor(sim, o, world.logic) * A.aptitudePoolWeight, 10000);
+        for (let r = 0; r < reps; r++) weighted.push(o);
+      }
+      sim.traits.occupation = weighted[rngInt(world.rngSim, weighted.length)];
       emit('graduated', sim.id, { to: sim.traits.occupation, uni: hasUni });
     } else if (sim.traits.occupation !== 'retired' && sim.traits.age >= S.retireAge) {
       sim.traits.occupation = 'retired';
@@ -182,6 +191,7 @@ export function maybeChildren(world, t, day, emit) {
       lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
       knownTokens: [], plan: null, lastPlannedDay: -1,
       hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
+      abilities: makeAbilities(world.seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
     };
     world.sims.push(child);
     for (const row of world.affinity) row.push(0);
@@ -296,6 +306,7 @@ function immigrateOne(world, t, emit) {
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
     hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
+      abilities: makeAbilities(world.seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);

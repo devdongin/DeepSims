@@ -1,3 +1,4 @@
+import { makeAbilities } from './abilities.js'; // §21.1
 import { SCHEMA_VERSION } from './constants.js';
 // 월드 생성 — rngWorldgen만 사용, 이후 런타임은 rngSim (PLAN §2 네임드 스트림).
 // schemaVersion 2: traits(성별·나이·MBTI·직업)·mood·world.logic 포함 (PLAN §12.1).
@@ -29,6 +30,7 @@ export function createWorld(seed) {
       homeId,
       isPlayer: false,
       traits,
+      abilities: makeAbilities(seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
       mood: 0,
       x: home.door.x,
       y: home.door.y + 1, // 문 앞 도로변
