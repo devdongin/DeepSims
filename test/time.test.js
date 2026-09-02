@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const TICK = 1000;
-const MAX = 30 * 1440;
+const MAX = 240 * 1440; // §22.1 따라잡기 클램프 (게임 2년치)
 
 test('6a. 기본: 경과 실시간 → 틱', () => {
   const r = computeTarget({ nowUtcMs: 100 * TICK, epochUtcMs: 0, lastSimulatedTick: 50 });
@@ -93,4 +93,35 @@ test('T-9. §20 따라잡기 중 배속 변경: 완료 후 재기준화되어 �
   });
   assert.equal(t1.target, engine.world.worldTick + 30, 'x3에서 10초 = 30틱 — 정지하지 않는다');
   st.close();
+});
+
+test('T-10. §22.1 ×48이면 실시간 1시간 = 게임 1년', () => {
+  // 1년 = yearDays(120) × TICKS_PER_DAY(1440) = 172,800틱.
+  // ×48이면 3,600초(1시간)에 그만큼 진행해야 한다.
+  const YEAR_TICKS = 120 * 1440;
+  const r = computeTarget({ nowUtcMs: 3600 * 1000, epochUtcMs: 0, lastSimulatedTick: 0, speed: 48 });
+  assert.equal(r.target, YEAR_TICKS, '1시간 × ×48 = 1년치 틱');
+  assert.equal(r.clamped, false, '2년 클램프 안에 들어온다');
+
+  // 달력은 그대로다 — 배속은 관람 속도만 바꾼다
+  assert.equal(YEAR_TICKS / 1440, 120, '1년은 여전히 120일');
+});
+
+test('T-11. §22.1 따라잡기 클램프는 ×48에서도 2시간 부재를 버티고, 넘으면 재기준화한다', () => {
+  const TICK = 1000;
+  // 2시간 부재 = 2년치 = 345,600틱 = 클램프 경계
+  const twoHours = 2 * 3600 * 1000;
+  const ok = computeTarget({ nowUtcMs: twoHours, epochUtcMs: 0, lastSimulatedTick: 0, speed: 48 });
+  assert.equal(ok.clamped, false, '2시간(2년치)까지는 버리지 않는다');
+  assert.equal(ok.target, MAX);
+
+  // 그 이상은 클램프되고 epoch가 재기준화된다 (세계가 멈추지 않게)
+  const over = computeTarget({ nowUtcMs: twoHours * 2, epochUtcMs: 0, lastSimulatedTick: 0, speed: 48 });
+  assert.equal(over.clamped, true, '한도를 넘으면 클램프');
+  assert.equal(over.target, MAX, '한도까지만 진행');
+  assert.ok(over.newEpochUtcMs > 0, 'epoch 재기준화 — 다음 목표가 현재 틱 아래로 내려가지 않는다');
+  const next = computeTarget({
+    nowUtcMs: twoHours * 2, epochUtcMs: over.newEpochUtcMs, lastSimulatedTick: MAX, speed: 48,
+  });
+  assert.equal(next.target, MAX, '재기준화 직후 목표 = 현재 틱');
 });
