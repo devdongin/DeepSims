@@ -20,7 +20,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -345,6 +345,12 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
               presence ??= socialPresence(world, sim.id);
               const pull = socialPullPct(world, fac, presence, L, sim);
               if (pull > 0) cand.score += floorDiv(cand.score * pull, 100);
+            }
+            // §22.6 청을 받아들였으면 그 자리로 마음이 기운다 (이슈 #69).
+            // 하던 일을 강제로 끊지 않고 **다음 선택에서** 그리로 가게 하는 가중이다.
+            if (action === 'socialize' && sim.invitedTo
+                && sim.invitedTo.untilTick > t && sim.invitedTo.facilityId === fac.id) {
+              cand.score += floorDiv(cand.score * L.social.invitePullPct, 100);
             }
           }
           if (cand.score <= 0 && !includeZeroScore) continue;
@@ -730,6 +736,10 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
   }
+
+  // §22.6 먼저 말 걸기 (이슈 #69) — 페어링이 끝난 뒤, 혼자 남은 심이 옆 사람에게 청한다.
+  // 페어링 다음에 두는 이유: 누가 혼자인지 확정된 뒤라야 말을 걸 대상이 정해진다.
+  maybeApproach(world, t, floorDiv(t, 1440), emit);
 
   // 2c) performing 전진 + 회복 (id 오름차순)
   for (const sim of world.sims) {

@@ -14,7 +14,7 @@ function grossWageOf(sim, L) {
   const apt = aptitudeFor(sim, sim.traits.occupation, L);
   return Math.floor(base * (100 + Math.floor((apt - 50) * L.abilities.wageSpanPct / 100)) / 100);
 }
-import { applyRomance, maybeShare as maybeShareRef, maybeJobSwitch as maybeJobSwitchRef, maybeDeaths as maybeDeathsRef, deathRiskPer100k as deathRiskRef, remitPublicRevenue as remitPublicRevenueRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
+import { applyRomance, maybeShare as maybeShareRef, maybeJobSwitch as maybeJobSwitchRef, maybeDeaths as maybeDeathsRef, deathRiskPer100k as deathRiskRef, remitPublicRevenue as remitPublicRevenueRef, maybeApproach as maybeApproachRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
 import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
@@ -1874,4 +1874,71 @@ test('S-85. §22.4 공공·민간 임금 재원이 겹치면 로직 검증이 �
   assert.equal(r.ok, false);
   assert.ok(r.errors.some((e) => e.includes('공공·민간')),
     `재원이 둘로 갈리는 설정을 막아야 한다 — 실제: ${JSON.stringify(r.errors)}`);
+});
+
+test('S-86. §22.6 혼자 남은 심이 옆 사람에게 먼저 말을 건다 (#69)', () => {
+  const w = createWorld(SEED);
+  const S = w.logic.social;
+  const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+  const lonely = w.sims[0], eater = w.sims[1];
+  idleAll(w, []);
+  // 한 명은 혼자 사교 중, 한 명은 같은 카페에서 밥 먹는 중 — 지금은 영원히 남이다
+  lonely.state = { kind: 'performing', action: 'socialize', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 30, pairedTicks: 0 };
+  eater.state = { kind: 'performing', action: 'eat', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 20, pairedTicks: 0 };
+  eater.needs.social = 0; // 상대도 사교가 고프다 → 잘 응한다
+  // 40일을 모두 돌려 수락과 거절이 **둘 다** 나오는지 본다 (첫 성공에서 멈추면 거절을 못 본다)
+  const out = [];
+  for (let d = 0; d < 40; d++) {
+    eater.invitedTo = undefined;
+    maybeApproachRef(w, d * 1440, d, (type, simId, payload) => out.push({ type, simId, payload }));
+  }
+  const invited = out.find((e) => e.type === 'invited');
+  const declined = out.find((e) => e.type === 'invite_declined');
+  assert.ok(invited, '언젠가는 청이 받아들여진다');
+  assert.equal(invited.simId, lonely.id, '혼자인 쪽이 먼저 다가간다');
+  assert.equal(invited.payload.toSimId, eater.id);
+  // 마지막 시행의 결과가 남아 있다면 초대 자리가 기록돼야 한다
+  const lastAccepted = out[out.length - 1]?.type === 'invited';
+  if (lastAccepted) assert.equal(eater.invitedTo.facilityId, cafe.id, '초대 자리가 기록된다');
+  assert.ok(declined, '거절도 결과로 남는다 (항상 성공하지 않는다)');
+});
+
+test('S-87. §22.6 말 걸기의 제약: 자는 사람·아이·라이벌은 대상이 아니다', () => {
+  const S = createWorld(SEED).logic.social;
+  const run = (setup) => {
+    const w = createWorld(SEED);
+    const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+    const lonely = w.sims[0], other = w.sims[1];
+    idleAll(w, []);
+    lonely.state = { kind: 'performing', action: 'socialize', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 30, pairedTicks: 0 };
+    other.state = { kind: 'performing', action: 'eat', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 20, pairedTicks: 0 };
+    other.needs.social = 0;
+    setup(lonely, other, w);
+    const out = [];
+    for (let d = 0; d < 40; d++) {
+      other.invitedTo = undefined;
+      maybeApproachRef(w, d * 1440, d, (type, simId, payload) => out.push({ type, simId, payload }));
+    }
+    return out.filter((e) => e.type === 'invited' || e.type === 'invite_declined').length;
+  };
+  assert.ok(run(() => {}) > 0, '평소에는 말을 건다');
+  assert.equal(run((l, o) => { o.state.action = 'sleep'; }), 0, '자는 사람은 깨우지 않는다');
+  assert.equal(run((l, o) => { o.traits.occupation = 'child'; }), 0, '아이는 대상이 아니다');
+  assert.equal(run((l, o) => { o.relTiers[l.id] = 'rival'; }), 0, '사이가 나쁘면 말을 걸지 않는다');
+});
+
+test('S-88. §22.6 말 걸기는 rngSim을 소비하지 않고, 초대는 점수만 기울인다', () => {
+  const w = createWorld(SEED);
+  const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+  const a = w.sims[0], b = w.sims[1];
+  idleAll(w, []);
+  a.state = { kind: 'performing', action: 'socialize', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 30, pairedTicks: 0 };
+  b.state = { kind: 'performing', action: 'eat', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 20, pairedTicks: 0 };
+  const before = JSON.stringify(w.rngSim);
+  for (let d = 0; d < 30; d++) { b.invitedTo = undefined; maybeApproachRef(w, d * 1440, d, () => {}); }
+  assert.equal(JSON.stringify(w.rngSim), before, 'pairHash 의사확률 — 드로우 미소비');
+  // 초대는 상태를 강제로 바꾸지 않는다 — 하던 일이 그대로다
+  b.state.action = 'eat';
+  b.invitedTo = { facilityId: cafe.id, untilTick: 99999 };
+  assert.equal(b.state.action, 'eat', '밥을 먹다 말고 끌려가지 않는다');
 });
