@@ -644,6 +644,19 @@ const eun = (w) => `${w}${hasJong(w) ? '은' : '는'}`;
 const rang = (w) => `${w}${hasJong(w) ? '이랑' : '랑'}`;
 const ne = (w) => `${w}${hasJong(w) ? '이네' : '네'}`;
 
+// §22.28 unmet 기억의 placeId는 **장소가 아니라 행동 이름**이다(라이브 확인: 'eat').
+// placeKo에 넣으면 "eat 하려는데"가 그대로 찍힌다 — 장소 이름과 행동 이름은 다른 어휘다.
+// 아래쪽 ACTION_KO와 별개로 둔다: 저건 UI 라벨용 명사형('식사'), 이건 대사용 동사형이라
+// 문장에서 서로 바꿔 쓸 수 없다("식사 하려는데 갈 데가 없더라"는 어색하다).
+const ACTION_TRY_KO = {
+  eat: '밥 먹으려', sleep: '자려', work: '일하려', socialize: '사람 만나려',
+  play: '놀려', drink: '한잔하려', binge_eat: '뭐 좀 먹으려', hole_up: '좀 쉬려',
+  exercise: '운동하려', build: '뭘 좀 만들려', read: '책 좀 읽으려', shop: '장 보려',
+  fish: '낚시하려', cook_eat: '밥 해 먹으려', construct: '공사 거들려',
+  see_doctor: '병원 가려', idle: '좀 쉬려',
+};
+function actKo(id) { return ACTION_TRY_KO[id] ?? '뭘 좀 하려'; }
+
 function placeKo(id) {
   if (!id) return '동네';
   if (id.startsWith('house')) return '집';
@@ -736,6 +749,81 @@ function conversationLine(e) {
           ? pick([`${rang(about)} 요즘 사이가 달라진 것 같아`, `${wa(about)} 예전 같지가 않네`,
             `${about} 생각하면 마음이 좀 복잡해`], t)
           : pick([`요즘 인간관계가 좀 변했어`, `사람 사이라는 게 참 알 수가 없어`], t);
+        // ── 여기부터는 세계가 기록하는데 클라가 할 말이 없던 25종이다.
+        // 라이브 4000건 중 memory_share 635건이었고 그 **59%가 아래 종류라
+        // "별일이 다 있었어"로 뭉개지고 있었다**. sick 138·unmet 85·was_helped 32처럼
+        // 가장 많이 기억되는 일일수록 할 말이 없었다 — 배선 없는 키는 조용히
+        // 죽는다는 §22.10의 교훈이 대사 테이블에서 반복된 자리다.
+        case 'sick': return pick([`요 며칠 몸이 안 좋아. 자꾸 처지네`,
+          `아침부터 몸살 기운이 있어`, `병원에 가봐야 하나 싶어`,
+          `쉬어도 낫질 않아서 걱정이야`], t);
+        case 'healed': return pick([`이제 좀 살 것 같아. 다 나았어`,
+          `병원 다녀오고 나니 훨씬 낫다`, `아프고 나니 건강이 최고인 걸 알겠어`,
+          `며칠 앓았는데 이제 괜찮아`], t);
+        case 'unmet': return pick([`${actKo(d.placeId)} 했는데 갈 데가 없더라`,
+          `${actKo(d.placeId)} 했다가 그냥 돌아왔어`,
+          `${actKo(d.placeId)} 해도 이 동네엔 마땅한 데가 없나 봐`,
+          `${actKo(d.placeId)} 하는 게 왜 이렇게 어렵냐`], t);
+        case 'was_helped': return about
+          ? pick([`아까 ${ga(about)} 나 도와줬어. 고맙더라`, `${about} 아니었으면 큰일 날 뻔했어`,
+            `${ga(about)} 아무 말 없이 챙겨주더라`], t)
+          : pick([`오늘 누가 나 도와줬어. 고맙더라`, `모르는 사람한테 도움을 받았어`], t);
+        case 'helped': return about
+          ? pick([`아까 ${eul(about)} 좀 도왔어`, `${ga(about)} 힘들어 보여서 거들었어`,
+            `${about} 표정이 안 좋길래 말 걸어봤어`], t)
+          : pick([`오늘 누구 좀 도와줬어`, `거들고 나니 기분이 괜찮더라`], t);
+        case 'new_neighbor': return about
+          ? pick([`${about} 새로 이사 왔대. 인사했어?`, `${ga(about)} 이 동네 처음이라던데`,
+            `${about} 봤어? 새 얼굴이야`], t)
+          : pick([`동네에 새로 온 사람이 있더라`, `못 보던 얼굴이 늘었어`], t);
+        case 'welfare': return pick([`이번에 지원금 나왔더라. 숨통이 좀 트여`,
+          `시청에서 나온 돈으로 겨우 장 봤어`, `없는 것보단 낫지만 빠듯해`,
+          `지원이 없었으면 이번 달 못 넘겼어`], t);
+        case 'governed': return pick([`요즘 시청이 일을 좀 하는 것 같지 않아?`,
+          `동네가 조금씩 바뀌는 게 보여`, `정책이 바뀌었다던데 체감은 아직이야`], t);
+        case 'elected': return pick([`나 이번에 뽑혔어. 잘해야 할 텐데`,
+          `표를 받고 나니 어깨가 무겁다`, `맡겨준 만큼은 해야지`], t);
+        case 'voted': return pick([`오늘 투표하고 왔어`, `한 표라도 보태야지`,
+          `누굴 찍을지 끝까지 고민했어`], t);
+        case 'construct_work': return pick([`오늘 공사장에서 일 좀 거들었어`,
+          `동네 공사에 손 보태고 왔어`, `짓는 걸 보고 있으면 뿌듯하더라`,
+          `몸은 힘든데 뭔가 남는 일이야`], t);
+        case 'shopping': return pick([`시장에서 장 좀 봐 왔어`, `살 게 많아서 한참 돌았네`,
+          `요즘 물가가 만만치 않더라`, `필요한 것만 사려고 했는데 또 이만큼이야`], t);
+        case 'play_time': return pick([`오늘 ${place}에서 좀 놀았어. 오랜만이야`,
+          `아무 생각 없이 노는 것도 필요하더라`, `${place} 갔다 왔는데 기분 전환 됐어`], t);
+        case 'read_time': return pick([`요즘 읽는 게 있는데 꽤 재밌어`,
+          `도서관에 앉아 있으면 시간이 잘 가`, `한 권 끝냈어. 뿌듯하네`], t);
+        case 'club_joined': return pick([`나 모임 하나 들었어`, `사람들이랑 뭘 같이 하니 좋더라`,
+          `처음엔 어색했는데 이제 갈 만해`], t);
+        case 'celebration': return pick([`오늘 동네에 잔치가 있었어`, `다들 모여서 웃고 떠들었지`,
+          `이런 날이 자주 있으면 좋겠다`], t);
+        case 'milestone': return pick([`오늘 좀 특별한 날이야`, `한 고비 넘긴 것 같아`,
+          `돌아보니 여기까지 왔네`], t);
+        case 'wedding': return about
+          ? pick([`${about} 결혼식 다녀왔어`, `${ne(about)} 결혼식, 참 좋더라`], t)
+          : pick([`결혼식 다녀왔어. 보기 좋더라`, `남의 경사에도 기분이 좋아지네`], t);
+        case 'love': return about
+          ? pick([`요즘 ${about} 생각이 자꾸 나`, `${ga(about)} 좋아졌나 봐`], t)
+          : pick([`요즘 마음이 자꾸 한쪽으로 기울어`, `좋아하는 사람이 생겼어`], t);
+        // 이별·폭식·칩거는 진지한 자리다 — 농담이나 이모티콘 없이 담백하게.
+        case 'heartbreak': return about
+          ? pick([`${wa(about)} 헤어졌어`, `${about} 얘기는 아직 못 하겠어`,
+            `${rang(about)} 끝났어. 아직 실감이 안 나`], t)
+          : pick([`헤어졌어`, `혼자가 되고 나니 하루가 길다`, `아직 정리가 안 됐어`], t);
+        case 'binge': return pick([`어젯밤에 정신없이 먹었어`,
+          `허기가 아니라 다른 게 고팠던 것 같아`, `먹고 나서 오히려 마음이 안 좋더라`], t);
+        case 'hole_up': return pick([`며칠 집에만 있었어`, `나가기가 싫어서 계속 누워 있었어`,
+          `사람 만나는 게 버거운 날이 있더라`], t);
+        case 'heroic': return pick([`오늘 좀 위험한 일이 있었는데 그냥 몸이 먼저 움직였어`,
+          `무섭긴 했는데 가만있을 수가 없더라`, `다들 무사해서 다행이야`], t);
+        case 'child': return about
+          ? pick([`우리 ${about} 얘기 좀 들어볼래?`, `${ga(about)} 오늘 또 한 건 했지`,
+            `${about} 크는 걸 보면 하루가 아깝지 않아`], t)
+          : pick([`애 키우는 얘기 하자면 끝이 없지`, `애가 있으니 하루가 정신없어`], t);
+        case 'small_talk': return pick([`별일은 없었는데, 그냥 얘기하고 싶어서`,
+          `오늘 뭐 했어? 난 별거 없었어`, `이런 날은 그냥 사람 얼굴 보는 게 좋더라`,
+          `할 말이 있어서라기보단 그냥 반가워서`], t);
         default: return pick([`오늘 ${place}에서 별일이 다 있었어`, `오늘 ${place} 얘기 하나 해줄까?`], t);
       }
     }
@@ -866,10 +954,32 @@ function replyLine(e) {
       found_item: ['나도 예전에 그런 적 있어', '나는 그런 운이 없더라'],
       built_bed: ['나도 집에 하나 만들어볼까', '나도 손으로 뭐 만드는 거 좋아해'],
       relationship_changed: ['나도 요즘 그런 생각 해', '사람 사이가 변하는 건 나도 겪어봤어'],
+      // 라이브 상위 종류 — 여기가 실제로 가장 많이 오가는 자리다.
+      sick: ['나도 요즘 컨디션이 별로야', '나도 지난주에 앓았어', '무리하지 말고 좀 쉬어'],
+      healed: ['다행이다', '나도 아프고 나서 조심하게 되더라', '이제 좀 다니겠네'],
+      unmet: ['나도 그것 때문에 헛걸음한 적 있어', '나도 갈 데가 없어서 그냥 돌아왔어',
+        '그거 나도 아쉬웠어'],
+      was_helped: ['나도 그런 도움 받은 적 있어', '나도 그때 누가 챙겨줘서 넘겼어',
+        '그런 사람 만나면 오래 기억에 남더라'],
+      helped: ['나도 그럴 때 그냥 지나쳐지지가 않더라', '나도 거들어 본 적 있어'],
+      new_neighbor: ['나도 처음 왔을 때 막막했어', '나도 아직 인사는 못 했어'],
+      welfare: ['나도 그거로 이번 달 넘겼어', '나도 없었으면 힘들었을 거야',
+        '나도 빠듯한 건 마찬가지야'],
+      small_talk: ['나도 그냥 얘기하고 싶었어', '나도 오늘 별일 없었어', '잘 왔어, 마침 심심했거든'],
+      construct_work: ['나도 저번에 나갔었어', '나도 몸 쓰는 일이 차라리 낫더라'],
+      shopping: ['나도 오늘 장 봤어', '나도 요즘 값 보고 놀라'],
+      play_time: ['나도 좀 놀아야 하는데', '나도 오랜만에 나가볼까'],
+      read_time: ['나도 요즘 읽는 게 있어', '나도 한 권 붙잡고 있어'],
+      // 무거운 얘기일수록 되받는 공개가 힘이 된다 — 다만 담백하게.
+      heartbreak: ['나도 그런 적 있어', '나도 그때 한참 걸렸어', '천천히 해도 돼'],
+      binge: ['나도 그런 밤이 있어', '나도 마음이 허할 때 그러더라'],
+      hole_up: ['나도 그런 날이 있어', '나도 며칠 안 나간 적 있어'],
+      love: ['나도 그런 때가 있었지', '표정에 다 보여'],
+      child: ['나도 애 키우면서 그 생각 해', '나도 그맘때가 제일 기억나'],
     }[k];
     if (warm >= 0 && back) return pick(back, t);
     // 무거운 얘기는 호감이 없어도 가볍게 넘기지 않는다.
-    return (k === 'starving' || k === 'lonely' || k === 'argument')
+    return ['starving', 'lonely', 'argument', 'heartbreak', 'sick', 'binge', 'hole_up'].includes(k)
       ? pick(['그랬구나…', '힘들었겠다', '음…'], t)
       : pick(['아 그랬어?', '그렇구나', '그럴 수도 있지', '음…'], t);
   }

@@ -176,3 +176,33 @@ test('QA-12. 순환 참조에서 오라클이 죽지 않는다 (Codex 103차 ④
   w2.sims[0].habit = shared; w2.sims[1].habit = shared;
   assert.deepEqual(findNonFinite(w2), [], '공유 참조를 순환으로 오인한다');
 });
+
+// §22.28 배선 누락 방지 — 세계가 기록하는 기억 종류에 클라가 할 말이 있어야 한다.
+//
+// 이 테스트가 없어서 생긴 일: sim이 38종의 기억을 남기는데 대사 테이블은 13종만
+// 알고 있었고, 그중 5종(drank·workout·argument·found_item·built_bed)은 실제로는
+// 거의 발생하지 않는 종류였다. 결과적으로 라이브 자기 공개 대사의 **59%**가
+// "오늘 ○○에서 별일이 다 있었어" 하나로 뭉개졌다. 가장 자주 기억되는 일
+// (sick 138건·unmet 85건·was_helped 32건)일수록 할 말이 없었다.
+//
+// 배선 없는 새 키는 조용히 죽는다 — car·smoke가 PROP_KEYS 누락으로 안 보이던
+// §22.10과 같은 부류다. 기억 종류를 늘리면 이 테스트가 먼저 깨지게 둔다.
+test('QA-13. §22.28 모든 기억 종류에 memory_share 대사가 있다', async () => {
+  const params = JSON.parse(
+    fs.readFileSync(new URL('../logic/params.json', import.meta.url), 'utf8'),
+  );
+  const kinds = Object.keys(params.memory.importance);
+  assert.ok(kinds.length > 30, `기억 종류를 못 읽었다 (${kinds.length}종)`);
+
+  // conversationLine의 memory_share switch 본문만 떼어내 case 라벨을 모은다.
+  const start = CLIENT.indexOf("case 'memory_share': {");
+  assert.ok(start > 0, 'memory_share 분기를 찾지 못했다');
+  const end = CLIENT.indexOf("case 'work_gripe': {", start);
+  assert.ok(end > start, 'memory_share 분기의 끝을 찾지 못했다');
+  const body = CLIENT.slice(start, end);
+  const handled = new Set([...body.matchAll(/case '([a-z_]+)':/g)].map((m) => m[1]));
+
+  const missing = kinds.filter((k) => !handled.has(k));
+  assert.deepEqual(missing, [],
+    `대사 없는 기억 종류(기본 문장으로 뭉개진다): ${missing.join(', ')}`);
+});
