@@ -10,7 +10,8 @@
     "build": "vite build client",
     "dev:client": "vite client",
     "test": "node --test test/",
-    "bench": "node bench/bench.js"
+    "bench": "node bench/bench.js",
+    "bench:pop": "node bench/popscale.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
