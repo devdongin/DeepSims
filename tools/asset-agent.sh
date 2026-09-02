@@ -12,6 +12,19 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p logs
+
+# 시작 전에 작업트리가 깨끗해야 한다.
+#
+# 이 스크립트는 "실행이 끝난 뒤 바뀐 파일 = Codex가 바꾼 파일"로 판정하고, 코드 파일이면
+# 되돌린다. 그 전제는 **깨끗한 baseline에서만** 참이다. 더러운 상태로 돌리면 아래
+# 되돌리기가 사람이 쓰던 미커밋 작업을 그대로 날린다 — 실제로 fence_wood·bench2·
+# street_tree_lit 배선 작업이 이 경로로 통째로 사라졌다(§22.30).
+DIRTY=$(git status --porcelain | grep -v '^?? logs/' || true)
+if [ -n "$DIRTY" ]; then
+  echo "✋ 작업트리가 깨끗하지 않다. 커밋하거나 stash한 뒤 다시 실행해라."
+  echo "$DIRTY"
+  exit 1
+fi
 LOG="logs/assets-$(date +%Y%m%d-%H%M).md"
 FOCUS="${1:-}"
 
@@ -49,6 +62,14 @@ CHANGED=$(git status --porcelain | awk '{print $2}')
 NONPNG=$(echo "$CHANGED" | grep -v '\.png$' | grep -v '^logs/' || true)
 if [ -n "$NONPNG" ]; then
   echo "⚠️ 에셋 에이전트가 코드 파일을 건드렸다 — 되돌린다: $NONPNG"
+  # 지우기 전에 사본을 남긴다. 위의 클린 트리 검사가 있어도, 파일을 되돌릴 수 없게
+  # 만드는 동작은 언제나 흔적을 남겨야 한다.
+  BK="logs/reverted-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$BK"
+  echo "$NONPNG" | while read -r f; do
+    [ -f "$f" ] && { mkdir -p "$BK/$(dirname "$f")"; cp "$f" "$BK/$f"; }
+  done
+  echo "   되돌린 내용 사본: $BK"
   echo "$NONPNG" | xargs git checkout -- 2>/dev/null || true
 fi
 PNGS=$(git status --porcelain | awk '{print $2}' | grep '\.png$' || true)
