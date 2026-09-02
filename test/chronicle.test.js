@@ -114,6 +114,8 @@ test('C3b. deadNames 보존 창: 30일(프루닝 기준)보다 오래된 사망 
   assert.ok(!(9 in far.deadNames), '창 밖 — 프루닝 시점과 무관하게 같은 출력');
   const wide = st.getReport(100, 50000); // 커서가 더 과거를 보면 그 구간의 사망은 포함
   assert.equal(wide.deadNames[9], '연희');
+  const past = st.getReport(0, 200); // upto가 사망(300) 이전 — 미래의 사망을 미리 알면 안 된다
+  assert.ok(!(9 in past.deadNames), 'upto 상한');
   st.close();
 });
 

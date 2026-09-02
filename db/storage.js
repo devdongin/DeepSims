@@ -268,11 +268,12 @@ export class Storage {
     // pruneEvents와 같은 30일 기준이라 (Codex 지적 ②) 프루닝이 아직 안 돌았어도
     // 리포트 내용이 같고, 장기 실행 중 무한 누적도 없다. 커서가 그보다 과거를 보면
     // 그 구간 안의 사망은 항상 포함한다. 창 밖 사망은 클라이언트가 '심N'으로 접는다.
+    // 상한도 uptoTick — 과거 시점 리포트가 '그 이후의 사망'을 미리 알면 안 된다 (Codex ③).
     const nameFloor = Math.min(cursorTick, uptoTick - 30 * TICKS_PER_DAY);
     const deadNames = {};
     for (const r of this.db.prepare(
       `SELECT sim_id, json_extract(payload, '$.name') AS name FROM events
-       WHERE type = 'died' AND tick > ?`).all(nameFloor)) {
+       WHERE type = 'died' AND tick > ? AND tick <= ?`).all(nameFloor, uptoTick)) {
       deadNames[r.sim_id] = r.name;
     }
     const chronicle = selectChronicle(chronicleRows);
