@@ -262,16 +262,23 @@ export class Storage {
        ORDER BY tick ASC, ordinal ASC`)
       .all(cursorTick, uptoTick, ...CHRONICLE_PRIORITY)
       .map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
-    // 죽은 사람은 world.sims에 없어 클라이언트가 이름을 못 찾는다 — died payload의
-    // 이름을 상한 적용 **전** 전체에서 모은다 (사별 문장이 상한에 잘린 사망을 참조해도 안전).
+    // 죽은 사람은 world.sims에 없어 클라이언트가 이름을 못 찾는다. 이름은 커서 구간이
+    // 아니라 **보존 창(30일) 전체**의 died payload에서 모은다 (Codex 지적: 지난 리포트
+    // 구간에서 죽은 부모를 이번 구간의 자립 문장이 참조할 수 있다). 프루닝보다 오래된
+    // 사망은 이름이 남지 않아 클라이언트가 '심N'으로 접는다 — 정직한 한계.
     const deadNames = {};
-    for (const r of chronicleRows) if (r.type === 'died') deadNames[r.sim_id] = r.payload.name;
+    for (const r of this.db.prepare(
+      `SELECT sim_id, json_extract(payload, '$.name') AS name FROM events WHERE type = 'died'`).all()) {
+      deadNames[r.sim_id] = r.name;
+    }
     const chronicle = selectChronicle(chronicleRows);
     // 집계는 일 단위라 커서가 하루 중간이면 그 날 전체 집계를 포함시킨다 (교집합 기준).
     // 부분일 정밀도 손실은 의도된 근사 — 원본 이벤트는 이미 프루닝됨.
+    // §22.8: 화면은 (day, category, count)만 읽는다 — sim_id·sum 열은 보내지 않는다.
     const aggregates = this.db.prepare(
-      `SELECT day_start_tick, category, sim_id, count, sum FROM event_daily_aggregates
-       WHERE day_start_tick + ${TICKS_PER_DAY} - 1 > ? AND day_start_tick <= ?`)
+      `SELECT day_start_tick, category, SUM(count) AS count FROM event_daily_aggregates
+       WHERE day_start_tick + ${TICKS_PER_DAY} - 1 > ? AND day_start_tick <= ?
+       GROUP BY day_start_tick, category`)
       .all(cursorTick, uptoTick);
     return {
       fromTick: cursorTick, toTick: uptoTick, nextCursor: uptoTick,

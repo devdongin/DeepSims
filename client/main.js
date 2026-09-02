@@ -2809,7 +2809,7 @@ function chronicleText(e, nameOf) {
     case 'fire_out': return p.by === 'self'
       ? `💨 ${placeOfFac(p.facilityId)}의 불이 저절로 잦아들었습니다 (아무도 오지 않았습니다)`
       : `🚒 ${ga(nameOf(p.by))} ${placeOfFac(p.facilityId)} 화재를 진압했습니다`;
-    case 'city_promoted': return `🏙️ 해솔이 ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
+    case 'city_promoted': return `🏙️ ${ga('해솔')} ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
     case 'job_changed': return `💼 ${ga(n)} ${OCC_KO[p.from] ?? p.from} 일을 접고 ${ro(OCC_KO[p.to] ?? p.to)} 전직했습니다`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };

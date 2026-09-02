@@ -88,15 +88,21 @@ test('C2b. 예산이 아주 작으면 2차 패스가 종류째 비운다 — 위
   }
 });
 
-test('C3. 죽은 사람의 이름: deadNames가 상한 적용 전 전체에서 모인다', () => {
+test('C3. 죽은 사람의 이름: deadNames가 보존 창 전체에서 모인다 (커서 구간 밖 사망 포함)', () => {
   const events = [
     ev(300, 'died', 9, { name: '연희', age: 84, cause: 'age', pop: 60 }),
     ev(300, 'bereaved', 10, { lostSimId: 9 }),
+    // 이전 리포트 구간에서 죽은 부모를 이번 구간의 자립 문장이 참조하는 시나리오
+    ev(600, 'child_settled', 11, { name: '한별', parentA: 9, parentB: 10, homeId: 'house1' }),
   ];
   const st = storageWith(events);
   const rep = st.getReport(0, 2000);
   assert.equal(rep.deadNames[9], '연희');
   assert.ok(rep.chronicle.some((c) => c.type === 'bereaved'), '사별이 연대기에 오른다');
+  // 커서가 사망을 지나친 뒤에도 이름이 나온다 (Codex 리뷰 P2)
+  const later = st.getReport(500, 2000);
+  assert.deepEqual(later.chronicle.map((c) => c.type), ['child_settled'], '사망·사별은 구간 밖');
+  assert.equal(later.deadNames[9], '연희', '이름은 보존 창 전체에서');
   st.close();
 });
 
@@ -135,5 +141,20 @@ test('C5. 총계 한 줄: 심별 나열 대신 스칼라 + 최대 증감자 (동
   for (const gone of ['meals', 'works', 'moneyBySim', 'highlights']) {
     assert.ok(!(gone in rep), `${gone} 필드 제거`);
   }
+  st.close();
+});
+
+test('C6. 프루닝 집계 전송: 화면이 읽는 (day, category, count)만 — sim_id·sum 미전송', () => {
+  const st = new Storage(tmpDb());
+  const { world } = st.loadOrCreate({ seed: SEED, nowUtcMs: 1000 });
+  const events = advance(world, {}, 1440);
+  st.commitBatch({ world, events, appliedInputIds: [], epochUtcMs: 1000 });
+  st.pruneEvents(31 * 1440 + 1);
+  const rep = st.getReport(100, 31 * 1440 + 1);
+  assert.ok(rep.prunedAggregates.length > 0, '교집합하는 날의 집계 포함');
+  assert.deepEqual(Object.keys(rep.prunedAggregates[0]).sort(), ['category', 'count', 'day_start_tick']);
+  // 같은 (day, category)가 심별로 쪼개져 중복 전송되지 않는다 (§22.8, Codex 리뷰 P1)
+  const keys = rep.prunedAggregates.map((a) => `${a.day_start_tick}:${a.category}`);
+  assert.equal(new Set(keys).size, keys.length);
   st.close();
 });
