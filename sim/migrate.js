@@ -207,7 +207,7 @@ export function migrateWorld(world) {
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
   }
-  if (from < 49) {
+  if (from < 50) {
     // §19.12 (이슈 #52) 역 수요 관측·언락 상태 + 장거리 칸수 누적.
     // 기존 세계는 다음 일일 평가에서 첫 판정을 받는다 — 관측값은 0에서 시작한다.
     // longTripTiles는 소급하지 않는다: 과거 이동의 경로 길이는 기록돼 있지 않고,
@@ -232,6 +232,9 @@ export function migrateWorld(world) {
       if (!Number.isSafeInteger(sim.longTrips) || sim.longTrips < 0) sim.longTrips = 0;
       if (!Number.isSafeInteger(sim.longTripTiles) || sim.longTripTiles < 0) sim.longTripTiles = 0;
     }
+  }
+  if (from < 49) {
+    world.lastPublicWorksDay ??= -1; // §22.26
   }
   if (from < 48) {
     // §22.22 시장 재정 리뷰 가드 + 플레이어 정책 존중 창

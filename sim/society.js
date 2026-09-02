@@ -9,6 +9,7 @@ import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
 import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 · §22.2 사망 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
+import { TILE } from './map.js';
 import { isResidence } from './map.js';
 import { learnToken as learnTokenRef } from './planning.js';
 
@@ -1004,6 +1005,75 @@ export function maybeFiscalReview(world, t, day, emit) {
     campaign: campaignStart, // Rogoff 순환 관측용
   });
   recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', reason] });
+}
+
+// ---- §22.26 공공사업 — 사람들이 걷는 길을 정부가 포장한다 (사용자 지시) ----
+//
+// "도로나 광장등은 정부에서 국고를 써서 해야겠지. 국고가 충분할 때 마을을 성장시키기
+// 위한 도구로 사용한다." — 대상 선정이 핵심이다: 정부는 **어디를 포장할지 모른다.**
+// 아는 것은 세계뿐이다 — world.wear가 발자국의 지도다. 마모가 자연 도로화 임계의
+// 절반을 넘은 자리만 포장한다. 아무도 걷지 않는 곳은 절대 포장하지 않는다 —
+// 수요를 창조하지 않고 창발을 증폭한다(§0.1). 현실의 desire path 포장 관행 그대로다.
+//
+// 즉시 도로화는 §22.23("단숨에 안 된다")과 충돌하지 않는다(120차 ①): 마모 수백
+// 발자국이 이미 공기(工期)였다 — 포장은 그 마지막 한 걸음이다.
+// Rogoff 1990 정합: 투자는 선거 앞에서 미뤄진다 — 유세 기간에는 발화하지 않는다
+// (§22.22의 유세일 '보이는 지출' 편향과 대칭).
+//
+// 회계(120차 ④): construct 노동이 무급이므로 포장비 전액을 externalOutflow로 기록
+// (자재를 마을 밖에서 산다). 국고만 깎고 기록하지 않으면 G1 보존식이 깨진다.
+// 공채로는 포장하지 않는다 — 부채는 임금 보장 전용이다(사용자: "국고가 충분할 때").
+export function maybePublicWorks(world, t, day, emit) {
+  const P = world.logic.publicWorks;
+  const E = world.logic.election;
+  if (P.paveMaxPerDay === 0 || P.paveCostPerTile === 0) return; // A/B 스위치
+  if (world.mayorId === null) return;
+  if (world.lastPublicWorksDay === day) return;
+  if (day % E.intervalDays === 0) return; // 선거일
+  // 유세 기간 스킵 — 재임자는 선거 앞에서 투자를 미룬다 (Rogoff)
+  const tillElection = E.intervalDays - (day % E.intervalDays);
+  if (tillElection <= E.campaignDays) return;
+  if (day % world.logic.fiscal.reviewIntervalDays !== 0) return; // 재정 리뷰와 같은 주기
+  const mayor = world.sims.find((s) => s.id === world.mayorId);
+  if (!mayor || mayor.isPlayer) return; // 플레이어 시장은 직접 통치한다
+  // 국고가 충분할 때만 — §22.20·§22.22와 같은 기준을 본다
+  const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
+  if (world.treasury <= floorDiv(cashTotal * E.hoardRatioPct, 100)) return;
+  world.lastPublicWorksDay = day;
+
+  // 후보: 마모가 임계의 pavePickPct% 이상인 타일. Object 키 순서에 기대지 않는다
+  // (120차 ⑤) — 정수 검증 후 (wear desc, index asc)로 완전 순서를 강제한다.
+  const threshold = floorDiv(world.logic.build.wearThreshold * P.pavePickPct, 100);
+  const cands = [];
+  for (const [k, v] of Object.entries(world.wear ?? {})) {
+    const idx = Number(k);
+    if (!Number.isSafeInteger(idx) || !Number.isSafeInteger(v)) continue;
+    if (v >= threshold) cands.push([idx, v]);
+  }
+  cands.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]));
+
+  const paved = [];
+  let stale = 0;
+  for (const [idx] of cands) {
+    // 이미 변한 칸(자연 도로화 등)의 낡은 마모는 **비용·상한과 무관하게** 정리한다
+    // (121차 ②) — 비용 검사 뒤에 두면 국고가 마른 날의 stale 엔트리가 다음 리뷰까지
+    // 남고, remainingCandidates가 실제 미처리 수와 어긋난다.
+    if (world.map.tiles[idx] !== TILE.GRASS) { delete world.wear[idx]; stale++; continue; }
+    if (paved.length >= P.paveMaxPerDay) continue; // 포장은 상한까지, 정리는 끝까지
+    if (world.treasury - P.paveCostPerTile <= 0) continue; // 공채로 포장하지 않는다
+    world.treasury -= P.paveCostPerTile;
+    world.externalOutflow = (world.externalOutflow ?? 0) + P.paveCostPerTile;
+    world.map.tiles[idx] = TILE.ROAD; // road_formed와 동일한 효과
+    delete world.wear[idx];
+    paved.push(idx);
+  }
+  if (paved.length === 0) return;
+  emit('public_works', world.mayorId, {
+    kind: 'pave', tiles: paved, cost: paved.length * P.paveCostPerTile,
+    treasury: world.treasury,
+    remainingCandidates: cands.length - paved.length - stale, // 실제 미처리 후보 수 (121차 ②)
+  });
+  recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', 'public_works'] });
 }
 
 // ---- §21.3 전직 — 손님은 있는데 일할 사람이 없다 (이슈 #63, 사용자 규칙 §0.1) ----

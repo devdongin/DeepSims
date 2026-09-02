@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 44,
+  "logicSchemaVersion": 45,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -727,6 +727,11 @@
     "stepTaxPct": 3,
     "stepWelfare": 100,
     "lowRatioPct": 10
+  },
+  "publicWorks": {
+    "paveCostPerTile": 250,
+    "paveMaxPerDay": 8,
+    "pavePickPct": 50
   },
   "election": {
     "intervalDays": 15,

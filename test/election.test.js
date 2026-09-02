@@ -362,3 +362,97 @@ test('H-5. 챙김은 곁다리 수다 스위치와 독립이다 (117차 A)', () 
   assert.ok(evs.some((e) => e.type === 'helped'), '수다를 끄니 챙김까지 죽었다');
   assert.equal(evs.some((e) => e.type === 'side_talk'), false);
 });
+
+// ---- §22.26 공공사업 — 도로 포장 ----
+import { maybePublicWorks } from '../sim/society.js';
+import { TILE } from '../sim/map.js';
+
+function worksStage(w, { treasury, wear }) {
+  w.mayorId = 3;
+  w.treasury = treasury;
+  w.lastPublicWorksDay = -1;
+  w.wear = {};
+  for (const [idx, v] of wear) w.wear[idx] = v;
+  return w;
+}
+
+test('P-1. 국고가 충분하면 사람들이 걷는 자리를 포장한다 — 마모 순, 상한·양수 국고 준수', () => {
+  const w = createWorld(4242);
+  const cash = w.sims.reduce((n, s) => n + s.money, 0);
+  const thr = Math.floor(w.logic.build.wearThreshold * w.logic.publicWorks.pavePickPct / 100);
+  // 잔디 타일 후보를 심는다: 마모가 서로 다른 12칸 (전부 임계 이상) + 임계 미만 1칸
+  const grassIdx = [];
+  for (let i = 0; i < w.map.tiles.length && grassIdx.length < 13; i++) {
+    if (w.map.tiles[i] === TILE.GRASS) grassIdx.push(i);
+  }
+  const wear = grassIdx.slice(0, 12).map((idx, k) => [idx, thr + 12 - k]);
+  wear.push([grassIdx[12], thr - 1]); // 임계 미만 — 포장되면 안 된다
+  worksStage(w, { treasury: cash * 3, wear });
+  const evs = [];
+  maybePublicWorks(w, 5 * 1440, 5, (t2, s2, p2) => evs.push({ type: t2, payload: p2 }));
+  const pw = evs.find((e) => e.type === 'public_works');
+  assert.ok(pw, '공공사업이 발화하지 않았다');
+  assert.equal(pw.payload.tiles.length, w.logic.publicWorks.paveMaxPerDay, '하루 상한을 지켜야 한다');
+  // 마모 내림차순 상위가 먼저 포장된다
+  assert.deepEqual(pw.payload.tiles, wear.slice(0, w.logic.publicWorks.paveMaxPerDay).map(([i]) => i));
+  for (const idx of pw.payload.tiles) assert.equal(w.map.tiles[idx], TILE.ROAD);
+  assert.equal(w.map.tiles[grassIdx[12]], TILE.GRASS, '아무도 안 걷는(임계 미만) 곳을 포장했다');
+  assert.ok(w.treasury > 0, '공채로 포장했다');
+});
+
+test('P-2. 국고가 부족하면 포장하지 않는다 — 부채는 임금 보장 전용', () => {
+  const w = createWorld(4242);
+  const thr = Math.floor(w.logic.build.wearThreshold * w.logic.publicWorks.pavePickPct / 100);
+  const gi = w.map.tiles.findIndex((t2) => t2 === TILE.GRASS);
+  worksStage(w, { treasury: 100, wear: [[gi, thr + 5]] }); // 사재기 조건 미달
+  const evs = [];
+  maybePublicWorks(w, 5 * 1440, 5, (t2, s2, p2) => evs.push(p2));
+  assert.equal(evs.length, 0, '국고가 시민현금보다 적은데 포장했다');
+});
+
+test('P-3. 유세 기간에는 투자를 미룬다 (Rogoff 1990)', () => {
+  const w = createWorld(4242);
+  const cash = w.sims.reduce((n, s) => n + s.money, 0);
+  const thr = Math.floor(w.logic.build.wearThreshold * w.logic.publicWorks.pavePickPct / 100);
+  const gi = w.map.tiles.findIndex((t2) => t2 === TILE.GRASS);
+  // 선거 주기 15일·유세 3일이면 12·13·14일이 유세, 15일이 선거다.
+  // 리뷰 주기(5일)와 겹치는 유세일은 없으므로 25일(5의 배수, 유세 아님)과
+  // 유세일을 직접 대조한다: day 27은 리뷰 주기가 아니라 발화 자체가 없으니
+  // fiscal.reviewIntervalDays를 1로 낮춰 유세일 스킵만 분리해 검증한다.
+  w.logic.fiscal.reviewIntervalDays = 1;
+  worksStage(w, { treasury: cash * 3, wear: [[gi, thr + 5]] });
+  const fire = (day) => {
+    w.lastPublicWorksDay = -1;
+    const evs = [];
+    maybePublicWorks(w, day * 1440, day, (t2, s2, p2) => evs.push(p2));
+    return evs.length;
+  };
+  assert.equal(fire(13), 0, '유세 기간(D-2)에 투자했다');
+  assert.equal(fire(14), 0, '유세 기간(D-1)에 투자했다');
+  assert.equal(fire(15), 0, '선거일에 투자했다');
+  assert.equal(fire(16), 1, '유세도 선거도 아닌 날에 투자하지 않았다');
+});
+
+test('P-4. 포장비는 경계 유출로 기록된다 — 보존식 유지 (120차 ④)', () => {
+  const w = createWorld(4242);
+  const cash0 = w.sims.reduce((n, s) => n + s.money, 0);
+  const thr = Math.floor(w.logic.build.wearThreshold * w.logic.publicWorks.pavePickPct / 100);
+  const gi = w.map.tiles.findIndex((t2) => t2 === TILE.GRASS);
+  worksStage(w, { treasury: cash0 * 3, wear: [[gi, thr + 5]] });
+  const total = (x) => x.sims.reduce((a, s) => a + s.money, 0) + x.treasury
+    + x.map.facilities.reduce((a, f) => a + (f.revenue ?? 0), 0);
+  const start = total(w);
+  const out0 = w.externalOutflow ?? 0;
+  maybePublicWorks(w, 5 * 1440, 5, () => {});
+  const spent = (w.externalOutflow ?? 0) - out0;
+  assert.equal(spent, w.logic.publicWorks.paveCostPerTile, '포장비가 경계 유출로 기록되지 않았다');
+  assert.equal(total(w), start - spent, '보존식이 깨졌다 — 돈이 기록 없이 사라졌다');
+});
+
+test('P-5. 공공사업이 결정적이고 왕복을 견딘다', () => {
+  const a = createWorld(777); const b = createWorld(777);
+  advance(a, {}, 40 * 1440); advance(b, {}, 40 * 1440);
+  assert.equal(hashWorld(a), hashWorld(b));
+  const w2 = deserialize(serialize(a));
+  assert.equal(hashWorld(a), hashWorld(w2));
+});
