@@ -24,7 +24,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview, maybePublicWorks, evalStationDemand } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -462,7 +462,11 @@ function startAction(world, sim, cand, t, emit, reason) {
     return false;
   }
   // §19 R-B: 장거리 이동 통계 — **출발 시점** 누적(64차 (c) 계약 고정)
-  if (path.length >= world.logic.transport.longTripMin) sim.longTrips++;
+  // §19.12: 칸수도 같은 자리에서 누적 — 거리 분포가 역 수요 판정의 입력이다 (이슈 #52)
+  if (path.length >= world.logic.transport.longTripMin) {
+    sim.longTrips++;
+    sim.longTripTiles = (sim.longTripTiles ?? 0) + path.length;
+  }
   // §22.16 emptyState를 펼쳐서 만든다. 예전에는 여기서 필드를 손으로 나열해
   // sideTalkTicks가 빠졌고(§22.14), 읽는 쪽의 `?? 0` 가드 덕에 우연히 버티고 있었다.
   // 필드를 하나 늘릴 때마다 이런 자리를 찾아다녀야 하는 구조는 언젠가 반드시 어긋난다.
@@ -1146,6 +1150,7 @@ export function tick(world, inputsForThisTick = []) {
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
         maybeFiscalReview(world, t, day, emit); // §22.22 선거 직후 고정 위치 — 그날 복지 정산부터 새 정책
+        maybePublicWorks(world, t, day, emit); // §22.26 순서 고정: 선거 → 재정 → 공공사업 (120차 ⑥)
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
         // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야
@@ -1196,6 +1201,9 @@ export function tick(world, inputsForThisTick = []) {
             incidents: world.incidents.length }); // 오늘의 사건 수 (55차)
           while (world.statsHistory.length > 180) world.statsHistory.shift();
         }
+        // §19.12 역 수요 판정 (일일 통계 다음 — 서브순서 고정). RNG 미소비라 드로우
+        // 순서 계약과 무관하고, world.transit 관측 필드와 1회성 언락 이벤트만 만든다.
+        evalStationDemand(world, t, emit);
         for (const s2 of world.sims) { // §17.23 쿨다운 청소
           for (const k of Object.keys(s2.noPathCool)) if (s2.noPathCool[k] <= t) delete s2.noPathCool[k];
         }

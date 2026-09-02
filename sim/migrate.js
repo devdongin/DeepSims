@@ -8,6 +8,7 @@ import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivic
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 import { SCHEMA_VERSION } from './constants.js';
 import { surnameFor } from './surnames.js';
+import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단일 정의 공유
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -205,6 +206,35 @@ export function migrateWorld(world) {
     // 세이브 구조는 그대로지만 **같은 스냅샷에서 다른 궤적**이 나오므로, 구 로그 재생이
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
+  }
+  if (from < 50) {
+    // §19.12 (이슈 #52) 역 수요 관측·언락 상태 + 장거리 칸수 누적.
+    // 기존 세계는 다음 일일 평가에서 첫 판정을 받는다 — 관측값은 0에서 시작한다.
+    // longTripTiles는 소급하지 않는다: 과거 이동의 경로 길이는 기록돼 있지 않고,
+    // 지어내면 거리 가중이 허구 위에 선다. avgTripTiles는 마이그레이션 직후 0이라
+    // 거리 가중 없이(계수 100) 판정이 시작되고, 이후 실제 이동이 채운다.
+    //
+    // `??=`만으로는 부분 객체·손상 값을 못 고친다 (§22.18 v45와 같은 이유, Codex 교차
+    // 리뷰 조건) — 기본 모양과 **필드 단위로 병합**하고, 유한 safe integer가 아닌 값은
+    // 기본값으로 되돌린다. 언락 판정의 입력(longTrips·longTripTiles)도 여기서 정규화한다.
+    const base = makeTransitState();
+    const raw = world.transit;
+    const src = (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    const tr = {};
+    for (const [k, dv] of Object.entries(base)) {
+      const v = src[k];
+      if (typeof dv === 'boolean') tr[k] = v === true;
+      else tr[k] = (Number.isSafeInteger(v) && v >= (k === 'unlockedDay' ? -1 : 0)) ? v : dv; // 카운터는 ≥0, 언락일만 -1 허용
+    }
+    if (!tr.stationUnlocked) tr.unlockedDay = -1; // 잠긴 세계에 언락일이 남지 않게
+    world.transit = tr;
+    for (const sim of world.sims) {
+      if (!Number.isSafeInteger(sim.longTrips) || sim.longTrips < 0) sim.longTrips = 0;
+      if (!Number.isSafeInteger(sim.longTripTiles) || sim.longTripTiles < 0) sim.longTripTiles = 0;
+    }
+  }
+  if (from < 49) {
+    world.lastPublicWorksDay ??= -1; // §22.26
   }
   if (from < 48) {
     // §22.22 시장 재정 리뷰 가드 + 플레이어 정책 존중 창

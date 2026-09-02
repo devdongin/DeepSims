@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 43, // §22.23 공공 임금 보장·공기 차등
+  logicSchemaVersion: 45, // §19.12 기차역 언락 (44=공공사업과 번호 충돌 → 45로)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -321,7 +321,16 @@ export const DEFAULT_LOGIC = {
     carTripsMin: 12,      // 자가용 구매 문턱
     carPrice: 6000,       // 실측 조정: 잔고 상한 ~9.8천 (soak 검증, 64차 (c))
     carSpeedTiles: 2,     // 틱당 최대 전진 칸수 (순서대로)
-    stationDemand: 300,   // 마을 총 longTrips — 기차역 언락 (후속 라운드)
+    stationDemand: 300,   // 가중 이동 수요 문턱 — 기차역 언락 (§19.12, 이슈 #52)
+    // §19.12 언락 판정 가중치. 수요 = floorDiv(가중 longTrips × 거리 계수, 100).
+    // 차 보유 심의 장거리 이동은 이미 수단이 있으므로 할인해 센다(0이 아닌 이유:
+    // 4단계 모델의 수단 선택 — 철도는 자가용과 경쟁하지 소멸시키지 않는다).
+    // 평균 장거리 칸수가 longTripMin을 크게 넘으면 철도의 경쟁 구간이라 가중한다.
+    // Duranton & Turner 제약: 여기서는 수요를 **측정**하고 언락만 한다 — 역이 혼잡을
+    // 풀어준다고 가정하지 않는다(유발 수요 계측은 #48 동반 과제).
+    stationCarOwnerPct: 50,   // 차 보유 심의 longTrips 반영률 %
+    stationDistBoostMin: 60,  // 평균 장거리 칸수가 이 이상이면 수요 가중
+    stationDistBoostPct: 25,  // 그때 가중 % (100 + 이 값이 계수가 된다)
   },
   // §17.24 순찰·정직 (56차 합의): p(신고) = honesty.base + floorDiv(TF, honesty.tfDiv) — 정수식 고정
   patrol: { targets: ['cafe', 'park', 'market', 'bar', 'mall'], repPerPatrol: 1 },
@@ -386,6 +395,15 @@ export const DEFAULT_LOGIC = {
     stepTaxPct: 3,           // 세율 한 걸음 (%p)
     stepWelfare: 100,        // 복지 금액·문턱 한 걸음
     lowRatioPct: 10,         // 국고 < 시민총현금 × 10% → 재정 위험(긴축)
+  },
+  // §22.26 공공사업 (사용자 지시: "도로나 광장등은 정부에서 국고를 써서…
+  // 국고가 충분할 때 마을을 성장시키기 위한 도구"). 첫 슬라이스는 도로 포장 —
+  // 사람들이 이미 걷어 마모가 쌓인 자리(desire path)를 정부가 앞당겨 포장한다.
+  // 수요를 창조하지 않고 창발을 증폭한다(§0.1). 광장은 후속 슬라이스(120차 B).
+  publicWorks: {
+    paveCostPerTile: 250,   // 칸당 포장비 — 국고에서 externalOutflow로 (자재는 마을 밖에서 산다)
+    paveMaxPerDay: 8,       // 리뷰당 상한 — 마을이 하루 만에 확 바뀌지 않게
+    pavePickPct: 50,        // wear가 자연 도로화 임계의 이 % 이상인 칸만 후보
   },
   election: {
     intervalDays: 15,
@@ -718,6 +736,11 @@ function checkRanges(p, errors) {
   inRange('transport.carPrice', p.transport.carPrice, 0, 10000000);
   inRange('transport.carSpeedTiles', p.transport.carSpeedTiles, 1, 8);
   inRange('transport.stationDemand', p.transport.stationDemand, 1, 1000000);
+  // §19.12: 반영률은 0~100%(할인만 허용 — 100 초과면 차가 수요를 부풀린다),
+  // 거리 가중은 0~1000%로 묶어 fulfillmentPct 오버플로를 막는다.
+  inRange('transport.stationCarOwnerPct', p.transport.stationCarOwnerPct, 0, 100);
+  inRange('transport.stationDistBoostMin', p.transport.stationDistBoostMin, 1, 10000);
+  inRange('transport.stationDistBoostPct', p.transport.stationDistBoostPct, 0, 1000);
   inRange('patrol.repPerPatrol', p.patrol.repPerPatrol, 0, 1000);
   inRange('honesty.base', p.honesty.base, 0, 100);
   if (p.honesty.base + Math.floor(100 / p.honesty.tfDiv) > 100) {
@@ -798,6 +821,9 @@ function checkRanges(p, errors) {
   inRange('fiscal.stepTaxPct', p.fiscal.stepTaxPct, 0, 25);
   inRange('fiscal.stepWelfare', p.fiscal.stepWelfare, 0, 1000);
   inRange('fiscal.lowRatioPct', p.fiscal.lowRatioPct, 0, 100);
+  inRange('publicWorks.paveCostPerTile', p.publicWorks.paveCostPerTile, 0, 100000);
+  inRange('publicWorks.paveMaxPerDay', p.publicWorks.paveMaxPerDay, 0, 1000);
+  inRange('publicWorks.pavePickPct', p.publicWorks.pavePickPct, 1, 100);
   for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {
     inRange(`disease.${k}`, p.disease[k], 0, 1000);
   }

@@ -1015,6 +1015,7 @@ function eventText(e) {
       return `📢 주민 청원: "${ko[e.payload.kind] ?? e.payload.kind}" (${e.payload.total}건, 문턱 ${e.payload.threshold})`;
     }
     case 'car_bought': return `🚗 ${ga(n)} 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
+    case 'station_unlocked': return `🚉 장거리 이동 수요가 문턱을 넘었다 — 기차역 언락! (수요 ${e.payload.demand}/${e.payload.threshold} · 충족도 ${e.payload.fulfillmentPct}% · 장거리 ${e.payload.totalLongTrips}회 · 차 ${e.payload.carsOwned}대)`;
     case 'city_promoted': return `🏙️ 해솔${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
@@ -1071,6 +1072,10 @@ function eventText(e) {
     }
     case 'road_formed': return `🛤️ 많이 다니던 길이 도로가 되었습니다 (${e.payload.x}, ${e.payload.y})`;
     case 'bed_built': return `🛏️ ${ga(n)} 집에 침대를 새로 만들었습니다!`;
+    case 'public_works': {
+      const n2 = e.payload.tiles?.length ?? 0;
+      return `🏗️ 시장이 사람들이 다니는 길 ${n2}칸을 포장했습니다 (-${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
+    }
     case 'side_talk': return `💬 ${ga(n)} 옆자리 ${wa(simName(e.payload.withSimId))} 말을 텄습니다`;
     case 'helped': {
       const why = { sick: '아픈', hungry: '배곯는', broke: '주머니가 빈' }[e.payload.why] ?? '';
@@ -1275,6 +1280,7 @@ function connect() {
         if (msg.projects !== undefined) world.projects = msg.projects; // §19.3
         if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
+        if (msg.transit) world.transit = msg.transit; // §19.12 역 수요 관측·언락 (zone 모달 게이트)
         if (msg.statsToday) { // §18.T5 증분 upsert (54차: 동일 day는 교체)
           world.statsHistory ??= [];
           const last = world.statsHistory[world.statsHistory.length - 1];
@@ -1293,6 +1299,11 @@ function connect() {
         for (const e of msg.events) {
           if (e.type === 'road_formed' && world) {
             world.map.tiles[e.payload.y * world.map.w + e.payload.x] = 1;
+            mapDirty = true;
+          } else if (e.type === 'public_works' && world) {
+            // §22.26 정부 포장 — road_formed와 같은 증분 갱신. 이 분기가 없으면 클라는
+            // 다음 전체 resync(15초+)까지 포장을 모른 채 잔디를 그린다.
+            for (const idx of (e.payload.tiles ?? [])) world.map.tiles[idx] = 1;
             mapDirty = true;
           } else if (e.type === 'bed_built' && world) {
             const fac = world.map.facilities.find((f) => f.id === e.payload.facilityId);
@@ -1401,15 +1412,30 @@ setInterval(pushSpark, 5000);
   let cur = null; let dir = 0; let type = 'house';
   const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000 };
   const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
+  // §19.12 기차역은 인구 등급이 아니라 **이동 수요**가 언락한다 (world.transit, 이슈 #52).
+  // 착공 레시피(ZONEABLE·비용)는 후속 라운드 — 언락 전에는 충족도 %를, 언락 후에는
+  // 언락 사실을 보여주고 '지시'는 잠근다 (서버가 bad_type으로 거부할 주문을 보내지 않는다).
+  const stationLocked = () => !(world?.transit?.stationUnlocked);
   const render = () => {
+    const isStation = type === 'train_station';
     const need = TIER_NEED[type] ?? 0;
     const locked = (world?.cityTier ?? 0) < need;
-    document.getElementById('zone-info').textContent = `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원` + (locked ? ` · 🔒${['','읍','시','대도시'][need]} 필요` : '');
+    const pct = world?.transit?.fulfillmentPct ?? 0;
+    const info = isStation
+      ? `공터 ${cur.plotId} · ${type} · ` + (stationLocked()
+        ? `🔒 이동 수요 ${pct}% — 100%에 언락`
+        : `🚉 언락됨 (수요 ${pct}%) · 착공 레시피는 후속 라운드`)
+      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원` + (locked ? ` · 🔒${['','읍','시','대도시'][need]} 필요` : '');
+    document.getElementById('zone-info').textContent = info;
     for (const b of modal.querySelectorAll('[data-zt]')) {
-      const bn = TIER_NEED[b.dataset.zt] ?? 0;
-      b.style.opacity = (world?.cityTier ?? 0) < bn ? 0.4 : 1;
-      b.style.borderColor = b.dataset.zt === type ? '#ffcf6a' : '#6b5638';
+      const zt = b.dataset.zt;
+      const dim = zt === 'train_station' ? stationLocked() : (world?.cityTier ?? 0) < (TIER_NEED[zt] ?? 0);
+      b.style.opacity = dim ? 0.4 : 1;
+      b.style.borderColor = zt === type ? '#ffcf6a' : '#6b5638';
     }
+    const go = document.getElementById('zone-go');
+    go.disabled = isStation;
+    go.style.opacity = isStation ? 0.4 : 1;
   };
   window.openZoneModal = (plot) => { cur = plot; dir = 0; type = 'house'; modal.style.display = 'flex'; render(); };
   for (const b of modal.querySelectorAll('[data-zt]')) b.addEventListener('click', () => { type = b.dataset.zt; render(); });

@@ -1101,6 +1101,7 @@ traits: {
 - 실측 조정(64차 (c) 요구): carPrice 15000 → 6000. 잔고 상한이 ~9.8천이라 15000은 영구 미달이었음
   (120일 soak 구매 0대) → 6000에서 day 4 첫 구매, 120일 99명 중 69명 보유.
 - 기차역(stationDemand 300)·공항은 후속 라운드. 에셋 5장 세트(4방향+내부) 확보 완료.
+  → 언락 **판정**은 §19.12에서 섰다 (이슈 #52). 건설 레시피·운행은 그다음이다.
 
 ### 19.3 라운드 24 — 동시 건설 슬롯 (구조 변경, Codex 66차 GO)
 - world.project(단수) → world.projects(배열), 세이브 v27. 마이그레이션은 legacy가 있고 배열이
@@ -1168,6 +1169,49 @@ traits: {
   collectComplaints가 태그로 kind를 분화한다. 드로우 0.
 - 실측(라이브 20일 재수집): no_money:eat ×382, lonely 270, hungry 11 — no_facility는 0.
   로드맵이 '식당 증설'이 아니라 '빈곤 대책'을 가리키게 됐다.
+
+### 19.12 기차역 언락 판정 — stationDemand가 파라미터에서 판정이 된다 (이슈 #52)
+- **문제**: `transport.stationDemand=300`은 §19 R-B부터 파라미터로만 존재했다. Σ longTrips와
+  비교하는 코드가 없어 "911 > 300"은 사람이 수동으로 더한 값이었지 세계의 판정이 아니었다.
+- **원칙**: 건물을 미리 짓지 않는다(§22.18 — 산업은 필요에서 자란다). 이 라운드는 **언락
+  판정과 계측만** 세운다. 건설 레시피(ZONEABLE·비용·footprint)·열차 운행은 후속 라운드.
+- **판정** (`evalStationDemand`, 일일 평가 맨 끝 — 일일 통계 다음 서브순서 고정, RNG 0):
+  - `weightedTrips = Σ (hasCar ? floorDiv(longTrips × stationCarOwnerPct 50, 100) : longTrips)`
+    — 차 보유 심의 이동은 할인해 센다(4단계 모델의 수단 선택: 경쟁이지 소멸이 아니다).
+    심별 항이 독립인 floorDiv라 순회 순서 무관.
+  - `distFactorPct = avgTripTiles ≥ stationDistBoostMin 60 ? 125 : 100` — 평균 장거리 칸수가
+    문턱을 넘으면 철도의 경쟁 구간(수단 분담 대 거리). 이를 위해 startAction의 longTrips++
+    자리에서 **칸수(longTripTiles)도 함께 누적**한다 (세이브 v49, 소급 없음 — 과거 경로
+    길이는 기록에 없고 지어내면 가중이 허구 위에 선다).
+  - `demand = floorDiv(weightedTrips × distFactorPct, 100)`, `demand ≥ stationDemand → 언락`.
+  - **충족도 %를 상태로 남긴다**: `world.transit.fulfillmentPct = floorDiv(demand×100, stationDemand)`
+    — 이분 컷이 아니라 %가 관측 가능해야 "언락까지 얼마나 왔나"를 세계가 말할 수 있다.
+- **언락**: 비가역(cityTier 승급과 같은 계약). 1회성 `station_unlocked` 이벤트(수요·문턱·
+  구성 요소 전부 payload로). `zoneAllowedTypes`에 train_station 추가 — 단 ZONEABLE 레시피가
+  없으므로 zone 주문은 기존 **bad_type(언락됐지만 레시피 미구현, §18.T3와 같은 대기)** 분기로
+  결정적으로 거부된다. 클라 zone 모달은 언락 전 충족도 %를, 언락 후 '착공은 후속 라운드'를
+  보여주고 지시 버튼을 잠근다(거부될 주문을 보내 놓고 '지시했습니다'라 말하지 않는다).
+- **관측**: `world.transit` {stationUnlocked, unlockedDay, fulfillmentPct, demand, totalLongTrips,
+  weightedTrips, carsOwned, avgTripTiles} — 스냅샷·tickBatch·export-world-snapshot에 노출.
+  `/api/industry` H(운수·창고업)에 `transit` 블록 — **directUnmet과 다른 축**이다: 심은 '역이
+  없어서 못 갔다'고 좌절한 적이 없지만(걷거나 차로 갔다), 이동의 누적 자체가 산업의 근거다.
+- **제약 (Duranton & Turner, 로드맵 회차)**: 역이 혼잡을 풀어준다고 가정하지 않는다 — 도로
+  공급 확대가 통행량도 늘리듯 유발 수요는 **측정** 대상이고, 그 계측(#48)은 동반 과제다.
+  여기서는 수요 관측과 언락 판정까지만.
+- 참고 (이슈 #52 코멘트): OpenTTD 역 등급 — 역이 수요를 만드는 게 아니라 수요가 역의
+  성과를 결정하는 방향. cargodist — 다중 마을(G3) 왕래가 서면 '어디로 가려는 수요인가'를
+  세는 틀로 이어진다.
+- 버전: 세이브 v49(world.transit·sim.longTripTiles) · 로직 v44(stationCarOwnerPct 50,
+  stationDistBoostMin 60, stationDistBoostPct 25 — validateLogic 범위 포함. 반영률 상한 100:
+  차가 수요를 부풀리면 안 된다). 테스트 test/station.test.js ST-1~16 (299/300 경계, 차 할인
+  경계, 거리 가중 경계, 비가역, 왕복 고정점, 결정성 해시, 마이그레이션, zone 계약,
+  손상 세이브 정규화, 이동 0회, 파라미터 극단값 0/100·0/1000).
+- Codex 교차 리뷰: **조건부 GO → 조건 이행**. 지적 ①: `??=`는 부분 객체·NaN 누적값을 못
+  고친다(§22.18 v45가 industryDemand에서 배운 그 함정) → v49 마이그레이션이 transit을
+  기본 모양과 **필드 단위로 병합**하고(불리언은 true만 true, 카운터는 유한 safe integer
+  ≥ 0만 보존, unlockedDay만 -1 허용), longTrips·longTripTiles도 유한 정수로 정규화.
+  잠긴 세계에는 언락일이 남지 않는다. 실측 30일 soak(시드 4242): day 25 언락, 수요
+  320/300, 이벤트 1회, 왕복 고정점 유지, findNonFinite 0건.
 
 ### 20 라운드 29 — 시뮬레이션 배속 (x1/x2/x3)
 - 시간 권위 computeTarget에 speed(기본 1) 도입: target = floor((now − epoch) × speed / TICK_DURATION_MS).

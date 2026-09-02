@@ -9,6 +9,7 @@ import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
 import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 · §22.2 사망 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
+import { TILE } from './map.js';
 import { isResidence } from './map.js';
 import { learnToken as learnTokenRef } from './planning.js';
 
@@ -704,6 +705,10 @@ export function maybePromotion(world, t, emit) {
 export function zoneAllowedTypes(world) {
   const out = ['house', 'cafe', 'office', 'park'];
   for (let i = 1; i <= world.cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
+  // §19.12 기차역은 인구 등급이 아니라 **이동 수요**로 언락된다 (이슈 #52).
+  // 건설 레시피(ZONEABLE·비용·footprint)는 후속 라운드 — 그 전까지 zone 주문은
+  // 기존 'bad_type'(언락됐지만 레시피 미구현) 분기로 결정적으로 거부된다.
+  if (world.transit?.stationUnlocked) out.push('train_station');
   return out;
 }
 
@@ -723,6 +728,59 @@ export function maybeBuyCar(world, sim, t, emit) {
   world.externalOutflow = (world.externalOutflow ?? 0) + (T.carPrice - acqTax);
   emit('car_bought', sim.id, { price: T.carPrice, longTrips: sim.longTrips, balance: sim.money });
   recordFact(sim, t, world.logic, 'milestone', { tags: ['car'] });
+}
+
+// §19.12 (이슈 #52) 기차역 언락 판정 — 일일 평가에서 호출. RNG 미소비, 정수 산술만.
+//
+// stationDemand는 지금까지 파라미터로만 존재했고 아무도 Σ longTrips와 비교하지 않았다.
+// 여기서 세계가 스스로 판정한다: longTrips 누적·차 보유율·이동 거리 분포를
+// **결정적으로** 집계해 충족도 %를 상태로 남기고, 문턱을 넘으면 1회성
+// station_unlocked 이벤트를 낸다. 건물은 짓지 않는다(§22.18 — 산업은 필요에서 자란다).
+//
+// 수식 (전부 floorDiv 정수식, 심별 항이 독립이라 순회 순서 무관):
+//   weightedTrips  = Σ (hasCar ? floorDiv(longTrips × stationCarOwnerPct, 100) : longTrips)
+//   distFactorPct  = avgTripTiles ≥ stationDistBoostMin ? 100 + stationDistBoostPct : 100
+//   demand         = floorDiv(weightedTrips × distFactorPct, 100)
+//   fulfillmentPct = floorDiv(demand × 100, stationDemand)   ← 이분 컷 대신 %를 상태로
+//   demand ≥ stationDemand → 언락 (비가역)
+//
+// 차 보유 할인의 근거: 4단계 모델의 수단 선택 — 이미 수단이 있는 이동은 철도 수요로
+// 온전히 세지 않는다(0도 아니다 — 경쟁이지 소멸이 아니다). 거리 가중의 근거: 평균
+// 장거리 칸수가 longTripMin을 크게 넘으면 철도의 경쟁 구간이다(수단 분담 대 거리).
+// OpenTTD 역 등급과 같은 방향 — 역이 수요를 만드는 게 아니라 수요가 역의 근거가 된다.
+// Duranton & Turner 제약: 여기서는 측정과 언락만 한다. 역이 혼잡을 풀어준다고
+// 가정하지 않으며, 유발 수요 계측은 #48 동반 과제다.
+export function evalStationDemand(world, t, emit) {
+  const T = world.logic.transport;
+  const tr = world.transit;
+  const day = floorDiv(t, 1440);
+  let total = 0; let tiles = 0; let cars = 0; let weighted = 0;
+  for (const sim of world.sims) { // 합산만 하므로 순서 무관 — 관례상 배열 순(id asc)
+    const trips = sim.longTrips ?? 0;
+    total += trips;
+    tiles += sim.longTripTiles ?? 0;
+    if (sim.hasCar) { cars++; weighted += floorDiv(trips * T.stationCarOwnerPct, 100); }
+    else weighted += trips;
+  }
+  const avgTiles = total > 0 ? floorDiv(tiles, total) : 0;
+  const distFactorPct = avgTiles >= T.stationDistBoostMin ? 100 + T.stationDistBoostPct : 100;
+  const demand = floorDiv(weighted * distFactorPct, 100);
+  tr.totalLongTrips = total;
+  tr.carsOwned = cars;
+  tr.avgTripTiles = avgTiles;
+  tr.weightedTrips = weighted;
+  tr.demand = demand;
+  // 상한 없음: trips ≤ 경과틱×인구라 ×100해도 2^53에 한참 못 미친다 (validateLogic이
+  // stationDemand ≥ 1을 보장하므로 0 나눗셈 없음).
+  tr.fulfillmentPct = floorDiv(demand * 100, T.stationDemand);
+  if (!tr.stationUnlocked && demand >= T.stationDemand) {
+    tr.stationUnlocked = true; // 비가역 — cityTier 승급과 같은 계약
+    tr.unlockedDay = day;
+    emit('station_unlocked', null, {
+      day, demand, threshold: T.stationDemand, fulfillmentPct: tr.fulfillmentPct,
+      totalLongTrips: total, weightedTrips: weighted, carsOwned: cars, avgTripTiles: avgTiles,
+    });
+  }
 }
 
 // ---- §19.5 시민 불만 → 집단 청원 (Granovetter 문턱 모델, Codex 70차 조건 반영) ----
@@ -947,6 +1005,75 @@ export function maybeFiscalReview(world, t, day, emit) {
     campaign: campaignStart, // Rogoff 순환 관측용
   });
   recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', reason] });
+}
+
+// ---- §22.26 공공사업 — 사람들이 걷는 길을 정부가 포장한다 (사용자 지시) ----
+//
+// "도로나 광장등은 정부에서 국고를 써서 해야겠지. 국고가 충분할 때 마을을 성장시키기
+// 위한 도구로 사용한다." — 대상 선정이 핵심이다: 정부는 **어디를 포장할지 모른다.**
+// 아는 것은 세계뿐이다 — world.wear가 발자국의 지도다. 마모가 자연 도로화 임계의
+// 절반을 넘은 자리만 포장한다. 아무도 걷지 않는 곳은 절대 포장하지 않는다 —
+// 수요를 창조하지 않고 창발을 증폭한다(§0.1). 현실의 desire path 포장 관행 그대로다.
+//
+// 즉시 도로화는 §22.23("단숨에 안 된다")과 충돌하지 않는다(120차 ①): 마모 수백
+// 발자국이 이미 공기(工期)였다 — 포장은 그 마지막 한 걸음이다.
+// Rogoff 1990 정합: 투자는 선거 앞에서 미뤄진다 — 유세 기간에는 발화하지 않는다
+// (§22.22의 유세일 '보이는 지출' 편향과 대칭).
+//
+// 회계(120차 ④): construct 노동이 무급이므로 포장비 전액을 externalOutflow로 기록
+// (자재를 마을 밖에서 산다). 국고만 깎고 기록하지 않으면 G1 보존식이 깨진다.
+// 공채로는 포장하지 않는다 — 부채는 임금 보장 전용이다(사용자: "국고가 충분할 때").
+export function maybePublicWorks(world, t, day, emit) {
+  const P = world.logic.publicWorks;
+  const E = world.logic.election;
+  if (P.paveMaxPerDay === 0 || P.paveCostPerTile === 0) return; // A/B 스위치
+  if (world.mayorId === null) return;
+  if (world.lastPublicWorksDay === day) return;
+  if (day % E.intervalDays === 0) return; // 선거일
+  // 유세 기간 스킵 — 재임자는 선거 앞에서 투자를 미룬다 (Rogoff)
+  const tillElection = E.intervalDays - (day % E.intervalDays);
+  if (tillElection <= E.campaignDays) return;
+  if (day % world.logic.fiscal.reviewIntervalDays !== 0) return; // 재정 리뷰와 같은 주기
+  const mayor = world.sims.find((s) => s.id === world.mayorId);
+  if (!mayor || mayor.isPlayer) return; // 플레이어 시장은 직접 통치한다
+  // 국고가 충분할 때만 — §22.20·§22.22와 같은 기준을 본다
+  const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
+  if (world.treasury <= floorDiv(cashTotal * E.hoardRatioPct, 100)) return;
+  world.lastPublicWorksDay = day;
+
+  // 후보: 마모가 임계의 pavePickPct% 이상인 타일. Object 키 순서에 기대지 않는다
+  // (120차 ⑤) — 정수 검증 후 (wear desc, index asc)로 완전 순서를 강제한다.
+  const threshold = floorDiv(world.logic.build.wearThreshold * P.pavePickPct, 100);
+  const cands = [];
+  for (const [k, v] of Object.entries(world.wear ?? {})) {
+    const idx = Number(k);
+    if (!Number.isSafeInteger(idx) || !Number.isSafeInteger(v)) continue;
+    if (v >= threshold) cands.push([idx, v]);
+  }
+  cands.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]));
+
+  const paved = [];
+  let stale = 0;
+  for (const [idx] of cands) {
+    // 이미 변한 칸(자연 도로화 등)의 낡은 마모는 **비용·상한과 무관하게** 정리한다
+    // (121차 ②) — 비용 검사 뒤에 두면 국고가 마른 날의 stale 엔트리가 다음 리뷰까지
+    // 남고, remainingCandidates가 실제 미처리 수와 어긋난다.
+    if (world.map.tiles[idx] !== TILE.GRASS) { delete world.wear[idx]; stale++; continue; }
+    if (paved.length >= P.paveMaxPerDay) continue; // 포장은 상한까지, 정리는 끝까지
+    if (world.treasury - P.paveCostPerTile <= 0) continue; // 공채로 포장하지 않는다
+    world.treasury -= P.paveCostPerTile;
+    world.externalOutflow = (world.externalOutflow ?? 0) + P.paveCostPerTile;
+    world.map.tiles[idx] = TILE.ROAD; // road_formed와 동일한 효과
+    delete world.wear[idx];
+    paved.push(idx);
+  }
+  if (paved.length === 0) return;
+  emit('public_works', world.mayorId, {
+    kind: 'pave', tiles: paved, cost: paved.length * P.paveCostPerTile,
+    treasury: world.treasury,
+    remainingCandidates: cands.length - paved.length - stale, // 실제 미처리 후보 수 (121차 ②)
+  });
+  recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', 'public_works'] });
 }
 
 // ---- §21.3 전직 — 손님은 있는데 일할 사람이 없다 (이슈 #63, 사용자 규칙 §0.1) ----
