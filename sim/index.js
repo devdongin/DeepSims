@@ -3,7 +3,7 @@ export { DEFAULT_LOGIC, validateLogic, logicHash } from './logic.js';
 export { migrateWorld } from './migrate.js';
 export { generateTraits, validateTraits, mbtiString, OCCUPATIONS, GENDERS } from './traits.js';
 export { tick, advance } from './tick.js';
-export { serialize, deserialize, hashWorld, fnv1a } from './serialize.js';
+export { serialize, deserialize, hashWorld, fnv1a, findNonFinite } from './serialize.js';
 export { computeTarget } from './time.js';
 export { buildMap, isWalkable, TILE, MAP_W, MAP_H } from './map.js';
 export { bfsPath, manhattan } from './pathfind.js';

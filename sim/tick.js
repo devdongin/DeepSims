@@ -507,6 +507,12 @@ function applyCreatePlayer(world, inp, t, emit) {
     lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
     knownTokens: [], plan: null, lastPlannedDay: -1,
     hangoverUntil: -1, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
+    // §22.13 이 두 필드가 없어서 결정성 계약이 깨져 있었다 (플레이테스트 S2-1).
+    // 이민자(society.js)와 신생아는 설정하는데 플레이어만 빠져 있었다. groceries가
+    // 없으면 `sim.groceries + n`이 NaN이 되고, NaN은 serialize에서 null이 되므로
+    // **서버 재시작이 세계를 바꾼다**. 게다가 `NaN < 1`이 false라 장보기 게이트가
+    // 항상 열려 플레이어만 장바구니 없이 무한히 집밥을 먹었다.
+    groceries: 0, sick: null,
   };
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
@@ -709,7 +715,7 @@ export function tick(world, inputsForThisTick = []) {
         for (const p of [a, b]) {
           if (p.invitedTo && p.invitedTo.untilTick > t && p.invitedTo.facilityId === facId) {
             emit('invite_fulfilled', p.id, { facilityId: facId, withSimId: p === a ? b.id : a.id });
-            p.invitedTo = undefined;
+            p.invitedTo = null; // §22.13 undefined는 직렬화가 삼켜 왕복이 고정점이 아니다
           }
         }
         // §17.8 페어링 서브순서: ① 전파 → ② 전염 → ③ 대화(험담 영향 포함) → ④ 델타
@@ -1060,7 +1066,7 @@ export function tick(world, inputsForThisTick = []) {
         for (const sim of world.sims) {
           if (sim.invitedTo && sim.invitedTo.untilTick <= t) {
             emit('invite_expired', sim.id, { facilityId: sim.invitedTo.facilityId });
-            sim.invitedTo = undefined;
+            sim.invitedTo = null; // §22.13 위와 같은 이유
           }
         }
         remitPublicRevenue(world, t, emit);
