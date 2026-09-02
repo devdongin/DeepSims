@@ -256,3 +256,56 @@ test('QA-15. §22.35 가족 대화 표가 [발화, 응답] 짝으로만 이뤄�
     });
   }
 });
+
+// §22.36 스프라이트가 심의 성별·나이와 모순되지 않는다 (사용자 지적).
+//
+// 예전 archOf는 직업만 보고 traits.gender·traits.age를 아예 읽지 않았다. 서버는
+// 그 둘을 이미 보내고 있었는데(server/view.js) 클라가 안 쓴 것이다. 제복 스프라이트는
+// 성별이 하나씩뿐이라(경찰·의사·교사·요리사 여성, 소방관·점원·노동자 남성) 직업만
+// 보면 반드시 절반이 어긋난다 — 라이브 104명 중 39명(36%)이 반대 성별이었고,
+// 87세가 청년으로 그려졌다.
+//
+// 여기서 고정하는 것은 **영구 불변식**이다: 나이대는 언제나 맞아야 하고, 성인은
+// 성별이 모순되면 안 된다. (노년 여성·여아 스프라이트는 아직 없어서 그 둘만 예외이고,
+// 에셋이 생기면 이 테스트를 건드리지 않고도 저절로 만족된다.)
+test('QA-16. §22.36 스프라이트가 성별·나이와 모순되지 않는다', async () => {
+  const { OCCUPATIONS } = await import('../sim/traits.js');
+  const grabConst = (n) => {
+    const i = CLIENT.indexOf(`const ${n} = {`);
+    assert.ok(i > 0, `${n}을 찾지 못했다`);
+    let d = 0;
+    for (let k = CLIENT.indexOf('{', i); k < CLIENT.length; k++) {
+      if (CLIENT[k] === '{') d++;
+      else if (CLIENT[k] === '}') { d--; if (d === 0) return CLIENT.slice(i, k + 2); }
+    }
+    return null;
+  };
+  const m = CLIENT.match(/function archOf\(sim\) \{[\s\S]*?\n\}/);
+  assert.ok(m, 'archOf를 찾지 못했다');
+  const src = grabConst('ARCH_OF_OCCUPATION') + grabConst('ARCH_LOOK') + grabConst('GENERIC_ARCH')
+    + 'const GENERIC_ARCH_ANY=[...GENERIC_ARCH.M,...GENERIC_ARCH.F];'
+    + 'const CHILD_MAX_AGE=15,OLD_MIN_AGE=65;';
+  const { archOf, ARCH_LOOK } = new Function(`${src}${m[0]}; return {archOf, ARCH_LOOK};`)();
+
+  const band = (age) => (age < 15 ? 'child' : age >= 65 ? 'old' : 'adult');
+  const ageBad = [];
+  const genderBad = [];
+  for (const occupation of OCCUPATIONS) {
+    for (const gender of ['F', 'M', 'X']) {
+      for (const age of [3, 10, 16, 30, 45, 64, 66, 80]) {
+        for (const id of [0, 1, 2, 7]) {
+          const look = ARCH_LOOK[archOf({ id, traits: { gender, age, occupation } })];
+          assert.ok(look, `원형에 ARCH_LOOK 항목이 없다 (${occupation}/${gender}/${age})`);
+          if (look.band !== band(age)) ageBad.push(`${occupation}/${gender}/${age}세→${look.band}`);
+          // 성인 구간에서 성별이 정면으로 모순되면 안 된다 (X는 모순 대상이 아니다)
+          const contradicts = (gender === 'F' && look.g === 'M') || (gender === 'M' && look.g === 'F');
+          if (band(age) === 'adult' && contradicts) {
+            genderBad.push(`${occupation}/${gender}/${age}세`);
+          }
+        }
+      }
+    }
+  }
+  assert.deepEqual(ageBad.slice(0, 5), [], `나이대가 어긋난다 (${ageBad.length}건)`);
+  assert.deepEqual(genderBad.slice(0, 5), [], `성인의 성별이 모순된다 (${genderBad.length}건)`);
+});

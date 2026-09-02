@@ -46,6 +46,40 @@ const ARCH_OF_OCCUPATION = {
   // §22.5 새 직군 — 매핑이 없으면 id%10으로 떨어져 **아이가 어른 모습으로** 보였다.
   child: 10, chef: 11, clerk: 12, worker: 13,
 };
+
+// §22.36 **스프라이트가 실제로 무엇을 그리는지** (에셋 육안 확인).
+// 이 표가 없어서 archOf가 직업만 보고 성별·나이를 무시했다 — 라이브 100명 중
+// 30명이 반대 성별로, 8명이 다른 나이대로 그려지고 있었다(사용자 지적).
+// 제복 스프라이트는 성별이 하나씩뿐이라(경찰·의사·간호사·교사·요리사는 여성만,
+// 소방관·점원·노동자·바리스타는 남성만) 직업만 보면 반드시 절반이 어긋난다.
+const ARCH_LOOK = {
+  0: { g: 'F', band: 'adult' },   // 정장 블라우스 + 가방
+  1: { g: 'M', band: 'adult' },   // 양복 + 백팩
+  2: { g: 'M', band: 'adult' },   // 앞치마 (바리스타)
+  3: { g: 'M', band: 'adult' },   // 재킷 차림
+  4: { g: 'M', band: 'old' },     // **유일한 노인** — 백발·안경·지팡이
+  5: { g: 'F', band: 'adult' },   // 흰 가운 + 청진기
+  6: { g: 'F', band: 'adult' },   // 안경 + 서류 (교사)
+  7: { g: 'F', band: 'adult' },   // 경찰 제복
+  8: { g: 'M', band: 'adult' },   // 소방 방화복
+  9: { g: 'M', band: 'adult' },   // 밀짚모자 + 멜빵
+  10: { g: 'M', band: 'child' },  // **유일한 아이** — 남아
+  11: { g: 'F', band: 'adult' },  // 조리모 (요리사)
+  12: { g: 'M', band: 'adult' },  // 조끼 (점원)
+  13: { g: 'M', band: 'adult' },  // 안전모 + 작업복
+};
+// 제복이 없는 평상복 원형. 성별이 맞는 직업 스프라이트가 없을 때 여기로 떨어진다.
+// **여성 평상복이 하나뿐**이라 제복 없는 여성이 다 같아 보인다 — 에셋 부족이고,
+// 반대 성별로 그리는 것보다는 낫다는 판단이다 (§22.36).
+const GENERIC_ARCH = { M: [1, 3], F: [0] };
+// 이 세계의 성별은 셋이다: sim/traits.js의 GENDERS = ['F','M','X'], 각 1/3씩 균등.
+// 라이브 104명 중 X가 28명이라 **X를 남성으로 몰면 그것대로 4분의 1이 어긋난다.**
+// X는 '지정 없음'이고(정보판도 이미 '-'로 표시한다) 어떤 스프라이트와도 모순되지
+// 않으므로, 제복도 평상복도 양쪽을 다 쓴다.
+const GENERIC_ARCH_ANY = [...GENERIC_ARCH.M, ...GENERIC_ARCH.F];
+// 나이대 경계는 시뮬의 상수를 따른다: child 직업은 age < 15, society.retireAge = 65.
+const CHILD_MAX_AGE = 15;
+const OLD_MIN_AGE = 65;
 // 심 스프라이트 일괄 폐기 — stopTimer 콜백이 폐기된 body를 만지지 않도록 함께 정리 (Codex 37차)
 function destroySimSprites() {
   simSprites.forEach((s) => {
@@ -62,10 +96,36 @@ function destroySimSprites() {
 // §17.19 내부 모드: 열려 있는 시설 id — 건물 클릭으로 토글, 지붕이 걷히고 내부·심이 보인다
 const interiorOpen = new Set();
 
+// §22.36 스프라이트 고르기 — **나이대 → 성별 → 직업** 순서다.
+//
+// 예전에는 직업만 봤고 traits.gender·traits.age를 아예 읽지 않았다. 서버는 그 둘을
+// 이미 보내주고 있었는데(server/view.js) 클라가 쓰지 않은 것이다. 결과:
+//   · 남자 교사가 여자로, 여자 사무원이 남자로 — 100명 중 30명이 반대 성별
+//   · 87세 프리랜서가 청년 모습으로 — 은퇴자만 노인으로 보였다
+//   · freelancer는 ARCH_OF_OCCUPATION에 아예 없어 id%10으로 떨어졌다 → 성별 무작위
+//
+// 우선순위를 이렇게 둔 이유: 87세를 청년으로 그리는 어긋남이 제복을 잃는 것보다 크고,
+// 성별이 틀린 것은 그보다도 더 크게 어긋난다. 제복은 마지막에 맞출 수 있으면 맞춘다.
 function archOf(sim) {
   if (sim.isPlayer) return 'p';
-  const m = ARCH_OF_OCCUPATION[sim.traits?.occupation];
-  return m !== undefined ? m : sim.id % 10;
+  const tr = sim.traits ?? {};
+  // 'X'(지정 없음)와 미상은 null로 둔다 — 남성으로 몰지 않는다.
+  const g = (tr.gender === 'F' || tr.gender === 'M') ? tr.gender : null;
+  const age = Number.isFinite(tr.age) ? tr.age : 30;
+
+  // ① 나이대. 아이·노인 원형은 각각 하나뿐이라 성별을 맞출 수가 없다 —
+  //    여자 노인과 여자 아이 스프라이트가 아직 없다(에셋 과제, §22.36).
+  if (age < CHILD_MAX_AGE) return 10;
+  if (age >= OLD_MIN_AGE) return 4;
+
+  // ② 직업 제복은 **성별이 어긋나지 않을 때만** 쓴다. X는 어긋날 것이 없으므로 다 쓴다.
+  const occ = ARCH_OF_OCCUPATION[tr.occupation];
+  const look = ARCH_LOOK[occ];
+  if (look !== undefined && look.band === 'adult' && (g === null || look.g === g)) return occ;
+
+  // ③ 평상복. id로 갈라 같은 성별끼리도 조금은 달라 보이게 한다.
+  const pool = g === null ? GENERIC_ARCH_ANY : GENERIC_ARCH[g];
+  return pool[sim.id % pool.length];
 }
 // §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
 const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
