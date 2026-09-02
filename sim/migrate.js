@@ -205,6 +205,10 @@ export function migrateWorld(world) {
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
   }
+  if (from < 42) {
+    // §22.14 동석 대화 카운터. undefined면 직렬화 왕복이 고정점이 아니게 되므로 0으로 심는다.
+    for (const sim of world.sims) if (sim.state && sim.state.sideTalkTicks === undefined) sim.state.sideTalkTicks = 0;
+  }
   if (from < 41) {
     // §22.13 플레이어 심의 groceries·sick 미초기화 복구 (플레이테스트 S2-1).
     // 살아 있는 세계에는 이미 NaN이 저장돼 null로 굳어 있거나 키가 아예 없다.

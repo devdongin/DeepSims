@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 38,
+  "logicSchemaVersion": 39,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -387,6 +387,7 @@
     "approachNeedBonusMax": 25,
     "inviteTtlTicks": 240,
     "invitePullPct": 120,
+    "sideTalkFactorPct": 30,
     "rivalStatePenalty": 200000000000,
     "reflectionMoodScale": 60,
     "habitIncrement": 10000000000,

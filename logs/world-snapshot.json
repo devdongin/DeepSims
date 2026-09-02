@@ -1,11 +1,11 @@
 {
  "_note": "개발자 저장소의 세계 상태 리포트 — GitHub Actions·리뷰 에이전트 전용. 게임은 읽지 않는다.",
- "exportedAtTick": 231901,
- "day": 161,
- "pop": 57,
- "tier": 1,
- "treasury": 1059449,
- "reputation": 500,
+ "exportedAtTick": 241732,
+ "day": 167,
+ "pop": 63,
+ "tier": 2,
+ "treasury": 1129172,
+ "reputation": 447,
  "policy": {
   "taxPct": 25,
   "welfareAmount": 550,
@@ -15,7 +15,7 @@
   "house": 30,
   "office": 3,
   "cafe": 8,
-  "park": 8,
+  "park": 11,
   "bar": 1,
   "library": 1,
   "market": 1,
@@ -29,46 +29,46 @@
   "fire_station": 1,
   "police_station": 1
  },
- "plotsFree": 54,
+ "plotsFree": 51,
  "facilityRevenue": {
-  "total": 170754,
+  "total": 243424,
   "top": [
    {
     "id": "restaurant",
     "type": "restaurant",
-    "revenue": 78800
+    "revenue": 101972
    },
    {
     "id": "cafe2",
     "type": "cafe",
-    "revenue": 38918
+    "revenue": 54518
+   },
+   {
+    "id": "hospital",
+    "type": "hospital",
+    "revenue": 27200
    },
    {
     "id": "cafe",
     "type": "cafe",
-    "revenue": 18414
+    "revenue": 19036
    },
    {
     "id": "market",
     "type": "market",
-    "revenue": 15600
+    "revenue": 13490
    },
    {
     "id": "cafe4",
     "type": "cafe",
-    "revenue": 6462
-   },
-   {
-    "id": "cafe3",
-    "type": "cafe",
-    "revenue": 4315
+    "revenue": 10862
    }
   ]
  },
  "incidents": 0,
  "transport": {
-  "carsOwned": 29,
-  "totalLongTrips": 3880,
+  "carsOwned": 32,
+  "totalLongTrips": 5159,
   "stationDemand": 300
  },
  "complaints": [
@@ -87,80 +87,66 @@
    "sinceDay": 132
   },
   {
-   "count": 4,
-   "kind": "lonely",
-   "placeId": "park1",
-   "severity": 3,
-   "sinceDay": 132
-  },
-  {
-   "count": 14,
-   "kind": "lonely",
-   "placeId": "park2",
-   "severity": 13,
-   "sinceDay": 132
-  },
-  {
-   "count": 4,
-   "kind": "lonely",
-   "placeId": "park3",
-   "severity": 4,
-   "sinceDay": 132
-  },
-  {
    "count": 1,
    "kind": "lonely",
-   "placeId": "cafe1",
+   "placeId": "park1",
    "severity": 0,
    "sinceDay": 132
   },
   {
    "count": 12,
    "kind": "lonely",
-   "placeId": "cafe",
-   "severity": 10,
+   "placeId": "park2",
+   "severity": 11,
    "sinceDay": 132
   },
   {
-   "count": 11,
+   "count": 2,
+   "kind": "lonely",
+   "placeId": "park3",
+   "severity": 2,
+   "sinceDay": 132
+  },
+  {
+   "count": 21,
+   "kind": "lonely",
+   "placeId": "cafe",
+   "severity": 20,
+   "sinceDay": 132
+  },
+  {
+   "count": 18,
    "kind": "lonely",
    "placeId": "cafe4",
-   "severity": 10,
+   "severity": 18,
    "sinceDay": 132
   },
   {
-   "count": 12,
+   "count": 17,
    "kind": "hungry",
    "placeId": "",
-   "severity": 12,
+   "severity": 17,
    "sinceDay": 132
   },
   {
-   "count": 29,
+   "count": 21,
    "kind": "lonely",
    "placeId": "park4",
-   "severity": 29,
+   "severity": 21,
    "sinceDay": 132
   },
   {
-   "count": 310,
+   "count": 359,
    "kind": "no_money",
    "placeId": "eat",
-   "severity": 87,
+   "severity": 100,
    "sinceDay": 137
   },
   {
-   "count": 1,
-   "kind": "lonely",
-   "placeId": "cafe5",
-   "severity": 1,
-   "sinceDay": 144
-  },
-  {
-   "count": 4,
+   "count": 8,
    "kind": "lonely",
    "placeId": "cafe7",
-   "severity": 4,
+   "severity": 8,
    "sinceDay": 153
   },
   {
@@ -169,69 +155,44 @@
    "placeId": "park7",
    "severity": 53,
    "sinceDay": 154
+  },
+  {
+   "count": 4,
+   "kind": "lonely",
+   "placeId": "park5",
+   "severity": 4,
+   "sinceDay": 161
+  },
+  {
+   "count": 9,
+   "kind": "lonely",
+   "placeId": "park8",
+   "severity": 9,
+   "sinceDay": 163
+  },
+  {
+   "count": 1,
+   "kind": "lonely",
+   "placeId": "park9",
+   "severity": 1,
+   "sinceDay": 163
+  },
+  {
+   "count": 13,
+   "kind": "lonely",
+   "placeId": "cafe5",
+   "severity": 13,
+   "sinceDay": 165
+  },
+  {
+   "count": 14,
+   "kind": "lonely",
+   "placeId": "park10",
+   "severity": 14,
+   "sinceDay": 165
   }
  ],
  "stats14": [
-  {
-   "avgMood": 141,
-   "day": 148,
-   "employed": 31,
-   "incidents": 0,
-   "pop": 46,
-   "reputation": 285,
-   "tier": 1,
-   "treasury": 479126
-  },
-  {
-   "avgMood": 41,
-   "day": 149,
-   "employed": 31,
-   "incidents": 0,
-   "pop": 46,
-   "reputation": 272,
-   "tier": 1,
-   "treasury": 494963
-  },
-  {
-   "avgMood": 95,
-   "day": 150,
-   "employed": 31,
-   "incidents": 0,
-   "pop": 51,
-   "reputation": 258,
-   "tier": 1,
-   "treasury": 509161
-  },
-  {
-   "avgMood": 205,
-   "day": 151,
-   "employed": 31,
-   "incidents": 0,
-   "pop": 51,
-   "reputation": 465,
-   "tier": 1,
-   "treasury": 521188
-  },
-  {
-   "avgMood": -45,
-   "day": 152,
-   "employed": 31,
-   "incidents": 0,
-   "pop": 51,
-   "reputation": 469,
-   "tier": 1,
-   "treasury": 535032
-  },
-  {
-   "avgMood": -52,
-   "day": 153,
-   "employed": 33,
-   "incidents": 0,
-   "pop": 53,
-   "reputation": 469,
-   "tier": 1,
-   "treasury": 539875
-  },
   {
    "avgMood": 29,
    "day": 154,
@@ -311,56 +272,120 @@
    "reputation": 475,
    "tier": 1,
    "treasury": 1059163
+  },
+  {
+   "avgMood": 1172,
+   "day": 162,
+   "employed": 41,
+   "incidents": 0,
+   "pop": 61,
+   "reputation": 475,
+   "tier": 2,
+   "treasury": 1058438
+  },
+  {
+   "avgMood": 195,
+   "day": 163,
+   "employed": 41,
+   "incidents": 0,
+   "pop": 61,
+   "reputation": 475,
+   "tier": 2,
+   "treasury": 1073020
+  },
+  {
+   "avgMood": 24,
+   "day": 164,
+   "employed": 41,
+   "incidents": 0,
+   "pop": 61,
+   "reputation": 456,
+   "tier": 2,
+   "treasury": 1090538
+  },
+  {
+   "avgMood": 26,
+   "day": 165,
+   "employed": 43,
+   "incidents": 0,
+   "pop": 63,
+   "reputation": 475,
+   "tier": 2,
+   "treasury": 1102703
+  },
+  {
+   "avgMood": 23,
+   "day": 166,
+   "employed": 43,
+   "incidents": 0,
+   "pop": 63,
+   "reputation": 465,
+   "tier": 2,
+   "treasury": 1104176
+  },
+  {
+   "avgMood": -44,
+   "day": 167,
+   "employed": 43,
+   "incidents": 0,
+   "pop": 63,
+   "reputation": 446,
+   "tier": 2,
+   "treasury": 1135342
   }
  ],
  "events7d": [
   {
    "type": "action_started",
-   "n": 4524
+   "n": 5059
   },
   {
    "type": "action_completed",
-   "n": 4147
+   "n": 4538
   },
   {
    "type": "conversation",
-   "n": 3317
+   "n": 3816
   },
   {
    "type": "money_changed",
-   "n": 1266
+   "n": 1360
   },
   {
    "type": "greeting",
-   "n": 627
+   "n": 804
   },
   {
    "type": "lonely",
-   "n": 373
-  },
-  {
-   "type": "relationship_changed",
-   "n": 328
+   "n": 515
   },
   {
    "type": "fell_sick",
-   "n": 326
+   "n": 355
   },
   {
    "type": "recovered",
-   "n": 322
+   "n": 352
   },
   {
-   "type": "road_formed",
-   "n": 47
+   "type": "relationship_changed",
+   "n": 340
   },
   {
    "type": "invite_declined",
-   "n": 43
+   "n": 185
   },
   {
    "type": "invited",
-   "n": 36
+   "n": 91
+  },
+  {
+   "type": "invite_fulfilled",
+   "n": 67
+  },
+  {
+   "type": "road_formed",
+   "n": 39
   },
   {
    "type": "welfare_paid",
@@ -368,23 +393,27 @@
   },
   {
    "type": "fish_caught",
-   "n": 32
+   "n": 33
   },
   {
    "type": "money_shared",
    "n": 30
   },
   {
-   "type": "invite_fulfilled",
-   "n": 29
+   "type": "starving",
+   "n": 25
   },
   {
-   "type": "starving",
-   "n": 24
+   "type": "wage_shortfall",
+   "n": 22
+  },
+  {
+   "type": "invite_expired",
+   "n": 17
   },
   {
    "type": "item_spawned",
-   "n": 11
+   "n": 9
   },
   {
    "type": "item_found",
@@ -395,15 +424,27 @@
    "n": 7
   },
   {
+   "type": "public_revenue_remitted",
+   "n": 7
+  },
+  {
+   "type": "item_returned",
+   "n": 7
+  },
+  {
+   "type": "moved_home",
+   "n": 6
+  },
+  {
+   "type": "immigrated",
+   "n": 6
+  },
+  {
    "type": "item_reported",
-   "n": 6
+   "n": 5
   },
   {
-   "type": "invite_expired",
-   "n": 6
-  },
-  {
-   "type": "wage_shortfall",
+   "type": "gathering",
    "n": 5
   },
   {
@@ -411,19 +452,7 @@
    "n": 4
   },
   {
-   "type": "public_revenue_remitted",
-   "n": 4
-  },
-  {
-   "type": "moved_home",
-   "n": 4
-  },
-  {
-   "type": "immigrated",
-   "n": 4
-  },
-  {
-   "type": "gathering",
+   "type": "facility_built",
    "n": 4
   },
   {
@@ -431,7 +460,7 @@
    "n": 3
   },
   {
-   "type": "facility_built",
+   "type": "car_bought",
    "n": 3
   },
   {
@@ -443,37 +472,25 @@
    "n": 2
   },
   {
-   "type": "item_returned",
-   "n": 2
-  },
-  {
-   "type": "job_changed",
+   "type": "logic_changed",
    "n": 1
   },
   {
-   "type": "heroic_save",
+   "type": "election",
    "n": 1
   },
   {
-   "type": "fire_started",
-   "n": 1
-  },
-  {
-   "type": "fire_out",
-   "n": 1
-  },
-  {
-   "type": "car_bought",
+   "type": "city_promoted",
    "n": 1
   }
  ],
  "topFails7d": [],
  "wageShortfall7d": {
-  "count": 5,
-  "total": 4593
+  "count": 22,
+  "total": 18264
  },
  "hungerNow": {
   "atZero": 6,
-  "belowCritical": 9
+  "belowCritical": 10
  }
 }

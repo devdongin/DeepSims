@@ -435,7 +435,8 @@ function startAction(world, sim, cand, t, emit, reason) {
 }
 
 function emptyState() {
-  return { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 };
+  // §22.14 sideTalkTicks: 옆 사람과 말이 트인 횟수. undefined면 직렬화 왕복이 깨지므로 0으로 둔다.
+  return { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0, sideTalkTicks: 0 };
 }
 
 function startIdle(sim, L, emit) {
@@ -754,7 +755,8 @@ export function tick(world, inputsForThisTick = []) {
 
   // §22.6 먼저 말 걸기 (이슈 #69) — 페어링이 끝난 뒤, 혼자 남은 심이 옆 사람에게 청한다.
   // 페어링 다음에 두는 이유: 누가 혼자인지 확정된 뒤라야 말을 걸 대상이 정해진다.
-  maybeApproach(world, t, floorDiv(t, 1440), emit);
+  // §22.14 승낙하면 그 자리에서 바로 말이 트인다 — pairedThisTick을 넘겨 이중 계산을 막는다.
+  const sideTalked = maybeApproach(world, t, floorDiv(t, 1440), emit, pairedThisTick);
 
   // 2c) performing 전진 + 회복 (id 오름차순)
   for (const sim of world.sims) {
@@ -764,9 +766,12 @@ export function tick(world, inputsForThisTick = []) {
     const def = L.actions[s.action];
     const need = NEED_OF_ACTION[s.action];
     if (need && def.recoverPerTick) {
-      const recovers = s.action !== 'socialize' || pairedThisTick.has(sim.id);
+      const sideOnly = s.action === 'socialize' && !pairedThisTick.has(sim.id) && sideTalked.has(sim.id);
+      const recovers = s.action !== 'socialize' || pairedThisTick.has(sim.id) || sideOnly;
       if (recovers) {
         let amt = def.recoverPerTick;
+        // §22.14 곁다리 대화는 마주 앉은 대화보다 약하다
+        if (sideOnly) amt = floorDiv(amt * L.social.sideTalkFactorPct, 100);
         // §17.5: 연인과의 수다는 더 달콤하다
         if (s.action === 'socialize' && pairedWith.get(sim.id) === world.partners[sim.id]) {
           amt = floorDiv(amt * L.romance.partnerSocialPct, 100);
@@ -914,7 +919,8 @@ export function tick(world, inputsForThisTick = []) {
         world.reputation = Math.min(L.growth.repCap, world.reputation + L.patrol.repPerPatrol);
       }
     }
-    if (s.action === 'socialize' && s.pairedTicks === 0) {
+    // §22.14 옆 사람과 말이 트였으면 헛걸음이 아니다
+    if (s.action === 'socialize' && s.pairedTicks === 0 && (s.sideTalkTicks ?? 0) === 0) {
       emit('lonely', sim.id, { facilityId: s.facilityId });
       applyMood(sim, L.mood.lonely);
       recordFact(sim, t, L, 'lonely', { placeId: s.facilityId, tags: ['socialize', `facility:${s.facilityId}`] });

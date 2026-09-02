@@ -962,7 +962,8 @@ export function remitPublicRevenue(world, t, emit) {
 // 응하면 그 자리로 마음이 기울 뿐(점수 가중), 하던 일을 강제로 끊지 않는다.
 //
 // pairHash 의사확률이라 rngSim 미소비. 인구 조작 없음. lonely 수치를 직접 깎지 않는다(§0.1).
-export function maybeApproach(world, t, day, emit) {
+export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
+  const sideTalked = new Map(); // §22.14 이번 틱에 곁다리로 말이 트인 쌍 (심당 1회)
   const S = world.logic.social;
   if (S.approachBasePct === 0) return;
   // 시설별로 '혼자 사교 중인 심'과 '사교 중이 아닌 심'을 모은다 (심 전체 1회 순회)
@@ -1009,8 +1010,34 @@ export function maybeApproach(world, t, day, emit) {
     if (accepted) {
       target.invitedTo = { facilityId: sim.state.facilityId, untilTick: t + S.inviteTtlTicks };
       emit('invited', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
+      // §22.14 동석 대화 — 승낙했으면 **지금 이 자리에서** 말이 트인다.
+      // 예전에는 invitedTo(미래 선택에 대한 가중)만 줬다. 그래서 청한 심은 그대로
+      // 혼자 socialize를 마치고 헛걸음으로 기록됐다 — 실측 헛걸음의 46.7%가
+      // 옆에 사람이 있는데도 혼자 돌아온 경우였다.
+      //
+      // 상대의 행동은 바꾸지 않는다. 밥 먹던 사람은 계속 먹고 일하던 사람은 계속 일한다.
+      // 그래서 경제·허기·예약·임금에 손대지 않는다 (Codex 106차 ④).
+      // 호감도·상호작용 행렬도 건드리지 않는다: 관계 형성은 마주 앉은 대화의 몫으로 두고,
+      // 곁다리 대화는 외로움만 던다. 같으면 '아무나 붙잡기'가 최적 전략이 된다 (106차 ③).
+      const both = pairedThisTick.has(sim.id) || pairedThisTick.has(target.id)
+        || sideTalked.has(sim.id) || sideTalked.has(target.id);
+      if (S.sideTalkFactorPct > 0 && !both) {
+        sideTalked.set(sim.id, target.id);
+        sideTalked.set(target.id, sim.id);
+        sim.state.sideTalkTicks = (sim.state.sideTalkTicks ?? 0) + 1;
+        target.state.sideTalkTicks = (target.state.sideTalkTicks ?? 0) + 1;
+        // 청한 쪽의 사교 회복은 tick의 회복 루프가 감쇠해서 처리한다(행동이 socialize라서).
+        // 상대는 행동이 다르니 여기서 직접, 같은 비율로 채운다.
+        const amt = floorDiv(world.logic.actions.socialize.recoverPerTick * S.sideTalkFactorPct, 100);
+        target.needs.social = Math.min(NEED_MAX_REF, target.needs.social + amt);
+        emit('side_talk', sim.id, { withSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
+        const fid = sim.state.facilityId;
+        recordFact(sim, t, world.logic, 'small_talk', { subjectSimId: target.id, placeId: fid, tags: ['socialize', `facility:${fid}`, `sim:${target.id}`] });
+        recordFact(target, t, world.logic, 'small_talk', { subjectSimId: sim.id, placeId: fid, tags: ['socialize', `facility:${fid}`, `sim:${sim.id}`] });
+      }
     } else {
       emit('invite_declined', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
     }
   }
+  return sideTalked;
 }

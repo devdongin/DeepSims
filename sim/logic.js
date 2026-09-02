@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 38, // §22.6 approach 추가 (먼저 말 거는 행동 — 이슈 #69)
+  logicSchemaVersion: 39, // §22.14 동석 대화 (헛걸음의 46.7%는 옆에 사람이 있었다)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -159,6 +159,12 @@ export const DEFAULT_LOGIC = {
     approachNeedBonusMax: 25,         // 상대도 사교가 고플수록 잘 응한다 (결핍 비례, 이분 컷 아님)
     inviteTtlTicks: 240,              // 청을 받아들이면 이만큼 그 자리로 마음이 기운다 (4시간)
     invitePullPct: 120,               // 초대받은 곳의 사교 점수 가중 (%) — §20.3과 같은 곱셈 축
+    // §22.14 동석 대화 (로드맵 P1, #69 확장). 헛걸음 199건 표본 중 **46.7%는 같은 시설에
+    // 다른 심이 있었는데도 혼자 돌아왔다** — 시간 문제가 아니라 말을 안 트는 문제였다.
+    // 청을 받아들인 사람이 하던 일을 바꾸지 않은 채 옆에서 말을 튼다. 식사·근무가
+    // 끊기지 않으므로 경제·허기에 부작용이 없다. 정면 페어링보다 약하게 친다 —
+    // 곁다리 대화가 마주 앉은 대화와 같으면 '아무나 붙잡기'가 최적 전략이 된다.
+    sideTalkFactorPct: 30,            // 곁다리 대화의 사교 회복 강도 (정면 대비 %)
     rivalStatePenalty: 200000000000,  // 라이벌이 있으면 감점 (양수로 저장, 적용 시 부호)
     reflectionMoodScale: 60,          // pendingMood = clamp(Σ 부호 importance × scale, ±10000)
     habitIncrement: 10000000000,      // 회고당(=하루당) 습관 증가 상한 (PLAN §G: 1e10/일)
@@ -493,6 +499,7 @@ function checkRanges(p, errors) {
     inRange(`social.${k}`, p.social[k], 0, 100);
   }
   inRange('social.inviteTtlTicks', p.social.inviteTtlTicks, 0, 100000);
+  inRange('social.sideTalkFactorPct', p.social.sideTalkFactorPct, 0, 100);
   inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);
   inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
   inRange('sharing.needyBelow', p.sharing.needyBelow, 0, 100000);

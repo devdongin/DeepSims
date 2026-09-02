@@ -135,6 +135,11 @@ export function createWorld(seed) {
     reservations: {}, // "facilityId:resourceId" -> simId
     tokens: [],       // 활성 정보 토큰 (PLAN §F)
     tokenCounter: 0,
-    logic: DEFAULT_LOGIC,
+    // §22.14 **깊은 복사가 필요하다.** 예전에는 DEFAULT_LOGIC을 참조로 그대로 넣어서
+    // 모든 세계가 같은 logic 객체를 공유했다 — 한 세계의 값을 바꾸면 모듈 기본값과
+    // 이후 만들어지는 모든 세계가 함께 오염된다. 서버는 세계가 하나라 안 물렸지만,
+    // A/B 소크·테스트처럼 한 프로세스에서 여러 세계를 돌리면 대조군이 처치군을 오염시켜
+    // **모든 지표가 0% 변화로 나온다**. 실제로 이 절의 첫 설계를 거짓 반증할 뻔했다.
+    logic: structuredClone(DEFAULT_LOGIC),
   };
 }
