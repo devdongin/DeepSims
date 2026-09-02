@@ -13,7 +13,7 @@ import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor } from './abilities.js'; // §21.1
 import { makeSim, emptyState } from './simfactory.js';
-import { recordIndustryDemand, recordCapacityShortfall } from './industry.js';
+import { recordIndustryDemand, recordCapacityShortfall, recordIndustryWant } from './industry.js';
 import { makeAbilities } from './abilities.js';
 import { surnameFor, surnameHash } from './surnames.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
@@ -1303,6 +1303,42 @@ export function tick(world, inputsForThisTick = []) {
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });
     const best = pickBest(cands);
+
+    // §22.19 일상 수요 (이슈 #87). §22.18 원장은 **위급한 필요**에만 걸려서, 진료·독서·여가처럼
+    // 굶어 죽지는 않지만 하고 싶은 일은 영원히 잡히지 않았다 — 실측으로 병원의 진료 자리를
+    // 전부 없애고 40,000틱을 돌려도 보건업 수요가 0건이었다. 사람이 산업을 만드는 이유의
+    // 절반은 위급하지 않은 아쉬움이다.
+    //
+    // 위급 원장과 **섞지 않는다** (Codex 112차). 강도가 다른 신호다.
+    //
+    // '하고 싶었다'의 기준은 임의 문턱이 아니라 **실제로 한 일과의 비교**다:
+    // 내가 지금 하는 일보다 더 아쉬웠는데 갈 데가 없었다면 그게 일상 수요다.
+    // 그래서 문턱을 고를 필요가 없고, 욕구가 다 찬 심은 저절로 세지 않는다.
+    //
+    // 빈도가 훨씬 높으므로 **심·행동당 하루 1회**로 묶는다. 안 그러면 매 결정마다
+    // 같은 아쉬움이 다시 세어져 원장이 틱 잡음이 된다 (§22.6 approach에서 같은 실수로
+    // 거절 5,924건이 나왔다).
+    const day19 = floorDiv(t, 1440);
+    if (sim.wantDay !== day19) { sim.wantDay = day19; sim.wantedActions = []; }
+    const bestDeficit = best ? NEED_MAX - needValueFor(sim, best.action, L) : 0;
+    for (const action of ACTIONS) {
+      if (action === 'idle' || sim.wantedActions.includes(action)) continue;
+      if (cands.some((c) => c.action === action)) continue;      // 갈 곳이 있었다
+      // 자격 판정이 먼저다. actionBlockReason이 null이면 '지금 이 사람은 이걸 할 수 있고
+      // 하려는 상태'라는 뜻이다 — 아프지 않으면 see_doctor가 'healthy'로 막히고,
+      // 장바구니가 비면 cook_eat가 'no_groceries'로 막힌다.
+      if (actionBlockReason(world, sim, action, t) !== null) continue;
+      // 욕구가 있는 행동은 **실제로 한 일보다 더 아쉬웠을 때만** 센다.
+      // 욕구가 없는 행동(진료 등)은 자격이 곧 의사다 — 아픈데 갈 병원이 없으면 그게 수요다.
+      // 이 구분이 없으면 #87이 지목한 바로 그 구멍이 남는다: 병원 자리를 전부 없애도
+      // 보건업 수요가 0건이었다.
+      if (NEED_OF_ACTION[action] !== undefined
+        && NEED_MAX - needValueFor(sim, action, L) <= bestDeficit) continue;
+      const kind19 = facilityShortfallKind(world, sim, action, t);
+      if (kind19 !== 'no_facility' && kind19 !== 'capacity_full') continue;
+      sim.wantedActions.push(action); // 오늘은 이 아쉬움을 이미 셌다
+      recordIndustryWant(world, action, day19, kind19);
+    }
     if (best) {
       // §15.1.C 사고 흐름: 막힌 대안 수집 (rng 미사용, ACTIONS 순, 최대 4개)
       const chain = [];

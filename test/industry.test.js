@@ -26,6 +26,18 @@ test('I-2. 분류가 겹치지 않는다 — 시설·직업·행동이 두 산�
   }
 });
 
+test('I-3b. 실재하는 **행동**만 분류에 올라 있다', async () => {
+  // 이 검사가 없어서 Q가 존재하지 않는 행동 이름('treat', 실제로는 'see_doctor')을
+  // 쓰고 있었고, 그 탓에 병원을 통째로 지워도 보건업 수요가 **0건**이었다.
+  // 원장이 조용히 비어 있는 것은 버그가 없는 것처럼 보여서 더 위험하다.
+  const { ACTIONS } = await import('../sim/constants.js');
+  for (const s of KSIC) {
+    for (const a of s.actions) {
+      assert.ok(ACTIONS.includes(a), `${s.code}: 존재하지 않는 행동 '${a}'`);
+    }
+  }
+});
+
 test('I-3. 실재하는 직업·시설만 분류에 올라 있다', () => {
   const w = createWorld(4242);
   const facTypes = new Set(w.map.facilities.map((f) => f.type));
@@ -76,19 +88,19 @@ test('I-5. 구매력 부족은 산업 수요와 **분리**돼야 한다', () => 
   const w = createWorld(4242);
   w.complaints = [
     { kind: 'no_money', placeId: 'eat', severity: 100, sinceDay: 1, count: 415 },
-    { kind: 'no_facility', placeId: 'treat', severity: 40, sinceDay: 2, count: 7 },
+    { kind: 'no_facility', placeId: 'see_doctor', severity: 40, sinceDay: 2, count: 7 },
     { kind: 'lonely', placeId: 'park1', severity: 30, sinceDay: 3, count: 31 },
   ];
   assert.equal(purchasingPowerGap(w), 415, '구매력 부족이 따로 집계돼야 한다');
   const byCode = new Map(industryStatus(w).map((s) => [s.code, s]));
-  assert.equal(byCode.get('Q').complaintEvidence, 7, 'treat 좌절은 보건업(Q) 수요다');
+  assert.equal(byCode.get('Q').complaintEvidence, 7, 'see_doctor 좌절은 보건업(Q) 수요다');
   assert.equal(byCode.get('I').complaintEvidence, 0, '돈이 없어서 못 먹은 것은 음식점업 수요가 아니다');
 });
 
 test('I-6. 수요 원장이 결정적이고 직렬화 왕복을 견딘다', () => {
   const w = createWorld(4242);
-  recordIndustryDemand(w, 'treat', 5);
-  recordIndustryDemand(w, 'treat', 6);
+  recordIndustryDemand(w, 'see_doctor', 5);
+  recordIndustryDemand(w, 'see_doctor', 6);
   recordIndustryDemand(w, 'read', 6);
   assert.equal(w.industryDemand.Q.unmet, 2);
   assert.equal(w.industryDemand.Q.firstDay, 5);
@@ -114,7 +126,7 @@ test('I-7. 산업을 추가해도 세계 진행이 결정적이다', () => {
 
 test('I-8. 행동·시설·직업 조회가 서로 맞는다', () => {
   assert.equal(industryOfAction('eat'), 'I');
-  assert.equal(industryOfAction('treat'), 'Q');
+  assert.equal(industryOfAction('see_doctor'), 'Q');
   assert.equal(industryOfFacilityType('hospital'), 'Q');
   assert.equal(industryOfOccupation('doctor'), 'Q');
   assert.equal(industryOfAction('없는행동'), null);
@@ -275,4 +287,58 @@ test('I-16. 가상 자원을 쓰는 행동은 판정 대상이 아니다 (111차
   const w3 = createWorld(4242);
   w3.map.facilities = w3.map.facilities.filter((f) => f.type !== 'office');
   assert.equal(facilityShortfallKind(w3, office, 'work', 100), 'no_facility');
+});
+
+test('I-17. 일상 수요가 위급 원장과 따로 쌓인다 (이슈 #87)', () => {
+  // §22.18 원장은 위급한 필요(needCritical 미만)에만 걸려서, 진료처럼 굶어 죽지는 않지만
+  // 하고 싶은 일은 영원히 안 잡혔다 — 병원을 통째로 지워도 보건업 수요가 0건이었다.
+  const control = createWorld(4242);
+  advance(control, {}, 40000);
+
+  const razed = createWorld(4242);
+  razed.map.facilities = razed.map.facilities.filter((f) => f.type !== 'hospital');
+  advance(razed, {}, 40000);
+
+  const seated = createWorld(4242);
+  seated.map.facilities.find((f) => f.type === 'hospital').resources = []; // 건물은 있고 자리만 없다
+  advance(seated, {}, 40000);
+
+  const q = (w) => w.industryWant.Q ?? { noFacility: 0, capacityFull: 0 };
+  assert.equal(q(control).noFacility, 0, '병원이 멀쩡한데 부재 수요가 잡혔다');
+  assert.ok(q(razed).noFacility > 0, `병원을 철거했는데 부재 수요가 없다 (${q(razed).noFacility})`);
+  assert.equal(q(razed).capacityFull, 0, '철거를 만석으로 세면 안 된다');
+  assert.ok(q(seated).capacityFull > 0, `자리가 없는데 만석 수요가 없다 (${q(seated).capacityFull})`);
+  assert.equal(q(seated).noFacility, 0, '건물이 서 있는데 부재로 세면 안 된다');
+
+  // 위급 원장과 **섞이지 않는다**
+  assert.equal(razed.industryDemand.Q, undefined, '일상 수요가 위급 원장으로 새어 들어갔다');
+});
+
+test('I-18. 일상 수요가 심·행동당 하루 1회로 묶인다', () => {
+  // 빈도가 높아 묶지 않으면 원장이 틱 잡음이 된다 (§22.6 approach에서 같은 실수로
+  // 거절 5,924건이 나왔다).
+  const w = createWorld(4242);
+  w.map.facilities = w.map.facilities.filter((f) => f.type !== 'hospital');
+  const DAYS = 28;
+  advance(w, {}, DAYS * 1440);
+  const q = w.industryWant.Q ?? { noFacility: 0 };
+  const pop = w.sims.length;
+  assert.ok(q.noFacility <= pop * DAYS,
+    `하루 1회 상한을 넘었다: ${q.noFacility} > ${pop}명 × ${DAYS}일`);
+  // 그리고 가드가 실제로 심에 남아 있다
+  for (const s of w.sims) {
+    assert.ok(Number.isSafeInteger(s.wantDay), `심 ${s.id}에 wantDay가 없다`);
+    assert.ok(Array.isArray(s.wantedActions), `심 ${s.id}에 wantedActions가 없다`);
+  }
+});
+
+test('I-19. 일상 수요 원장도 왕복 고정점이다', () => {
+  const w = createWorld(4242);
+  w.map.facilities = w.map.facilities.filter((f) => f.type !== 'hospital');
+  advance(w, {}, 30000);
+  const w2 = deserialize(serialize(w));
+  assert.equal(hashWorld(w), hashWorld(w2));
+  advance(w, {}, 2000); advance(w2, {}, 2000);
+  assert.equal(hashWorld(w), hashWorld(w2), '왕복 뒤 세계가 갈라졌다');
+  assert.deepEqual(findNonFinite(w, 5), []);
 });

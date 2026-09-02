@@ -206,6 +206,11 @@ export function migrateWorld(world) {
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
   }
+  if (from < 46) {
+    // §22.19 일상 수요 원장 + 하루 1회 가드
+    world.industryWant ??= {};
+    for (const sim of world.sims) { sim.wantDay ??= -1; sim.wantedActions ??= []; }
+  }
   if (from < 45) {
     // §22.18 산업 수요 원장. `??=`만으로는 배열·문자열 같은 손상 값을 못 고친다
     // (109차 ⑤) — 순수 객체가 아니면 버리고 새로 만든다. 각 항목의 카운터도 검사한다.

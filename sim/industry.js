@@ -102,8 +102,11 @@ export const KSIC = [
   {
     code: 'O', nameKo: '공공행정, 국방 및 사회보장 행정',
     facilityTypes: ['city_hall', 'police_station', 'fire_station'],
-    occupations: ['civil_servant', 'police', 'firefighter', 'politician'], actions: ['patrol'],
-    note: '세금·복지·선거·치안·소방이 모두 여기 있다. 가장 두꺼운 분류다.',
+    occupations: ['civil_servant', 'police', 'firefighter', 'politician'], actions: [],
+    // 순찰·소방 대응은 ACTIONS가 아니라 work의 특수 분기이고 가상 자원을 쓴다 —
+    // 행동으로 등록하면 수요 판정이 후보 생성과 어긋난다 (이슈 #88).
+    note: '세금·복지·선거·치안·소방이 모두 여기 있다. 가장 두꺼운 분류다. '
+      + '순찰·소방은 가상 자원을 써서 수요를 판정할 수 없다 (#88).',
   },
   {
     code: 'P', nameKo: '교육 서비스업',
@@ -118,7 +121,7 @@ export const KSIC = [
   },
   {
     code: 'Q', nameKo: '보건업 및 사회복지 서비스업',
-    facilityTypes: ['hospital'], occupations: ['doctor', 'nurse'], actions: ['treat'],
+    facilityTypes: ['hospital'], occupations: ['doctor', 'nurse'], actions: ['see_doctor'],
     note: '병원이 있다. 사회복지 시설은 없고 복지는 국고 이전으로만 이뤄진다.',
   },
   {
@@ -183,6 +186,23 @@ export function recordCapacityShortfall(world, action, day) {
   const d = world.capacityShortfall;
   if (d[code] === undefined) d[code] = { full: 0, firstDay: day, lastDay: day };
   d[code].full++;
+  d[code].lastDay = day;
+  return code;
+}
+
+// 일상 수요 원장 (§22.19, 이슈 #87) — **위급 원장과 섞지 않는다.** 강도가 다른 신호다.
+// 위급 원장: 굶어 죽게 생겼는데 갈 데가 없었다.
+// 일상 원장: 지금 하는 일보다 더 하고 싶었는데 갈 데가 없었다.
+// 산업이 생기는 이유의 절반은 후자다 — 도서관도 영화관도 굶주림에서 나오지 않는다.
+export function recordIndustryWant(world, action, day, kind) {
+  const code = industryOfAction(action);
+  if (code === null) return null;
+  if (world.industryWant === undefined) world.industryWant = {};
+  const d = world.industryWant;
+  if (d[code] === undefined) d[code] = { noFacility: 0, capacityFull: 0, firstDay: day, lastDay: day };
+  if (kind === 'no_facility') d[code].noFacility++;
+  else if (kind === 'capacity_full') d[code].capacityFull++;
+  else return null;
   d[code].lastDay = day;
   return code;
 }
@@ -254,6 +274,9 @@ export function industryStatus(world) {
       participants: participantCount.get(s.code) ?? 0, // 이용자 (학생 등) — 종사자가 아니다
       directUnmet: dem?.unmet ?? 0,      // 시설이 없어서 못 했다 → 새로 지어야 한다
       capacityFull: world.capacityShortfall?.[s.code]?.full ?? 0, // 자리가 없어서 못 했다 → 키워야 한다
+      // §22.19 일상 수요 — 위급하지 않은 아쉬움. 위급 수요와 **더하지 않는다**.
+      wantNoFacility: world.industryWant?.[s.code]?.noFacility ?? 0,
+      wantCapacityFull: world.industryWant?.[s.code]?.capacityFull ?? 0,
       complaintEvidence: fromComplaints, // 세계가 불만으로 집계한 것 (같은 사건의 다른 표현일 수 있다)
       firstDay: dem?.firstDay ?? -1,
       lastDay: dem?.lastDay ?? -1,
