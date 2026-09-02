@@ -82,9 +82,16 @@ export function naturalRecovery(world, sim, t, emit) {
 // 쌓인 것 자체가 아니라 **쌓였는데 아무것도 안 한 것**이 원망의 대상이다.
 // 임기 시작 때 스냅샷한 정책과 지금을 비교한다: 세율을 내렸거나 복지를 늘렸으면
 // 대응한 것이다. 세율을 올린 것은 대응이 아니다 — 방향이 시민 반대쪽이다.
+// 반환: true=대응했다 / false=안 했다 / null=**판정 불가** (기준선 없음).
+// null과 false는 다르다 (115차 ②) — 기준선이 없는 첫 임기에 배수를 걸면 첫 시장이
+// 억울하다. 판정 불가면 배수를 걸지 않는다.
+// 의도된 의미는 "선거 시점의 최종 정책이 임기 시작보다 시민 쪽인가"다 — 임기 중
+// 감세했다가 원상복구하면 대응이 아니다(115차 ①에서 이 의미로 확정). '한 번이라도
+// 움직였는가'로 바꾸려면 이력 추적이 필요하고, 그건 원상복구 꼼수를 허용하는 것이기도
+// 해서 채택하지 않았다.
 export function policyResponded(world) {
   const base = world.termStartPolicy;
-  if (!base) return false; // 첫 임기 이전 — 기준이 없다
+  if (!base) return null; // 기준선 없음 — 무대응이 아니라 판정 불가
   const E = world.logic.economy;
   const cur = {
     taxPct: world.policy.taxPct ?? E.taxPct,
@@ -117,7 +124,8 @@ export function retrospectiveScore(world, voter, candidateId, sinceTick, L, ctx 
       ? ctx.hoarding
       : (() => {
         const cash = world.sims.reduce((n, s) => n + s.money, 0);
-        return world.treasury > floorDiv(cash * E.hoardRatioPct, 100) && !policyResponded(world);
+        // === false: 판정 불가(null)면 배수를 걸지 않는다 (115차 ②)
+        return world.treasury > floorDiv(cash * E.hoardRatioPct, 100) && policyResponded(world) === false;
       })();
     if (hoarding) bad = floorDiv(bad * E.hoardMultPct, 100);
   }
@@ -155,7 +163,8 @@ export function maybeElection(world, t, day, emit) {
   const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
   const responded = policyResponded(world);
   const ctx = {
-    hoarding: world.treasury > floorDiv(cashTotal * E.hoardRatioPct, 100) && !responded,
+    // responded === false 만 배수 대상 — null(기준선 없음)은 판정 불가라 배수 없음 (115차 ②)
+    hoarding: world.treasury > floorDiv(cashTotal * E.hoardRatioPct, 100) && responded === false,
   };
   for (const voter of world.sims) {
     let best = candidates[0];

@@ -40,6 +40,10 @@ test('E-3. 나라에 돈이 있는데 굶었다면 원망이 커진다 (사재�
   const E = w.logic.election;
   const voter = w.sims[0];
   plant(voter, 150, 'starving');
+  // 배수는 (국고>시민총현금) AND (대응 안 함=false)에만 걸린다. 기준선 없이는
+  // 판정 불가(null)라 배수가 없으므로, '아무것도 안 바꾼 임기'를 명시해 둔다.
+  w.termStartPolicy = { taxPct: 25, welfareAmount: 550, welfareThreshold: 300 };
+  w.policy = { taxPct: 25, welfareAmount: 550, welfareThreshold: 300 };
   const cash = w.sims.reduce((n, s) => n + s.money, 0);
   w.treasury = 0;
   const poorGov = retrospectiveScore(w, voter, 3, 100, w.logic);
@@ -142,10 +146,13 @@ test('E-8. 국고가 쌓여도 정책을 움직인 정부는 배수를 면한다
   assert.equal(retrospectiveScore(w, voter, 3, 100, w.logic),
     -Math.floor(E.judgeStarving * E.hoardMultPct / 100));
 
-  // ⑤ 기준선이 없으면(첫 임기 이전) 대응 판정 불가 → 배수 유지
+  // ⑤ 기준선이 없으면 **판정 불가(null)** — 무대응(false)과 다르다. 배수를 걸지 않는다.
+  // 첫 시장은 기준선이 없다는 이유로 억울하게 2배 감점을 받으면 안 된다 (115차 ②).
   w.termStartPolicy = null;
   w.policy = { taxPct: 5, welfareAmount: 900, welfareThreshold: 1500 };
-  assert.equal(policyResponded(w), false);
+  assert.equal(policyResponded(w), null);
+  assert.equal(retrospectiveScore(w, voter, 3, 100, w.logic), -E.judgeStarving,
+    '기준선이 없는데 배수가 걸렸다');
 });
 
 test('E-9. 선거가 다음 임기의 정책 기준선을 스냅샷한다', () => {
