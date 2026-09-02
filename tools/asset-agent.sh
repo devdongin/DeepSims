@@ -62,20 +62,27 @@ $INVENTORY
 $PREV
 " </dev/null 2>&1 | tee "$LOG" | tail -30
 
-# PNG만 바뀌었는지 확인 후 커밋 (코드가 바뀌었으면 되돌리고 경고)
-CHANGED=$(git status --porcelain | awk '{print $2}')
-NONPNG=$(echo "$CHANGED" | grep -v '\.png$' | grep -v '^logs/' || true)
+# PNG가 아닌 변경이 있으면 **알리기만** 한다 — 지우지 않는다.
+#
+# 예전에는 여기서 git checkout --로 되돌렸다. 그러다 실제로 사고가 났다:
+# 시작 시점엔 트리가 깨끗했지만 **Codex가 도는 동안 사람이 코드를 고쳤고**, 끝날 때
+# 그 변경을 Codex의 것으로 보고 통째로 지웠다(§22.37 수정이 그렇게 날아갔다 —
+# 사본이 없었으면 복구 못 했다). 시작 시점 검사로는 이 경쟁 상태를 막을 수 없다:
+# 이 스크립트는 몇 분씩 돌고, 그동안의 변경을 **누가 했는지 구별할 방법이 없다.**
+#
+# 그런데 되돌리기는 애초에 없어도 된다. 아래 커밋 단계가 이미 **PNG만 골라
+# add**하므로 코드 변경은 어차피 커밋되지 않는다. 되돌리기는 덤이었고, 그 덤이
+# 유일하게 파괴적인 부분이었다. 알리고 사본만 남기고, 처리는 사람이 판단한다.
+NONPNG=$(git status --porcelain | awk '{print $2}' | grep -v '\.png$' | grep -v '^logs/' || true)
 if [ -n "$NONPNG" ]; then
-  echo "⚠️ 에셋 에이전트가 코드 파일을 건드렸다 — 되돌린다: $NONPNG"
-  # 지우기 전에 사본을 남긴다. 위의 클린 트리 검사가 있어도, 파일을 되돌릴 수 없게
-  # 만드는 동작은 언제나 흔적을 남겨야 한다.
-  BK="logs/reverted-$(date +%Y%m%d-%H%M%S)"
+  BK="logs/uncommitted-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$BK"
   echo "$NONPNG" | while read -r f; do
     [ -f "$f" ] && { mkdir -p "$BK/$(dirname "$f")"; cp "$f" "$BK/$f"; }
   done
-  echo "   되돌린 내용 사본: $BK"
-  echo "$NONPNG" | xargs git checkout -- 2>/dev/null || true
+  echo "⚠️ PNG가 아닌 변경이 남아 있다 (커밋에는 안 들어간다). 사본: $BK"
+  echo "$NONPNG" | sed 's/^/     /'
+  echo "   Codex가 건드린 것일 수도, 실행 중 사람이 고친 것일 수도 있다 — 확인해라."
 fi
 PNGS=$(git status --porcelain | awk '{print $2}' | grep '\.png$' || true)
 if [ -n "$PNGS" ]; then

@@ -1555,7 +1555,13 @@ function eventText(e) {
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
-      const parts = Object.entries(e.payload.changes).map(([k, v2]) => `${ko[k] ?? k} ${e.payload.before[k]}→${v2}${k === 'taxPct' ? '%' : '원'}`);
+      // §22.37 before가 없어도 피드가 죽으면 안 된다. 시장 경로가 before를 안 싣던
+      // 동안 쌓인 과거 이벤트가 그대로 남아 있고, 여기서 예외가 나면 **그 이벤트만이
+      // 아니라 피드 렌더 전체가** 멈춘다.
+      const bf = e.payload.before ?? {};
+      const parts = Object.entries(e.payload.changes).map(([k, v2]) => (bf[k] !== undefined
+        ? `${ko[k] ?? k} ${bf[k]}→${v2}${k === 'taxPct' ? '%' : '원'}`
+        : `${ko[k] ?? k} ${v2}${k === 'taxPct' ? '%' : '원'}로`));
       return `🏛️ 시정 발표: ${parts.join(', ')}`;
     }
     case 'starving': return `⚠️ ${ga(n)} 굶고 있습니다!`;

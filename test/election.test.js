@@ -456,3 +456,37 @@ test('P-5. 공공사업이 결정적이고 왕복을 견딘다', () => {
   const w2 = deserialize(serialize(a));
   assert.equal(hashWorld(a), hashWorld(w2));
 });
+
+// §22.37 policy_changed는 어느 경로에서 나오든 before를 실어야 한다.
+//
+// 실제로 일어난 일: 플레이어 경로(sim/tick.js)는 before를 넣는데 **시장 경로만
+// 빠져 있었다.** 화면은 `e.payload.before[k]`를 무조건 읽으므로 시장이 정책을 바꿀
+// 때마다 피드 렌더러가 예외로 죽었고, 그래서 **시장의 정책 발표가 한 번도 화면에
+// 나온 적이 없다.** 라이브 DB의 policy_changed 6건이 전부 before가 없었다.
+//
+// 기존 F-1~F-5는 changes·reason만 봤기 때문에 이걸 못 잡았다. 페이로드가 화면과
+// 맺은 계약을 여기서 고정한다.
+test('F-6. §22.37 시장이 바꾼 정책도 before를 싣는다 (화면이 before를 읽는다)', () => {
+  for (const [label, setup] of [
+    ['복지 인상', (w) => {
+      const cash = w.sims.reduce((n, s) => n + s.money, 0);
+      fiscalStage(w, { treasury: cash * 3 });
+      w.sims[0].hungerZeroTicks = 100;
+    }],
+    ['긴축', (w) => { fiscalStage(w, { treasury: 1 }); }],
+  ]) {
+    const w = createWorld(4242);
+    setup(w);
+    const evs = [];
+    maybeFiscalReview(w, 5 * 1440, 5, (t2, s2, p2) => evs.push({ type: t2, payload: p2 }));
+    const pol = evs.find((e) => e.type === 'policy_changed');
+    if (!pol) continue; // 이 조건에서 시장이 움직이지 않았다면 검사할 것이 없다
+    assert.ok(pol.payload.before, `${label}: before가 없다 — 화면이 죽는다`);
+    for (const k of Object.keys(pol.payload.changes)) {
+      assert.notEqual(pol.payload.before[k], undefined,
+        `${label}: 바뀐 키 ${k}의 before가 없다`);
+      assert.notEqual(pol.payload.before[k], pol.payload.changes[k],
+        `${label}: ${k}의 before와 after가 같다 — 변경이 아니다`);
+    }
+  }
+});

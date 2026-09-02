@@ -998,9 +998,14 @@ export function maybeFiscalReview(world, t, day, emit) {
   }
   if (reason === null) return; // 현상 유지도 선택이다
 
+  // §22.37 before를 함께 싣는다. 플레이어 경로(tick.js)는 처음부터 넣고 있었는데
+  // 시장 경로만 빠져 있었고, 화면은 그걸 무조건 읽어서 **시장의 정책 발표가 한 번도
+  // 렌더된 적이 없다**(피드 렌더러가 매번 예외로 죽었다). cur가 곧 변경 전 값이다.
+  const before = {};
+  for (const k of Object.keys(changes)) before[k] = cur[k];
   world.policy = { ...world.policy, ...changes };
   emit('policy_changed', world.mayorId, {
-    source: 'mayor', reason, changes,
+    source: 'mayor', reason, changes, before,
     treasury: world.treasury, cashTotal,
     campaign: campaignStart, // Rogoff 순환 관측용
   });
