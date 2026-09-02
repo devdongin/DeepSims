@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 40,
+  "logicSchemaVersion": 41,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -345,7 +345,9 @@
       "celebration": 7,
       "milestone": 7,
       "unmet": 6,
-      "welfare": 6
+      "welfare": 6,
+      "helped": 5,
+      "was_helped": 6
     },
     "recencyLut": [
       1000,
@@ -389,6 +391,11 @@
     "inviteTtlTicks": 240,
     "invitePullPct": 120,
     "sideTalkFactorPct": 30,
+    "helpAcceptBonusPct": 25,
+    "helpGiverSocialPct": 100,
+    "helpGratitudeAffinity": 300,
+    "helpMoodGiver": 40,
+    "helpMoodTaker": 60,
     "rivalStatePenalty": 200000000000,
     "reflectionMoodScale": 60,
     "habitIncrement": 10000000000,

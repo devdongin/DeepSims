@@ -1120,6 +1120,14 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
     else if (tier === 'rival') continue; // 사이가 나쁘면 말을 걸지 않는다
     const deficit = NEED_MAX_REF - Math.min(NEED_MAX_REF, target.needs.social);
     pct += floorDiv(deficit * S.approachNeedBonusMax, NEED_MAX_REF);
+    // §22.21 상대가 곤경이면 수다가 아니라 **챙김**이 된다 (이슈 #69, KIND RCT).
+    // 곤경 = 아프거나, 허기가 위급하거나, 복지 문턱 아래로 가난하거나.
+    // 사람은 챙김을 수다보다 잘 받는다 — 승낙 확률이 오른다.
+    const w2 = world.logic.economy;
+    const distress = target.sick !== null
+      || target.needs.hunger < world.logic.needCritical
+      || target.money < (world.policy.welfareThreshold ?? w2.welfareThreshold);
+    if (distress) pct += S.helpAcceptBonusPct;
     const accepted = pairHash(sim.id, target.id, day, 83) < Math.min(100, pct);
     if (accepted) {
       target.invitedTo = { facilityId: sim.state.facilityId, untilTick: t + S.inviteTtlTicks };
@@ -1144,10 +1152,28 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
         // 상대는 행동이 다르니 여기서 직접, 같은 비율로 채운다.
         const amt = floorDiv(world.logic.actions.socialize.recoverPerTick * S.sideTalkFactorPct, 100);
         target.needs.social = Math.min(NEED_MAX_REF, target.needs.social + amt);
-        emit('side_talk', sim.id, { withSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
         const fid = sim.state.facilityId;
-        recordFact(sim, t, world.logic, 'small_talk', { subjectSimId: target.id, placeId: fid, tags: ['socialize', `facility:${fid}`, `sim:${target.id}`] });
-        recordFact(target, t, world.logic, 'small_talk', { subjectSimId: sim.id, placeId: fid, tags: ['socialize', `facility:${fid}`, `sim:${sim.id}`] });
+        if (distress) {
+          // §22.21 챙김. KIND RCT의 핵심 — **주는 쪽의 외로움이 준다.** 그래서 회복
+          // 보정이 주는 쪽에 붙는다(정면 대화와 같은 100%, 곁다리 30%보다 크다).
+          // 받는 쪽은 고마움을 기억하고 호감이 **받는 쪽 → 주는 쪽 한 방향**으로만
+          // 오른다 — 주는 쪽 호감은 그대로라 '아무나 붙잡고 돕기'가 최적이 안 된다.
+          const giveAmt = floorDiv(world.logic.actions.socialize.recoverPerTick * S.helpGiverSocialPct, 100);
+          sim.needs.social = Math.min(NEED_MAX_REF, sim.needs.social + giveAmt);
+          sim.mood += S.helpMoodGiver;
+          target.mood += S.helpMoodTaker;
+          world.affinity[target.id][sim.id] = Math.min(AFFINITY_MAX,
+            world.affinity[target.id][sim.id] + S.helpGratitudeAffinity);
+          const why = target.sick !== null ? 'sick'
+            : (target.needs.hunger < world.logic.needCritical ? 'hungry' : 'broke');
+          emit('helped', sim.id, { toSimId: target.id, facilityId: fid, why, relation: tier ?? 'stranger' });
+          recordFact(sim, t, world.logic, 'helped', { subjectSimId: target.id, placeId: fid, tags: ['help', `facility:${fid}`, `sim:${target.id}`] });
+          recordFact(target, t, world.logic, 'was_helped', { subjectSimId: sim.id, placeId: fid, tags: ['help', `facility:${fid}`, `sim:${sim.id}`] });
+        } else {
+          emit('side_talk', sim.id, { withSimId: target.id, facilityId: fid, relation: tier ?? 'stranger' });
+          recordFact(sim, t, world.logic, 'small_talk', { subjectSimId: target.id, placeId: fid, tags: ['socialize', `facility:${fid}`, `sim:${target.id}`] });
+          recordFact(target, t, world.logic, 'small_talk', { subjectSimId: sim.id, placeId: fid, tags: ['socialize', `facility:${fid}`, `sim:${sim.id}`] });
+        }
       }
     } else {
       emit('invite_declined', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });

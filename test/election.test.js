@@ -164,3 +164,79 @@ test('E-9. 선거가 다음 임기의 정책 기준선을 스냅샷한다', () =
     { taxPct: 18, welfareAmount: 700, welfareThreshold: 400 },
     '임기 시작 정책이 스냅샷되지 않았다');
 });
+
+// ---- §22.21 먼저 돕기 (이슈 #69, KIND RCT) ----
+import { maybeApproach } from '../sim/society.js';
+import { serialize, deserialize, findNonFinite } from '../sim/index.js';
+
+// 곤경에 빠진 심 옆에 외로운 심을 앉히는 헬퍼
+function stageHelp(w, { distress }) {
+  const giver = w.sims[0];
+  const target = w.sims[1];
+  const fac = w.map.facilities.find((f) => f.type === 'cafe');
+  giver.state = { ...giver.state, kind: 'performing', action: 'socialize', facilityId: fac.id, pairedTicks: 0, sideTalkTicks: 0 };
+  target.state = { ...target.state, kind: 'performing', action: 'eat', facilityId: fac.id, pairedTicks: 0, sideTalkTicks: 0 };
+  target.sick = null; target.needs.hunger = 8000; target.money = 99999;
+  if (distress === 'sick') target.sick = { kind: 'cold', untilTick: 99999 };
+  else if (distress === 'hungry') target.needs.hunger = 100;
+  else if (distress === 'broke') target.money = 0;
+  // 승낙이 확실히 나게 (판정식은 그대로 두고 파라미터만 올린다 — 이분 컷 아님)
+  w.logic.social.approachBasePct = 100;
+  return { giver, target };
+}
+
+test('H-1. 곤경인 상대에게는 수다가 아니라 챙김이 된다', () => {
+  const w = createWorld(4242);
+  const { giver, target } = stageHelp(w, { distress: 'sick' });
+  const before = {
+    giverSocial: giver.needs.social,
+    gratitude: w.affinity[target.id][giver.id],
+    reverse: w.affinity[giver.id][target.id],
+    giverMood: giver.mood, targetMood: target.mood,
+  };
+  const evs = [];
+  maybeApproach(w, 1000, 0, (type, simId, payload) => evs.push({ type, simId, payload }), new Set());
+  const helped = evs.find((e) => e.type === 'helped');
+  assert.ok(helped, `helped가 없다: ${evs.map((e) => e.type).join(',')}`);
+  assert.equal(helped.payload.why, 'sick');
+  assert.equal(evs.some((e) => e.type === 'side_talk'), false, '챙김과 수다가 같이 나왔다');
+  // KIND의 핵심 — 주는 쪽의 회복이 크다 (정면 100% > 곁다리 30%)
+  assert.ok(giver.needs.social > before.giverSocial, '주는 쪽 사교가 안 올랐다');
+  // 고마움은 받는 쪽 → 주는 쪽 한 방향
+  assert.equal(w.affinity[target.id][giver.id], before.gratitude + w.logic.social.helpGratitudeAffinity);
+  assert.equal(w.affinity[giver.id][target.id], before.reverse, '주는 쪽 호감까지 올랐다 — 아무나 붙잡기 유인이 생긴다');
+  assert.ok(giver.mood > before.giverMood && target.mood > before.targetMood);
+  // 기억이 양쪽에 남는다
+  assert.ok(giver.memories.some((m) => m.kind === 'helped'));
+  assert.ok(target.memories.some((m) => m.kind === 'was_helped'));
+});
+
+test('H-2. 곤경이 아니면 예전 그대로 곁다리 수다다', () => {
+  const w = createWorld(4242);
+  stageHelp(w, { distress: null });
+  const evs = [];
+  maybeApproach(w, 1000, 0, (type, simId, payload) => evs.push({ type, simId, payload }), new Set());
+  assert.ok(evs.some((e) => e.type === 'side_talk'), '수다가 사라졌다');
+  assert.equal(evs.some((e) => e.type === 'helped'), false, '멀쩡한 사람을 챙겼다');
+});
+
+test('H-3. 곤경 종류가 why에 정확히 실린다 (sick > hungry > broke 우선)', () => {
+  for (const [distress, why] of [['sick', 'sick'], ['hungry', 'hungry'], ['broke', 'broke']]) {
+    const w = createWorld(4242);
+    stageHelp(w, { distress });
+    const evs = [];
+    maybeApproach(w, 1000, 0, (t2, s2, p2) => evs.push({ type: t2, payload: p2 }), new Set());
+    const h = evs.find((e) => e.type === 'helped');
+    assert.ok(h, `${distress}: helped 미발생`);
+    assert.equal(h.payload.why, why);
+  }
+});
+
+test('H-4. 챙김이 결정적이고 왕복을 견딘다', () => {
+  const a = createWorld(777); const b = createWorld(777);
+  advance(a, {}, 25 * 1440); advance(b, {}, 25 * 1440);
+  assert.equal(hashWorld(a), hashWorld(b));
+  const w2 = deserialize(serialize(a));
+  assert.equal(hashWorld(a), hashWorld(w2));
+  assert.deepEqual(findNonFinite(a, 5), []);
+});

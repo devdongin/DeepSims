@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 40, // §22.20 회고 투표 (표에 성과가 들어간다)
+  logicSchemaVersion: 41, // §22.21 먼저 돕기 (주는 쪽의 외로움이 준다)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -134,7 +134,8 @@ export const DEFAULT_LOGIC = {
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
       sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
       new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7, unmet: 6,
-      welfare: 6 }, // §22.20 정부가 나를 도왔다 — 회고 투표의 재료
+      welfare: 6, // §22.20 정부가 나를 도왔다 — 회고 투표의 재료
+      helped: 5, was_helped: 6 }, // §22.21 이웃을 챙겼다 / 이웃이 나를 챙겼다
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
     posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프
@@ -166,6 +167,17 @@ export const DEFAULT_LOGIC = {
     // 끊기지 않으므로 경제·허기에 부작용이 없다. 정면 페어링보다 약하게 친다 —
     // 곁다리 대화가 마주 앉은 대화와 같으면 '아무나 붙잡기'가 최적 전략이 된다.
     sideTalkFactorPct: 30,            // 곁다리 대화의 사교 회복 강도 (정면 대비 %)
+    // §22.21 먼저 돕기 (이슈 #69, 로드맵 P1). 혼자 남은 심이 말을 걸었는데 상대가
+    // **곤경**(아픔·허기 위급·복지 문턱 미만)이면, 수다가 아니라 챙김이 된다.
+    // KIND Challenge RCT(4,284명, CC BY)의 핵심은 **주는 쪽의 외로움이 준다**는 것 —
+    // 그래서 회복 보정이 받는 쪽이 아니라 주는 쪽에 붙는다. 받는 쪽은 고마움을
+    // 기억하고(was_helped) 호감이 한쪽 방향으로만 오른다 — 주는 쪽 호감은 그대로라
+    // '아무나 붙잡고 돕기'가 사교 최적 전략이 되지 않는다.
+    helpAcceptBonusPct: 25,           // 곤경일 때 승낙 확률 가산 (사람은 챙김을 더 잘 받는다)
+    helpGiverSocialPct: 100,          // 주는 쪽 사교 회복 (정면 대비 %) — 곁다리(30)보다 크다
+    helpGratitudeAffinity: 300,       // 받는 쪽 → 주는 쪽 호감 (한 방향)
+    helpMoodGiver: 40,                // 챙긴 쪽 기분
+    helpMoodTaker: 60,                // 챙김 받은 쪽 기분
     rivalStatePenalty: 200000000000,  // 라이벌이 있으면 감점 (양수로 저장, 적용 시 부호)
     reflectionMoodScale: 60,          // pendingMood = clamp(Σ 부호 importance × scale, ±10000)
     habitIncrement: 10000000000,      // 회고당(=하루당) 습관 증가 상한 (PLAN §G: 1e10/일)
@@ -515,6 +527,11 @@ function checkRanges(p, errors) {
   }
   inRange('social.inviteTtlTicks', p.social.inviteTtlTicks, 0, 100000);
   inRange('social.sideTalkFactorPct', p.social.sideTalkFactorPct, 0, 100);
+  inRange('social.helpAcceptBonusPct', p.social.helpAcceptBonusPct, 0, 100);
+  inRange('social.helpGiverSocialPct', p.social.helpGiverSocialPct, 0, 300);
+  inRange('social.helpGratitudeAffinity', p.social.helpGratitudeAffinity, 0, 5000);
+  inRange('social.helpMoodGiver', p.social.helpMoodGiver, 0, 1000);
+  inRange('social.helpMoodTaker', p.social.helpMoodTaker, 0, 1000);
   inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);
   inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
   inRange('sharing.needyBelow', p.sharing.needyBelow, 0, 100000);
