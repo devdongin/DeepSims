@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } from '../sim/index.js';
+import { sameRegion, TILE } from '../sim/map.js';
 import { applyRomance, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
 import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
@@ -1370,4 +1371,31 @@ test('S-62. §20.3 오는 중인 심은 절반 가중, 좌석이 다 차면 끌�
   assert.ok(socialPullPct(w, cafe, socialPresence(w, -1), L) > 0, '좌석이 남으면 끌림이 있다');
   for (const r of cafe.resources) w.reservations[`${cafe.id}:${r.id}`] = 999;
   assert.equal(socialPullPct(w, cafe, socialPresence(w, -1), L), 0, '좌석이 다 차면 끌림 0');
+});
+
+test('S-63. §20.3 갈 수 없는 곳은 붐벼도 끌리지 않는다 (80차 ② 도달 방어)', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+  idleAll(w, []);
+  let k = 0;
+  for (const o of w.sims) {
+    if (k >= 3) break;
+    o.state = { kind: 'performing', action: 'socialize', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 50, pairedTicks: 0 };
+    k++;
+  }
+  const presence = socialPresence(w, -1);
+  const sim = w.sims[w.sims.length - 1];
+  // sim 인자를 주지 않으면 도달 검사를 하지 않는다 (순수 규칙 테스트용)
+  assert.ok(socialPullPct(w, cafe, presence, L) > 0, '사람이 있으면 끌림이 있다');
+
+  // 카페 문 주변을 산으로 둘러싸 도달 불가로 만든다
+  const W = w.map.w;
+  const d = cafe.door;
+  for (const [dx, dy] of [[0,-1],[1,0],[0,1],[-1,0],[1,1],[-1,-1],[1,-1],[-1,1]]) {
+    w.map.tiles[(d.y + dy) * W + (d.x + dx)] = TILE.MOUNTAIN;
+  }
+  w.map.reachVersion = (w.map.reachVersion ?? 0) + 1; // 타일이 바뀌면 도달 영역 캐시 무효화
+  assert.equal(sameRegion(w.map, sim.x, sim.y, d.x, d.y), false, '문이 막혀 도달 불가');
+  assert.equal(socialPullPct(w, cafe, presence, L, sim), 0, '갈 수 없으면 끌림 0');
 });

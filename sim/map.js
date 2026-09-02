@@ -493,8 +493,56 @@ export function addBuilding(map, type, plot, dir = 0) {
   }
   fac.dir = dir;
   fac.revenue ??= 0; // §20.2 매출 원장 — 신축 시설도 0에서 시작 (이슈 #43)
+  map.reachVersion = (map.reachVersion ?? 0) + 1; // §20.3 벽이 생기면 도달 영역이 바뀐다
   map.facilities.push(fac);
   return fac;
+}
+
+// §20.3 도달 가능 영역 (Codex 80차 ②). 심은 타일을 막지 않으므로 연결성은 **타일에만** 의존한다.
+// 사회적 중력이 강물 건너·산 너머 시설을 이기게 되면 no_path가 폭증하므로,
+// 같은 영역이 아닌 시설에는 중력을 주지 않는다.
+// 캐시는 map.tiles 객체를 키로 하는 WeakMap — 세이브에 들어가지 않고 해시에 영향이 없다.
+// 재계산은 고정된 주사 순서라 항상 같은 라벨을 낸다 (결정성 보존).
+const regionCache = new WeakMap();
+function regionsOf(map) {
+  const hit = regionCache.get(map.tiles);
+  if (hit !== undefined && hit.version === (map.reachVersion ?? 0)) return hit.comp;
+  const W = map.w, H = map.h;
+  const comp = new Int32Array(W * H).fill(-1);
+  let next = 0;
+  const queue = [];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      if (comp[i] !== -1 || !isWalkable(map, x, y)) continue;
+      const label = next++;
+      comp[i] = label;
+      queue.length = 0;
+      queue.push(i);
+      for (let qi = 0; qi < queue.length; qi++) {
+        const cur = queue[qi];
+        const cx = cur % W, cy = (cur - cx) / W;
+        // BFS와 같은 이웃 순서 (북→동→남→서)
+        for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          const ni = ny * W + nx;
+          if (comp[ni] !== -1 || !isWalkable(map, nx, ny)) continue;
+          comp[ni] = label;
+          queue.push(ni);
+        }
+      }
+    }
+  }
+  regionCache.set(map.tiles, { version: map.reachVersion ?? 0, comp });
+  return comp;
+}
+
+// 두 지점이 서로 오갈 수 있는가. 둘 중 하나라도 통행 불가 타일이면 false.
+export function sameRegion(map, ax, ay, bx, by) {
+  if (!isWalkable(map, ax, ay) || !isWalkable(map, bx, by)) return false;
+  const comp = regionsOf(map);
+  return comp[ay * map.w + ax] === comp[by * map.w + bx];
 }
 
 export function isWalkable(map, x, y) {

@@ -399,8 +399,15 @@ function checkRanges(p, errors) {
   inRange('social.rivalInteractions', p.social.rivalInteractions, 0, 1000000);
   inRange('social.acquaintanceInteractions', p.social.acquaintanceInteractions, 0, 1000000);
   inRange('social.friendStateBonus', p.social.friendStateBonus, 0, 250000000000);
-  inRange('social.gravityPullPct', p.social.gravityPullPct, 0, 1000);
-  inRange('social.gravityPullCap', p.social.gravityPullCap, 0, 5000);
+  // §20.3 (80차 ③): 상한은 임의로 두지 않고 **최대 점수에서 역산**한다.
+  // 점수 상한 = deficit(NEED_MAX)² × 16 × SCORE_SCALE / den(최소 16) × persFactor(≤300%)
+  //           + mods(memory 5e11 + state 2.5e11 + habit 2.5e11) ≈ 3.10e13 (실측 계산).
+  // 여기에 (100 + cap)/100 을 곱해도 Number.MAX_SAFE_INTEGER(9.007e15)를 넘으면 안 되므로
+  // cap ≤ 100 × (9.007e15 / 3.10e13 - 1) ≈ 28,000. 훨씬 보수적으로 500으로 제한한다
+  // (cap=500이면 최대 1.86e14로 안전 정수의 2% 수준).
+  // (관측된 no_path 절벽은 150 부근이므로 이 상한은 정수 안전성 전용 방어다.)
+  inRange('social.gravityPullPct', p.social.gravityPullPct, 0, 500);
+  inRange('social.gravityPullCap', p.social.gravityPullCap, 0, 500);
   inRange('social.gravityWalkingPct', p.social.gravityWalkingPct, 0, 100);
   inRange('social.rivalStatePenalty', p.social.rivalStatePenalty, 0, 250000000000);
   inRange('social.reflectionMoodScale', p.social.reflectionMoodScale, 0, 1000);

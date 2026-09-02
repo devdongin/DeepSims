@@ -5,7 +5,7 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion} from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
@@ -51,9 +51,13 @@ export function socialPresence(world, selfId) {
 // 점수에 **곱하는** 끌림(%). 가산 슬롯(stateMod)으로는 안 된다 — 전형 점수 ~3e12 대비
 // 클램프가 ±2.5e11(약 8%)이라 거리 항을 못 이긴다. 실제로 가산 형태는 3번째 반증됐다.
 // 좌석이 다 찼으면 0 — 몰려가도 앉을 자리가 없으면 헛걸음만 는다 (79차 ③).
-export function socialPullPct(world, fac, presence, L) {
+export function socialPullPct(world, fac, presence, L, sim = null) {
   const p = presence.get(fac.id);
   if (p === undefined) return 0;
+  // §20.3 (80차 ②): 갈 수 없는 곳은 아무리 붐벼도 끌리지 않는다. 강 건너·산 너머 시설이
+  // 중력으로 거리 항을 이기면 no_path가 폭증한다(끌림 150%에서 1,880건).
+  // 심은 타일을 막지 않으므로 연결성은 타일에만 의존하고, 결과는 결정적이다.
+  if (sim !== null && !sameRegion(world.map, sim.x, sim.y, fac.door.x, fac.door.y)) return 0;
   const S = L.social;
   let free = 0;
   for (const r of fac.resources) if (world.reservations[resKey(fac.id, r.id)] === undefined) free++;
@@ -328,7 +332,7 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
             // 먹기·놀기는 붐빈다고 끌리지 않으므로 socialize에만 적용한다.
             if (action === 'socialize') {
               presence ??= socialPresence(world, sim.id);
-              const pull = socialPullPct(world, fac, presence, L);
+              const pull = socialPullPct(world, fac, presence, L, sim);
               if (pull > 0) cand.score += floorDiv(cand.score * pull, 100);
             }
           }
