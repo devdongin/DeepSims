@@ -24,6 +24,13 @@ fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
   exportedAtTick: w.worldTick, day, pop: w.sims.length, tier: w.cityTier,
   treasury: w.treasury, reputation: w.reputation, policy: w.policy,
   facilities, plotsFree: w.plots.filter((p) => !p.used).length,
+  // §20.2 시설 매출 원장 — 소비금이 어디에 고이는지 (이슈 #43 다음 슬라이스의 근거)
+  facilityRevenue: {
+    total: w.map.facilities.reduce((a, f) => a + (f.revenue ?? 0), 0),
+    top: w.map.facilities.filter((f) => (f.revenue ?? 0) > 0)
+      .sort((a, b) => b.revenue - a.revenue).slice(0, 6)
+      .map((f) => ({ id: f.id, type: f.type, revenue: f.revenue })),
+  },
   incidents: w.incidents.length,
   // §19.10 (73차 ②): 원인 분화 이전에 쌓인 no_facility 항목은 오라벨일 수 있어
   // 외부(로드맵 에이전트) 노출에서 legacy로 표시한다. 감쇠로 자연 소멸한다.

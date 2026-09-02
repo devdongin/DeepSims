@@ -153,6 +153,11 @@ export function migrateWorld(world) {
     // §19.10 (73차 ②): 원인 분화 시행일 — 이전 no_facility 항목은 외부 노출에서 legacy 표시
     world.complaintReasonDay = Math.floor(world.worldTick / 1440);
   }
+  if (from < 32) {
+    // §20.2: 시설 매출 원장 도입 (이슈 #43 — 소비금이 소멸하던 문제).
+    // 기존 시설은 매출 0에서 시작한다. 과거 소비는 이미 사라졌으므로 소급하지 않는다.
+    for (const f of world.map.facilities) f.revenue ??= 0;
+  }
   if (from < 31) {
     // §20.1 (75차 ①): 복지 수급 순서가 id asc → 필요도 순(잔고 asc)으로 바뀌었다.
     // 세이브 구조는 그대로지만 **같은 스냅샷에서 다른 궤적**이 나오므로, 구 로그 재생이
@@ -185,7 +190,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 31;
+  world.schemaVersion = 32;
   return world;
 }
 

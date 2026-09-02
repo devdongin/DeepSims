@@ -492,6 +492,7 @@ export function addBuilding(map, type, plot, dir = 0) {
     fac.w = sz.w; fac.h = sz.h;
   }
   fac.dir = dir;
+  fac.revenue ??= 0; // §20.2 매출 원장 — 신축 시설도 0에서 시작 (이슈 #43)
   map.facilities.push(fac);
   return fac;
 }

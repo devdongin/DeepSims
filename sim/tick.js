@@ -315,6 +315,16 @@ function releaseReservation(world, sim) {
 
 function actionDuration(action, L) { return L.actions[action].duration; }
 
+// §20.2 소비 → 시설 매출 이전. 예전에는 sim.money -= cost 로 **소멸**했다 (이슈 #43).
+// 돈이 사라지지 않고 시설 원장에 쌓이고, 그 원장이 민간 서비스 임금의 재원이 된다.
+// 순수 정수 이동 — rngSim 미소비, 드로우 순서 무관.
+function payToFacility(world, facilityId, amount) {
+  if (amount <= 0 || facilityId === null) return;
+  const fac = world.map.facilities.find((f) => f.id === facilityId);
+  if (!fac) return; // 시설 없는 소비(예: 노점 없음)는 기존대로 소멸 — 화이트리스트 밖
+  fac.revenue = (fac.revenue ?? 0) + amount;
+}
+
 // 예약 + walking/performing 전이 (원자적). reason은 판단 사유 (PLAN §14.1).
 function startAction(world, sim, cand, t, emit, reason) {
   releaseReservation(world, sim);
@@ -691,6 +701,7 @@ export function tick(world, inputsForThisTick = []) {
     if (s.action === 'eat' || s.action === 'drink' || s.action === 'binge_eat') {
       const cost = L.actions[s.action].cost;
       sim.money -= cost;
+      payToFacility(world, s.facilityId, cost); // §20.2 소멸 → 시설 매출
       emit('money_changed', sim.id, { delta: -cost, balance: sim.money, action: s.action });
       if (s.action === 'drink') {
         // 숙취 (§15.1.A): t < hangoverUntil 동안 energy(수면 욕구) 감쇠 가산
@@ -715,6 +726,7 @@ export function tick(world, inputsForThisTick = []) {
       resolveFire(world, sim, s.resourceId.slice(5), t, emit); // 'fire:<facId>' → facId (§17.20)
     } else if (s.action === 'see_doctor') {
       sim.money -= L.actions.see_doctor.cost;
+      payToFacility(world, s.facilityId, L.actions.see_doctor.cost); // §20.2
       emit('money_changed', sim.id, { delta: -L.actions.see_doctor.cost, balance: sim.money, action: 'see_doctor' });
       if (sim.sick) {
         sim.sick = null;
@@ -722,6 +734,7 @@ export function tick(world, inputsForThisTick = []) {
       }
     } else if (s.action === 'shop') {
       sim.money -= L.actions.shop.cost;
+      payToFacility(world, s.facilityId, L.actions.shop.cost); // §20.2
       emit('money_changed', sim.id, { delta: -L.actions.shop.cost, balance: sim.money, action: 'shop' });
       sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.shop.groceriesGain);
     } else if (s.action === 'cook_eat') {
@@ -743,7 +756,24 @@ export function tick(world, inputsForThisTick = []) {
       home.resources.push(newRes);
       emit('bed_built', sim.id, { facilityId: home.id, resourceId: newRes.id, x: slot.x, y: slot.y });
     } else if (s.action === 'work') {
-      const wage = floorDiv(L.actions.work.wageBase * L.occupations[sim.traits.occupation].wagePct, 100);
+      let wage = floorDiv(L.actions.work.wageBase * L.occupations[sim.traits.occupation].wagePct, 100);
+      // §20.2 민간 서비스 직군(화이트리스트)은 임금이 무에서 나지 않고 **일한 시설의 매출**에서 나온다.
+      // 매출이 모자라면 있는 만큼만 받는다 — 손님 없는 가게는 임금을 다 못 준다 (이슈 #43).
+      // 나머지 직군(사무·공공)은 이번 슬라이스에서 그대로 둔다: 경제기반이론의 기반 부문,
+      // 즉 마을 밖에서 벌어오는 소득으로 본다 (77차 합의).
+      const priv = L.economy.privateWageOccupations.includes(sim.traits.occupation);
+      const payer = priv ? world.map.facilities.find((f) => f.id === s.facilityId) : null;
+      if (priv) {
+        const avail = Math.max(0, payer?.revenue ?? 0);
+        const paid = Math.min(wage, avail);
+        if (paid < wage) {
+          emit('wage_shortfall', sim.id, {
+            facilityId: s.facilityId, asked: wage, paid, shortfall: wage - paid,
+          });
+        }
+        if (payer) payer.revenue = avail - paid;
+        wage = paid;
+      }
       // §17.15 소득세 원천징수: 실수령 = wage×(100-taxPct)/100, 세금은 국고로
       const net = floorDiv(wage * (100 - econ(world, 'taxPct')), 100);
       const tax = wage - net;

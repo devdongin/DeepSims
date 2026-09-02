@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 30, // §20.1 복지 수급 순서 = 필요도 순 (거동 변경 — 파라미터 추가는 없음)
+  logicSchemaVersion: 31, // §20.2 economy.privateWageOccupations 추가 (시설 매출 → 민간 임금)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -238,7 +238,10 @@ export const DEFAULT_LOGIC = {
     taxPct: 15,             // 임금 원천징수율
     welfareThreshold: 300,  // 이 잔고 미만이면 복지 대상
     welfareAmount: 200,     // 1회 지급액
-    welfareDailyCap: 5,     // 하루 최대 수급자 수 (id asc)
+    welfareDailyCap: 5,     // 하루 최대 수급자 수 (필요도 순 — §20.1)
+    // §20.2 임금이 '일한 시설의 매출'에서 나오는 민간 서비스 직군 (화이트리스트).
+    // 여기 없는 직군은 기반 부문(외부 소득)·공공 부문으로 보고 기존대로 지급한다.
+    privateWageOccupations: ['barista'],
     taxMoodPer: 5,          // §18.T1: 납세 시점 mood 델타 = -floorDiv(tax×taxMoodPer, 10) (그라데이션)
   },
   // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
@@ -524,6 +527,10 @@ function checkRanges(p, errors) {
   inRange('economy.welfareThreshold', p.economy.welfareThreshold, 0, 100000);
   inRange('economy.welfareAmount', p.economy.welfareAmount, 0, 100000);
   inRange('economy.welfareDailyCap', p.economy.welfareDailyCap, 0, 1000);
+  if (!Array.isArray(p.economy.privateWageOccupations)
+      || p.economy.privateWageOccupations.some((o) => !(o in p.occupations))) {
+    errors.push('economy.privateWageOccupations: occupations에 있는 직업 이름의 배열이어야 함');
+  }
   inRange('economy.taxMoodPer', p.economy.taxMoodPer, 0, 1000);
   if (!Array.isArray(p.circadian?.energyPct) || p.circadian.energyPct.length !== 24) {
     errors.push('circadian.energyPct: 24칸 배열 필요');
