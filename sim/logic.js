@@ -677,7 +677,8 @@ function checkRanges(p, errors) {
   inRange('items.pickupMood', p.items.pickupMood, 0, 10000);
   inRange('market.maxGroceries', p.market.maxGroceries, 1, 100);
   inRange('actions.construct.duration', p.actions.construct.duration, 1, 10000);
-  inRange('economy.maxDebt', p.economy.maxDebt, 0, Number.MAX_SAFE_INTEGER);
+  // 119차 후속: MAX_SAFE_INTEGER까지 열면 차감 연산이 안전 정수를 벗어날 수 있다
+  inRange('economy.maxDebt', p.economy.maxDebt, 0, 1e15);
   for (const [ft, req] of Object.entries(p.construct.requiredByType)) {
     inRange(`construct.requiredByType.${ft}`, req, 1, 10000000);
   }
