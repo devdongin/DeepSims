@@ -12,6 +12,12 @@ on:
     types: [opened, reopened, synchronize]
   issues:
     types: [opened, reopened]
+  # 수동 검증용 — 이 워크플로 자체를 고칠 때 실패 경로를 재현할 수 있어야 한다.
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: '코멘트를 남길 이슈 번호'
+        required: true
 
 permissions:
   contents: read
@@ -109,10 +115,13 @@ jobs:
           WORLD_SNAPSHOT: ${{ steps.world.outputs.snapshot }}
           CONTRACTS_DIFF: ${{ steps.contracts.outputs.diff }}
           TESTS_EXIT: ${{ steps.tests.outputs.exit }}
+          DISPATCH_ISSUE: ${{ inputs.issue }}
         with:
           script: |
             const isPR = context.eventName === 'pull_request';
-            const number = isPR ? context.payload.pull_request.number : context.payload.issue.number;
+            const number = isPR
+              ? context.payload.pull_request.number
+              : (context.payload.issue?.number ?? Number(process.env.DISPATCH_ISSUE));
             const testSummary = process.env.TEST_SUMMARY ?? '';
             const world = process.env.WORLD_SNAPSHOT ?? '';
             const contracts = process.env.CONTRACTS_DIFF ?? '';
