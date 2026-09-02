@@ -206,3 +206,28 @@ test('QA-13. §22.28 모든 기억 종류에 memory_share 대사가 있다', asy
   assert.deepEqual(missing, [],
     `대사 없는 기억 종류(기본 문장으로 뭉개진다): ${missing.join(', ')}`);
 });
+
+// §22.33 직업별 대사 배선 누락 방지 — QA-13(기억 종류)의 직업판이다.
+//
+// 이 테스트가 없어서 생긴 일: 세계에는 16개 직업이 있는데 대사 테이블은 10개만
+// 알았다. 라이브 358건 중 106건(30%)이 분기 없는 직업(worker 34·child 22·nurse 20·
+// civil_servant 15·politician 15)이라 전부 "일이 너무 많아…" 세 줄로 나왔다.
+// 간호사도 공장 노동자도 시장도 아이도 똑같은 말을 하고 있었다.
+//
+// 직업을 하나 늘리면 이 테스트가 먼저 깨지게 둔다.
+test('QA-14. §22.33 모든 직업에 work_gripe 대사가 있다', async () => {
+  const { OCCUPATIONS } = await import('../sim/traits.js');
+  assert.ok(OCCUPATIONS.length >= 15, `직업 목록을 못 읽었다 (${OCCUPATIONS.length}종)`);
+
+  // work_gripe 분기의 객체 리터럴만 떼어 키를 모은다.
+  const start = CLIENT.indexOf("case 'work_gripe': {");
+  assert.ok(start > 0, 'work_gripe 분기를 찾지 못했다');
+  const end = CLIENT.indexOf("case 'food': {", start);
+  assert.ok(end > start, 'work_gripe 분기의 끝을 찾지 못했다');
+  const body = CLIENT.slice(start, end);
+  const handled = new Set([...body.matchAll(/^\s{8}([a-z_]+):\s*\[/gm)].map((m) => m[1]));
+
+  const missing = OCCUPATIONS.filter((o) => !handled.has(o));
+  assert.deepEqual(missing, [],
+    `대사 없는 직업(기본 문장 세 줄로 뭉개진다): ${missing.join(', ')}`);
+});
