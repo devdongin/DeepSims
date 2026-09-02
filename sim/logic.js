@@ -467,8 +467,20 @@ function checkRanges(p, errors) {
   inRange('industry.switchPctPerApt', p.industry.switchPctPerApt, 0, 100);
   inRange('industry.switchMaxPct', p.industry.switchMaxPct, 0, 100);
   inRange('industry.minAptGain', p.industry.minAptGain, 0, 100);
+  // §21.3 (86차 ②) 교차 검증: 일자리를 여는 직업은 반드시
+  //   ① 존재하는 직업이고 ② 그 시설에서 매출로 임금을 받으며 ③ 근무지 매핑이 일치해야 한다.
+  // 하나라도 어긋나면 '손님은 있는데 임금이 안 나오는' 조용한 고장이 된다.
   for (const [facType, occ] of Object.entries(p.industry.openings)) {
-    if (!(occ in p.occupations)) errors.push(`industry.openings.${facType}: 알 수 없는 직업 ${occ}`);
+    if (!(occ in p.occupations)) {
+      errors.push(`industry.openings.${facType}: 알 수 없는 직업 ${occ}`);
+      continue;
+    }
+    if (!p.economy.privateWageOccupations.includes(occ)) {
+      errors.push(`industry.openings.${facType}: ${occ}는 economy.privateWageOccupations에 있어야 함 (매출에서 임금이 나온다)`);
+    }
+    if (p.workplace[occ] !== facType) {
+      errors.push(`industry.openings.${facType}: workplace.${occ}=${p.workplace[occ]} 가 시설 타입과 불일치`);
+    }
   }
   inRange('abilities.aptitudePoolWeight', p.abilities.aptitudePoolWeight, 0, 2000);
   for (const [o, k] of Object.entries(p.abilities.keyAbility)) {

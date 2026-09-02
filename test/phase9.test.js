@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } from '../sim/index.js';
 import { sameRegion, TILE } from '../sim/map.js';
+import { validateLogic as validateLogicRef } from '../sim/logic.js';
 import { SWITCH_ONLY_OCCUPATIONS as SWITCH_ONLY_REF } from '../sim/traits.js';
 import { aptitudeFor, makeAbilities, ABILITIES, FALLBACK_SEED } from '../sim/abilities.js';
 
@@ -1627,4 +1628,42 @@ test('S-74. §21.3 chef·clerk는 생성 풀에서 빠져 worldgen RNG가 불변
   }
   const a = createWorld(4242), b = createWorld(4242);
   assert.equal(hashWorld(a), hashWorld(b), '같은 시드면 같은 세계');
+});
+
+test('S-75. §21.3 (86차 ①) 일자리 순회는 키 순서에 의존하지 않는다', () => {
+  // 로직 파일의 키 순서가 바뀌어도 같은 날 같은 사람이 뽑혀야 한다.
+  const build = (openings) => {
+    const w = createWorld(SEED);
+    w.logic.industry.openings = openings;
+    for (const f of w.map.facilities) {
+      if (f.type === 'restaurant' || f.type === 'market') f.revenue = w.logic.industry.minRevenueToHire * 5;
+    }
+    const out = [];
+    for (let d = 0; d < 40; d++) maybeJobSwitchRef(w, d * 1440, d, (type, simId, payload) => out.push({ type, simId, payload }));
+    return out.filter((e) => e.type === 'job_changed').map((e) => `${e.simId}:${e.payload.to}`);
+  };
+  const a = build({ restaurant: 'chef', market: 'clerk' });
+  const b = build({ market: 'clerk', restaurant: 'chef' }); // 키 순서만 뒤집음
+  assert.ok(a.length > 0, '전직이 일어난다');
+  assert.deepEqual(a, b, '키 순서가 달라도 결과가 같다 (정렬로 고정)');
+});
+
+test('S-76. §21.3 (86차 ②) 일자리 직업은 매출 임금·근무지와 교차 검증된다', () => {
+  const base = createWorld(SEED).logic;
+  const clone = () => JSON.parse(JSON.stringify(base));
+  assert.equal(validateLogicRef(base).ok, true, '기본 로직은 통과');
+
+  // 매출 임금 화이트리스트에서 빠뜨리면 거부
+  const noPrivate = clone();
+  noPrivate.economy.privateWageOccupations = noPrivate.economy.privateWageOccupations.filter((o) => o !== 'chef');
+  const r1 = validateLogicRef(noPrivate);
+  assert.equal(r1.ok, false);
+  assert.ok(r1.errors.some((e) => e.includes('privateWageOccupations')), '매출 임금 누락을 잡는다');
+
+  // 근무지 매핑이 어긋나면 거부
+  const badPlace = clone();
+  badPlace.workplace.chef = 'cafe';
+  const r2 = validateLogicRef(badPlace);
+  assert.equal(r2.ok, false);
+  assert.ok(r2.errors.some((e) => e.includes('workplace.chef')), '근무지 불일치를 잡는다');
 });

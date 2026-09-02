@@ -755,7 +755,10 @@ export function maybeShare(world, a, b, t, day, emit) {
 export function maybeJobSwitch(world, t, day, emit) {
   const L = world.logic;
   const I = L.industry;
-  for (const facType of Object.keys(I.openings)) { // 삽입 순서 고정 = 결정적
+  // §21.3 (86차 ①): **정렬 필수**. Object.keys는 params 객체의 삽입 순서를 따르는데,
+  // 로직 파일을 손으로 고쳐 키 순서가 바뀌면 같은 날 후보가 달라진다.
+  // canonical hash가 키 순서를 무시한다면 '같은 로직 해시인데 다른 결과'가 되어버린다.
+  for (const facType of Object.keys(I.openings).sort()) {
     const occ = I.openings[facType];
     const facs = world.map.facilities.filter((f) => f.type === facType);
     if (facs.length === 0) continue;
