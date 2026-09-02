@@ -5,7 +5,13 @@ export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
 export const TICK_DURATION_MS = 1000;       // 실시간 1초 = 게임 1분
-export const MAX_CATCHUP_TICKS = 30 * TICKS_PER_DAY; // 30일 클램프 (PLAN §1)
+// §22.1 따라잡기 클램프. 예전엔 게임 30일이었는데, 속도 ×48에서는 **실시간 15분**만
+// 자리를 비워도 세계가 잘렸다(30일 × 1440틱 ÷ 48틱/초 = 900초). 관람 배속이 오르면
+// 클램프가 실질적으로 조여지는 구조였다.
+// 게임 2년치(240일)로 올린다 — ×48에서 실시간 2시간 부재까지 버리지 않고 따라잡는다.
+// 계산 비용은 벤치 15,665틱/초 기준 345,600틱 ≈ 22초이고, catchUp이 1일 배치마다
+// yield하므로 이벤트 루프를 막지 않는다 (89차 ①).
+export const MAX_CATCHUP_TICKS = 240 * TICKS_PER_DAY;
 
 export const NEED_MAX = 10000;
 

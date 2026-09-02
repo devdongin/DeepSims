@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { Storage } from '../db/storage.js';
-import { Engine } from './engine.js';
+import { Engine, MAX_SPEED } from './engine.js';
 import { PROTOCOL_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC, validatePolicy } from '../sim/logic.js';
 
@@ -94,7 +94,9 @@ app.get('/api/report', (req, res) => {
 // 틱 내용은 불변이므로 결정성·리플레이에 영향 없음.
 app.post('/api/speed', (req, res) => {
   const s = Number(req.body?.speed);
-  if (![1, 2, 3].includes(s)) return res.status(400).json({ error: 'speed는 1, 2, 3 중 하나입니다' });
+  if (!Number.isInteger(s) || s < 1 || s > MAX_SPEED) {
+    return res.status(400).json({ error: `speed는 1~${MAX_SPEED} 정수여야 합니다` });
+  }
   const applied = engine.setSpeed(s);
   for (const ws of clients) send(ws, { type: 'speed', speed: applied }); // 모든 뷰어에 즉시 반영
   res.json({ speed: applied });

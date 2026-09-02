@@ -7,6 +7,10 @@ import { TICKS_PER_DAY } from '../sim/constants.js';
 import { validateLogic, logicHash } from '../sim/logic.js';
 
 const BATCH_TICKS = TICKS_PER_DAY; // 따라잡기 배치 = 게임 1일
+// §22.1 관람 배속 상한. ×48이면 실시간 1시간 = 게임 1년이다
+// (1년 = yearDays 120 × 1440틱 = 172,800틱, ÷48 = 3,600초).
+// 달력(1년=120일, 1일=1440분)은 건드리지 않는다 — 바뀌는 건 관람 속도뿐이다 (89차 ①).
+export const MAX_SPEED = 48;
 const LIVE_COMMIT_TICKS = 30;      // §17.0: 라이브 커밋 주기 (미커밋 유실은 스냅샷+입력 재생으로 복구)
 
 export class Engine {
@@ -130,7 +134,7 @@ export class Engine {
   // 지나친 뒤 라이브 목표가 현재 틱에 묶여 시간이 멈춘다 (74차 ①). 대신 플래그만
   // 세워두고 catchUp이 끝난 직후 재기준화한다.
   setSpeed(speed) {
-    const s = Math.max(1, Math.min(3, Math.floor(Number(speed) || 1)));
+    const s = Math.max(1, Math.min(MAX_SPEED, Math.floor(Number(speed) || 1)));
     if (s === this.speed) return this.speed;
     this.speed = s;
     if (this.catchingUp) this.speedChangedDuringCatchup = true;
