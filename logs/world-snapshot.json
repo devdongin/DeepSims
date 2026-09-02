@@ -65,6 +65,11 @@
   ]
  },
  "incidents": 0,
+ "transport": {
+  "carsOwned": 22,
+  "totalLongTrips": 1337,
+  "stationDemand": 300
+ },
  "complaints": [
   {
    "count": 72,
@@ -348,6 +353,78 @@
   {
    "type": "road_formed",
    "n": 22
+  },
+  {
+   "type": "starving",
+   "n": 12
+  },
+  {
+   "type": "item_spawned",
+   "n": 9
+  },
+  {
+   "type": "item_found",
+   "n": 9
+  },
+  {
+   "type": "weather_changed",
+   "n": 7
+  },
+  {
+   "type": "project_started",
+   "n": 6
+  },
+  {
+   "type": "car_bought",
+   "n": 5
+  },
+  {
+   "type": "facility_built",
+   "n": 4
+  },
+  {
+   "type": "token_created",
+   "n": 3
+  },
+  {
+   "type": "immigrated",
+   "n": 3
+  },
+  {
+   "type": "gathering",
+   "n": 3
+  },
+  {
+   "type": "wage_shortfall",
+   "n": 2
+  },
+  {
+   "type": "started_dating",
+   "n": 2
+  },
+  {
+   "type": "moved_home",
+   "n": 2
+  },
+  {
+   "type": "petition",
+   "n": 1
+  },
+  {
+   "type": "married",
+   "n": 1
+  },
+  {
+   "type": "heroic_save",
+   "n": 1
+  },
+  {
+   "type": "fire_started",
+   "n": 1
+  },
+  {
+   "type": "fire_out",
+   "n": 1
   }
  ],
  "topFails7d": []

@@ -17,8 +17,11 @@ const since = Math.max(0, w.worldTick - 7 * 1440);
 const topFails7d = db.prepare(
   \"SELECT payload, COUNT(*) n FROM events WHERE type='action_failed' AND tick > ? GROUP BY payload ORDER BY n DESC LIMIT 5\"
 ).all(since);
+// 상한을 두면 하위 이벤트가 잘려 리뷰어가 '0건'으로 오독한다 (실제로 Codex가
+// car_bought를 0건으로 잘못 읽었다 — 7일 5건인데 상위 12종 밖이었다).
+// 종류 수는 수십 개 수준이라 전부 실어도 스냅샷이 커지지 않는다.
 const events7d = db.prepare(
-  'SELECT type, COUNT(*) n FROM events WHERE tick > ? GROUP BY type ORDER BY n DESC LIMIT 12'
+  'SELECT type, COUNT(*) n FROM events WHERE tick > ? GROUP BY type ORDER BY n DESC'
 ).all(since);
 fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
   exportedAtTick: w.worldTick, day, pop: w.sims.length, tier: w.cityTier,
@@ -32,6 +35,12 @@ fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
       .map((f) => ({ id: f.id, type: f.type, revenue: f.revenue })),
   },
   incidents: w.incidents.length,
+  // §19 R-B 교통 현황 — #48이 '지표가 없다'고 지적한 부분의 최소 계측
+  transport: {
+    carsOwned: w.sims.filter((s) => s.hasCar).length,
+    totalLongTrips: w.sims.reduce((a, s) => a + (s.longTrips ?? 0), 0),
+    stationDemand: w.logic?.transport?.stationDemand ?? null,
+  },
   // §19.10 (73차 ②): 원인 분화 이전에 쌓인 no_facility 항목은 오라벨일 수 있어
   // 외부(로드맵 에이전트) 노출에서 legacy로 표시한다. 감쇠로 자연 소멸한다.
   complaints: (w.complaints ?? []).slice(-20).map((c) => (
