@@ -601,7 +601,10 @@ export function maybeBuyCar(world, sim, t, emit) {
   if (sim.money < T.carPrice) return;
   sim.money -= T.carPrice;
   sim.hasCar = true;
-  world.treasury += floorDiv(T.carPrice * world.logic.economy.taxPct, 100); // 취득세 — 국고 순환
+  const acqTax = floorDiv(T.carPrice * world.logic.economy.taxPct, 100);
+  world.treasury += acqTax; // 취득세 — 국고 순환
+  // §22.4 (93차 ②) 차값에서 취득세를 뺀 나머지는 마을 밖 제조사에게 나간다 — 경계 유출.
+  world.externalOutflow = (world.externalOutflow ?? 0) + (T.carPrice - acqTax);
   emit('car_bought', sim.id, { price: T.carPrice, longTrips: sim.longTrips, balance: sim.money });
   recordFact(sim, t, world.logic, 'milestone', { tags: ['car'] });
 }

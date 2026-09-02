@@ -565,6 +565,9 @@ function applyZone(world, inp, t, emit) {
   else if (world.treasury < cost) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   world.treasury -= cost;
+  // §22.4 (93차 ②) 건설비는 마을 밖 시공사에게 나간다 — 경계 **유출**로 명시한다.
+  // 안 세면 '내부에서 돈이 사라지는' 회계가 되어 G1 폐쇄 회계가 성립하지 않는다.
+  world.externalOutflow = (world.externalOutflow ?? 0) + cost;
   world.zoneOrders.push({ plotId: p.plotId, type: p.type, dir: p.dir });
   emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, treasury: world.treasury });
 }
@@ -822,6 +825,7 @@ export function tick(world, inputsForThisTick = []) {
         continue;
       }
       sim.money -= L.actions.build.cost;
+      world.externalOutflow = (world.externalOutflow ?? 0) + L.actions.build.cost; // §22.4 자재값 — 경계 유출
       emit('money_changed', sim.id, { delta: -L.actions.build.cost, balance: sim.money, action: 'build' });
       const slot = home.extraBedSlots[extraBuilt]; // 슬롯 순서 고정 (§15.1.B)
       const newRes = { id: `bed${home.resources.length}`, kind: 'bed', x: slot.x, y: slot.y };

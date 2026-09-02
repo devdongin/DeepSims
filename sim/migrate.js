@@ -158,6 +158,7 @@ export function migrateWorld(world) {
   if (from < 38) {
     // §22.4 경계 유입 누계 — 기반 부문(마을 밖) 소득을 명시적으로 센다 (G1 폐쇄 회계).
     world.externalInflow ??= 0;
+    world.externalOutflow ??= 0;
   }
   if (from < 37) {
     // §22.2 생애 주기: id 전용 카운터와 굶은 시간 누적기. 사망으로 심이 사라져도

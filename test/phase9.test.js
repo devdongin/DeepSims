@@ -1850,13 +1850,16 @@ test('S-84. §22.4 폐쇄 회계: 경계 유입을 빼면 내부에서 돈이 �
   // 소비가 시설로, 공공 매출이 국고로, 공공 임금이 국고에서 — 전부 '이동'이어야 한다.
   const start = total(w);
   const startInflow = w.externalInflow ?? 0;
+  const startOutflow = w.externalOutflow ?? 0;
   advance(w, {}, 5 * 1440);
   const end = total(w);
   const inflow = (w.externalInflow ?? 0) - startInflow;
-  assert.ok(inflow >= 0, '경계 유입은 음수가 될 수 없다');
-  // 내부 이동만 있다면 end == start + inflow − (소멸분). 소멸이 남아 있으면 end < start+inflow.
-  // 최소한 **경계 유입 없이 총액이 늘어나지는 않아야** 한다.
-  assert.ok(end <= start + inflow, `내부에서 돈이 생기면 안 된다 (start=${start} inflow=${inflow} end=${end})`);
+  const outflow = (w.externalOutflow ?? 0) - startOutflow;
+  assert.ok(inflow >= 0 && outflow >= 0, '경계 유입·유출은 음수가 될 수 없다');
+  // **완전한 보존식** (93차 ②): 끝 = 시작 + 유입 − 유출.
+  // 경계 밖 이동을 전부 세면 내부에서는 돈이 생기지도 사라지지도 않는다.
+  assert.equal(end, start + inflow - outflow,
+    `폐쇄 회계 불변식 위반 (start=${start} inflow=${inflow} outflow=${outflow} end=${end})`);
   assert.ok(w.treasury >= 0, '국고는 음수가 되지 않는다');
 });
 

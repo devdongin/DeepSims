@@ -501,6 +501,13 @@ function checkRanges(p, errors) {
     if (p.economy.privateWageOccupations.includes(occ)) {
       errors.push(`economy: ${occ}가 공공·민간 임금 양쪽에 있다 (재원이 모호해진다)`);
     }
+    // §22.4 (93차 ⑤) 공공 임금 직군의 근무지는 공공 시설이어야 한다.
+    // 어긋나면 '민간 시설에서 일하는데 국고가 임금을 대는' 모순이 된다.
+    const wp = p.workplace[occ];
+    const places = Array.isArray(wp) ? wp : [wp];
+    if (!places.some((f) => p.economy.publicFacilityTypes.includes(f))) {
+      errors.push(`economy.publicWageOccupations: ${occ}의 근무지(${places.join('|')})가 공공 시설이 아니다`);
+    }
   }
   for (const [facType, occ] of Object.entries(p.industry.openings)) {
     if (!(occ in p.occupations)) {
