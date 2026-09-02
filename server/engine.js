@@ -139,6 +139,10 @@ export class Engine {
   // 목표가 현재 틱 아래로 내려가지 않게 한다 — 남는 소수 틱은 floor가 흡수한다.
   rebaseEpoch() {
     this.epochUtcMs = this.now() - Math.ceil((this.world.worldTick * TICK_DURATION_MS) / (this.speed ?? 1));
+    // (epoch, speed)를 **한 트랜잭션에** 내린다 (Codex 100차 ②). 재기준화는 시뮬 시간을
+    // 버리지 않고 시계만 다시 맞추는 일이라 배치 커밋을 기다릴 이유가 없고, 기다리면
+    // 그 창에서 죽었을 때 짝이 어긋난 채로 남는다.
+    this.storage.setClock({ epochUtcMs: this.epochUtcMs, speed: this.speed ?? 1 });
   }
 
   // §20 배속 변경. 재기준화로 시간축이 튀지 않게 한다.
@@ -150,7 +154,9 @@ export class Engine {
     const s = Math.max(1, Math.min(MAX_SPEED, Math.floor(Number(speed) || 1)));
     if (s === this.speed) return this.speed;
     this.speed = s;
-    this.storage.setMetaInt('speed', s); // §22.11 epoch와 짝을 맞춰 저장
+    // 저장은 rebaseEpoch가 (epoch, speed)를 함께 내리며 처리한다 — 여기서 speed만
+    // 따로 쓰면 짝이 어긋난다. 따라잡기 중이면 **아무것도 쓰지 않는다**: 지금 디스크에
+    // 있는 쌍은 서로 맞는 상태이고, 여기서 죽으면 배속 변경만 잃을 뿐 세계는 멀쩡하다.
     if (this.catchingUp) this.speedChangedDuringCatchup = true;
     else this.rebaseEpoch();
     return this.speed;

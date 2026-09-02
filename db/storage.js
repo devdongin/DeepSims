@@ -87,6 +87,18 @@ export class Storage {
     this.db.prepare('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)').run(key, String(value));
   }
 
+  // §22.11 시계 = (epoch, speed) 한 쌍. **반드시 함께 써야 한다** (Codex 100차 ②).
+  // 따로 쓰면 그 사이에 프로세스가 죽었을 때 디스크에 짝이 안 맞는 쌍이 남고,
+  // 이는 이 절이 고치려던 정지 버그와 같은 부류다 — 방향만 반대라 이번에는
+  // 새 배속 + 옛 epoch로 잘못된 대량 따라잡기가 일어난다.
+  setClock({ epochUtcMs, speed }) {
+    const set = this.db.prepare('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)');
+    this.db.transaction(() => {
+      set.run('epochUtcMs', String(epochUtcMs));
+      set.run('speed', String(speed));
+    })();
+  }
+
   // 유효 대기 로직 계산용: 미적용 logic_update를 (target, sequence) 순으로 (PLAN §14.1 부팅 정합)
   getPendingLogicUpdates() {
     return this.db.prepare(
