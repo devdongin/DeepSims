@@ -155,6 +155,11 @@ export function migrateWorld(world) {
     // §19.10 (73차 ②): 원인 분화 시행일 — 이전 no_facility 항목은 외부 노출에서 legacy 표시
     world.complaintReasonDay = Math.floor(world.worldTick / 1440);
   }
+  if (from < 40) {
+    // §22.7 (97차 ④): 이름 섞기가 **새 세계의 생성 결과**를 바꾼다. 기존 세계 데이터는
+    // 그대로 두되(이름은 스냅샷에 이미 박혀 있다), 구 로그 재생이 어긋났을 때
+    // '버그'가 아니라 '생성 버전 차이'로 식별되도록 표식만 남긴다.
+  }
   if (from < 39) {
     // §22.6 먼저 말 걸기 — 하루 1회 제한 상태의 결정적 기본값.
     for (const sim of world.sims) { sim.approachedDay ??= -1; sim.approachedTo ??= []; }
@@ -225,7 +230,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 39;
+  world.schemaVersion = 40;
   return world;
 }
 

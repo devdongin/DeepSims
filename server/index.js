@@ -22,8 +22,18 @@ const DB_PATH = process.env.DEEPSIMS_DB || path.join(ROOT, 'deepsims.db');
 // 시드는 세계 생성에만 쓰이고 DB에 박히므로, 한 번 만들어진 마을은 이후 실행에서 그대로다.
 // 결정성은 그대로다 — 같은 시드 + 같은 입력 = 같은 세계라는 계약은 변하지 않는다.
 // DEEPSIMS_SEED를 주면 그 값을 쓴다 (친구와 같은 마을을 만들거나, 버그를 재현할 때).
-const SEED = process.env.DEEPSIMS_SEED
-  ? Number(process.env.DEEPSIMS_SEED)
+function parseSeed(raw) {
+  // §22.7 (97차 ③): Number()만 쓰면 NaN·소수·범위 밖 값이 그대로 통과해
+  // makeRng가 조용히 이상한 스트림을 만든다. 유효하지 않으면 즉시 알리고 멈춘다.
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < 1 || n > 2 ** 31 - 1) {
+    console.error(`DEEPSIMS_SEED가 올바르지 않습니다: ${JSON.stringify(raw)} — 1 ~ ${2 ** 31 - 1} 정수여야 합니다.`);
+    process.exit(1);
+  }
+  return n;
+}
+const SEED = process.env.DEEPSIMS_SEED !== undefined
+  ? parseSeed(process.env.DEEPSIMS_SEED)
   : randomInt(1, 2 ** 31 - 1);
 const LOCK_PATH = DB_PATH + '.lock.pid';
 
