@@ -133,6 +133,29 @@ test('16b. 프루닝: 30일 이전 이벤트 → 일 집계 축약', () => {
   st.close();
 });
 
+test('16d. 프루닝 보존: 타입·심별 총량이 집계로 정확히 이월된다', () => {
+  // Codex 교차 리뷰 ④: 프루닝은 세부 이벤트를 지우지만 **총량은 잃지 않아야** 한다.
+  // (getReport의 counts는 원본 구간 전용이고, 프루닝된 구간은 prunedAggregates로
+  //  돌아온다는 의미 계약은 getReport 주석 참조 — 여기서는 이월 산수 자체를 검증)
+  const st = new Storage(tmpDb());
+  const { world } = st.loadOrCreate({ seed: SEED, nowUtcMs: 1000 });
+  const events = advance(world, {}, 1440);
+  st.commitBatch({ world, events, appliedInputIds: [], epochUtcMs: 1000 });
+  const before = st.db.prepare('SELECT type, COUNT(*) AS n FROM events GROUP BY type').all();
+  const moneyBefore = st.db.prepare(
+    "SELECT COALESCE(SUM(json_extract(payload, '$.delta')), 0) AS s FROM events WHERE type = 'money_changed'").get().s;
+  st.pruneEvents(31 * 1440 + 1);
+  for (const { type, n } of before) {
+    const agg = st.db.prepare(
+      'SELECT COALESCE(SUM(count), 0) AS n FROM event_daily_aggregates WHERE category = ?').get(type).n;
+    assert.equal(agg, n, `${type} 총량 보존`);
+  }
+  const moneyAfter = st.db.prepare(
+    "SELECT COALESCE(SUM(sum), 0) AS s FROM event_daily_aggregates WHERE category = 'money_changed'").get().s;
+  assert.equal(moneyAfter, moneyBefore, 'money delta 합 보존');
+  st.close();
+});
+
 // §22.12 회귀: 예전에는 pruneEvents가 **부팅 때 한 번만** 불려서, 서버를 켜 둔 채
 // 오래 돌리면 events가 무한 증가했다 (실측 107게임일 205,092행·53.8MB, 시간당 +31MB).
 // 이제 따라잡기 배치·라이브 커밋 양쪽에서 일 경계마다 프루닝된다.

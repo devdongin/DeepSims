@@ -111,13 +111,17 @@ export class Engine {
 
   // §22.12 커밋 **후행** 일일 프루닝. 반드시 commitBatch가 끝난 뒤에만 부른다 —
   // 프루닝은 별도 트랜잭션이라 커밋 원자성에 끼어들지 않고, 대상(30일 전 이하)은
-  // 이미 오래전에 커밋된 행뿐이다. 하루에 한 번만 실제 작업이 생기고, 경계가 아니면
-  // 정수 비교 한 번으로 끝난다.
+  // 이미 커밋된 행뿐이다. runLive의 n이 아무리 커도 flushLive가 pending을 전부
+  // 커밋한 **다음**에 여기 오므로, 미커밋 이벤트가 cutoff에 걸릴 경로는 없다.
+  // 하루에 한 번만 실제 작업이 생기고, 경계가 아니면 정수 비교 한 번으로 끝난다.
+  // lastPruneDay는 **성공 후에** 갱신한다 (Codex 교차 리뷰 ②) — 프루닝이 던지면
+  // 미갱신이라 다음 커밋에서 재시도되고, 실패 자체는 커밋 실패와 같은 부류의
+  // DB 오류이므로 삼키지 않는다 (PLAN §4: 손상 = 안전 정지).
   pruneAfterCommit() {
     const day = Math.floor(this.world.worldTick / TICKS_PER_DAY);
     if (day <= this.lastPruneDay) return;
-    this.lastPruneDay = day;
     const deleted = this.storage.pruneEvents(this.world.worldTick);
+    this.lastPruneDay = day;
     if (deleted > 0) this.storage.opsLog(this.now(), 'events_pruned', { deleted, day });
   }
 

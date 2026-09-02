@@ -190,6 +190,14 @@ export class Storage {
   }
 
   // 부재중 리포트: (cursor, upto] 이벤트 집계 + 하이라이트 (PLAN §5)
+  //
+  // 의미 계약 (§22.12 라이브 프루닝 후 명시 — Codex 교차 리뷰 ①):
+  // counts/meals/works/moneyBySim은 **원본 events가 남아 있는 구간(최근 30게임일)**의
+  // 세부 통계다. 그보다 오래된 구간은 prunedAggregates(일×타입×심 단위 집계)로만
+  // 돌아온다 — 합산하지 않는 것은 의도다: 두 해상도(틱 단위 원본 vs 일 단위 집계)를
+  // 한 숫자로 섞으면 리포트가 어느 쪽 정밀도인지 알 수 없게 된다. 표시층이 구분해
+  // 보여준다. 이는 부팅 프루닝 시절에도 같았고, 라이브 프루닝은 이 경계가 세션 중에도
+  // 굴러간다는 점만 다르다.
   getReport(cursorTick, uptoTick) {
     const counts = this.db.prepare(
       `SELECT type, COUNT(*) AS n FROM events WHERE tick > ? AND tick <= ? GROUP BY type`)
