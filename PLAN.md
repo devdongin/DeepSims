@@ -1201,10 +1201,17 @@ traits: {
 - 참고 (이슈 #52 코멘트): OpenTTD 역 등급 — 역이 수요를 만드는 게 아니라 수요가 역의
   성과를 결정하는 방향. cargodist — 다중 마을(G3) 왕래가 서면 '어디로 가려는 수요인가'를
   세는 틀로 이어진다.
-- 버전: 세이브 v49(world.transit·sim.longTripTiles ??=) · 로직 v44(stationCarOwnerPct 50,
+- 버전: 세이브 v49(world.transit·sim.longTripTiles) · 로직 v44(stationCarOwnerPct 50,
   stationDistBoostMin 60, stationDistBoostPct 25 — validateLogic 범위 포함. 반영률 상한 100:
-  차가 수요를 부풀리면 안 된다). 테스트 test/station.test.js ST-1~13 (299/300 경계, 차 할인
-  경계, 거리 가중 경계, 비가역, 왕복 고정점, 결정성 해시, 마이그레이션, zone 계약).
+  차가 수요를 부풀리면 안 된다). 테스트 test/station.test.js ST-1~16 (299/300 경계, 차 할인
+  경계, 거리 가중 경계, 비가역, 왕복 고정점, 결정성 해시, 마이그레이션, zone 계약,
+  손상 세이브 정규화, 이동 0회, 파라미터 극단값 0/100·0/1000).
+- Codex 교차 리뷰: **조건부 GO → 조건 이행**. 지적 ①: `??=`는 부분 객체·NaN 누적값을 못
+  고친다(§22.18 v45가 industryDemand에서 배운 그 함정) → v49 마이그레이션이 transit을
+  기본 모양과 **필드 단위로 병합**하고(불리언은 true만 true, 카운터는 유한 safe integer
+  ≥ 0만 보존, unlockedDay만 -1 허용), longTrips·longTripTiles도 유한 정수로 정규화.
+  잠긴 세계에는 언락일이 남지 않는다. 실측 30일 soak(시드 4242): day 25 언락, 수요
+  320/300, 이벤트 1회, 왕복 고정점 유지, findNonFinite 0건.
 
 ### 20 라운드 29 — 시뮬레이션 배속 (x1/x2/x3)
 - 시간 권위 computeTarget에 speed(기본 1) 도입: target = floor((now − epoch) × speed / TICK_DURATION_MS).

@@ -221,6 +221,89 @@ test('ST-12. validateLogic — 새 파라미터의 시맨틱 범위', () => {
   assert.equal(validateLogic(p).ok, true);
 });
 
+test('ST-14. 마이그레이션 정규화 — 부분·손상 transit과 NaN 누적값을 기본값으로 되돌린다', () => {
+  // Codex 교차 리뷰 조건: `??=`는 부분 객체·손상 값을 못 고친다 (§22.18 v45와 같은 이유).
+  const cases = [
+    {},                                   // 부분 객체 (필드 전무)
+    { fulfillmentPct: 42 },               // 부분 객체 (유효 필드 하나)
+    'corrupt', [1, 2], 7,                 // 객체가 아님
+    { stationUnlocked: 'yes', demand: -5, totalLongTrips: 1.5, unlockedDay: -1 }, // 손상 값
+  ];
+  for (const corrupt of cases) {
+    const w = createWorld(SEED);
+    w.transit = corrupt;
+    w.sims[0].longTrips = Number.NaN;     // 손상 누적값
+    w.sims[1].longTripTiles = -3;
+    w.schemaVersion = 48;
+    const m = migrateWorld(w);
+    const base = makeTransitState();
+    assert.deepEqual(Object.keys(m.transit).sort(), Object.keys(base).sort(),
+      `모양 복원 (입력: ${JSON.stringify(corrupt)})`);
+    assert.equal(m.transit.stationUnlocked, false, '불리언은 true만 true');
+    assert.equal(m.transit.unlockedDay, -1);
+    if (corrupt !== null && typeof corrupt === 'object' && !Array.isArray(corrupt) && corrupt.fulfillmentPct === 42) {
+      assert.equal(m.transit.fulfillmentPct, 42, '유효한 필드는 보존');
+    } else {
+      assert.equal(m.transit.fulfillmentPct, 0);
+    }
+    assert.equal(m.transit.demand, 0, '음수·NaN은 기본값으로');
+    assert.equal(m.transit.totalLongTrips, 0, '비정수는 기본값으로');
+    assert.equal(m.sims[0].longTrips, 0, 'NaN 누적값 복구');
+    assert.equal(m.sims[1].longTripTiles, 0, '음수 누적값 복구');
+    assert.deepEqual(findNonFinite(m), [], '이관 후 유한성');
+    // 정규화된 세계에서 판정이 오염 없이 돈다
+    evalStationDemand(m, 1440, collectEmit([]));
+    assert.ok(Number.isSafeInteger(m.transit.demand) && m.transit.demand >= 0);
+    assert.ok(Number.isSafeInteger(m.transit.fulfillmentPct) && m.transit.fulfillmentPct >= 0);
+  }
+});
+
+test('ST-15. 이동 0회 — 평균·수요·충족도가 전부 0이고 언락되지 않는다', () => {
+  const w = createWorld(SEED);
+  zeroTransport(w);
+  const events = [];
+  evalStationDemand(w, 1440, collectEmit(events));
+  assert.deepEqual(
+    { ...w.transit },
+    { ...makeTransitState() },
+    '무이동 세계의 판정은 초기 상태와 동일 (0 나눗셈 없음)');
+  assert.equal(events.length, 0);
+});
+
+test('ST-16. 파라미터 극단값 — 0/100 반영률과 0/1000 거리 가중이 정의대로 동작한다', () => {
+  // 극단값도 validateLogic을 통과한다
+  const p = structuredClone(DEFAULT_LOGIC);
+  p.transport.stationCarOwnerPct = 0;
+  p.transport.stationDistBoostPct = 0;
+  assert.equal(validateLogic(p).ok, true);
+  p.transport.stationCarOwnerPct = 100;
+  p.transport.stationDistBoostPct = 1000;
+  assert.equal(validateLogic(p).ok, true);
+  // 반영률 0: 차 보유 심의 이동은 전혀 세지 않는다
+  const w = createWorld(SEED);
+  zeroTransport(w);
+  w.logic.transport.stationCarOwnerPct = 0;
+  w.sims[0].hasCar = true; w.sims[0].longTrips = 10000;
+  w.sims[1].longTrips = 7;
+  evalStationDemand(w, 1440, collectEmit([]));
+  assert.equal(w.transit.weightedTrips, 7, '차 보유 이동 완전 배제');
+  assert.equal(w.transit.stationUnlocked, false);
+  // 반영률 100: 할인 없음
+  w.logic.transport.stationCarOwnerPct = 100;
+  evalStationDemand(w, 2880, collectEmit([]));
+  assert.equal(w.transit.weightedTrips, 10007, '할인 없음');
+  // 거리 가중 1000%: 계수 1100 — 오버플로 없이 정수
+  const w2 = createWorld(SEED);
+  zeroTransport(w2);
+  w2.logic.transport.stationDistBoostPct = 1000;
+  w2.sims[0].longTrips = 28;
+  w2.sims[0].longTripTiles = 28 * 60;
+  evalStationDemand(w2, 1440, collectEmit([]));
+  assert.equal(w2.transit.demand, Math.floor(28 * 1100 / 100), '계수 1100');
+  assert.equal(w2.transit.stationUnlocked, true, '308 ≥ 300');
+  assert.deepEqual(findNonFinite(w2), []);
+});
+
 test('ST-13. /api/industry의 H — 이동 수요가 directUnmet과 다른 축으로 실린다', () => {
   const w = createWorld(SEED);
   zeroTransport(w);
