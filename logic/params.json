@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 33,
+  "logicSchemaVersion": 34,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -249,6 +249,15 @@
     },
     "wageSpanPct": 40,
     "aptitudePoolWeight": 300
+  },
+  "sharing": {
+    "needyBelow": 300,
+    "giverKeepMin": 1500,
+    "amount": 400,
+    "basePct": 5,
+    "friendBonusPct": 35,
+    "householdBonusPct": 55,
+    "partnerBonusPct": 45
   },
   "needCritical": 2000,
   "memory": {
