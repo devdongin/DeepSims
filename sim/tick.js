@@ -703,6 +703,15 @@ export function tick(world, inputsForThisTick = []) {
         pairedThisTick.add(a.id); pairedThisTick.add(b.id);
         pairedWith.set(a.id, b.id); pairedWith.set(b.id, a.id);
         a.state.pairedTicks++; b.state.pairedTicks++;
+        // §22.6 (95차 ②) 초대가 실제 만남으로 이어졌는지 계측한다.
+        // 청을 받아들여도 그 자리로 가는 사이 초대한 쪽이 떠나 있을 수 있다 —
+        // 지표가 없으면 '행동은 있는데 왜 외로움이 그대로인지' 알 수 없다.
+        for (const p of [a, b]) {
+          if (p.invitedTo && p.invitedTo.untilTick > t && p.invitedTo.facilityId === facId) {
+            emit('invite_fulfilled', p.id, { facilityId: facId, withSimId: p === a ? b.id : a.id });
+            p.invitedTo = undefined;
+          }
+        }
         // §17.8 페어링 서브순서: ① 전파 → ② 전염 → ③ 대화(험담 영향 포함) → ④ 델타
         const transferred = transferTokens(world, a, b, t, emit);
         contagionDraw(world, a, b, t, emit);
@@ -1046,6 +1055,14 @@ export function tick(world, inputsForThisTick = []) {
         maybeElection(world, t, day, emit);
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
+        // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야
+        // '왜 관계는 느는데 외로움은 그대로인지'를 가릴 수 있다.
+        for (const sim of world.sims) {
+          if (sim.invitedTo && sim.invitedTo.untilTick <= t) {
+            emit('invite_expired', sim.id, { facilityId: sim.invitedTo.facilityId });
+            sim.invitedTo = undefined;
+          }
+        }
         remitPublicRevenue(world, t, emit);
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)

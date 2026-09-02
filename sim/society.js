@@ -995,8 +995,8 @@ export function maybeApproach(world, t, day, emit) {
     });
     const target = sorted.find((c) => !sim.approachedTo.includes(c.id));
     if (target === undefined) continue; // 오늘 이 자리 사람들에게는 이미 다 청해봤다
+    sim.approachedTo.push(target.id); // 95차 ③: 건너뛰는 경우도 기록해야 매 틱 재검사를 막는다
     if (target.invitedTo && target.invitedTo.untilTick > t) continue; // 이미 청을 받았다
-    sim.approachedTo.push(target.id);
     // 응할 확률: 관계가 가까울수록, 상대도 사교가 고플수록 (이분 컷이 아니라 가중)
     let pct = S.approachBasePct;
     const tier = target.relTiers[sim.id];
