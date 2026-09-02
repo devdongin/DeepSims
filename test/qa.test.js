@@ -44,3 +44,68 @@ test('QA-4. 오류 응답에 스택트레이스가 실리지 않는다', () => {
   const SERVER = fs.readFileSync(new URL('../server/index.js', import.meta.url), 'utf8');
   assert.match(SERVER, /app\.use\(\(err, _req, res, _next\)/, 'express 오류 핸들러가 있어야 한다');
 });
+
+// ---- §22.13 결정성 계약 회복 (플레이테스트 S2-1) ----
+import { createWorld, advance, serialize, deserialize, hashWorld, findNonFinite } from '../sim/index.js';
+
+const PLAYER_INPUT = {
+  10: [{
+    sequence: 0,
+    command: 'create_player',
+    payload: { name: '테스터', gender: 'F', age: 31, mbti: { EI: 25, SN: 75, TF: 25, JP: 75 }, occupation: 'office_worker' },
+  }],
+};
+
+test('QA-5. 저장/복구 왕복이 고정점이다 — 재시작이 세계를 바꾸지 않는다', () => {
+  // 기존 결정성 테스트는 **같은 프로세스 안의 분할**만 검증했다. 저장/복구 왕복은
+  // 아무도 안 봤고, 그 틈에서 계약이 깨져 있었다 (3000틱 뒤 국고 115 vs 380).
+  const w = createWorld(848664808);
+  advance(w, PLAYER_INPUT, 11);
+  advance(w, {}, 12000); // 플레이어가 장을 보고 아프고 초대받을 만큼 충분히
+  const w2 = deserialize(serialize(w));
+  assert.equal(hashWorld(w), hashWorld(w2), '직렬화 왕복이 세계를 바꿨다');
+
+  // 그리고 그 뒤로도 같은 길을 간다 — 왕복 직후 해시만 같고 갈라지는 경우를 잡는다
+  advance(w, {}, 3000);
+  advance(w2, {}, 3000);
+  assert.equal(hashWorld(w), hashWorld(w2), '왕복 후 3000틱에서 세계가 갈라졌다');
+  assert.equal(w.treasury, w2.treasury);
+});
+
+test('QA-6. 세계에 NaN·undefined가 없다 — 직렬화가 삼키는 값이 상태에 남으면 안 된다', () => {
+  const w = createWorld(848664808);
+  advance(w, PLAYER_INPUT, 11);
+  advance(w, {}, 12000);
+  const bad = findNonFinite(w, 20);
+  assert.deepEqual(bad, [], `직렬화가 삼키는 값이 남아 있다: ${JSON.stringify(bad)}`);
+});
+
+test('QA-7. hashWorld가 NaN·undefined를 구분한다 — 오라클에 구멍이 없다', () => {
+  // 예전 hashWorld는 JSON.stringify 위에 그대로 얹혀 있어 NaN과 null, undefined와
+  // "키 없음"을 구분하지 못했다. 오라클이 못 보면 테스트 177개가 전부 초록불인 채로
+  // 세계가 갈라진다 — 실제로 그렇게 됐다.
+  const base = createWorld(4242);
+  const withNaN = deserialize(serialize(base));
+  withNaN.sims[0].groceries = NaN;
+  const withNull = deserialize(serialize(base));
+  withNull.sims[0].groceries = null;
+  const withUndef = deserialize(serialize(base));
+  withUndef.sims[0].groceries = undefined;
+
+  assert.notEqual(hashWorld(withNaN), hashWorld(withNull), 'NaN과 null이 같은 해시로 보인다');
+  assert.notEqual(hashWorld(withUndef), hashWorld(withNull), 'undefined와 null이 같은 해시로 보인다');
+  assert.notEqual(hashWorld(withNaN), hashWorld(base), 'NaN이 원본과 같은 해시로 보인다');
+});
+
+test('QA-8. 플레이어 심이 NPC와 같은 필드를 갖는다', () => {
+  // 이민자·신생아는 groceries·sick을 설정하는데 플레이어만 빠져 있었다.
+  const w = createWorld(848664808);
+  advance(w, PLAYER_INPUT, 11);
+  const player = w.sims.find((s) => s.isPlayer);
+  const npc = w.sims.find((s) => !s.isPlayer);
+  for (const k of ['groceries', 'sick']) {
+    assert.ok(k in player, `플레이어에게 ${k}가 없다`);
+    assert.equal(typeof player[k], typeof npc[k], `${k}의 타입이 NPC와 다르다`);
+  }
+  assert.equal(Number.isSafeInteger(player.groceries), true);
+});

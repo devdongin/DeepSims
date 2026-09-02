@@ -6,6 +6,7 @@ import { growIdMatrices as growIdMatricesRef } from './society.js'; // §22.2
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
+import { SCHEMA_VERSION } from './constants.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -204,6 +205,15 @@ export function migrateWorld(world) {
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
   }
+  if (from < 41) {
+    // §22.13 플레이어 심의 groceries·sick 미초기화 복구 (플레이테스트 S2-1).
+    // 살아 있는 세계에는 이미 NaN이 저장돼 null로 굳어 있거나 키가 아예 없다.
+    // `??=`는 null·undefined는 잡아도 NaN은 못 잡으므로 유한수 검사로 되살린다.
+    for (const sim of world.sims) {
+      if (!Number.isSafeInteger(sim.groceries)) sim.groceries = 0;
+      if (sim.sick === undefined) sim.sick = null;
+    }
+  }
   if (from < 28) {
     world.complaints ??= []; // §19.5
     world.petitions ??= {};
@@ -230,7 +240,9 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 40;
+  // §22.13 상수를 쓴다. 예전에는 리터럴이라 SCHEMA_VERSION을 올릴 때 같이 안 고치면
+  // 로드된 세계가 구버전으로 되돌아가고, 라이브 세계와 상태가 갈렸다.
+  world.schemaVersion = SCHEMA_VERSION;
   return world;
 }
 
