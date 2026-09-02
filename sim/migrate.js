@@ -207,7 +207,16 @@ export function migrateWorld(world) {
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
   }
   if (from < 45) {
-    world.industryDemand ??= {}; // §22.18 산업 수요 원장
+    // §22.18 산업 수요 원장. `??=`만으로는 배열·문자열 같은 손상 값을 못 고친다
+    // (109차 ⑤) — 순수 객체가 아니면 버리고 새로 만든다. 각 항목의 카운터도 검사한다.
+    const d = world.industryDemand;
+    if (d === null || typeof d !== 'object' || Array.isArray(d)) world.industryDemand = {};
+    else {
+      for (const [k, v] of Object.entries(d)) {
+        if (v === null || typeof v !== 'object' || Array.isArray(v)
+          || !Number.isSafeInteger(v.unmet) || v.unmet < 0) delete d[k];
+      }
+    }
   }
   if (from < 44) {
     // §22.16 성씨 백필/재계산.

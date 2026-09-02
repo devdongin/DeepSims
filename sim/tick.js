@@ -1233,7 +1233,22 @@ export function tick(world, inputsForThisTick = []) {
         // 영업시간이 아니어서(blocked) 못 한 것은 시설 수요가 아니다 — 그걸 섞으면
         // '식당을 더 지어라'는 잘못된 처방이 나온다. §19.10에서 같은 이유로 불만 원인을
         // 분화했고, 지금 살아 있는 세계의 no_money 불만 452건이 정확히 그 함정이다.
-        if (kindTag === 'no_facility') recordIndustryDemand(world, critical[0], floorDiv(t, 1440));
+      }
+      // §22.18 (109차 ①) 원장은 **critical 각각을** 본다. 예전에는 위급 후보가 하나도
+      // 없을 때 critical[0]만 적립해서, 다른 위급 행동은 후보가 있고 병원만 막힌 경우를
+      // 통째로 놓쳤다 — 실측으로 병원·도서관·시장을 지운 세계를 40,000틱 돌려도
+      // 원장이 비어 있었다. 돈·영업시간 때문에 막힌 것은 여전히 제외한다.
+      const day18 = floorDiv(t, 1440);
+      for (const act of critical) {
+        if (cands.some((c) => c.action === act)) continue; // 갈 곳이 있었다
+        // **사유가 붙은 실패는 시설 수요가 아니다.** 돈이 없어서(no_money),
+        // 영업시간이 아니어서(off_hours), 장바구니가 비어서(no_groceries),
+        // 아직 필요하지 않아서(not_needed), 아파야 가는 곳이라(healthy) 못 한 것은
+        // 전부 '갈 곳이 없다'와 다르다. 실측으로 이 필터가 없을 때 집밥 실패
+        // 196건이 '가구내 산업 수요'로 잘못 잡혔다.
+        // 사유 없이 후보만 없는 경우 = 그 일을 할 자리가 세계에 없다.
+        if (actionBlockReason(world, sim, act, t) !== null) continue;
+        recordIndustryDemand(world, act, day18);
       }
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });

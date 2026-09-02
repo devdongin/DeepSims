@@ -79,13 +79,20 @@ export const KSIC = [
   },
   {
     code: 'L', nameKo: '부동산업',
-    facilityTypes: ['house', 'apartment'], occupations: [], actions: ['sleep'],
-    note: '집은 배정될 뿐 거래되지 않는다 — 임대·매매가 없어 중개업이 성립하지 않는다.',
+    facilityTypes: [], occupations: [], actions: [],
+    // 109차 ③: 주거 **시설이 있다는 것**과 **부동산업이 있다는 것**은 다르다.
+    // 집은 배정될 뿐 거래·임대되지 않으므로 사업체가 성립하지 않는다. 집을 이 분류의
+    // 시설로 세면 30채짜리 마을이 부동산업 활성으로 잘못 보고된다.
+    housingFacilityTypes: ['house', 'apartment'],
+    note: '집 30채가 있지만 배정될 뿐 거래되지 않는다 — 임대·매매가 없어 산업이 아니다.',
   },
   {
     code: 'M', nameKo: '전문, 과학 및 기술 서비스업',
     facilityTypes: ['office'], occupations: ['office_worker', 'freelancer'], actions: [],
-    note: '사무직의 일이 무엇인지는 아직 추상이다.',
+    // 109차 ③: office를 M에 넣은 것은 편의적 배정이다. 실제로는 사무직이 무슨 일을
+    // 하는지가 세계에 없어서 J(정보통신)·K(금융)·N(사업지원) 어디로도 갈 수 있다.
+    note: '사무직의 일이 무엇인지가 아직 추상이라 M에 임시 배정했다. '
+      + '사무 노동의 산출이 정해지면 J·K·N으로 갈릴 자리다.',
   },
   {
     code: 'N', nameKo: '사업시설 관리, 사업 지원 및 임대 서비스업',
@@ -100,9 +107,14 @@ export const KSIC = [
   },
   {
     code: 'P', nameKo: '교육 서비스업',
-    facilityTypes: ['school', 'university', 'library'], occupations: ['teacher', 'student'],
+    facilityTypes: ['school', 'university', 'library'], occupations: ['teacher'],
     actions: ['read'],
-    note: '학교와 도서관이 있다.',
+    // 109차 ②: student를 종사자로 세면 **고용 없이도 학교가 active**가 된다. 학생은
+    // 이 산업의 이용자이지 종사자가 아니다. 별도로 participants에 센다.
+    participantOccupations: ['student'],
+    note: '학교·도서관이 있고 교사가 일한다. 학생은 이용자로 따로 센다. '
+      + '도서관을 교육에 넣은 것은 이 세계에서 read 행동이 학습에 가깝기 때문이고, '
+      + '엄밀한 KSIC에서는 문화·정보 서비스에 더 가깝다.',
   },
   {
     code: 'Q', nameKo: '보건업 및 사회복지 서비스업',
@@ -135,7 +147,9 @@ export const KSIC = [
 const BY_FACILITY = new Map();
 const BY_OCCUPATION = new Map();
 const BY_ACTION = new Map();
+const BY_PARTICIPANT = new Map();
 for (const s of KSIC) {
+  for (const p of s.participantOccupations ?? []) BY_PARTICIPANT.set(p, s.code);
   for (const f of s.facilityTypes) BY_FACILITY.set(f, s.code);
   for (const o of s.occupations) BY_OCCUPATION.set(o, s.code);
   for (const a of s.actions) BY_ACTION.set(a, s.code);
@@ -196,9 +210,13 @@ export function industryStatus(world) {
     if (c !== null) facCount.set(c, (facCount.get(c) ?? 0) + 1);
   }
   const workerCount = new Map();
+  const participantCount = new Map();
   for (const s of world.sims ?? []) {
-    const c = industryOfOccupation(s.traits?.occupation);
+    const occ = s.traits?.occupation;
+    const c = industryOfOccupation(occ);
     if (c !== null) workerCount.set(c, (workerCount.get(c) ?? 0) + 1);
+    const pc = BY_PARTICIPANT.get(occ);
+    if (pc !== undefined) participantCount.set(pc, (participantCount.get(pc) ?? 0) + 1);
   }
   return KSIC.map((s) => {
     const facilities = facCount.get(s.code) ?? 0;
@@ -217,8 +235,9 @@ export function industryStatus(world) {
       state,
       facilities,
       workers,
-      unmet: dem?.unmet ?? 0,
-      complaintUnmet: fromComplaints,
+      participants: participantCount.get(s.code) ?? 0, // 이용자 (학생 등) — 종사자가 아니다
+      directUnmet: dem?.unmet ?? 0,      // 실패 순간에 직접 센 것
+      complaintEvidence: fromComplaints, // 세계가 불만으로 집계한 것 (같은 사건의 다른 표현일 수 있다)
       firstDay: dem?.firstDay ?? -1,
       lastDay: dem?.lastDay ?? -1,
       note: s.note,
