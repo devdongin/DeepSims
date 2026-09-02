@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 32,
+  "logicSchemaVersion": 33,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -231,6 +231,24 @@
     "lethargyThreshold": -5000,
     "reliefScale": 25000000,
     "lethargyScale": 50000000
+  },
+  "abilities": {
+    "keyAbility": {
+      "office_worker": "intellect",
+      "barista": "dexterity",
+      "freelancer": "intellect",
+      "student": "intellect",
+      "doctor": "intellect",
+      "civil_servant": "intellect",
+      "teacher": "charisma",
+      "police": "stamina",
+      "firefighter": "stamina",
+      "nurse": "charisma",
+      "politician": "charisma",
+      "worker": "stamina"
+    },
+    "wageSpanPct": 40,
+    "aptitudePoolWeight": 300
   },
   "needCritical": 2000,
   "memory": {
