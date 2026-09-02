@@ -7,6 +7,9 @@ import { makeRng, rngNext, rngInt } from './prng.js';
 import { generateTraits } from './traits.js';
 import { DEFAULT_LOGIC } from './logic.js';
 
+import { makeSim } from './simfactory.js';
+import { surnameFor } from './surnames.js';
+
 export const SIM_NAMES = ['민수', '지연', '하준', '서연', '도윤', '은지', '태호', '수아', '준호', '예린'];
 // §17.1 이민자 이름 풀 (순환 사용, 중복 시 클라가 이름 뒤 id 표기)
 export const IMMIGRANT_NAMES = ['재현', '소민', '우진', '하늘', '규리', '성민', '다은', '지호', '세아', '현우',
@@ -37,51 +40,27 @@ export function createWorld(seed) {
     const homeId = `house${Math.floor(id / 2)}`;
     const home = map.facilities.find((f) => f.id === homeId);
     const traits = generateTraits(rngWorldgen);
-    sims.push({
+    // §22.16 심 생성은 makeSim 한 곳으로 모은다. rng 소비 순서(traits → needs×4 → money)는
+    // 여기서 그대로 유지하고 값만 넘긴다 — 월드젠 바이트 동일성이 걸려 있다.
+    const needs = {
+      hunger: 5000 + rngInt(rngWorldgen, 4000),
+      energy: 5000 + rngInt(rngWorldgen, 4000),
+      social: 5000 + rngInt(rngWorldgen, 4000),
+      fun: 5000 + rngInt(rngWorldgen, 4000),
+    };
+    const money = DEFAULT_LOGIC.occupations[traits.occupation].startMoney + rngInt(rngWorldgen, 500);
+    sims.push(makeSim({
       id,
       name: nameOrder[id], // §22.7 시드로 섞인 순서
+      surname: surnameFor(seed, id),
       homeId,
-      isPlayer: false,
       traits,
-      abilities: makeAbilities(seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
-      sharedDay: -1,
-      sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
-      hungerZeroTicks: 0, // §22.2 굶은 채 머문 시간
-      approachedDay: -1,
-      approachedTo: [], // §22.6 하루에 같은 사람에게 거듭 말 걸지 않기
-      mood: 0,
+      seed,
       x: home.door.x,
       y: home.door.y + 1, // 문 앞 도로변
-      needs: {
-        hunger: 5000 + rngInt(rngWorldgen, 4000),
-        energy: 5000 + rngInt(rngWorldgen, 4000),
-        social: 5000 + rngInt(rngWorldgen, 4000),
-        fun: 5000 + rngInt(rngWorldgen, 4000),
-      },
-      money: DEFAULT_LOGIC.occupations[traits.occupation].startMoney + rngInt(rngWorldgen, 500),
-      state: { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 },
-      // Phase 3 인지 상태 (PLAN §2.5)
-      memories: [],
-      memorySeq: 0,
-      habit: {},           // "action:facilityId" -> 누적 보너스 (§G habitMod)
-      relTiers: {},        // otherSimId -> 'acquaintance'|'friend'|'rival' (stranger는 미기록)
-      lastReflectedDay: -1,
-      reflectionMemoryCursor: 0,
-      pendingMood: null,
-      // Phase 4 (PLAN §2.5 D/F)
-      knownTokens: [],
-      plan: null,
-      lastPlannedDay: -1,
-      hangoverUntil: -1, // §15.1.A: t < hangoverUntil 동안 숙취
-      sick: null,        // §17.3: null | { kind, untilTick }
-      groceries: 0,      // §16.B 장바구니 (집밥 재료)
-      noPathCool: {},    // §17.23 no_path 쿨다운
-      patrolIdx: 0,      // §17.24 순찰 진행 (경찰만 의미)
-      hasCar: false,     // §19 R-B 자가용 (이동 속도 배수)
-      complaintCursor: 0, // §19.5 불만 집계 커서 (중복 가산 방지 — 70차 ①)
-      complaintDays: {},  // §19.7 kind → 마지막 불만 제기일 (Granovetter: 사건 수가 아니라 사람 수)
-      longTrips: 0,      // §19 R-B 장거리 이동 횟수 (출발 시점 누적 — 64차 (c))
-    });
+      needs,
+      money,
+    }));
   }
 
   const affinity = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));

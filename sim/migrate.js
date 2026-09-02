@@ -7,6 +7,7 @@ import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 import { SCHEMA_VERSION } from './constants.js';
+import { surnameFor } from './surnames.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -204,6 +205,27 @@ export function migrateWorld(world) {
     // 세이브 구조는 그대로지만 **같은 스냅샷에서 다른 궤적**이 나오므로, 구 로그 재생이
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
+  }
+  if (from < 43) {
+    // §22.16 invitedTo를 모든 심에게 명시적으로 심는다 (없으면 키가 갈린다)
+    for (const sim of world.sims) if (sim.invitedTo === undefined) sim.invitedTo = null;
+    // §22.16 성씨 백필. (seed, simId) 해시라 같은 심은 언제나 같은 성을 받고,
+    // rng를 소비하지 않으므로 리플레이 스트림이 어긋나지 않는다.
+    // 자녀는 원래 부모 성을 따라야 하지만, 기존 세이브에는 그 정보가 없다 —
+    // world.parents로 부모를 찾을 수 있으면 그쪽 성을 물려주고, 아니면 분포에서 뽑는다.
+    const surnameOf = (sim) => surnameFor(world.seed, sim.id);
+    for (const sim of world.sims) if (typeof sim.surname !== 'string') sim.surname = surnameOf(sim);
+    // 부모가 있는 심은 성을 부모에게 맞춘다 (id 오름차순 — 세대가 순서대로 정리된다)
+    const byId = new Map(world.sims.map((s) => [s.id, s]));
+    for (const sim of [...world.sims].sort((a, b) => a.id - b.id)) {
+      const pr = world.parents?.[sim.id];
+      if (!Array.isArray(pr) || pr.length < 2) continue;
+      const pa = byId.get(pr[0]); const pb = byId.get(pr[1]);
+      if (!pa || !pb) continue;
+      const dads = [pa, pb].filter((x) => x.traits?.gender === 'M');
+      const np = dads.length === 1 ? dads[0] : (pa.id <= pb.id ? pa : pb);
+      if (typeof np.surname === 'string') sim.surname = np.surname;
+    }
   }
   if (from < 42) {
     // §22.14 동석 대화 카운터. undefined면 직렬화 왕복이 고정점이 아니게 되므로 0으로 심는다.

@@ -17,6 +17,7 @@ export function simView(sim) {
   return {
     id: sim.id,
     name: sim.name,
+    surname: sim.surname, // §22.16 표시는 성+이름
     x: sim.x,
     y: sim.y,
     state: sim.state,

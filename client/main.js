@@ -909,7 +909,14 @@ const BLOCK_KO = {
 };
 const OCC_KO = { office_worker: '회사원', barista: '바리스타', freelancer: '프리랜서', student: '학생', retired: '은퇴' };
 const NEED_KO = { hunger: '배고픔', energy: '수면 욕구', social: '외로움', fun: '심심함', money: '돈 걱정', mood: '울적함', space: '집이 좁음' };
-function simName(id) { return world?.sims.find((s) => s.id === id)?.name ?? `심${id}`; }
+// §22.16 표시 이름은 성+이름. 성이 없는 오래된 세이브도 이름만으로 그대로 나온다.
+function simName(id) {
+  const s = world?.sims.find((x) => x.id === id);
+  if (!s) return `심${id}`;
+  return `${s.surname ?? ''}${s.name ?? ''}` || `심${id}`;
+}
+// 말풍선·라벨처럼 좁은 자리에서는 이름만 쓴다 (성까지 넣으면 겹친다)
+function simGivenName(id) { return world?.sims.find((x) => x.id === id)?.name ?? `심${id}`; }
 
 // 판단 사유 문장화 (PLAN §14.1)
 function reasonText(r) {

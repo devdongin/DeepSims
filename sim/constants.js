@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 42; // §22.14 동석 대화 (state.sideTalkTicks)
+export const SCHEMA_VERSION = 43; // §22.16 성씨 (sim.surname)
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분

@@ -1,6 +1,8 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
+import { makeSim } from './simfactory.js';
+import { surnameFor } from './surnames.js';
 import { generateTraits, occupationAllowed } from './traits.js';
 import { makeAbilities, aptitudeFor } from './abilities.js'; // §21.1 (RNG 미소비)
 import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
@@ -188,21 +190,24 @@ export function maybeChildren(world, t, day, emit) {
     const name = IMMIGRANT_NAMES[world.immigrantCounter % IMMIGRANT_NAMES.length];
     world.immigrantCounter++;
     const L = world.logic;
-    const child = {
-      id, name, homeId: pa.homeId, isPlayer: false, traits, mood: 0,
-      x: home.door.x, y: home.door.y + 1,
+    // §22.16 자녀는 부모의 성을 따른다. 한국 민법 제781조는 부의 성을 원칙으로 하고
+    // 혼인신고 시 협의로 모의 성을 따를 수 있게 한다. 게임은 결정적이어야 하므로
+    // **남성 부모가 정확히 한 명이면 그 성**, 아니면 id가 작은 쪽의 성을 따른다.
+    // (동성 부부·성별 X인 경우에도 규칙이 갈리지 않게 하는 완전 순서다.)
+    const dads = [pa, pb].filter((p) => p.traits.gender === 'M');
+    const nameParent = dads.length === 1 ? dads[0] : (pa.id <= pb.id ? pa : pb);
+    const child = makeSim({
+      id,
+      name,
+      surname: nameParent.surname ?? surnameFor(world.seed, nameParent.id),
+      homeId: pa.homeId,
+      traits,
+      seed: world.seed,
+      x: home.door.x,
+      y: home.door.y + 1,
       needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 },
       money: L.occupations.child.startMoney,
-      state: { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 },
-      memories: [], memorySeq: 0, habit: {}, relTiers: {},
-      lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
-      knownTokens: [], plan: null, lastPlannedDay: -1,
-      hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
-      abilities: makeAbilities(world.seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
-      sharedDay: -1, sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
-      hungerZeroTicks: 0, // §22.2
-      approachedDay: -1, approachedTo: [], // §22.6
-    };
+    });
     world.sims.push(child);
     growIdMatrices(world); // §22.2 id 공간 기준 확장 (sims.length는 사망 후 어긋난다)
     world.parents[id] = [a, b];
@@ -301,19 +306,20 @@ function immigrateOne(world, t, emit) {
   world.immigrantCounter++;
   const id = nextSimId(world); // §22.2 (위와 동일)
   const L = world.logic;
-  const sim = {
-    id, name, homeId: home.id, isPlayer: false, traits, mood: 0,
-    x: 2, y: 23, // 서쪽 도로 끝에서 걸어 들어온다
+  // §22.16 이민자는 한국 성씨 분포에서 성을 받아 온다 — 마을에 새 성씨가 생기는 통로다.
+  // rngSim을 소비하지 않으므로(해시 유도) 기존 리플레이가 어긋나지 않는다.
+  const sim = makeSim({
+    id,
+    name,
+    surname: surnameFor(world.seed, id),
+    homeId: home.id,
+    traits,
+    seed: world.seed,
+    x: 2,
+    y: 23, // 서쪽 도로 끝에서 걸어 들어온다
     needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 },
     money: L.occupations[traits.occupation].startMoney,
-    state: { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 },
-    memories: [], memorySeq: 0, habit: {}, relTiers: {},
-    lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
-    knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
-      abilities: makeAbilities(world.seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
-      sharedDay: -1, sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
-  };
+  });
   world.sims.push(sim);
   // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).
   world.externalInflow = (world.externalInflow ?? 0) + sim.money;

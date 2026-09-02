@@ -12,6 +12,8 @@ import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chron
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits } from './traits.js';
 import { aptitudeFor } from './abilities.js'; // §21.1
+import { makeSim, emptyState } from './simfactory.js';
+import { surnameFor } from './surnames.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
@@ -413,14 +415,17 @@ function startAction(world, sim, cand, t, emit, reason) {
   }
   // §19 R-B: 장거리 이동 통계 — **출발 시점** 누적(64차 (c) 계약 고정)
   if (path.length >= world.logic.transport.longTripMin) sim.longTrips++;
+  // §22.16 emptyState를 펼쳐서 만든다. 예전에는 여기서 필드를 손으로 나열해
+  // sideTalkTicks가 빠졌고(§22.14), 읽는 쪽의 `?? 0` 가드 덕에 우연히 버티고 있었다.
+  // 필드를 하나 늘릴 때마다 이런 자리를 찾아다녀야 하는 구조는 언젠가 반드시 어긋난다.
   sim.state = {
+    ...emptyState(),
     kind: path.length === 0 ? 'performing' : 'walking',
     action: cand.action,
     facilityId: cand.facilityId,
     resourceId: cand.resourceId,
     path,
     ticksLeft: actionDuration(cand.action, world.logic),
-    pairedTicks: 0,
   };
   emit('action_started', sim.id, {
     action: cand.action, facilityId: cand.facilityId, resourceId: cand.resourceId, reason,
@@ -434,10 +439,6 @@ function startAction(world, sim, cand, t, emit, reason) {
   return true;
 }
 
-function emptyState() {
-  // §22.14 sideTalkTicks: 옆 사람과 말이 트인 횟수. undefined면 직렬화 왕복이 깨지므로 0으로 둔다.
-  return { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0, sideTalkTicks: 0 };
-}
 
 function startIdle(sim, L, emit) {
   sim.state = { ...emptyState(), kind: 'performing', action: 'idle', ticksLeft: actionDuration('idle', L) };
@@ -498,23 +499,23 @@ function applyCreatePlayer(world, inp, t, emit) {
   const home = [...houses].sort((a, b) => (counts.get(a.id) - counts.get(b.id)) || (a.id < b.id ? -1 : 1))[0];
 
   const id = world.sims[world.sims.length - 1].id + 1;
-  const sim = {
-    id, name, homeId: home.id, isPlayer: true, traits, mood: 0,
-    x: home.door.x, y: home.door.y + 1,
+  // §22.16 플레이어도 같은 창구로 만든다. 예전에는 여기만 필드가 달라서 groceries·sick이
+  // 빠졌고, 그게 결정성 계약을 깨뜨렸다 (§22.13). 이제 그럴 자리가 없다.
+  const sim = makeSim({
+    id,
+    name,
+    surname: typeof p.surname === 'string' && p.surname.length >= 1 && p.surname.length <= 2
+      ? p.surname
+      : surnameFor(world.seed, id), // 플레이어가 성을 안 고르면 분포에서 뽑아 준다
+    homeId: home.id,
+    isPlayer: true,
+    traits,
+    seed: world.seed,
+    x: home.door.x,
+    y: home.door.y + 1,
     needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 }, // 고정, rng 미소비
     money: world.logic.occupations[traits.occupation].startMoney,   // 고정분만
-    state: emptyState(),
-    memories: [], memorySeq: 0, habit: {}, relTiers: {},
-    lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
-    knownTokens: [], plan: null, lastPlannedDay: -1,
-    hangoverUntil: -1, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
-    // §22.13 이 두 필드가 없어서 결정성 계약이 깨져 있었다 (플레이테스트 S2-1).
-    // 이민자(society.js)와 신생아는 설정하는데 플레이어만 빠져 있었다. groceries가
-    // 없으면 `sim.groceries + n`이 NaN이 되고, NaN은 serialize에서 null이 되므로
-    // **서버 재시작이 세계를 바꾼다**. 게다가 `NaN < 1`이 false라 장보기 게이트가
-    // 항상 열려 플레이어만 장바구니 없이 무한히 집밥을 먹었다.
-    groceries: 0, sick: null,
-  };
+  });
   world.sims.push(sim);
   for (const row of world.affinity) row.push(0);
   world.affinity.push(new Array(world.sims.length).fill(0));
