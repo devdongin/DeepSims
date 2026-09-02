@@ -48,7 +48,14 @@ const ARCH_OF_OCCUPATION = {
 };
 // 심 스프라이트 일괄 폐기 — stopTimer 콜백이 폐기된 body를 만지지 않도록 함께 정리 (Codex 37차)
 function destroySimSprites() {
-  simSprites.forEach((s) => { if (s.stopTimer) s.stopTimer.remove(); s.destroy(); });
+  simSprites.forEach((s) => {
+    if (s.stopTimer) s.stopTimer.remove();
+    // §22.10: Phaser 3의 destroy는 트윈을 죽이지 않고 Tween도 타깃 파괴를 듣지 않는다.
+    // 남은 트윈이 파괴된 컨테이너를 계속 붙들어 GC를 막는다 — 이동 트윈은 매 배치 새로 붙으므로
+    // 인구×배속에 비례해 쌓인다.
+    if (scene) scene.tweens.killTweensOf(s);
+    s.destroy();
+  });
   simSprites.clear();
 }
 
@@ -84,7 +91,11 @@ const BLD_OF_FACILITY = { apartment: 'bld_apartment', factory: 'bld_factory', ma
   city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
   police_station: 'bld_police', fire_station: 'bld_fire' };
-const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern', 'police_car', 'fire_truck', 'ambulance', 'well', 'jangdok', 'laundry', 'bicycle', 'cart', 'flower_bed2', 'fence_wood', 'lamp_stone', 'street_tree_lit', 'bench2']
+const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern', 'police_car', 'fire_truck', 'ambulance', 'well', 'jangdok', 'laundry', 'bicycle', 'cart', 'flower_bed2', 'fence_wood', 'lamp_stone', 'street_tree_lit', 'bench2',
+  // §22.10: 'car'·'smoke'는 렌더 코드(main.js 차량 아이콘·굴뚝 연기)와 에셋이 둘 다 있는데
+  // 이 목록에만 빠져 있었다 — 텍스처 주입점이 여기뿐이라 exists()가 영원히 false였고,
+  // 두 기능이 조용히 죽어 있었다. 차 구매(society.js)·이동속도 2배(tick.js)는 계속 돌고 있었다.
+  'car', 'smoke']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -317,12 +328,52 @@ class TownScene extends Phaser.Scene {
       for (const [ox, oy] of [[-16, -8], [16, -8], [-16, 8], [16, 8]]) cx2.drawImage(src, ox, oy, 32, 16);
       this.textures.addCanvas('grass_cell', cell);
     }
-    const MW = 512;
-    const wpx = (MW + MW) * (TW / 2) + TW * 2;
-    const hpx = (MW + MW) * (TH / 2) + TH * 2;
-    this.grassBg = this.add.tileSprite(-(MW * TW) / 2 - TW, -TH, wpx, hpx, 'grass_cell')
+    // §22.10 뷰포트 크기 잔디 배경.
+    // 이전에는 월드 전체(512×512)를 덮는 16,448×8,224 TileSprite였다. Phaser CANVAS 렌더러는
+    // TileSprite 백킹 캔버스를 표시 크기 그대로 잡으므로(TileSprite.js CanvasPool.create) 이는
+    // 541 MB RGBA이고, 매 프레임 그 전체를 소스로 drawImage 한다 — 실측 6.42 ms/frame.
+    // (WEBGL이면 gl 경로가 캔버스를 건너뛰지만 임베디드 브라우저 이슈로 CANVAS 고정이다.)
+    // 화면만 한 캔버스를 두고 카메라를 따라다니게 하면 같은 그림이 0.08 ms에 나온다.
+    const cam = this.cameras.main;
+    this.grassBg = this.add.tileSprite(0, 0, Math.max(1, cam.width), Math.max(1, cam.height), 'grass_cell')
       .setOrigin(0, 0).setDepth(-10);
-    this.grassBg.tilePositionX = 16; this.grassBg.tilePositionY = 8;
+    this.grassBg.__vw = 0; this.grassBg.__vh = 0; // 리사이즈 감지용
+    this.syncGrassBg();
+  }
+
+  // 잔디 배경을 카메라 월드뷰에 맞춘다 (§22.10).
+  //   백킹 캔버스 = 화면 픽셀, 오브젝트 스케일 = 1/zoom → 월드뷰를 정확히 덮는다.
+  //   tileScale = zoom → 무늬 한 칸이 화면에서 32*zoom px, 즉 월드 스케일이 유지된다.
+  //   tilePosition = 월드뷰 좌상단 + 원래 위상(16, 8) → 예전과 같은 자리에 같은 무늬가 온다.
+  // 값이 바뀔 때만 대입한다 — TileSprite 세터는 무조건 dirty를 세워 캔버스를 다시 채우기 때문.
+  syncGrassBg() {
+    const bg = this.grassBg;
+    if (!bg) return;
+    const cam = this.cameras.main;
+    const zoom = cam.zoom;
+    if (!(zoom > 0) || cam.width <= 0 || cam.height <= 0) return;
+    // 뷰포트보다 사방 1px 크게 잡는다 — 줌 배율에 따라 월드뷰 폭이 정수로 안 떨어져
+    // 가장자리에 최대 0.5px 틈이 생기고, 그 자리에 카메라 배경색이 비친다 (실측 zoom 2.7).
+    const cw = cam.width + 2, ch = cam.height + 2;
+    if (bg.__vw !== cw || bg.__vh !== ch) {
+      bg.setSize(cw, ch);
+      bg.__vw = cw; bg.__vh = ch;
+    }
+    // worldView는 카메라 preRender에서 갱신되므로 한 프레임 늦다 — 직접 계산한다.
+    const inv = 1 / zoom;
+    const vx = cam.scrollX + cam.width / 2 - cam.width / (2 * zoom) - inv;
+    const vy = cam.scrollY + cam.height / 2 - cam.height / (2 * zoom) - inv;
+    if (bg.x !== vx || bg.y !== vy) bg.setPosition(vx, vy);
+    if (bg.scaleX !== inv) bg.setScale(inv);
+    if (bg.tileScaleX !== zoom) bg.setTileScale(zoom);
+    // 위상은 오브젝트 좌상단 기준이므로 vx/vy와 같은 원점을 써야 예전 무늬와 일치한다.
+    const px = vx + 16, py = vy + 8;
+    if (bg.tilePositionX !== px) bg.tilePositionX = px;
+    if (bg.tilePositionY !== py) bg.tilePositionY = py;
+  }
+
+  update() {
+    this.syncGrassBg();
   }
 
   // §UI 도로·바닥 레이어(59차 ③ 재검토): 구시가 한정(0..132) 개별 스탬프 — 실측 1,419개.
@@ -514,7 +565,8 @@ function syncItems() {
   if (!scene || !world?.lostItems) return;
   const alive = new Set(world.lostItems.map((it) => it.itemId));
   for (const [id, sp] of itemSprites) {
-    if (!alive.has(id)) { sp.destroy(); itemSprites.delete(id); }
+    // §22.10 repeat:-1 트윈은 destroy로 죽지 않는다 — 먼저 끊고 파괴한다
+    if (!alive.has(id)) { scene.tweens.killTweensOf(sp); sp.destroy(); itemSprites.delete(id); }
   }
   for (const it of world.lostItems) {
     if (itemSprites.has(it.itemId)) continue;
@@ -811,7 +863,8 @@ function syncFires() {
   if (!scene || !world?.incidents) return;
   const alive = new Set(world.incidents.map((i) => i.facilityId));
   for (const [id, sp] of fireSprites) {
-    if (!alive.has(id)) { sp.destroy(); fireSprites.delete(id); }
+    // §22.10 repeat:-1 트윈은 destroy로 죽지 않는다 — 먼저 끊고 파괴한다
+    if (!alive.has(id)) { scene.tweens.killTweensOf(sp); sp.destroy(); fireSprites.delete(id); }
   }
   for (const inc of world.incidents) {
     if (fireSprites.has(inc.facilityId)) continue;
