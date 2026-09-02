@@ -1298,6 +1298,11 @@ function connect() {
           if (e.type === 'road_formed' && world) {
             world.map.tiles[e.payload.y * world.map.w + e.payload.x] = 1;
             mapDirty = true;
+          } else if (e.type === 'public_works' && world) {
+            // §22.26 정부 포장 — road_formed와 같은 증분 갱신. 이 분기가 없으면 클라는
+            // 다음 전체 resync(15초+)까지 포장을 모른 채 잔디를 그린다.
+            for (const idx of (e.payload.tiles ?? [])) world.map.tiles[idx] = 1;
+            mapDirty = true;
           } else if (e.type === 'bed_built' && world) {
             const fac = world.map.facilities.find((f) => f.id === e.payload.facilityId);
             if (fac && !fac.resources.some((r) => r.id === e.payload.resourceId)) {

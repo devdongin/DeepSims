@@ -996,11 +996,14 @@ export function maybePublicWorks(world, t, day, emit) {
   cands.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]));
 
   const paved = [];
+  let stale = 0;
   for (const [idx] of cands) {
-    if (paved.length >= P.paveMaxPerDay) break;
-    // 차감 후에도 양수 유지 — 공채로 포장하지 않는다
-    if (world.treasury - P.paveCostPerTile <= 0) break;
-    if (world.map.tiles[idx] !== TILE.GRASS) { delete world.wear[idx]; continue; } // 이미 변한 칸
+    // 이미 변한 칸(자연 도로화 등)의 낡은 마모는 **비용·상한과 무관하게** 정리한다
+    // (121차 ②) — 비용 검사 뒤에 두면 국고가 마른 날의 stale 엔트리가 다음 리뷰까지
+    // 남고, remainingCandidates가 실제 미처리 수와 어긋난다.
+    if (world.map.tiles[idx] !== TILE.GRASS) { delete world.wear[idx]; stale++; continue; }
+    if (paved.length >= P.paveMaxPerDay) continue; // 포장은 상한까지, 정리는 끝까지
+    if (world.treasury - P.paveCostPerTile <= 0) continue; // 공채로 포장하지 않는다
     world.treasury -= P.paveCostPerTile;
     world.externalOutflow = (world.externalOutflow ?? 0) + P.paveCostPerTile;
     world.map.tiles[idx] = TILE.ROAD; // road_formed와 동일한 효과
@@ -1010,7 +1013,8 @@ export function maybePublicWorks(world, t, day, emit) {
   if (paved.length === 0) return;
   emit('public_works', world.mayorId, {
     kind: 'pave', tiles: paved, cost: paved.length * P.paveCostPerTile,
-    treasury: world.treasury, remainingCandidates: cands.length - paved.length,
+    treasury: world.treasury,
+    remainingCandidates: cands.length - paved.length - stale, // 실제 미처리 후보 수 (121차 ②)
   });
   recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', 'public_works'] });
 }
