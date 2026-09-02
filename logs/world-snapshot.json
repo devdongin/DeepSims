@@ -1,18 +1,18 @@
 {
  "_note": "개발자 저장소의 세계 상태 리포트 — GitHub Actions·리뷰 에이전트 전용. 게임은 읽지 않는다.",
- "exportedAtTick": 229113,
- "day": 159,
+ "exportedAtTick": 231901,
+ "day": 161,
  "pop": 57,
  "tier": 1,
- "treasury": 1003988,
- "reputation": 392,
+ "treasury": 1059449,
+ "reputation": 500,
  "policy": {
   "taxPct": 25,
   "welfareAmount": 550,
   "welfareThreshold": 300
  },
  "facilities": {
-  "house": 27,
+  "house": 30,
   "office": 3,
   "cafe": 8,
   "park": 8,
@@ -29,82 +29,75 @@
   "fire_station": 1,
   "police_station": 1
  },
- "plotsFree": 57,
+ "plotsFree": 54,
  "facilityRevenue": {
-  "total": 156703,
+  "total": 170754,
   "top": [
    {
     "id": "restaurant",
     "type": "restaurant",
-    "revenue": 67000
+    "revenue": 78800
    },
    {
     "id": "cafe2",
     "type": "cafe",
-    "revenue": 34318
+    "revenue": 38918
    },
    {
     "id": "cafe",
     "type": "cafe",
-    "revenue": 19413
+    "revenue": 18414
    },
    {
     "id": "market",
     "type": "market",
-    "revenue": 15000
-   },
-   {
-    "id": "cafe1",
-    "type": "cafe",
-    "revenue": 6110
+    "revenue": 15600
    },
    {
     "id": "cafe4",
     "type": "cafe",
-    "revenue": 6062
+    "revenue": 6462
+   },
+   {
+    "id": "cafe3",
+    "type": "cafe",
+    "revenue": 4315
    }
   ]
  },
  "incidents": 0,
  "transport": {
-  "carsOwned": 28,
-  "totalLongTrips": 3537,
+  "carsOwned": 29,
+  "totalLongTrips": 3880,
   "stationDemand": 300
  },
  "complaints": [
   {
-   "count": 19,
+   "count": 14,
    "kind": "lonely",
    "placeId": "cafe2",
-   "severity": 17,
-   "sinceDay": 132
-  },
-  {
-   "count": 10,
-   "kind": "lonely",
-   "placeId": "cafe3",
-   "severity": 8,
-   "sinceDay": 132
-  },
-  {
-   "count": 1,
-   "kind": "lonely",
-   "placeId": "park",
-   "severity": 0,
-   "sinceDay": 132
-  },
-  {
-   "count": 8,
-   "kind": "lonely",
-   "placeId": "park1",
-   "severity": 5,
+   "severity": 13,
    "sinceDay": 132
   },
   {
    "count": 18,
    "kind": "lonely",
+   "placeId": "cafe3",
+   "severity": 17,
+   "sinceDay": 132
+  },
+  {
+   "count": 4,
+   "kind": "lonely",
+   "placeId": "park1",
+   "severity": 3,
+   "sinceDay": 132
+  },
+  {
+   "count": 14,
+   "kind": "lonely",
    "placeId": "park2",
-   "severity": 16,
+   "severity": 13,
    "sinceDay": 132
   },
   {
@@ -115,90 +108,70 @@
    "sinceDay": 132
   },
   {
-   "count": 3,
+   "count": 1,
    "kind": "lonely",
    "placeId": "cafe1",
    "severity": 0,
    "sinceDay": 132
   },
   {
-   "count": 7,
+   "count": 12,
    "kind": "lonely",
    "placeId": "cafe",
-   "severity": 4,
+   "severity": 10,
    "sinceDay": 132
   },
   {
-   "count": 18,
+   "count": 11,
    "kind": "lonely",
    "placeId": "cafe4",
-   "severity": 17,
+   "severity": 10,
    "sinceDay": 132
   },
   {
-   "count": 13,
+   "count": 12,
    "kind": "hungry",
    "placeId": "",
-   "severity": 13,
+   "severity": 12,
    "sinceDay": 132
   },
   {
-   "count": 44,
+   "count": 29,
    "kind": "lonely",
    "placeId": "park4",
-   "severity": 44,
+   "severity": 29,
    "sinceDay": 132
   },
   {
-   "count": 369,
+   "count": 310,
    "kind": "no_money",
    "placeId": "eat",
-   "severity": 82,
+   "severity": 87,
    "sinceDay": 137
   },
   {
-   "count": 3,
+   "count": 1,
    "kind": "lonely",
    "placeId": "cafe5",
-   "severity": 3,
+   "severity": 1,
    "sinceDay": 144
   },
   {
-   "count": 8,
+   "count": 4,
    "kind": "lonely",
    "placeId": "cafe7",
-   "severity": 8,
+   "severity": 4,
    "sinceDay": 153
   },
   {
-   "count": 34,
+   "count": 53,
    "kind": "lonely",
    "placeId": "park7",
-   "severity": 34,
+   "severity": 53,
    "sinceDay": 154
   }
  ],
  "stats14": [
-  {
-   "avgMood": -16,
-   "day": 146,
-   "employed": 28,
-   "incidents": 1,
-   "pop": 43,
-   "reputation": 317,
-   "tier": 1,
-   "treasury": 462901
-  },
-  {
-   "avgMood": -41,
-   "day": 147,
-   "employed": 31,
-   "incidents": 0,
-   "pop": 46,
-   "reputation": 301,
-   "tier": 1,
-   "treasury": 466276
-  },
   {
    "avgMood": 141,
    "day": 148,
@@ -318,149 +291,189 @@
    "reputation": 392,
    "tier": 1,
    "treasury": 1003779
+  },
+  {
+   "avgMood": -44,
+   "day": 160,
+   "employed": 37,
+   "incidents": 1,
+   "pop": 57,
+   "reputation": 412,
+   "tier": 1,
+   "treasury": 1040062
+  },
+  {
+   "avgMood": 42,
+   "day": 161,
+   "employed": 37,
+   "incidents": 0,
+   "pop": 57,
+   "reputation": 475,
+   "tier": 1,
+   "treasury": 1059163
   }
  ],
  "events7d": [
   {
    "type": "action_started",
-   "n": 4369
+   "n": 4524
   },
   {
    "type": "action_completed",
-   "n": 4005
+   "n": 4147
   },
   {
    "type": "conversation",
-   "n": 3191
+   "n": 3317
   },
   {
    "type": "money_changed",
-   "n": 1198
+   "n": 1266
   },
   {
    "type": "greeting",
-   "n": 676
+   "n": 627
   },
   {
    "type": "lonely",
-   "n": 358
+   "n": 373
   },
   {
    "type": "relationship_changed",
-   "n": 345
+   "n": 328
   },
   {
    "type": "fell_sick",
-   "n": 313
+   "n": 326
   },
   {
    "type": "recovered",
-   "n": 310
+   "n": 322
+  },
+  {
+   "type": "road_formed",
+   "n": 47
+  },
+  {
+   "type": "invite_declined",
+   "n": 43
+  },
+  {
+   "type": "invited",
+   "n": 36
   },
   {
    "type": "welfare_paid",
    "n": 35
   },
   {
-   "type": "road_formed",
-   "n": 30
-  },
-  {
-   "type": "starving",
-   "n": 26
-  },
-  {
    "type": "fish_caught",
-   "n": 25
+   "n": 32
   },
   {
    "type": "money_shared",
-   "n": 22
+   "n": 30
   },
   {
-   "type": "wage_shortfall",
-   "n": 11
+   "type": "invite_fulfilled",
+   "n": 29
+  },
+  {
+   "type": "starving",
+   "n": 24
   },
   {
    "type": "item_spawned",
-   "n": 10
+   "n": 11
+  },
+  {
+   "type": "item_found",
+   "n": 8
   },
   {
    "type": "weather_changed",
    "n": 7
   },
   {
-   "type": "item_found",
+   "type": "item_reported",
    "n": 6
   },
   {
-   "type": "immigrated",
+   "type": "invite_expired",
    "n": 6
   },
   {
-   "type": "moved_home",
+   "type": "wage_shortfall",
    "n": 5
   },
   {
-   "type": "facility_built",
+   "type": "token_created",
    "n": 4
   },
   {
-   "type": "item_reported",
+   "type": "public_revenue_remitted",
+   "n": 4
+  },
+  {
+   "type": "moved_home",
+   "n": 4
+  },
+  {
+   "type": "immigrated",
+   "n": 4
+  },
+  {
+   "type": "gathering",
+   "n": 4
+  },
+  {
+   "type": "project_started",
    "n": 3
   },
   {
-   "type": "car_bought",
+   "type": "facility_built",
    "n": 3
-  },
-  {
-   "type": "token_created",
-   "n": 2
   },
   {
    "type": "started_dating",
    "n": 2
   },
   {
-   "type": "public_revenue_remitted",
+   "type": "married",
    "n": 2
   },
   {
-   "type": "gathering",
+   "type": "item_returned",
    "n": 2
-  },
-  {
-   "type": "project_started",
-   "n": 1
   },
   {
    "type": "job_changed",
    "n": 1
   },
   {
-   "type": "item_returned",
+   "type": "heroic_save",
    "n": 1
   },
   {
-   "type": "invited",
+   "type": "fire_started",
    "n": 1
   },
   {
-   "type": "invite_declined",
+   "type": "fire_out",
    "n": 1
   },
   {
-   "type": "bed_built",
+   "type": "car_bought",
    "n": 1
   }
  ],
  "topFails7d": [],
  "wageShortfall7d": {
-  "count": 11,
-  "total": 9183
+  "count": 5,
+  "total": 4593
  },
  "hungerNow": {
-  "atZero": 4,
-  "belowCritical": 5
+  "atZero": 6,
+  "belowCritical": 9
  }
 }
