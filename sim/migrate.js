@@ -154,6 +154,10 @@ export function migrateWorld(world) {
     // §19.10 (73차 ②): 원인 분화 시행일 — 이전 no_facility 항목은 외부 노출에서 legacy 표시
     world.complaintReasonDay = Math.floor(world.worldTick / 1440);
   }
+  if (from < 36) {
+    // §21.3 전직: 새 파라미터는 mergeLogicDefaults가 설치한다. 세계 데이터 이관은 없다 —
+    // 거동이 바뀌므로 구 로그 재생 불일치를 '버전 차이'로 식별하기 위한 표식이다 (75차 ①).
+  }
   if (from < 35) {
     // §21.2 나눔: 쌍당 하루 1회를 위한 결정적 기본값 (83차 ③).
     for (const sim of world.sims) { sim.sharedDay ??= -1; sim.sharedTo ??= []; }
@@ -204,7 +208,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 35;
+  world.schemaVersion = 36;
   return world;
 }
 

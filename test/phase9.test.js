@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } from '../sim/index.js';
 import { sameRegion, TILE } from '../sim/map.js';
+import { SWITCH_ONLY_OCCUPATIONS as SWITCH_ONLY_REF } from '../sim/traits.js';
 import { aptitudeFor, makeAbilities, ABILITIES, FALLBACK_SEED } from '../sim/abilities.js';
 
 // §21.1: 임금은 직업 기본급에 **능력치 보정**이 곱해진다 (이슈 #62). 테스트 공용 계산.
@@ -11,7 +12,7 @@ function grossWageOf(sim, L) {
   const apt = aptitudeFor(sim, sim.traits.occupation, L);
   return Math.floor(base * (100 + Math.floor((apt - 50) * L.abilities.wageSpanPct / 100)) / 100);
 }
-import { applyRomance, maybeShare as maybeShareRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
+import { applyRomance, maybeShare as maybeShareRef, maybeJobSwitch as maybeJobSwitchRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
 import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
@@ -1553,4 +1554,77 @@ test('S-70. §21.2 나눔은 rngSim을 소비하지 않는다 (드로우 순서 
   const before = JSON.stringify(w.rngSim);
   for (let day = 0; day < 20; day++) maybeShareRef(w, a, b, day * 1440, day, () => {});
   assert.equal(JSON.stringify(w.rngSim), before, 'dayHash 의사확률 — 드로우 미소비');
+});
+
+test('S-71. §21.3 전직: 수요가 있고 적성이 맞으면 그 일을 하러 간다 (#63)', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const I = L.industry;
+  const rest = w.map.facilities.find((f) => f.type === 'restaurant');
+  assert.ok(rest, '식당이 있다');
+  const before = w.sims.filter((s) => s.traits.occupation === 'chef').length;
+  assert.equal(before, 0, '아무도 셰프로 태어나지 않는다');
+
+  // 손님이 없으면 사람을 쓰지 않는다
+  rest.revenue = 0;
+  const out0 = [];
+  for (let d = 0; d < 30; d++) maybeJobSwitchRef(w, d * 1440, d, (type, simId, payload) => out0.push({ type, simId, payload }));
+  assert.equal(out0.filter((e) => e.type === 'job_changed').length, 0, '매출이 없으면 전직 없음');
+
+  // 손님이 오면 누군가 그 일을 하러 간다
+  rest.revenue = I.minRevenueToHire * 3;
+  let ev = null;
+  for (let d = 0; d < 60 && !ev; d++) {
+    const out = [];
+    maybeJobSwitchRef(w, d * 1440, d, (type, simId, payload) => out.push({ type, simId, payload }));
+    ev = out.find((e) => e.type === 'job_changed');
+  }
+  assert.ok(ev, '수요가 있으면 언젠가 전직한다');
+  assert.equal(ev.payload.to, 'chef');
+  assert.equal(ev.payload.facilityType, 'restaurant');
+  const sim = w.sims.find((s) => s.id === ev.simId);
+  assert.equal(sim.traits.occupation, 'chef', '직업이 실제로 바뀐다');
+});
+
+test('S-72. §21.3 전직의 제약: 자리가 차면 멈추고, 은퇴자·학생은 옮기지 않는다', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const rest = w.map.facilities.find((f) => f.type === 'restaurant');
+  rest.revenue = L.industry.minRevenueToHire * 10;
+  const run = () => {
+    const out = [];
+    for (let d = 0; d < 60; d++) maybeJobSwitchRef(w, d * 1440, d, (type, simId, payload) => out.push({ type, simId, payload }));
+    return out.filter((e) => e.type === 'job_changed');
+  };
+  const first = run();
+  assert.ok(first.length >= 1, '한 명은 옮긴다');
+  // 식당 1개 × workersPerFacility 1 → 더는 뽑지 않는다
+  const chefs = w.sims.filter((s) => s.traits.occupation === 'chef').length;
+  assert.equal(chefs, L.industry.workersPerFacility, '자리 수만큼만 채운다');
+  const second = run();
+  assert.equal(second.length, 0, '자리가 차면 더 옮기지 않는다');
+  // 은퇴자·학생은 후보가 아니다
+  for (const e of first) {
+    assert.ok(!['retired', 'student'].includes(e.payload.from), '은퇴자·학생은 전직 대상이 아니다');
+  }
+});
+
+test('S-73. §21.3 전직은 rngSim을 소비하지 않는다 (드로우 순서 계약)', () => {
+  const w = createWorld(SEED);
+  const rest = w.map.facilities.find((f) => f.type === 'restaurant');
+  rest.revenue = w.logic.industry.minRevenueToHire * 5;
+  const before = JSON.stringify(w.rngSim);
+  for (let d = 0; d < 30; d++) maybeJobSwitchRef(w, d * 1440, d, () => {});
+  assert.equal(JSON.stringify(w.rngSim), before, 'dayHash 의사확률 — 드로우 미소비');
+});
+
+test('S-74. §21.3 chef·clerk는 생성 풀에서 빠져 worldgen RNG가 불변이다', () => {
+  // 전직으로만 도달하는 직업이라 eligible 길이가 예전과 같아야 한다 —
+  // 그래야 기존 세이브의 이민·출생 결과가 어긋나지 않는다.
+  const w = createWorld(SEED);
+  for (const s of w.sims) {
+    assert.ok(!SWITCH_ONLY_REF.includes(s.traits.occupation), '태어날 때는 chef/clerk가 아니다');
+  }
+  const a = createWorld(4242), b = createWorld(4242);
+  assert.equal(hashWorld(a), hashWorld(b), '같은 시드면 같은 세계');
 });
