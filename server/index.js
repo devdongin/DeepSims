@@ -83,7 +83,20 @@ if (!fs.existsSync(PARAMS_PATH)) {
     }
   } catch { /* 파싱 불가 파일은 reconcile이 ops_log에 기록 */ }
 }
-engine.reconcileLogic(PARAMS_PATH); // 부팅 정합 — 따라잡기 전에 등록 (따라잡기 전체가 새 로직)
+// 부팅 정합 — 따라잡기 전에 등록 (따라잡기 전체가 새 로직).
+// §22.11: 예전에는 반환값을 버려서, 로직 파일이 깨져 있으면 콘솔이 **아무 말도 안 하고**
+// ops_log에만 조용히 쌓였다. 그동안 핫스왑은 통째로 죽어 있고, 파일을 고쳐 본 사람은
+// "아무 일도 안 일어나네" 하고 떠난다 — 가상 플레이어가 실제로 밟은 경로다.
+const bootLogic = engine.reconcileLogic(PARAMS_PATH);
+if (bootLogic.reason === 'invalid' || bootLogic.reason === 'unreadable') {
+  console.warn('');
+  console.warn('  ⚠️  로직 파일을 읽을 수 없어 핫스왑이 꺼진 상태로 시작합니다');
+  console.warn(`     파일: ${PARAMS_PATH}`);
+  if (bootLogic.errors?.length) for (const e of bootLogic.errors.slice(0, 5)) console.warn(`     · ${e}`);
+  console.warn('     세계는 마지막으로 유효했던 로직으로 계속 돕니다. 파일을 고쳐 저장하면');
+  console.warn('     다음 틱부터 반영됩니다 (기본값으로 되돌리려면 파일을 지우고 재시작).');
+  console.warn('');
+}
 
 let watchDebounce = null;
 fs.watch(path.dirname(PARAMS_PATH), (_ev, file) => {

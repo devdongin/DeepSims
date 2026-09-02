@@ -49,7 +49,7 @@ export class Storage {
       });
       init();
       // §22.7 created: 이번 실행에서 세계를 **새로 만들었는지**. 호출자가 시드를 안내하는 데 쓴다.
-      return { world, epochUtcMs: nowUtcMs, lastSimulatedTick: 0, created: true };
+      return { world, epochUtcMs: nowUtcMs, lastSimulatedTick: 0, speed: 1, created: true };
     }
     const epochUtcMs = Number(epochRow.value);
     const lastSimulatedTick = Number(metaGet.get('lastSimulatedTick').value);
@@ -72,7 +72,10 @@ export class Storage {
       });
       tx();
     }
-    return { world, epochUtcMs, lastSimulatedTick };
+    // §22.11 speed는 시뮬 상태가 아니지만 **epoch와 한 쌍**이다 — epoch는 speed를
+    // 기준으로 고정되므로 둘을 따로 두면 재시작 때 어긋나 세계가 멈춘다. meta에
+    // 함께 두어 짝을 유지한다 (틱 내용은 여전히 배속과 무관 — 결정성 불변).
+    return { world, epochUtcMs, lastSimulatedTick, speed: this.getMetaInt('speed', 1) };
   }
 
   getMetaInt(key, def = 0) {
@@ -82,6 +85,18 @@ export class Storage {
 
   setMetaInt(key, value) {
     this.db.prepare('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)').run(key, String(value));
+  }
+
+  // §22.11 시계 = (epoch, speed) 한 쌍. **반드시 함께 써야 한다** (Codex 100차 ②).
+  // 따로 쓰면 그 사이에 프로세스가 죽었을 때 디스크에 짝이 안 맞는 쌍이 남고,
+  // 이는 이 절이 고치려던 정지 버그와 같은 부류다 — 방향만 반대라 이번에는
+  // 새 배속 + 옛 epoch로 잘못된 대량 따라잡기가 일어난다.
+  setClock({ epochUtcMs, speed }) {
+    const set = this.db.prepare('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)');
+    this.db.transaction(() => {
+      set.run('epochUtcMs', String(epochUtcMs));
+      set.run('speed', String(speed));
+    })();
   }
 
   // 유효 대기 로직 계산용: 미적용 logic_update를 (target, sequence) 순으로 (PLAN §14.1 부팅 정합)

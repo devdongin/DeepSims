@@ -21,6 +21,9 @@ export class Engine {
     const loaded = storage.loadOrCreate({ seed, nowUtcMs: now() });
     this.world = loaded.world;
     this.epochUtcMs = loaded.epochUtcMs;
+    // §22.11 배속은 epoch와 한 쌍이다 — 저장된 값으로 복원하지 않으면 ×48 기준
+    // epoch에 ×1로 붙어 rawTarget이 현재 틱 아래로 떨어지고 세계가 멈춘다.
+    this.speed = loaded.speed ?? 1;
     this.createdNow = loaded.created === true; // §22.7 이번 실행에서 새 마을을 만들었는가
     storage.retargetStaleInputs(this.world.worldTick, now());
     storage.pruneEvents(this.world.worldTick);
@@ -45,9 +48,17 @@ export class Engine {
         nowUtcMs: this.now(), epochUtcMs: this.epochUtcMs, lastSimulatedTick: this.world.worldTick,
         speed: this.speed ?? 1,
       });
-      if (cap.clamped) {
+      // 두 클램프는 원인이 다르다 — 로그가 둘을 구분해야 진단이 된다 (§22.11).
+      // ahead는 초과분을 실제로 폐기한 것이고, behind는 아무것도 안 버리고 epoch만
+      // 다시 고정한 것이다. 하나로 뭉뚱그리면 "따라잡기 완료"라는 태연한 로그 뒤에서
+      // 세계가 멈춰 있어도 아무도 모른다.
+      if (cap.clampedAhead) {
         this.storage.opsLog(this.now(), 'catchup_clamped', {
           discardedToTick: cap.target, epochReanchored: cap.newEpochUtcMs,
+        });
+      } else if (cap.clampedBehind) {
+        this.storage.opsLog(this.now(), 'epoch_reanchored', {
+          atTick: cap.target, epochReanchored: cap.newEpochUtcMs, speed: this.speed ?? 1,
         });
       }
       this.epochUtcMs = cap.newEpochUtcMs; // 첫 배치 커밋에 포함 (PLAN §1)
@@ -128,6 +139,10 @@ export class Engine {
   // 목표가 현재 틱 아래로 내려가지 않게 한다 — 남는 소수 틱은 floor가 흡수한다.
   rebaseEpoch() {
     this.epochUtcMs = this.now() - Math.ceil((this.world.worldTick * TICK_DURATION_MS) / (this.speed ?? 1));
+    // (epoch, speed)를 **한 트랜잭션에** 내린다 (Codex 100차 ②). 재기준화는 시뮬 시간을
+    // 버리지 않고 시계만 다시 맞추는 일이라 배치 커밋을 기다릴 이유가 없고, 기다리면
+    // 그 창에서 죽었을 때 짝이 어긋난 채로 남는다.
+    this.storage.setClock({ epochUtcMs: this.epochUtcMs, speed: this.speed ?? 1 });
   }
 
   // §20 배속 변경. 재기준화로 시간축이 튀지 않게 한다.
@@ -139,6 +154,9 @@ export class Engine {
     const s = Math.max(1, Math.min(MAX_SPEED, Math.floor(Number(speed) || 1)));
     if (s === this.speed) return this.speed;
     this.speed = s;
+    // 저장은 rebaseEpoch가 (epoch, speed)를 함께 내리며 처리한다 — 여기서 speed만
+    // 따로 쓰면 짝이 어긋난다. 따라잡기 중이면 **아무것도 쓰지 않는다**: 지금 디스크에
+    // 있는 쌍은 서로 맞는 상태이고, 여기서 죽으면 배속 변경만 잃을 뿐 세계는 멀쩡하다.
     if (this.catchingUp) this.speedChangedDuringCatchup = true;
     else this.rebaseEpoch();
     return this.speed;
