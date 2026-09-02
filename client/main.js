@@ -1150,16 +1150,15 @@ $('an-btn').addEventListener('click', async () => {
 });
 
 $('ob-submit').addEventListener('click', async () => {
+  // §22.17 고르는 것은 이름·성별·MBTI **셋뿐**이다. 나이와 직업은 세계가 정한다 —
+  // 나이는 시드에서, 직업은 능력치 적성에서. 서버가 결정하므로 여기서 보내지 않는다.
   const name = $('ob-name').value.trim();
-  const age = Number($('ob-age').value);
   const type = $('ob-mbti').value;
   const axisVal = (letter, first) => (letter === first ? 25 : 75); // 글자 → 축 값 (완만한 극단)
   const payload = {
     name,
     gender: $('ob-gender').value,
-    age,
     mbti: { EI: axisVal(type[0], 'E'), SN: axisVal(type[1], 'S'), TF: axisVal(type[2], 'T'), JP: axisVal(type[3], 'J') },
-    occupation: $('ob-occ').value,
   };
   if (!name) { $('ob-error').textContent = '이름을 입력하세요'; return; }
   const res = await fetch('/api/input', {

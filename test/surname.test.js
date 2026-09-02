@@ -133,3 +133,64 @@ test('N-10. makeSim이 rng를 소비하지 않는다', () => {
   const args = { id: 3, name: '민수', surname: '김', homeId: 'house1', traits: { gender: 'M' }, seed: 42, x: 1, y: 2, needs: { hunger: 1 }, money: 100 };
   assert.equal(JSON.stringify(makeSim(args)), JSON.stringify(makeSim(args)));
 });
+
+test('N-11. 플레이어가 이민자와 같은 id를 받지 않는다 (설계 검증 ①)', () => {
+  // 예전에는 create_player가 `마지막 심의 id + 1`로 id를 만들고 nextSimId를
+  // 전진시키지 않아, 플레이어와 나중에 온 이민자가 **같은 id**를 받았다.
+  // 호감도·상호작용·인사 행렬과 world.parents·relTiers가 전부 id로 색인되므로
+  // 두 심이 서로의 관계를 덮어쓴다. 성씨도 (seed, id) 유도라 성까지 같아졌다.
+  const w = createWorld(4242);
+  advance(w, {
+    10: [{
+      sequence: 0,
+      command: 'create_player',
+      payload: { name: '테스터', gender: 'F', age: 31, mbti: { EI: 25, SN: 75, TF: 25, JP: 75 }, occupation: 'office_worker' },
+    }],
+  }, 11);
+  const player = w.sims.find((s) => s.isPlayer);
+  assert.ok(player, '플레이어가 만들어져야 한다');
+  assert.ok(w.nextSimId > player.id, 'nextSimId가 플레이어 id를 지나쳐야 한다');
+
+  advance(w, {}, 60000); // 이민이 여러 번 일어날 만큼
+  const ids = w.sims.map((s) => s.id);
+  const dup = ids.filter((v, i) => ids.indexOf(v) !== i);
+  assert.deepEqual(dup, [], `id 중복: ${dup.join(',')}`);
+  // 행렬도 id 공간을 덮어야 한다
+  assert.ok(w.affinity.length >= w.nextSimId, '호감도 행렬이 id 공간보다 작다');
+});
+
+test('N-12. 마이그레이션 성씨가 부모 생사에 좌우되지 않는다 (설계 검증 ②)', async () => {
+  // 사망한 심은 world.sims에서 제거되지만 world.parents에는 남는다. 예전 백필은
+  // **살아 있는 부모만** 봤기 때문에, 같은 세계라도 언제 마이그레이션을 돌렸는지에 따라
+  // 형제끼리 성이 갈렸다. 지금은 계보(world.parents)만 보고 뿌리를 찾으므로 생사와 무관하다.
+  //
+  // 재는 것은 '출생 시 규칙과 같은가'가 아니라 **'마이그레이션끼리 같은가'**다.
+  // 출생은 부성 원칙(민법 781조)으로 정하고, 마이그레이션은 죽은 부모의 성별을 알 수
+  // 없어 id 순서로 뿌리를 찾는다 — 둘은 다를 수 있지만, 마이그레이션은 언제 돌려도
+  // 같아야 한다. 그게 리플레이가 기대는 성질이다.
+  const { migrateWorld } = await import('../sim/migrate.js');
+  const w = createWorld(4242);
+  advance(w, {}, 150000); // 출생·사망이 충분히 일어나도록
+
+  const runMigration = (world) => {
+    const c = deserialize(serialize(world));
+    c.schemaVersion = 43; // 성씨 재계산 블록을 타게 한다
+    migrateWorld(c);
+    return new Map(c.sims.map((s) => [s.id, s.surname]));
+  };
+
+  const full = runMigration(w);
+
+  // 부모를 인위적으로 '사망' 처리(배열에서 제거)한 뒤 같은 마이그레이션을 돌린다
+  const pruned = deserialize(serialize(w));
+  const parentIds = new Set(Object.values(pruned.parents ?? {}).flat());
+  pruned.sims = pruned.sims.filter((s) => !parentIds.has(s.id));
+  assert.ok(pruned.sims.length > 0, '검사할 심이 남아야 한다');
+  assert.ok(parentIds.size > 0, '부모가 있는 세계여야 의미가 있다');
+  const after = runMigration(pruned);
+
+  for (const [id, sur] of after) {
+    assert.equal(sur, full.get(id),
+      `심 ${id}: 부모가 사라지자 성이 ${full.get(id)} → ${sur}로 바뀌었다`);
+  }
+});

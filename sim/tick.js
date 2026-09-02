@@ -10,10 +10,11 @@ import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
-import { validateTraits } from './traits.js';
+import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor } from './abilities.js'; // §21.1
 import { makeSim, emptyState } from './simfactory.js';
-import { surnameFor } from './surnames.js';
+import { makeAbilities } from './abilities.js';
+import { surnameFor, surnameHash } from './surnames.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
@@ -22,7 +23,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -488,7 +489,25 @@ function applyCreatePlayer(world, inp, t, emit) {
   const name = typeof p.name === 'string' ? p.name : '';
   const nameLen = [...name].length; // 유니코드 코드포인트
   if (nameLen < 1 || nameLen > 12) return reject('invalid_name');
-  const traits = { gender: p.gender, age: p.age, mbti: p.mbti, occupation: p.occupation };
+  // §22.17 주인공은 **이름·성별·MBTI만** 고른다 (사용자 지시). 나이와 직업은 세계가 정한다 —
+  // 이 마을에 이사 오는 사람이 자기 나이를 고르지 않듯이, 그리고 직업은 이 세계에서
+  // 무엇이 필요한지·내가 무엇을 잘하는지로 정해지는 것이지 메뉴에서 고르는 게 아니다.
+  //
+  // 나이: (seed, id) 해시로 25~44세 사이. 난수를 소비하지 않는다.
+  // 직업: 능력치 적성이 가장 높은 직업. 동점은 OCCUPATIONS 등재 순 — 완전 순서다.
+  const id = nextSimId(world);
+  const age = 25 + (surnameHash(world.seed, id * 7 + 3) % 20);
+  const abilities = makeAbilities(world.seed, id);
+  const pickable = OCCUPATIONS.filter((o) => occupationAllowed(o, age)
+    && !SWITCH_ONLY_OCCUPATIONS.includes(o) && !BIRTH_STAGE_OCCUPATIONS.includes(o));
+  let occupation = pickable[0];
+  let best = -1;
+  for (const o of pickable) {
+    const key = world.logic.abilities.keyAbility[o];
+    const v = key === undefined ? 50 : (abilities[key] ?? 50);
+    if (v > best) { best = v; occupation = o; }
+  }
+  const traits = { gender: p.gender, age, mbti: p.mbti, occupation };
   const traitErr = validateTraits(traits);
   if (traitErr) return reject(`invalid_traits: ${traitErr}`);
 
@@ -498,7 +517,7 @@ function applyCreatePlayer(world, inp, t, emit) {
   for (const s of world.sims) if (counts.has(s.homeId)) counts.set(s.homeId, counts.get(s.homeId) + 1);
   const home = [...houses].sort((a, b) => (counts.get(a.id) - counts.get(b.id)) || (a.id < b.id ? -1 : 1))[0];
 
-  const id = world.sims[world.sims.length - 1].id + 1;
+
   // §22.16 플레이어도 같은 창구로 만든다. 예전에는 여기만 필드가 달라서 groceries·sick이
   // 빠졌고, 그게 결정성 계약을 깨뜨렸다 (§22.13). 이제 그럴 자리가 없다.
   const sim = makeSim({
@@ -517,12 +536,9 @@ function applyCreatePlayer(world, inp, t, emit) {
     money: world.logic.occupations[traits.occupation].startMoney,   // 고정분만
   });
   world.sims.push(sim);
-  for (const row of world.affinity) row.push(0);
-  world.affinity.push(new Array(world.sims.length).fill(0));
-  for (const row of world.interactions) row.push(0);
-  world.interactions.push(new Array(world.sims.length).fill(0));
-  for (const row of world.lastGreetDay) row.push(-1);
-  world.lastGreetDay.push(new Array(world.sims.length).fill(-1));
+  // 행렬은 **id 공간** 기준으로 늘린다. sims.length 기준으로 늘리면 사망으로 심이
+  // 빠진 뒤 첨자가 어긋난다 (§22.2에서 같은 이유로 growIdMatrices를 만들었다).
+  growIdMatrices(world);
   emit('player_created', id, { name, occupation: traits.occupation, homeId: home.id });
 }
 

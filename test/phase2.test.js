@@ -8,6 +8,7 @@ import {
   createWorld, advance, tick, hashWorld, serialize, deserialize,
   DEFAULT_LOGIC, logicHash, validateLogic, migrateWorld,
 } from '../sim/index.js';
+import { OCCUPATIONS } from '../sim/traits.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
 import { Storage } from '../db/storage.js';
 import { Engine } from '../server/engine.js';
@@ -64,23 +65,34 @@ test('P2-3. retired는 work 불가, 직업별 근무 창 적용', () => {
   assert.ok(evs2.some((e) => e.type === 'input_rejected' && e.simId === of2.id));
 });
 
-test('P2-4. create_player: 생성·중복 거부·범위 거부·결정적 홈 선택', () => {
+test('P2-4. create_player: 이름·성별·MBTI만 받고 나이·직업은 세계가 정한다', () => {
+  // §22.17 사용자 지시로 계약이 바뀌었다 — 주인공은 이름·성별·MBTI **셋만** 고른다.
+  // 나이는 시드에서, 직업은 능력치 적성에서 나온다. 페이로드에 나이·직업을 실어 보내도
+  // **무시된다** (예전에는 그게 곧 캐릭터였다).
   const w = createWorld(SEED);
   const evs = tick(w, [{ sequence: 0, command: 'create_player', payload: PLAYER }]);
   assert.ok(evs.some((e) => e.type === 'player_created'));
-  const p = w.sims[10];
-  assert.equal(p.isPlayer, true);
-  assert.equal(p.needs.hunger, 7000 - w.logic.decay.hunger); // 생성(1단계) 후 같은 틱 감쇠(4단계) 반영
-  assert.equal(p.money, 1000); // freelancer 고정분
-  assert.equal(w.affinity.length, 11);
-  assert.equal(w.affinity[0].length, 11);
-  // 중복
+  const p = w.sims.find((s) => s.isPlayer);
+  assert.ok(p, '플레이어가 만들어져야 한다');
+  assert.equal(p.needs.hunger, 7000 - w.logic.decay.hunger); // 생성(1단계) 후 같은 틱 감쇠(4단계)
+  assert.equal(p.traits.gender, PLAYER.gender, '성별은 고른 대로');
+  assert.deepEqual(p.traits.mbti, PLAYER.mbti, 'MBTI는 고른 대로');
+  assert.ok(p.traits.age >= 25 && p.traits.age <= 44, `나이가 범위 밖: ${p.traits.age}`);
+  assert.ok(OCCUPATIONS.includes(p.traits.occupation), '유효한 직업이어야 한다');
+  assert.equal(p.money, w.logic.occupations[p.traits.occupation].startMoney);
+  assert.ok(w.affinity.length >= w.nextSimId, '행렬이 id 공간을 덮어야 한다');
+
+  // 나이·직업을 실어 보내도 무시된다
+  const w2 = createWorld(SEED);
+  tick(w2, [{ sequence: 0, command: 'create_player', payload: { ...PLAYER, age: 88, occupation: 'politician' } }]);
+  const p2 = w2.sims.find((s) => s.isPlayer);
+  assert.equal(p2.traits.age, p.traits.age, '보낸 나이가 반영되면 안 된다');
+  assert.equal(p2.traits.occupation, p.traits.occupation, '보낸 직업이 반영되면 안 된다');
+
+  // 중복 생성은 여전히 거부된다 (최초 1회만)
   const evs2 = tick(w, [{ sequence: 0, command: 'create_player', payload: PLAYER }]);
   assert.ok(evs2.some((e) => e.type === 'input_rejected' && e.payload.reason === 'player_exists'));
-  // 범위 위반 (학생 30세)
-  const w2 = createWorld(SEED);
-  const evs3 = tick(w2, [{ sequence: 0, command: 'create_player', payload: { ...PLAYER, occupation: 'student' } }]);
-  assert.ok(evs3.some((e) => e.type === 'input_rejected'));
+
   // 결정성: 같은 입력 → 같은 해시
   const wa = createWorld(SEED), wb = createWorld(SEED);
   const inp = { 1: [{ sequence: 0, command: 'create_player', payload: PLAYER }] };
