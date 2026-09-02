@@ -105,3 +105,55 @@ test('E-7. 나쁜 정치는 표를 잃는다 (A/B 방향성)', () => {
   assert.ok(hoard < base,
     `복지를 끊고 국고를 쌓은 정부의 회고합(${hoard})이 기본(${base})보다 나쁘지 않다`);
 });
+
+test('E-8. 국고가 쌓여도 정책을 움직인 정부는 배수를 면한다 (114차 ⑥)', async () => {
+  // 사용자 지시의 정확한 형태: "국고에 돈이 많은데 **세율을 조정하지 않거나 하면**".
+  // 돈이 쌓인 것 자체가 아니라 쌓였는데 아무것도 안 한 것이 원망의 대상이다.
+  const { policyResponded } = await import('../sim/society.js');
+  const w = createWorld(4242);
+  w.mayorId = 3;
+  const E = w.logic.election;
+  const voter = w.sims[0];
+  plant(voter, 150, 'starving');
+  const cash = w.sims.reduce((n, s) => n + s.money, 0);
+  w.treasury = cash * 2; // 국고가 시민 총현금의 2배 — 사재기 조건 성립
+
+  // 기준선: 임기 시작 때 세율 25
+  w.termStartPolicy = { taxPct: 25, welfareAmount: 550, welfareThreshold: 300 };
+
+  // ① 아무것도 안 바꿨다 → 배수
+  w.policy = { taxPct: 25, welfareAmount: 550, welfareThreshold: 300 };
+  assert.equal(policyResponded(w), false);
+  assert.equal(retrospectiveScore(w, voter, 3, 100, w.logic),
+    -Math.floor(E.judgeStarving * E.hoardMultPct / 100));
+
+  // ② 세율을 내렸다 → 배수 면제 (굶은 감점 자체는 남는다)
+  w.policy = { taxPct: 20, welfareAmount: 550, welfareThreshold: 300 };
+  assert.equal(policyResponded(w), true);
+  assert.equal(retrospectiveScore(w, voter, 3, 100, w.logic), -E.judgeStarving);
+
+  // ③ 복지를 늘려도 대응이다
+  w.policy = { taxPct: 25, welfareAmount: 800, welfareThreshold: 300 };
+  assert.equal(policyResponded(w), true);
+
+  // ④ 세율을 **올린** 것은 대응이 아니다 — 방향이 시민 반대쪽이다
+  w.policy = { taxPct: 30, welfareAmount: 550, welfareThreshold: 300 };
+  assert.equal(policyResponded(w), false);
+  assert.equal(retrospectiveScore(w, voter, 3, 100, w.logic),
+    -Math.floor(E.judgeStarving * E.hoardMultPct / 100));
+
+  // ⑤ 기준선이 없으면(첫 임기 이전) 대응 판정 불가 → 배수 유지
+  w.termStartPolicy = null;
+  w.policy = { taxPct: 5, welfareAmount: 900, welfareThreshold: 1500 };
+  assert.equal(policyResponded(w), false);
+});
+
+test('E-9. 선거가 다음 임기의 정책 기준선을 스냅샷한다', () => {
+  const w = createWorld(4242);
+  advance(w, {}, 10 * 1440);
+  w.policy = { taxPct: 18, welfareAmount: 700, welfareThreshold: 400 };
+  maybeElection(w, 15 * 1440, 15, () => {});
+  assert.deepEqual(w.termStartPolicy,
+    { taxPct: 18, welfareAmount: 700, welfareThreshold: 400 },
+    '임기 시작 정책이 스냅샷되지 않았다');
+});

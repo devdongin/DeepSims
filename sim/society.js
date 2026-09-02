@@ -77,7 +77,26 @@ export function naturalRecovery(world, sim, t, emit) {
 //
 // 각자의 기억만 읽는다. 새 난수를 뽑지 않고 세계를 바꾸지 않는다.
 // 재임자가 후보가 아니면 0이다 — 심판할 대상이 없다.
-export function retrospectiveScore(world, voter, candidateId, sinceTick, L) {
+// §22.20 이 임기에 정부가 시민 쪽으로 정책을 움직였는가 (Codex 114차 ⑥).
+// 사용자 지시는 "국고에 돈이 많은데 **세율을 조정하지 않거나 하면**"이다 — 돈이
+// 쌓인 것 자체가 아니라 **쌓였는데 아무것도 안 한 것**이 원망의 대상이다.
+// 임기 시작 때 스냅샷한 정책과 지금을 비교한다: 세율을 내렸거나 복지를 늘렸으면
+// 대응한 것이다. 세율을 올린 것은 대응이 아니다 — 방향이 시민 반대쪽이다.
+export function policyResponded(world) {
+  const base = world.termStartPolicy;
+  if (!base) return false; // 첫 임기 이전 — 기준이 없다
+  const E = world.logic.economy;
+  const cur = {
+    taxPct: world.policy.taxPct ?? E.taxPct,
+    welfareAmount: world.policy.welfareAmount ?? E.welfareAmount,
+    welfareThreshold: world.policy.welfareThreshold ?? E.welfareThreshold,
+  };
+  return cur.taxPct < base.taxPct
+    || cur.welfareAmount > base.welfareAmount
+    || cur.welfareThreshold > base.welfareThreshold;
+}
+
+export function retrospectiveScore(world, voter, candidateId, sinceTick, L, ctx = null) {
   if (candidateId !== world.mayorId) return 0;
   const E = L.election;
   let bad = 0;
@@ -88,14 +107,19 @@ export function retrospectiveScore(world, voter, candidateId, sinceTick, L) {
     else if (m.kind === 'welfare') good += E.judgeWelfare;
     else if (m.kind === 'unmet' && m.tags.includes('no_money')) bad += E.judgeNoMoney;
   }
-  // "나라에 돈이 있는데 나는 굶었다"는 더 화나는 일이다 — 돈이 없어서가 아니라
-  // **안 쓴 것**이기 때문이다 (사용자 지시). 절대 금액 문턱을 쓰지 않는다:
-  // 국고와 시민 총현금을 견줘서, 마을이 커져도 뜻이 유지되게 한다.
+  // "나라에 돈이 있는데 나는 굶었고, 정부는 아무것도 안 바꿨다"가 배수의 조건이다.
+  // 국고가 쌓여도 세율을 내리거나 복지를 늘린 정부는 배수를 면한다 — 굶은 감점
+  // 자체는 남는다(굶은 건 사실이니까). 절대 금액 문턱을 쓰지 않는다: 국고와 시민
+  // 총현금을 견줘서 마을이 커져도 뜻이 유지되게 한다.
+  // ctx는 선거 단위 캐시(114차 ③) — 유권자 63명 × 후보 2명이 같은 합을 반복 계산하지 않게.
   if (bad > 0) {
-    const cash = world.sims.reduce((n, s) => n + s.money, 0);
-    if (world.treasury > floorDiv(cash * E.hoardRatioPct, 100)) {
-      bad = floorDiv(bad * E.hoardMultPct, 100);
-    }
+    const hoarding = ctx !== null
+      ? ctx.hoarding
+      : (() => {
+        const cash = world.sims.reduce((n, s) => n + s.money, 0);
+        return world.treasury > floorDiv(cash * E.hoardRatioPct, 100) && !policyResponded(world);
+      })();
+    if (hoarding) bad = floorDiv(bad * E.hoardMultPct, 100);
   }
   const net = good - bad;
   // 상한을 둬서 회고가 인기를 완전히 지워버리지 않게 한다 — 이분 컷이 아니라 가중이다.
@@ -127,11 +151,17 @@ export function maybeElection(world, t, day, emit) {
   const votes = new Map(candidates.map((c) => [c, 0]));
   // §22.20 표 = 호감 + 회고. 완전 순서: 합계 → 호감 → 후보 id 오름차순 (Codex 113차 ④).
   let retroTotal = 0;
+  // 선거 단위 캐시(114차 ③): 국고·시민 총현금·정책 대응은 투표 중 변하지 않는다.
+  const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
+  const responded = policyResponded(world);
+  const ctx = {
+    hoarding: world.treasury > floorDiv(cashTotal * E.hoardRatioPct, 100) && !responded,
+  };
   for (const voter of world.sims) {
     let best = candidates[0];
     if (candidates.length > 1) {
-      const r0 = retrospectiveScore(world, voter, candidates[0], sinceTick, world.logic);
-      const r1 = retrospectiveScore(world, voter, candidates[1], sinceTick, world.logic);
+      const r0 = retrospectiveScore(world, voter, candidates[0], sinceTick, world.logic, ctx);
+      const r1 = retrospectiveScore(world, voter, candidates[1], sinceTick, world.logic, ctx);
       retroTotal += r0 + r1;
       const a0 = world.affinity[voter.id][candidates[0]] + r0;
       const a1 = world.affinity[voter.id][candidates[1]] + r1;
@@ -151,7 +181,17 @@ export function maybeElection(world, t, day, emit) {
     // §22.20 이 선거에서 회고가 실제로 작동했는지 관측할 수 있게 남긴다.
     incumbent: prevMayor, retroTotal, treasury: world.treasury,
     taxPct: world.policy.taxPct ?? world.logic.economy.taxPct,
+    responded, // 이 임기에 정부가 시민 쪽으로 정책을 움직였는가
   });
+  // §22.20 다음 임기의 회고 기준선 — 새 임기가 시작되는 지금의 정책을 스냅샷한다.
+  {
+    const Ec = world.logic.economy;
+    world.termStartPolicy = {
+      taxPct: world.policy.taxPct ?? Ec.taxPct,
+      welfareAmount: world.policy.welfareAmount ?? Ec.welfareAmount,
+      welfareThreshold: world.policy.welfareThreshold ?? Ec.welfareThreshold,
+    };
+  }
   const mayor = world.sims.find((s) => s.id === winner);
   recordFact(mayor, t, world.logic, 'elected', { tags: ['politics'] });
   for (const voter of world.sims) {
