@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 31,
+  "logicSchemaVersion": 32,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -304,6 +304,9 @@
     "rivalInteractions": 30,
     "acquaintanceInteractions": 15,
     "friendStateBonus": 150000000000,
+    "gravityPullPct": 60,
+    "gravityPullCap": 200,
+    "gravityWalkingPct": 50,
     "rivalStatePenalty": 200000000000,
     "reflectionMoodScale": 60,
     "habitIncrement": 10000000000,
