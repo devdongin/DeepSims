@@ -83,6 +83,7 @@ export function createWorld(seed) {
     termStartPolicy: null, // §22.20 임기 시작 정책 스냅샷 — '조정하지 않았다'의 기준선
     lastFiscalDay: -1,     // §22.22 시장 재정 리뷰 하루 1회 가드
     playerPolicyDay: -1,   // §22.22 플레이어 정책 입력을 시장이 존중하는 창
+    lastPublicWorksDay: -1, // §22.26 공공사업 하루 1회 가드
     externalInflow: 0,  // §22.4 경계 유입 누계 (기반 부문 임금·낚시·습득·이민 초기금)
     externalOutflow: 0, // §22.4 경계 유출 누계 (건설비·차값 — 마을 밖으로 나간다)
     nextSimId: SIM_COUNT, // §22.2 새 심 id 카운터 (사망 후 id 재사용 방지)

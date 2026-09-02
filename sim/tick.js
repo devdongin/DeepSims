@@ -24,7 +24,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview, maybePublicWorks } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -1146,6 +1146,7 @@ export function tick(world, inputsForThisTick = []) {
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
         maybeFiscalReview(world, t, day, emit); // §22.22 선거 직후 고정 위치 — 그날 복지 정산부터 새 정책
+        maybePublicWorks(world, t, day, emit); // §22.26 순서 고정: 선거 → 재정 → 공공사업 (120차 ⑥)
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
         // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야

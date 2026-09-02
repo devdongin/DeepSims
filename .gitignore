@@ -25,3 +25,4 @@ codex_review_*.md
 # 일회성 A/B 소크 스크립트 (임시 스냅샷을 읽는 작업용)
 soak_*.mjs
 ab_*.mjs
+.claude/

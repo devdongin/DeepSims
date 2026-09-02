@@ -1071,6 +1071,10 @@ function eventText(e) {
     }
     case 'road_formed': return `🛤️ 많이 다니던 길이 도로가 되었습니다 (${e.payload.x}, ${e.payload.y})`;
     case 'bed_built': return `🛏️ ${ga(n)} 집에 침대를 새로 만들었습니다!`;
+    case 'public_works': {
+      const n2 = e.payload.tiles?.length ?? 0;
+      return `🏗️ 시장이 사람들이 다니는 길 ${n2}칸을 포장했습니다 (-${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
+    }
     case 'side_talk': return `💬 ${ga(n)} 옆자리 ${wa(simName(e.payload.withSimId))} 말을 텄습니다`;
     case 'helped': {
       const why = { sick: '아픈', hungry: '배곯는', broke: '주머니가 빈' }[e.payload.why] ?? '';
@@ -1293,6 +1297,11 @@ function connect() {
         for (const e of msg.events) {
           if (e.type === 'road_formed' && world) {
             world.map.tiles[e.payload.y * world.map.w + e.payload.x] = 1;
+            mapDirty = true;
+          } else if (e.type === 'public_works' && world) {
+            // §22.26 정부 포장 — road_formed와 같은 증분 갱신. 이 분기가 없으면 클라는
+            // 다음 전체 resync(15초+)까지 포장을 모른 채 잔디를 그린다.
+            for (const idx of (e.payload.tiles ?? [])) world.map.tiles[idx] = 1;
             mapDirty = true;
           } else if (e.type === 'bed_built' && world) {
             const fac = world.map.facilities.find((f) => f.id === e.payload.facilityId);
