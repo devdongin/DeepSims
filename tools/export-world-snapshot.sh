@@ -28,6 +28,7 @@ const events7d = db.prepare(
   'SELECT type, COUNT(*) n FROM events WHERE tick > ? GROUP BY type ORDER BY n DESC'
 ).all(since);
 fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
+  _note: '개발자 저장소의 세계 상태 리포트 — GitHub Actions·리뷰 에이전트 전용. 게임은 읽지 않는다.',
   exportedAtTick: w.worldTick, day, pop: w.sims.length, tier: w.cityTier,
   treasury: w.treasury, reputation: w.reputation, policy: w.policy,
   facilities, plotsFree: w.plots.filter((p) => !p.used).length,
