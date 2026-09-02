@@ -224,10 +224,13 @@ export class Storage {
     };
   }
 
-  // 30게임일 이전 이벤트를 일 집계로 축약 후 삭제 (PLAN §4)
+  // 30게임일 이전 이벤트를 일 집계로 축약 후 삭제 (PLAN §4). 삭제 행 수를 반환한다.
+  // 부팅뿐 아니라 **라이브 일 경계에서도** 호출된다 (§22.12: 부팅에만 걸면 라이브 세션이
+  // 길어질수록 events가 무한 증가 — 실측 107게임일 205,092행·53.8MB, 시간당 +31MB).
+  // 정착 상태에서는 cutoff 이하가 딱 하루치라 PK(tick, ordinal) 범위 스캔으로 싸다.
   pruneEvents(lastSimulatedTick) {
     const cutoff = lastSimulatedTick - 30 * TICKS_PER_DAY;
-    if (cutoff <= 0) return;
+    if (cutoff <= 0) return 0;
     const tx = this.db.transaction(() => {
       const rows = this.db.prepare(
         `SELECT (tick / ${TICKS_PER_DAY}) * ${TICKS_PER_DAY} AS day_start,
@@ -241,9 +244,9 @@ export class Storage {
          ON CONFLICT(day_start_tick, category, sim_id)
          DO UPDATE SET count = count + excluded.count, sum = sum + excluded.sum`);
       for (const r of rows) ins.run(r.day_start, r.category, r.sim_id, r.n, r.s);
-      this.db.prepare('DELETE FROM events WHERE tick <= ?').run(cutoff);
+      return this.db.prepare('DELETE FROM events WHERE tick <= ?').run(cutoff).changes;
     });
-    tx();
+    return tx();
   }
 
   close() { this.db.close(); }

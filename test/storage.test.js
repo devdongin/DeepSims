@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { Storage } from '../db/storage.js';
+import { Engine } from '../server/engine.js';
 import { createWorld, advance, hashWorld, deserialize } from '../sim/index.js';
 
 const SEED = 777;
@@ -129,6 +130,38 @@ test('16b. 프루닝: 30일 이전 이벤트 → 일 집계 축약', () => {
   assert.equal(after, 0, '이벤트 삭제');
   const agg = st.db.prepare('SELECT COUNT(*) AS n FROM event_daily_aggregates').get().n;
   assert.ok(agg > 0, '집계 생성');
+  st.close();
+});
+
+// §22.12 회귀: 예전에는 pruneEvents가 **부팅 때 한 번만** 불려서, 서버를 켜 둔 채
+// 오래 돌리면 events가 무한 증가했다 (실측 107게임일 205,092행·53.8MB, 시간당 +31MB).
+// 이제 따라잡기 배치·라이브 커밋 양쪽에서 일 경계마다 프루닝된다.
+test('16c. 라이브 프루닝(§22.12): 긴 세션에서 events가 30일 상한 안에 머문다', async () => {
+  const st = new Storage(tmpDb());
+  const DAY = 1440;
+  // ① 따라잡기 경로: 32일치를 일 배치로 따라잡는다 → 31일차부터 매 배치 프루닝
+  let nowMs = 1000; // 생성 시점이 epoch가 된다 — 그 뒤 시계를 32일 밀어 따라잡게 한다
+  const engine = new Engine(st, { seed: SEED, now: () => nowMs });
+  nowMs += 32 * DAY * 1000; // TICK_DURATION_MS = 1000
+  await engine.catchUp();
+  const cutoff1 = engine.world.worldTick - 30 * DAY;
+  const min1 = st.db.prepare('SELECT MIN(tick) AS t FROM events').get().t;
+  assert.ok(min1 > cutoff1, `따라잡기 중 프루닝: MIN(tick)=${min1} > cutoff=${cutoff1}`);
+  const pruned1 = st.db.prepare("SELECT COUNT(*) AS n FROM ops_log WHERE type = 'events_pruned'").get().n;
+  assert.ok(pruned1 >= 1, '따라잡기 배치에서 events_pruned 기록');
+  assert.ok(st.db.prepare('SELECT COUNT(*) AS n FROM event_daily_aggregates').get().n > 0, '집계 생성');
+  // ② 라이브 경로: 이틀 더 라이브로 전진 → 일 경계마다 커밋 후행 프루닝
+  engine.runLive(DAY);
+  engine.runLive(DAY);
+  engine.flushLive();
+  const cutoff2 = engine.world.worldTick - 30 * DAY;
+  const min2 = st.db.prepare('SELECT MIN(tick) AS t FROM events').get().t;
+  assert.ok(min2 > cutoff2, `라이브 중 프루닝: MIN(tick)=${min2} > cutoff=${cutoff2}`);
+  const pruned2 = st.db.prepare("SELECT COUNT(*) AS n FROM ops_log WHERE type = 'events_pruned'").get().n;
+  assert.ok(pruned2 >= pruned1 + 2, `라이브 일 경계 2회 프루닝 (${pruned1} → ${pruned2})`);
+  // 상한: 남은 이벤트는 최근 30일 + 진행 중인 오늘 것뿐이다
+  const stale = st.db.prepare('SELECT COUNT(*) AS n FROM events WHERE tick <= ?').get(cutoff2).n;
+  assert.equal(stale, 0, '30일 이전 행 0');
   st.close();
 });
 
