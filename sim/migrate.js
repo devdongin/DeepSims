@@ -155,6 +155,10 @@ export function migrateWorld(world) {
     // §19.10 (73차 ②): 원인 분화 시행일 — 이전 no_facility 항목은 외부 노출에서 legacy 표시
     world.complaintReasonDay = Math.floor(world.worldTick / 1440);
   }
+  if (from < 38) {
+    // §22.4 경계 유입 누계 — 기반 부문(마을 밖) 소득을 명시적으로 센다 (G1 폐쇄 회계).
+    world.externalInflow ??= 0;
+  }
   if (from < 37) {
     // §22.2 생애 주기: id 전용 카운터와 굶은 시간 누적기. 사망으로 심이 사라져도
     // 새 id가 기존 id와 충돌하지 않게 하고, 행렬을 id 공간 크기로 맞춘다.
@@ -216,7 +220,7 @@ export function migrateWorld(world) {
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);
   }
-  world.schemaVersion = 37;
+  world.schemaVersion = 38;
   return world;
 }
 

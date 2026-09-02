@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 37;
+export const SCHEMA_VERSION = 38;
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -43,7 +43,7 @@ export const AFFINITY_MAX = 10000;
 
 export const EVENT_TYPES = [
   'action_started', 'action_completed', 'action_failed', 'input_rejected',
-  'starving', 'lonely', 'argument', 'money_changed', 'welfare_paid', 'wage_shortfall', 'money_shared', 'job_changed', 'died', 'bereaved', 'grew_up', 'fire_started', 'fire_out', 'heroic_save', 'policy_changed', 'zoned', 'city_promoted', 'item_reported', 'item_returned', 'car_bought', 'petition',
+  'starving', 'lonely', 'argument', 'money_changed', 'welfare_paid', 'wage_shortfall', 'money_shared', 'job_changed', 'died', 'bereaved', 'grew_up', 'public_revenue_remitted', 'fire_started', 'fire_out', 'heroic_save', 'policy_changed', 'zoned', 'city_promoted', 'item_reported', 'item_returned', 'car_bought', 'petition',
   'player_created', 'logic_changed', 'relationship_changed',
   'token_created', 'gathering', 'conversation', 'greeting',
   'road_formed', 'bed_built', 'hangover',

@@ -313,6 +313,8 @@ function immigrateOne(world, t, emit) {
       sharedDay: -1, sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
   };
   world.sims.push(sim);
+  // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).
+  world.externalInflow = (world.externalInflow ?? 0) + sim.money;
   growIdMatrices(world); // §22.2 id 공간 기준 확장
   emit('immigrated', id, { name, occupation: traits.occupation, homeId: home.id });
   for (const other of world.sims) {
@@ -912,4 +914,33 @@ export function maybeDeaths(world, t, day, emit) {
     doomed.push([sim, sim.sick ? 'illness' : (starved ? 'starvation' : 'age')]);
   }
   for (const [sim, cause] of doomed) removeSim(world, sim, t, emit, cause);
+}
+
+// ---- §22.4 공공 부문 회계 폐쇄 (이슈 #43, 대목표 G1) ----
+//
+// 관찰: 라이브에서 통화의 87%가 잠겨 있었다 — 국고 55%, 시설 매출 32%, 시민 손엔 13%.
+// 가장 큰 웅덩이는 hospital(전체 매출의 70%)이었는데, 의사·간호사가 공공 직군이라
+// 아무도 그 돈을 받지 못했다.
+//
+// 여기서 복지 캡을 올리는 건 계기판을 누르는 것이다(§0.1). 대신 **회계를 닫는다**:
+// 시민이 공공 시설에 낸 돈은 국고로 가고, 공공 임금은 그 국고에서 나온다.
+// 소비 → 국고 → 공공 임금 → 시민 → 소비.
+//
+// 77차에서 나는 이 방향을 '순유출로 국고가 무너진다'며 뺐었다. 그때와 달라진 건
+// §20.2 매출 원장이 생겨 **공공 시설 매출이 국고로 들어온다**는 점이다(89차 ④에서 번복 승인).
+export function remitPublicRevenue(world, t, emit) {
+  const E = world.logic.economy;
+  let total = 0;
+  // 시설 id 오름차순 — 결정적
+  const facs = world.map.facilities
+    .filter((f) => E.publicFacilityTypes.includes(f.type) && (f.revenue ?? 0) > 0)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const f of facs) {
+    const amt = f.revenue;
+    f.revenue = 0;
+    world.treasury += amt;
+    total += amt;
+    emit('public_revenue_remitted', null, { facilityId: f.id, type: f.type, amount: amt, treasury: world.treasury });
+  }
+  return total;
 }

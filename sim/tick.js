@@ -20,7 +20,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -656,6 +656,7 @@ export function tick(world, inputsForThisTick = []) {
           recordFact(sim, t, world.logic, 'honest', { tags: ['luck'] });
         } else {
           sim.money += it.amount;
+          world.externalInflow = (world.externalInflow ?? 0) + it.amount; // §22.4 경계 유입 (길에서 주운 돈)
           applyMood(sim, world.logic.items.pickupMood);
           emit('money_changed', sim.id, { delta: it.amount, balance: sim.money, action: 'found' });
           recordFact(sim, t, world.logic, 'found_item', { tags: ['luck'] });
@@ -786,6 +787,7 @@ export function tick(world, inputsForThisTick = []) {
       const catchAmt = rngInt(world.rngSim, L.actions.fish.catchSpan);
       if (catchAmt > 0) {
         sim.money += catchAmt;
+        world.externalInflow = (world.externalInflow ?? 0) + catchAmt; // §22.4 경계 유입 (강에서 온 것)
         emit('fish_caught', sim.id, { amount: catchAmt });
         emit('money_changed', sim.id, { delta: catchAmt, balance: sim.money, action: 'fish' });
       } else {
@@ -838,18 +840,37 @@ export function tick(world, inputsForThisTick = []) {
       // 매출이 모자라면 있는 만큼만 받는다 — 손님 없는 가게는 임금을 다 못 준다 (이슈 #43).
       // 나머지 직군(사무·공공)은 이번 슬라이스에서 그대로 둔다: 경제기반이론의 기반 부문,
       // 즉 마을 밖에서 벌어오는 소득으로 본다 (77차 합의).
-      const priv = L.economy.privateWageOccupations.includes(sim.traits.occupation);
-      const payer = priv ? world.map.facilities.find((f) => f.id === s.facilityId) : null;
+      // §22.4 임금 재원은 셋으로 갈린다 (이슈 #43, G1):
+      //   민간 서비스 → 그 시설의 매출 / 공공 → 국고 / 나머지(기반 부문) → 마을 밖 소득
+      // 어느 쪽이든 **없는 돈은 지급되지 않는다** — 재원이 모자라면 부분 지급이다.
+      const occ = sim.traits.occupation;
+      const priv = L.economy.privateWageOccupations.includes(occ);
+      const pub = !priv && L.economy.publicWageOccupations.includes(occ);
       if (priv) {
+        const payer = world.map.facilities.find((f) => f.id === s.facilityId);
         const avail = Math.max(0, payer?.revenue ?? 0);
         const paid = Math.min(wage, avail);
         if (paid < wage) {
           emit('wage_shortfall', sim.id, {
-            facilityId: s.facilityId, asked: wage, paid, shortfall: wage - paid,
+            facilityId: s.facilityId, asked: wage, paid, shortfall: wage - paid, source: 'facility',
           });
         }
         if (payer) payer.revenue = avail - paid;
         wage = paid;
+      } else if (pub) {
+        // 국고는 절대 음수가 되지 않는다 (89차 ④ invariant)
+        const avail = Math.max(0, world.treasury);
+        const paid = Math.min(wage, avail);
+        if (paid < wage) {
+          emit('wage_shortfall', sim.id, {
+            facilityId: s.facilityId, asked: wage, paid, shortfall: wage - paid, source: 'treasury',
+          });
+        }
+        world.treasury = avail - paid;
+        wage = paid;
+      } else {
+        // 기반 부문 — 마을 밖에서 벌어오는 소득. 경계 유입으로 **명시해 기록한다**(G1 폐쇄 회계).
+        world.externalInflow = (world.externalInflow ?? 0) + wage;
       }
       // §17.15 소득세 원천징수: 실수령 = wage×(100-taxPct)/100, 세금은 국고로
       const net = floorDiv(wage * (100 - econ(world, 'taxPct')), 100);
@@ -1009,6 +1030,9 @@ export function tick(world, inputsForThisTick = []) {
         dailyFireDraws(world, t, emit); // §17.20 (①.5 — 질병 다음, 시설당 1드로우)
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
+        // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
+        // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
+        remitPublicRevenue(world, t, emit);
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
         // §21.3 전직: 손님이 몰린 가게에 누군가 일하러 간다 (복지 다음 — 서브순서 고정).
@@ -1021,6 +1045,7 @@ export function tick(world, inputsForThisTick = []) {
             const finder = world.sims.find((s2) => s2.id === lf.finderId);
             if (finder) {
               finder.money += lf.amount;
+              world.externalInflow = (world.externalInflow ?? 0) + lf.amount; // §22.4 경계 유입
               emit('item_returned', finder.id, { itemId: lf.itemId, amount: lf.amount, balance: finder.money });
             }
           }
