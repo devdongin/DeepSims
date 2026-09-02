@@ -323,6 +323,7 @@ function immigrateOne(world, t, emit) {
 // ---- §17.5 연애 (회고에서 호출 — 먼저 회고하는 쪽이 실행, PLAN §17.8) ----
 
 export function applyRomance(world, sim, t, emit) {
+  if (sim.traits.occupation === 'child') return; // §22.2 (91차 ②) 아이는 연애하지 않는다
   const R = world.logic.romance;
   const partner = world.partners[sim.id];
   // ① 파혼: 어느 한 방향 호감 < breakup
@@ -414,6 +415,7 @@ export function applyRomance(world, sim, t, emit) {
     let best = null, bestMutual = 0;
     for (const other of world.sims) {
       if (other.id === sim.id || world.partners[other.id] !== undefined) continue;
+      if (other.traits.occupation === 'child') continue; // §22.2 아이는 상대가 되지 않는다
       const mutual = Math.min(world.affinity[sim.id][other.id], world.affinity[other.id][sim.id]);
       if (mutual >= R.datingMin && world.interactions[sim.id][other.id] >= R.datingInteractions
         && (mutual > bestMutual || (mutual === bestMutual && best !== null && other.id < best.id))) {
@@ -869,6 +871,28 @@ function removeSim(world, sim, t, emit, cause) {
   // 분실물 보관자가 죽으면 물건은 주인에게 갈 길이 없다 — 목록에서 뺀다
   world.lostAndFound = world.lostAndFound.filter((lf) => lf.finderId !== id);
   delete world.parents[id];
+  // §22.2 (91차 ①) 남은 참조 정리 — 빠뜨리면 죽은 사람이 계속 언급된다.
+  // 자녀의 부모 목록에서 뺀다. interaction.js의 family_talk가 죽은 부모를 참조하지 않게.
+  for (const childId of Object.keys(world.parents)) {
+    const ps = world.parents[childId];
+    if (ps.includes(id)) {
+      const left = ps.filter((p) => p !== id);
+      if (left.length === 0) delete world.parents[childId];
+      else world.parents[childId] = left;
+    }
+  }
+  // 동아리 명단
+  for (const key of Object.keys(world.clubs)) {
+    const i = world.clubs[key].indexOf(id);
+    if (i >= 0) world.clubs[key].splice(i, 1);
+  }
+  // §21.2 나눔의 '오늘 준 사람' 목록
+  for (const s of world.sims) {
+    if (s.sharedTo?.length) {
+      const i = s.sharedTo.indexOf(id);
+      if (i >= 0) s.sharedTo.splice(i, 1);
+    }
+  }
   const idx = world.sims.findIndex((s) => s.id === id);
   if (idx >= 0) world.sims.splice(idx, 1);
   emit('died', id, { name: sim.name, age: sim.traits.age, cause, pop: world.sims.length });

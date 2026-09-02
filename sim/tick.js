@@ -133,8 +133,14 @@ function scoreCandidate(sim, action, res, L) {
 // 하드 제약 (assign·자율 결정 공통). t = 전이 틱.
 // 사유 반환 변형 — reason chain(§15.1.C)과 공유. null = 허용.
 // blockedBy 우선순위: no_money → off_hours → not_coping → not_needed (Codex 20차 항목 2)
-function actionBlockReason(world, sim, action, t) {
+// §22.2 (91차 ②) 아이가 하지 않는 일. 어른의 노동·대처·공적 임무는 아이의 몫이 아니다.
+// 아이는 먹고 자고 놀고 어울리고 배운다.
+const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol',
+  'drink', 'binge_eat', 'shop', 'see_doctor', 'fish']);
+
+export function actionBlockReason(world, sim, action, t) {
   const L = world.logic;
+  if (sim.traits.occupation === 'child' && CHILD_BLOCKED.has(action)) return 'too_young';
   const cost = L.actions[action]?.cost ?? 0;
   if (cost > 0 && sim.money < cost) return 'no_money';
   if (action === 'work') {

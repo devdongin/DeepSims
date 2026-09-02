@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } from '../sim/index.js';
 import { sameRegion, TILE } from '../sim/map.js';
 import { validateLogic as validateLogicRef } from '../sim/logic.js';
+import { actionBlockReason as actionBlockReasonRef } from '../sim/tick.js';
 import { SWITCH_ONLY_OCCUPATIONS as SWITCH_ONLY_REF } from '../sim/traits.js';
 import { aptitudeFor, makeAbilities, ABILITIES, FALLBACK_SEED } from '../sim/abilities.js';
 
@@ -1747,4 +1748,58 @@ test('S-79. §22.2 사망 판정은 rngSim을 소비하지 않는다', () => {
   const before = JSON.stringify(w.rngSim);
   for (let d = 1; d <= 30; d++) maybeDeathsRef(w, d * 1440, d, () => {});
   assert.equal(JSON.stringify(w.rngSim), before, 'riskHash 의사확률 — 드로우 미소비');
+});
+
+test('S-80. §22.2 (91차 ①) 사망자 참조가 남지 않는다 — 부모·동아리·나눔 목록', () => {
+  const w = createWorld(SEED);
+  const dead = w.sims[0], kid = w.sims[1], giver = w.sims[2];
+  w.parents[kid.id] = [dead.id, giver.id];      // 죽는 사람이 부모
+  w.clubs.book_club.push(dead.id, giver.id);     // 동아리 명단
+  giver.sharedTo = [dead.id, kid.id];            // 오늘 나눠준 목록
+  dead.traits.age = 200; dead.abilities.stamina = 0; dead.sick = { kind: 'x' }; dead.hungerZeroTicks = 1e6;
+  for (let d = 1; d < 200 && w.sims.some((s) => s.id === dead.id); d++) {
+    maybeDeathsRef(w, d * 1440, d, () => {});
+  }
+  assert.equal(w.sims.find((s) => s.id === dead.id), undefined, '죽었다');
+  assert.deepEqual(w.parents[kid.id], [giver.id], '자녀의 부모 목록에서 빠진다');
+  assert.ok(!w.clubs.book_club.includes(dead.id), '동아리 명단에서 빠진다');
+  assert.ok(!giver.sharedTo.includes(dead.id), '나눔 목록에서 빠진다');
+  assert.ok(giver.sharedTo.includes(kid.id), '산 사람은 남는다');
+});
+
+test('S-81. §22.2 (91차 ②) 아이는 어른의 일을 하지 않는다', () => {
+  const w = createWorld(SEED);
+  const kid = w.sims[0];
+  kid.traits.occupation = 'child';
+  kid.traits.age = 7;
+  kid.money = 100000; // 돈 문제로 막히는 게 아님을 분명히
+  for (const a of ['work', 'construct', 'build', 'drink', 'binge_eat', 'shop', 'see_doctor']) {
+    assert.equal(actionBlockReasonRef(w, kid, a, 600), 'too_young', `${a}: 아이는 못 한다`);
+  }
+  // 아이도 하는 것들은 막히지 않는다 (나이 때문이 아니라 다른 사유일 수는 있다)
+  for (const a of ['eat', 'sleep', 'play', 'socialize']) {
+    assert.notEqual(actionBlockReasonRef(w, kid, a, 600), 'too_young', `${a}: 아이도 한다`);
+  }
+  // 어른은 그대로
+  const adult = w.sims[1];
+  adult.traits.occupation = 'office_worker'; adult.money = 100000;
+  assert.notEqual(actionBlockReasonRef(w, adult, 'shop', 600), 'too_young');
+});
+
+test('S-82. §22.2 (91차 ②) 아이는 연애하지 않고, 연애 상대도 되지 않는다', () => {
+  const w = createWorld(SEED);
+  const kid = w.sims[0], adult = w.sims[1];
+  kid.traits.occupation = 'child'; kid.traits.age = 10;
+  adult.traits.occupation = 'office_worker'; adult.traits.age = 30;
+  // 서로 매우 친하게 만들어도 아이는 대상이 아니다
+  for (const [a, b] of [[kid.id, adult.id], [adult.id, kid.id]]) {
+    w.affinity[a][b] = 9000;
+    w.interactions[a][b] = 1000;
+    w.sims.find((s) => s.id === a).relTiers[b] = 'friend';
+  }
+  const out = [];
+  applyRomance(w, kid, 1440, (type, simId, payload) => out.push({ type, simId, payload }));
+  applyRomance(w, adult, 1440, (type, simId, payload) => out.push({ type, simId, payload }));
+  assert.equal(w.partners[kid.id], undefined, '아이에게 연인이 생기지 않는다');
+  assert.equal(w.partners[adult.id], undefined, '어른도 아이와 맺어지지 않는다');
 });

@@ -159,7 +159,7 @@ export function migrateWorld(world) {
     // §22.2 생애 주기: id 전용 카운터와 굶은 시간 누적기. 사망으로 심이 사라져도
     // 새 id가 기존 id와 충돌하지 않게 하고, 행렬을 id 공간 크기로 맞춘다.
     world.nextSimId ??= world.sims.reduce((mx, s) => Math.max(mx, s.id), -1) + 1;
-    for (const sim of world.sims) sim.hungerZeroTicks ??= 0;
+    for (const sim of world.sims) { sim.hungerZeroTicks ??= 0; sim.sharedTo ??= []; sim.sharedDay ??= -1; }
     growIdMatricesRef(world);
   }
   if (from < 36) {
