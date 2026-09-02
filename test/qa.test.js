@@ -147,3 +147,32 @@ test('QA-10. 해시가 직렬화가 뭉개는 나머지 값도 구분한다 (Cod
   // 그리고 findNonFinite가 그걸 경로와 함께 지목한다
   assert.deepEqual(findNonFinite(mkObj(new Map())), [{ path: 'world.sims[0].habit', value: '[object Map]' }]);
 });
+
+test('QA-11. 고립 서로게이트가 대체문자를 사칭하지 못한다 (Codex 103차 ①)', () => {
+  // TextEncoder는 고립 서로게이트를 U+FFFD로 치환한다. 길이 접두만으로는
+  // "\uD800"과 "�"가 같은 바이트열이 됐다. 플레이어 이름은 사용자 입력이라
+  // 실제로 도달 가능한 경로다.
+  const mk = (v) => { const w = createWorld(4242); w.sims[0].name = v; return w; };
+  assert.notEqual(hashWorld(mk('\uD800')), hashWorld(mk('�')), '고립 서로게이트가 U+FFFD를 사칭한다');
+  assert.notEqual(hashWorld(mk('\uDC00')), hashWorld(mk('�')), '후행 서로게이트가 U+FFFD를 사칭한다');
+  assert.notEqual(hashWorld(mk('𐀀')), hashWorld(mk('\uD800')), '유효 페어와 고립이 같게 보인다');
+  // 키에 구분자가 들어가도 안전하다
+  const a = createWorld(4242); a.sims[0].habit = { 'x":1,"y': 1 };
+  const b = createWorld(4242); b.sims[0].habit = { x: 1, y: 1 };
+  assert.notEqual(hashWorld(a), hashWorld(b), '키 안의 구분자가 구조를 사칭한다');
+});
+
+test('QA-12. 순환 참조에서 오라클이 죽지 않는다 (Codex 103차 ④)', () => {
+  // 오라클이 스택 오버플로로 죽으면 그것도 눈이 먼 것이다.
+  const w = createWorld(4242);
+  w.sims[0].self = w.sims[0];
+  assert.doesNotThrow(() => hashWorld(w), 'hashWorld가 순환에서 죽는다');
+  const bad = findNonFinite(w);
+  assert.ok(bad.some((f) => f.value === 'circular'), `순환을 보고하지 않는다: ${JSON.stringify(bad)}`);
+
+  // 형제가 같은 객체를 두 번 참조하는 건 순환이 아니다 — 오탐하면 안 된다
+  const shared = { a: 1 };
+  const w2 = createWorld(4242);
+  w2.sims[0].habit = shared; w2.sims[1].habit = shared;
+  assert.deepEqual(findNonFinite(w2), [], '공유 참조를 순환으로 오인한다');
+});

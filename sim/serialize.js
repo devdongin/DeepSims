@@ -46,7 +46,10 @@ export function fnv1a(str) {
 // (Date·Map·Set·함수)은 조용히 `{}`로 뭉개지지 않고 고유 태그를 받아 해시에 드러난다.
 //
 // serialize 자체는 건드리지 않는다 — 그쪽은 DB 저장 형식이라 바꾸면 스키마가 움직인다.
-function encodeForHash(v, out) {
+//
+// 알려진 한계 (Codex 103차 ②): fnv1a는 32비트라 인코딩이 단사여도 해시는 결국 충돌한다.
+// 이 오라클의 강도는 32비트가 상한이고, 그건 해시 함수의 성질이지 인코딩의 결함이 아니다.
+function encodeForHash(v, out, seen) {
   if (v === null) { out.push('z'); return; }
   if (v === undefined) { out.push('u'); return; }      // JSON이 삼키는 값 ①
   const t = typeof v;
@@ -58,22 +61,31 @@ function encodeForHash(v, out) {
     if (Object.is(v, -0)) { out.push('n-0'); return; }   // ⑤ -0 → 0
     out.push(`n${v}`); return;
   }
-  if (t === 'string') { out.push(`s${v.length}:${v}`); return; }
-  if (Array.isArray(v)) {
-    out.push(`a${v.length}[`);
-    for (const x of v) encodeForHash(x, out);
-    out.push(']');
-    return;
-  }
+  // 문자열·키는 JSON.stringify로 이스케이프해 넣는다 (Codex 103차 ①).
+  // 길이 접두만으로는 부족했다 — TextEncoder가 고립 서로게이트를 U+FFFD로 치환하므로
+  // "\uD800"과 "�"가 같은 바이트열이 된다. JSON.stringify는 고립 서로게이트를
+  // \ud800 이스케이프로 남기고(ES2019 well-formed), 따옴표로 자기 구분까지 한다.
+  if (t === 'string') { out.push(`s${JSON.stringify(v)}`); return; }
   if (t === 'object') {
-    // 순수 객체만 o 태그를 받는다. Date·Map·Set은 Object.keys가 []라서
-    // 예전 인코딩에서는 전부 같은 빈 객체로 보였다.
-    const tag = Object.prototype.toString.call(v);
-    if (tag !== '[object Object]') { out.push(`!${tag}`); return; }
-    const keys = Object.keys(v).sort();
-    out.push(`o${keys.length}{`);
-    for (const k of keys) { out.push(`k${k.length}:${k}`); encodeForHash(v[k], out); }
-    out.push('}');
+    // 순환 참조에서 무한 재귀하지 않는다 (Codex 103차 ④). 현재 세계에는 순환이 없지만,
+    // 오라클이 스택 오버플로로 죽으면 그것도 눈이 먼 것이다.
+    if (seen.has(v)) { out.push('!cycle'); return; }
+    seen.add(v);
+    if (Array.isArray(v)) {
+      out.push(`a${v.length}[`);
+      for (const x of v) encodeForHash(x, out, seen);
+      out.push(']');
+    } else {
+      // 순수 객체만 o 태그를 받는다. Date·Map·Set은 Object.keys가 []라서
+      // 예전 인코딩에서는 전부 같은 빈 객체로 보였다.
+      const tag = Object.prototype.toString.call(v);
+      if (tag !== '[object Object]') { out.push(`!${tag}`); seen.delete(v); return; }
+      const keys = Object.keys(v).sort();
+      out.push(`o${keys.length}{`);
+      for (const k of keys) { out.push(`k${JSON.stringify(k)}`); encodeForHash(v[k], out, seen); }
+      out.push('}');
+    }
+    seen.delete(v); // 형제 노드가 같은 객체를 참조해도 순환으로 오인하지 않는다
     return;
   }
   out.push(`!${t}`); // function·symbol·bigint — 상태에 있으면 안 된다
@@ -81,7 +93,7 @@ function encodeForHash(v, out) {
 
 export function hashWorld(world) {
   const out = [];
-  encodeForHash(world, out);
+  encodeForHash(world, out, new Set());
   return fnv1a(out.join(''));
 }
 
@@ -89,21 +101,27 @@ export function hashWorld(world) {
 // 해시가 갈린 뒤에 "어디가 문제냐"를 묻게 되므로, 그 답을 낼 도구를 같이 둔다.
 export function findNonFinite(world, limit = 20) {
   const found = [];
+  const seen = new Set(); // 순환 참조에서 죽지 않는다 (Codex 103차 ④)
+  const odd = (v) => typeof v === 'function' || typeof v === 'symbol' || typeof v === 'bigint';
   const walk = (v, p) => {
     if (found.length >= limit) return;
-    if (Array.isArray(v)) { v.forEach((x, i) => walk(x, `${p}[${i}]`)); return; }
     if (v !== null && typeof v === 'object') {
-      const tag = Object.prototype.toString.call(v);
-      if (tag !== '[object Object]') { found.push({ path: p, value: tag }); return; }
-      for (const k of Object.keys(v)) walk(v[k], `${p}.${k}`);
+      if (seen.has(v)) { found.push({ path: p, value: 'circular' }); return; }
+      seen.add(v);
+      if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${p}[${i}]`));
+      else {
+        const tag = Object.prototype.toString.call(v);
+        if (tag !== '[object Object]') found.push({ path: p, value: tag });
+        else for (const k of Object.keys(v)) walk(v[k], `${p}.${k}`);
+      }
+      seen.delete(v);
       return;
     }
     if (v === undefined) found.push({ path: p, value: 'undefined' });
     else if (typeof v === 'number' && !Number.isFinite(v)) found.push({ path: p, value: String(v) });
     else if (Object.is(v, -0)) found.push({ path: p, value: '-0' });
-    else if (t2(v)) found.push({ path: p, value: typeof v });
+    else if (odd(v)) found.push({ path: p, value: typeof v });
   };
-  const t2 = (v) => typeof v === 'function' || typeof v === 'symbol' || typeof v === 'bigint';
   walk(world, 'world');
   return found;
 }
