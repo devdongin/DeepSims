@@ -24,7 +24,7 @@ const isoY = (x, y) => (x + y) * (TH / 2);
 const SPRITE_KEYS = [...Array.from({ length: 10 }, (_, i) => [`sim${i}`, `./sprites/sim${i}.png`]), ['player', './sprites/player.png']];
 // §17.14 걷기 시트 (Codex imagegen → tools/slice-sheet.js): 원형 N종 × 4프레임.
 // 존재하는 것만 로드 — 아직 생성 안 된 원형은 정적 sim 이미지로 폴백.
-const WALK_ARCHETYPES = 14; // §22.5: 10 child · 11 chef · 12 clerk · 13 worker 추가
+const WALK_ARCHETYPES = 16; // §22.5: 10 child · 11 chef · 12 clerk · 13 worker / §22.36: 14 노년여 · 15 여아
 const WALK_KEYS = [];
 for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
   WALK_KEYS.push([`walk${i}_${f}`, `./sprites/walk${i}_${f}.png`]);
@@ -67,6 +67,10 @@ const ARCH_LOOK = {
   11: { g: 'F', band: 'adult' },  // 조리모 (요리사)
   12: { g: 'M', band: 'adult' },  // 조끼 (점원)
   13: { g: 'M', band: 'adult' },  // 안전모 + 작업복
+  15: { g: 'F', band: 'child' }, // §22.36 여아 — walk10(남아)을 픽셀 편집해 만든 것
+  // 원형 14(노년 여성)는 **일부러 비워 뒀다.** 파일은 있지만 세 번을 그려도 얼굴이
+  // 원본 남성 노인과 97% 같아서 여전히 남자로 읽힌다. 여기 등록하지 않으면
+  // archOf가 절대 14를 반환하지 않으므로, 합격할 때까지 노년 여성은 원형 4로 남는다.
 };
 // 제복이 없는 평상복 원형. 성별이 맞는 직업 스프라이트가 없을 때 여기로 떨어진다.
 // **여성 평상복이 하나뿐**이라 제복 없는 여성이 다 같아 보인다 — 에셋 부족이고,
@@ -113,9 +117,10 @@ function archOf(sim) {
   const g = (tr.gender === 'F' || tr.gender === 'M') ? tr.gender : null;
   const age = Number.isFinite(tr.age) ? tr.age : 30;
 
-  // ① 나이대. 아이·노인 원형은 각각 하나뿐이라 성별을 맞출 수가 없다 —
-  //    여자 노인과 여자 아이 스프라이트가 아직 없다(에셋 과제, §22.36).
-  if (age < CHILD_MAX_AGE) return 10;
+  // ① 나이대가 먼저다.
+  //    아이는 여아(15)가 생겨서 성별까지 맞는다. 노인은 아직 남성(4)뿐이라
+  //    노년 여성은 나이만 맞고 성별이 어긋난 채로 남는다 (에셋 과제, §22.36).
+  if (age < CHILD_MAX_AGE) return g === 'F' ? 15 : 10;
   if (age >= OLD_MIN_AGE) return 4;
 
   // ② 직업 제복은 **성별이 어긋나지 않을 때만** 쓴다. X는 어긋날 것이 없으므로 다 쓴다.
@@ -584,7 +589,7 @@ class TownScene extends Phaser.Scene {
       let sp = simSprites.get(sim.id);
       const tx = isoX(sim.x, sim.y), ty = isoY(sim.x, sim.y) - 8;
       if (!sp) {
-        const arch = archOf(sim); // 직업 제복 우선, 미지정 직업은 id%10
+        const arch = archOf(sim); // §22.36 나이대 → 성별 → 직업 제복 순
         const animKey = this.ensureWalkAnim(arch);
         let body;
         if (animKey) {
