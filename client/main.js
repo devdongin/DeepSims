@@ -339,7 +339,14 @@ class TownScene extends Phaser.Scene {
     g.lineStyle(1, 0x14121a, 0.25); g.strokePath();
   }
 
-  // §UI 지형(멱등): 잔디 합성 셀 + 월드 TileSprite — 네이티브 로드 완료 후에도 안전 (Codex 59차)
+  // §UI 지형(멱등): 바탕 합성 셀 + 월드 TileSprite — 네이티브 로드 완료 후에도 안전 (Codex 59차)
+  //
+  // ⚠️ §22.32 이름 주의: 'tile_grass'·'grass_cell'·grassBg는 **더 이상 잔디가 아니다.**
+  // 목업의 "마을 전체가 따뜻한 회갈색 석재 포장" 문법에 맞추느라 tile_grass.png의
+  // 내용물이 석재 광장 텍스처로 바뀌었다(맵의 90.4%가 이 타일이다). 키 이름만 옛것이다.
+  // 초록으로 되돌리지 마라 — 그러면 마을 전체가 다시 잔디밭이 된다.
+  // 목업이 말하는 잔디는 **정원·화단 구획 안에만** 있어야 하고, 그건 이 바탕이 아니라
+  // 별도 텍스처와 구획 데이터가 생겨야 가능하다(아직 없음).
   ensureTerrain() {
     if (this.grassBg || !this.textures.exists('tile_grass')) return;
     if (!this.textures.exists('grass_cell')) {
