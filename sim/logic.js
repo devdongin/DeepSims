@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 39, // §22.14 동석 대화 (헛걸음의 46.7%는 옆에 사람이 있었다)
+  logicSchemaVersion: 40, // §22.20 회고 투표 (표에 성과가 들어간다)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -133,7 +133,8 @@ export const DEFAULT_LOGIC = {
       drank: 3, binge: 3, hole_up: 2, workout: 3, built_bed: 5,
       read_time: 2, shopping: 1, home_meal: 2, fishing: 3, found_item: 2, construct_work: 4,
       sick: 6, healed: 4, love: 7, wedding: 9, heartbreak: 8, elected: 8, voted: 2, child: 9,
-      new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7, unmet: 6 },
+      new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7, unmet: 6,
+      welfare: 6 }, // §22.20 정부가 나를 도왔다 — 회고 투표의 재료
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
     posScale: 2000000000, negScale: 4000000000, // 기여 = ±importance×(1+overlap)×scale, 합계는 §G ±5e11 클램프
@@ -352,6 +353,20 @@ export const DEFAULT_LOGIC = {
     mayorStipend: 200,       // 일일 수당
     campaignPull: 140,       // §17.9 유세: 후보의 socialize planFactor
     campaignDays: 3,         // 선거 D-3부터
+    // §22.20 회고 투표 (사용자 지시). 지금까지 투표는 **순수 인기투표**였다 —
+    // 유권자가 두 후보 중 자기가 더 좋아하는 쪽을 고를 뿐, 재임자가 무엇을 했는지는
+    // 표에 전혀 안 들어갔다. 사람은 그렇게 투표하지 않는다.
+    // 유권자가 **지난 임기에 자기가 겪은 일**로 재임자를 심판하게 한다
+    // (Key 1966, Fiorina 1981의 회고 투표). 새 난수를 뽑지 않고 각자의 기억만 읽는다.
+    judgeStarving: 3,        // 지난 임기에 굶었다 (1건당 재임자 감점)
+    judgeNoMoney: 2,         // 돈이 없어 하려던 걸 못 했다
+    judgeWelfare: 3,         // 정부가 나를 도왔다 (가점)
+    // "나라에 돈이 있는데 나는 굶었다"는 더 화나는 일이다 — 돈이 없어서가 아니라
+    // **안 쓴 것**이기 때문이다. 국고가 시민 전체 현금보다 많으면 원망이 커진다.
+    // 절대 금액 문턱을 쓰지 않는다: 마을 규모가 커져도 뜻이 유지되는 비교다.
+    hoardRatioPct: 100,      // 국고 > 시민 총현금 × 이 비율(%)이면 '쌓아두고 있다'
+    hoardMultPct: 200,       // 그때 불만이 이 비율로 커진다
+    retroCap: 40,            // 회고 점수 상한 — 인기 요소를 완전히 지워버리지 않는다
   },
   romance: {
     datingMin: 4500, datingInteractions: 40,
@@ -725,6 +740,10 @@ function checkRanges(p, errors) {
   inRange('family.familyBonus', p.family.familyBonus, 0, 1000);
   inRange('election.campaignPull', p.election.campaignPull, 100, 150);
   inRange('election.campaignDays', p.election.campaignDays, 0, 29);
+  for (const k of ['judgeStarving', 'judgeNoMoney', 'judgeWelfare']) inRange(`election.${k}`, p.election[k], 0, 100);
+  inRange('election.hoardRatioPct', p.election.hoardRatioPct, 1, 10000);
+  inRange('election.hoardMultPct', p.election.hoardMultPct, 100, 1000);
+  inRange('election.retroCap', p.election.retroCap, 0, 10000);
   for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {
     inRange(`disease.${k}`, p.disease[k], 0, 1000);
   }

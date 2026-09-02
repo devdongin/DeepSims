@@ -68,9 +68,77 @@ export function naturalRecovery(world, sim, t, emit) {
 
 // ---- §17.4 선거 ----
 
+// §22.20 회고 투표 — 유권자가 **지난 임기에 자기가 겪은 일**로 재임자를 심판한다.
+//
+// 지금까지 투표는 순수 인기투표였다: 두 후보 중 호감도가 높은 쪽. 재임자가 무엇을
+// 했는지는 표에 전혀 안 들어갔다. 사람은 그렇게 투표하지 않는다 — 내가 굶었는지,
+// 돈이 없어 못 먹었는지, 정부가 도왔는지를 기억하고 그걸로 심판한다
+// (Key 1966, Fiorina 1981의 회고 투표).
+//
+// 각자의 기억만 읽는다. 새 난수를 뽑지 않고 세계를 바꾸지 않는다.
+// 재임자가 후보가 아니면 0이다 — 심판할 대상이 없다.
+// §22.20 이 임기에 정부가 시민 쪽으로 정책을 움직였는가 (Codex 114차 ⑥).
+// 사용자 지시는 "국고에 돈이 많은데 **세율을 조정하지 않거나 하면**"이다 — 돈이
+// 쌓인 것 자체가 아니라 **쌓였는데 아무것도 안 한 것**이 원망의 대상이다.
+// 임기 시작 때 스냅샷한 정책과 지금을 비교한다: 세율을 내렸거나 복지를 늘렸으면
+// 대응한 것이다. 세율을 올린 것은 대응이 아니다 — 방향이 시민 반대쪽이다.
+// 반환: true=대응했다 / false=안 했다 / null=**판정 불가** (기준선 없음).
+// null과 false는 다르다 (115차 ②) — 기준선이 없는 첫 임기에 배수를 걸면 첫 시장이
+// 억울하다. 판정 불가면 배수를 걸지 않는다.
+// 의도된 의미는 "선거 시점의 최종 정책이 임기 시작보다 시민 쪽인가"다 — 임기 중
+// 감세했다가 원상복구하면 대응이 아니다(115차 ①에서 이 의미로 확정). '한 번이라도
+// 움직였는가'로 바꾸려면 이력 추적이 필요하고, 그건 원상복구 꼼수를 허용하는 것이기도
+// 해서 채택하지 않았다.
+export function policyResponded(world) {
+  const base = world.termStartPolicy;
+  if (!base) return null; // 기준선 없음 — 무대응이 아니라 판정 불가
+  const E = world.logic.economy;
+  const cur = {
+    taxPct: world.policy.taxPct ?? E.taxPct,
+    welfareAmount: world.policy.welfareAmount ?? E.welfareAmount,
+    welfareThreshold: world.policy.welfareThreshold ?? E.welfareThreshold,
+  };
+  return cur.taxPct < base.taxPct
+    || cur.welfareAmount > base.welfareAmount
+    || cur.welfareThreshold > base.welfareThreshold;
+}
+
+export function retrospectiveScore(world, voter, candidateId, sinceTick, L, ctx = null) {
+  if (candidateId !== world.mayorId) return 0;
+  const E = L.election;
+  let bad = 0;
+  let good = 0;
+  for (const m of voter.memories) {
+    if (m.tick < sinceTick) continue;
+    if (m.kind === 'starving') bad += E.judgeStarving;
+    else if (m.kind === 'welfare') good += E.judgeWelfare;
+    else if (m.kind === 'unmet' && m.tags.includes('no_money')) bad += E.judgeNoMoney;
+  }
+  // "나라에 돈이 있는데 나는 굶었고, 정부는 아무것도 안 바꿨다"가 배수의 조건이다.
+  // 국고가 쌓여도 세율을 내리거나 복지를 늘린 정부는 배수를 면한다 — 굶은 감점
+  // 자체는 남는다(굶은 건 사실이니까). 절대 금액 문턱을 쓰지 않는다: 국고와 시민
+  // 총현금을 견줘서 마을이 커져도 뜻이 유지되게 한다.
+  // ctx는 선거 단위 캐시(114차 ③) — 유권자 63명 × 후보 2명이 같은 합을 반복 계산하지 않게.
+  if (bad > 0) {
+    const hoarding = ctx !== null
+      ? ctx.hoarding
+      : (() => {
+        const cash = world.sims.reduce((n, s) => n + s.money, 0);
+        // === false: 판정 불가(null)면 배수를 걸지 않는다 (115차 ②)
+        return world.treasury > floorDiv(cash * E.hoardRatioPct, 100) && policyResponded(world) === false;
+      })();
+    if (hoarding) bad = floorDiv(bad * E.hoardMultPct, 100);
+  }
+  const net = good - bad;
+  // 상한을 둬서 회고가 인기를 완전히 지워버리지 않게 한다 — 이분 컷이 아니라 가중이다.
+  return Math.max(-E.retroCap, Math.min(E.retroCap, net));
+}
+
 export function maybeElection(world, t, day, emit) {
   const E = world.logic.election;
   if (day === 0 || day % E.intervalDays !== 0 || world.lastElectionDay === day) return;
+  const prevElectionDay = world.lastElectionDay; // 회고 창의 시작 (첫 선거면 -1 → 세계 시작부터)
+  const sinceTick = prevElectionDay < 0 ? 0 : prevElectionDay * 1440;
   world.lastElectionDay = day;
   // 인기 = 타 심들의 자신을 향한 양수 호감 합
   const pops = world.sims.map((s) => ({
@@ -78,14 +146,39 @@ export function maybeElection(world, t, day, emit) {
     pop: world.sims.reduce((sum, o) => o.id === s.id ? sum : sum + Math.max(0, world.affinity[o.id][s.id]), 0),
   })).filter((x) => x.pop > 0).sort((a, b) => (b.pop - a.pop) || (a.id - b.id));
   if (pops.length === 0) return; // 무산 — 현 시장 유지 (PLAN §17.8)
-  const candidates = pops.slice(0, 2).map((x) => x.id);
+  const prevMayor = world.mayorId;
+  // §22.20 **현직은 재선에 나선다.** 예전에는 후보가 인기 상위 2인뿐이라 재임자가
+  // 후보에 못 드는 일이 잦았고(실측 3회 중 2회), 그러면 회고 투표가 아예 발동하지
+  // 않는다 — 심판할 대상이 투표용지에 없기 때문이다. 현실의 선거도 현직이 나오고
+  // 유권자가 그를 심판한다. 현직을 첫 자리에 두고 나머지를 인기순으로 채운다.
+  const incumbentAlive = prevMayor !== null && world.sims.some((s) => s.id === prevMayor);
+  const ranked = pops.map((x) => x.id).filter((id) => id !== prevMayor);
+  const candidates = incumbentAlive
+    ? [prevMayor, ...ranked].slice(0, 2)
+    : ranked.slice(0, 2);
   const votes = new Map(candidates.map((c) => [c, 0]));
+  // §22.20 표 = 호감 + 회고. 완전 순서: 합계 → 호감 → 후보 id 오름차순 (Codex 113차 ④).
+  let retroTotal = 0;
+  // 선거 단위 캐시(114차 ③): 국고·시민 총현금·정책 대응은 투표 중 변하지 않는다.
+  const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
+  const responded = policyResponded(world);
+  const ctx = {
+    // responded === false 만 배수 대상 — null(기준선 없음)은 판정 불가라 배수 없음 (115차 ②)
+    hoarding: world.treasury > floorDiv(cashTotal * E.hoardRatioPct, 100) && responded === false,
+  };
   for (const voter of world.sims) {
     let best = candidates[0];
     if (candidates.length > 1) {
-      const a0 = world.affinity[voter.id][candidates[0]];
-      const a1 = world.affinity[voter.id][candidates[1]];
-      best = a1 > a0 ? candidates[1] : candidates[0]; // 동률 → 후보 배열 앞(인기·id 우선)
+      const r0 = retrospectiveScore(world, voter, candidates[0], sinceTick, world.logic, ctx);
+      const r1 = retrospectiveScore(world, voter, candidates[1], sinceTick, world.logic, ctx);
+      retroTotal += r0 + r1;
+      const a0 = world.affinity[voter.id][candidates[0]] + r0;
+      const a1 = world.affinity[voter.id][candidates[1]] + r1;
+      // 합계 동률이면 호감으로, 그것도 같으면 후보 배열 앞(인기·id 우선)
+      if (a1 > a0) best = candidates[1];
+      else if (a1 === a0 && world.affinity[voter.id][candidates[1]] > world.affinity[voter.id][candidates[0]]) {
+        best = candidates[1];
+      }
     }
     votes.set(best, votes.get(best) + 1);
   }
@@ -94,7 +187,20 @@ export function maybeElection(world, t, day, emit) {
   world.mayorId = winner;
   emit('election', winner, {
     candidates, votes: candidates.map((c) => votes.get(c)),
+    // §22.20 이 선거에서 회고가 실제로 작동했는지 관측할 수 있게 남긴다.
+    incumbent: prevMayor, retroTotal, treasury: world.treasury,
+    taxPct: world.policy.taxPct ?? world.logic.economy.taxPct,
+    responded, // 이 임기에 정부가 시민 쪽으로 정책을 움직였는가
   });
+  // §22.20 다음 임기의 회고 기준선 — 새 임기가 시작되는 지금의 정책을 스냅샷한다.
+  {
+    const Ec = world.logic.economy;
+    world.termStartPolicy = {
+      taxPct: world.policy.taxPct ?? Ec.taxPct,
+      welfareAmount: world.policy.welfareAmount ?? Ec.welfareAmount,
+      welfareThreshold: world.policy.welfareThreshold ?? Ec.welfareThreshold,
+    };
+  }
   const mayor = world.sims.find((s) => s.id === winner);
   recordFact(mayor, t, world.logic, 'elected', { tags: ['politics'] });
   for (const voter of world.sims) {
@@ -278,6 +384,8 @@ export function applyWelfare(world, t, emit) {
     sim.money += amount;
     paid++;
     emit('welfare_paid', sim.id, { amount, balance: sim.money, treasury: world.treasury });
+    // §22.20 '정부가 나를 도왔다' — 다음 선거에서 재임자에게 가점이 된다
+    recordFact(sim, t, world.logic, 'welfare', { tags: ['politics', 'welfare'] });
   }
 }
 

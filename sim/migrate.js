@@ -206,6 +206,16 @@ export function migrateWorld(world) {
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
   }
+  if (from < 47) {
+    // §22.20 임기 시작 정책 스냅샷. 진행 중 세계는 기준선이 없으므로 null로 시작한다 —
+    // 다음 선거에서 스냅샷이 잡히고 그 다음 임기부터 '조정 안 함' 판정이 선다.
+    world.termStartPolicy ??= null;
+  }
+  if (from < 46) {
+    // §22.19 일상 수요 원장 + 하루 1회 가드
+    world.industryWant ??= {};
+    for (const sim of world.sims) { sim.wantDay ??= -1; sim.wantedActions ??= []; }
+  }
   if (from < 45) {
     // §22.18 산업 수요 원장. `??=`만으로는 배열·문자열 같은 손상 값을 못 고친다
     // (109차 ⑤) — 순수 객체가 아니면 버리고 새로 만든다. 각 항목의 카운터도 검사한다.

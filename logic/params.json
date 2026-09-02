@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 39,
+  "logicSchemaVersion": 40,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -344,7 +344,8 @@
       "heroic": 8,
       "celebration": 7,
       "milestone": 7,
-      "unmet": 6
+      "unmet": 6,
+      "welfare": 6
     },
     "recencyLut": [
       1000,
@@ -693,7 +694,13 @@
     "mayorLaborPct": 90,
     "mayorStipend": 200,
     "campaignPull": 140,
-    "campaignDays": 3
+    "campaignDays": 3,
+    "judgeStarving": 3,
+    "judgeNoMoney": 2,
+    "judgeWelfare": 3,
+    "hoardRatioPct": 100,
+    "hoardMultPct": 200,
+    "retroCap": 40
   },
   "romance": {
     "datingMin": 4500,
