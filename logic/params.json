@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 36,
+  "logicSchemaVersion": 37,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -621,6 +621,22 @@
     "welfareDailyCap": 5,
     "privateWageOccupations": [
       "barista"
+    ],
+    "publicFacilityTypes": [
+      "hospital",
+      "city_hall",
+      "school",
+      "police_station",
+      "fire_station"
+    ],
+    "publicWageOccupations": [
+      "doctor",
+      "nurse",
+      "teacher",
+      "civil_servant",
+      "politician",
+      "police",
+      "firefighter"
     ],
     "taxMoodPer": 5
   },
