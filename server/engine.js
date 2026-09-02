@@ -27,6 +27,12 @@ export class Engine {
     this.createdNow = loaded.created === true; // §22.7 이번 실행에서 새 마을을 만들었는가
     storage.retargetStaleInputs(this.world.worldTick, now());
     storage.pruneEvents(this.world.worldTick);
+    // §22.12 라이브 프루닝: 부팅에만 걸면 켜 둔 세션에서 events가 무한 증가한다
+    // (실측 107게임일 205,092행·53.8MB, 시간당 +31MB). 일 경계를 지난 첫 커밋 뒤에
+    // 다시 프루닝한다 — 커밋 트랜잭션과 분리된 후행 트랜잭션이라 커밋 순서와 충돌하지
+    // 않고, cutoff(30일 전)는 pendingEvents 범위(최근 ≤30틱)와 절대 겹치지 않는다.
+    // DB 정리일 뿐 world를 건드리지 않으므로 결정성 계약과 무관하다.
+    this.lastPruneDay = Math.floor(this.world.worldTick / TICKS_PER_DAY);
     this.catchingUp = false;
     this.catchupPromise = null;
     this.liveTimer = null;
@@ -99,7 +105,24 @@ export class Engine {
     this.pendingEvents = [];
     this.uncommittedFrom = this.world.worldTick;
     this.speed ??= 1; // §20 배속 (서버 런타임 — 시뮬 상태 아님)
+    this.pruneAfterCommit(); // §22.12 따라잡기 배치(=1일)에서도 매일 프루닝 — 긴 부재도 상한 유지
     return { fromTick, toTick: this.world.worldTick, events };
+  }
+
+  // §22.12 커밋 **후행** 일일 프루닝. 반드시 commitBatch가 끝난 뒤에만 부른다 —
+  // 프루닝은 별도 트랜잭션이라 커밋 원자성에 끼어들지 않고, 대상(30일 전 이하)은
+  // 이미 커밋된 행뿐이다. runLive의 n이 아무리 커도 flushLive가 pending을 전부
+  // 커밋한 **다음**에 여기 오므로, 미커밋 이벤트가 cutoff에 걸릴 경로는 없다.
+  // 하루에 한 번만 실제 작업이 생기고, 경계가 아니면 정수 비교 한 번으로 끝난다.
+  // lastPruneDay는 **성공 후에** 갱신한다 (Codex 교차 리뷰 ②) — 프루닝이 던지면
+  // 미갱신이라 다음 커밋에서 재시도되고, 실패 자체는 커밋 실패와 같은 부류의
+  // DB 오류이므로 삼키지 않는다 (PLAN §4: 손상 = 안전 정지).
+  pruneAfterCommit() {
+    const day = Math.floor(this.world.worldTick / TICKS_PER_DAY);
+    if (day <= this.lastPruneDay) return;
+    const deleted = this.storage.pruneEvents(this.world.worldTick);
+    this.lastPruneDay = day;
+    if (deleted > 0) this.storage.opsLog(this.now(), 'events_pruned', { deleted, day });
   }
 
   // §17.0 라이브 전용: 커밋 없이 전진, LIVE_COMMIT_TICKS마다(또는 입력 소비 시) 커밋.
@@ -131,6 +154,7 @@ export class Engine {
     this.pendingApplied = [];
     this.uncommittedFrom = this.world.worldTick;
     this.speed ??= 1; // §20 배속 (서버 런타임 — 시뮬 상태 아님)
+    this.pruneAfterCommit(); // §22.12 라이브 일 경계 — 커밋이 실제로 일어난 뒤에만 온다
   }
 
   // §20 배속: epoch를 "지금이 곧 현재 틱"이 되도록 재기준화한다.
