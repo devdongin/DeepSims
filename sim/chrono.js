@@ -102,3 +102,14 @@ export function pairHash(fromId, toId, day, salt) {
   h = Math.imul(h ^ (h >>> 13), 3266489917);
   return ((h ^ (h >>> 16)) >>> 0) % 100;
 }
+
+// §22.2 사망 판정용 의사확률 (0..99,999). dayHash는 0..99라 하루 단위 사망 위험
+// (수만 분의 일 수준)을 표현할 해상도가 없다. rngSim은 소비하지 않는다.
+export function riskHash(simId, day, salt) {
+  let h = Math.imul(simId + 1, 374761393)
+    ^ Math.imul(day + 1, 668265263)
+    ^ Math.imul(salt + 1, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 2654435761);
+  h = Math.imul(h ^ (h >>> 16), 1597334677);
+  return ((h ^ (h >>> 15)) >>> 0) % 100000;
+}

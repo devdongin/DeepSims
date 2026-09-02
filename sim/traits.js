@@ -8,7 +8,12 @@ export const OCCUPATIONS = [
   'police', 'firefighter', 'nurse', 'politician',  // §17.13 신규
   'worker',                                        // §18.T3 공장 노동자 (append-only)
   'chef', 'clerk',                                 // §21.3 민간 서비스 (전직으로만 도달)
+  'child',                                         // §22.2 영유아·아동 (태어나서만 도달)
 ];
+
+// §22.2: **태어나서만** 도달하는 직업. 0세로 태어나 schoolAge에 student가 된다.
+// 생성 풀에서 빼두면 eligible 길이가 예전과 같아 worldgen·이민 RNG가 불변이다.
+export const BIRTH_STAGE_OCCUPATIONS = ['child'];
 
 // §21.3: **태어나거나 이민 올 때는 뽑히지 않는** 직업. 손님이 몰린 가게에 누군가
 // 일하러 가면서 생긴다(전직). 생성 풀에서 빼두면 eligible 길이가 예전과 같아
@@ -30,13 +35,15 @@ export function generateTraits(rng) {
   else age = 65 + off;
   const mbti = {};
   for (const axis of MBTI_AXES) mbti[axis] = rngInt(rng, 101); // 0~100
-  const eligible = OCCUPATIONS.filter((o) => occupationAllowed(o, age) && !SWITCH_ONLY_OCCUPATIONS.includes(o));
+  const eligible = OCCUPATIONS.filter((o) => occupationAllowed(o, age)
+    && !SWITCH_ONLY_OCCUPATIONS.includes(o) && !BIRTH_STAGE_OCCUPATIONS.includes(o));
   const occupation = eligible[rngInt(rng, eligible.length)];
   return { gender, age, mbti, occupation };
 }
 
 export function occupationAllowed(occupation, age) {
   if (occupation === 'chef' || occupation === 'clerk') return age >= 18 && age < 65; // §21.3
+  if (occupation === 'child') return age < 15; // §22.2 아동기
   if (occupation === 'retired') return age >= 60;
   if (occupation === 'student') return age <= 25;
   if (occupation === 'doctor' || occupation === 'politician') return age >= 26 && age < 60;

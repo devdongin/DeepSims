@@ -3,7 +3,7 @@ import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
 import { generateTraits, occupationAllowed } from './traits.js';
 import { makeAbilities, aptitudeFor } from './abilities.js'; // §21.1 (RNG 미소비)
-import { pairHash, dayHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 의사확률 (rngSim 미소비)
+import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 · §22.2 사망 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
 import { isResidence } from './map.js';
@@ -123,8 +123,12 @@ export function maybeNewYear(world, t, day, emit) {
   if (day === 0 || day % S.yearDays !== 0) return; // §17.9 새해 — 노화·졸업·은퇴는 연 단위 유지
   emit('new_year', null, { year: floorDiv(day, S.yearDays) });
   for (const sim of world.sims) {
-    sim.traits.age = Math.min(90, sim.traits.age + 1);
-    if (sim.traits.occupation === 'student' && sim.traits.age >= S.graduateAge) {
+    // §22.2 상한을 없앴다. 예전엔 90에서 멈춰 '죽지 않는 90세'가 무한 누적됐다.
+    sim.traits.age += 1;
+    if (sim.traits.occupation === 'child' && sim.traits.age >= S.schoolAge) {
+      sim.traits.occupation = 'student'; // §22.2 아이가 자라 학교에 간다
+      emit('grew_up', sim.id, { age: sim.traits.age, to: 'student' });
+    } else if (sim.traits.occupation === 'student' && sim.traits.age >= S.graduateAge) {
       // §18.T3: 가중 풀 단일 드로우 (51차 (a)) — 대학 보유 마을은 고급 직업 풀 append
       const G2 = world.logic.graduation;
       const hasUni = world.map.facilities.some((f) => f.type === 'university');
@@ -176,9 +180,10 @@ export function maybeChildren(world, t, day, emit) {
     if (roll >= F.childPermille) continue;
     // traits 생성 후 age/occupation 강제 — 소비된 두 드로우는 의도적 폐기 (결정적, Codex 30차)
     const traits = generateTraits(world.rngSim);
-    traits.age = 15;
-    traits.occupation = 'student';
-    const id = world.sims[world.sims.length - 1].id + 1;
+    // §22.2 아기로 태어난다. 예전엔 15세 청소년이 즉시 나타났다 — 자라는 시간이 없었다.
+    traits.age = 0;
+    traits.occupation = 'child';
+    const id = nextSimId(world); // §22.2 sims 배열 끝이 아니라 전용 카운터 (사망 시 id 충돌 방지)
     const name = IMMIGRANT_NAMES[world.immigrantCounter % IMMIGRANT_NAMES.length];
     world.immigrantCounter++;
     const L = world.logic;
@@ -186,7 +191,7 @@ export function maybeChildren(world, t, day, emit) {
       id, name, homeId: pa.homeId, isPlayer: false, traits, mood: 0,
       x: home.door.x, y: home.door.y + 1,
       needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 },
-      money: L.occupations.student.startMoney,
+      money: L.occupations.child.startMoney,
       state: { kind: 'idle', action: null, facilityId: null, resourceId: null, path: [], ticksLeft: 0, pairedTicks: 0 },
       memories: [], memorySeq: 0, habit: {}, relTiers: {},
       lastReflectedDay: -1, reflectionMemoryCursor: 0, pendingMood: null,
@@ -194,14 +199,10 @@ export function maybeChildren(world, t, day, emit) {
       hangoverUntil: -1, groceries: 0, sick: null, noPathCool: {}, patrolIdx: 0, hasCar: false, longTrips: 0, complaintCursor: 0, complaintDays: {},
       abilities: makeAbilities(world.seed, id), // §21.1 능력치 — 드로우 없이 seed·id에서 유도
       sharedDay: -1, sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
+      hungerZeroTicks: 0, // §22.2
     };
     world.sims.push(child);
-    for (const row of world.affinity) row.push(0);
-    world.affinity.push(new Array(world.sims.length).fill(0));
-    for (const row of world.interactions) row.push(0);
-    world.interactions.push(new Array(world.sims.length).fill(0));
-    for (const row of world.lastGreetDay) row.push(-1);
-    world.lastGreetDay.push(new Array(world.sims.length).fill(-1));
+    growIdMatrices(world); // §22.2 id 공간 기준 확장 (sims.length는 사망 후 어긋난다)
     world.parents[id] = [a, b];
     world.affinity[id][a] = 5000; world.affinity[a][id] = 5000;
     world.affinity[id][b] = 5000; world.affinity[b][id] = 5000;
@@ -296,7 +297,7 @@ function immigrateOne(world, t, emit) {
   const traits = generateTraits(world.rngSim); // §12.1 순서, rngSim 소비
   const name = IMMIGRANT_NAMES[world.immigrantCounter % IMMIGRANT_NAMES.length];
   world.immigrantCounter++;
-  const id = world.sims[world.sims.length - 1].id + 1;
+  const id = nextSimId(world); // §22.2 (위와 동일)
   const L = world.logic;
   const sim = {
     id, name, homeId: home.id, isPlayer: false, traits, mood: 0,
@@ -312,12 +313,7 @@ function immigrateOne(world, t, emit) {
       sharedDay: -1, sharedTo: [], // §21.2 나눔: 쌍당 하루 1회
   };
   world.sims.push(sim);
-  for (const row of world.affinity) row.push(0);
-  world.affinity.push(new Array(world.sims.length).fill(0));
-  for (const row of world.interactions) row.push(0);
-  world.interactions.push(new Array(world.sims.length).fill(0));
-  for (const row of world.lastGreetDay) row.push(-1);
-  world.lastGreetDay.push(new Array(world.sims.length).fill(-1));
+  growIdMatrices(world); // §22.2 id 공간 기준 확장
   emit('immigrated', id, { name, occupation: traits.occupation, homeId: home.id });
   for (const other of world.sims) {
     if (other.id !== id) recordFact(other, t, L, 'new_neighbor', { subjectSimId: id, tags: [`sim:${id}`, 'town'] });
@@ -327,6 +323,7 @@ function immigrateOne(world, t, emit) {
 // ---- §17.5 연애 (회고에서 호출 — 먼저 회고하는 쪽이 실행, PLAN §17.8) ----
 
 export function applyRomance(world, sim, t, emit) {
+  if (sim.traits.occupation === 'child') return; // §22.2 (91차 ②) 아이는 연애하지 않는다
   const R = world.logic.romance;
   const partner = world.partners[sim.id];
   // ① 파혼: 어느 한 방향 호감 < breakup
@@ -418,6 +415,7 @@ export function applyRomance(world, sim, t, emit) {
     let best = null, bestMutual = 0;
     for (const other of world.sims) {
       if (other.id === sim.id || world.partners[other.id] !== undefined) continue;
+      if (other.traits.occupation === 'child') continue; // §22.2 아이는 상대가 되지 않는다
       const mutual = Math.min(world.affinity[sim.id][other.id], world.affinity[other.id][sim.id]);
       if (mutual >= R.datingMin && world.interactions[sim.id][other.id] >= R.datingInteractions
         && (mutual > bestMutual || (mutual === bestMutual && best !== null && other.id < best.id))) {
@@ -791,4 +789,127 @@ export function maybeJobSwitch(world, t, day, emit) {
     pick.traits.occupation = occ;
     emit('job_changed', pick.id, { from, to: occ, facilityType: facType, aptitude: apt, revenue });
   }
+}
+
+// ---- §22.2 생애 주기: 출생과 사망 (사용자 지시) ----
+//
+// 사용자 지시: "사람의 능력치나 외부 요인등으로 사망하는 시나리오가 들어가야
+// 실제 인간세계에 가깝게 구현이 될 거잖아"
+//
+// 이전 세계의 문제: 사망 코드가 한 줄도 없었고 나이는 Math.min(90, age+1)로 90에서 멈췄다.
+// 즉 **죽지 않는 90세가 무한 누적**되는 구조였다. 출생도 15세 청소년이 즉시 나타나
+// 자라는 시간이 없었다.
+
+// 새 심 id 전용 카운터. 예전엔 `sims[sims.length-1].id + 1`이었는데, 사망으로 마지막 심이
+// 사라지면 이미 쓰인 id를 재발급해 행렬·관계가 뒤엉킨다.
+export function nextSimId(world) {
+  if (world.nextSimId === undefined) {
+    world.nextSimId = world.sims.reduce((m, s) => Math.max(m, s.id), -1) + 1;
+  }
+  return world.nextSimId++;
+}
+
+// id로 인덱싱되는 행렬들을 id 공간(nextSimId) 크기로 맞춘다.
+// 예전엔 `new Array(sims.length)`였는데 사망 후에는 sims.length < maxId라 행이 짧아져
+// undefined 접근이 난다 (89차 ③).
+export function growIdMatrices(world) {
+  const n = world.nextSimId ?? (world.sims.reduce((m, s) => Math.max(m, s.id), -1) + 1);
+  const fit = (mat, fill) => {
+    for (const row of mat) while (row.length < n) row.push(fill);
+    while (mat.length < n) mat.push(new Array(n).fill(fill));
+  };
+  fit(world.affinity, 0);
+  fit(world.interactions, 0);
+  fit(world.lastGreetDay, -1);
+}
+
+// 하루치 사망 위험 (10만분율). 이분 컷이 아니라 **가중 합**이다.
+export function deathRiskPer100k(world, sim, L) {
+  const D = L.mortality;
+  const age = sim.traits.age;
+  // 노화: (나이-바닥)³ / 제수. 40세까지 0이고 그 뒤로 가파르게 오른다.
+  let risk = 0;
+  if (age > D.ageFloor) {
+    const d = age - D.ageFloor;
+    risk = floorDiv(d * d * d, D.ageDivisor);
+  }
+  // 외부 요인 ①: 굶은 채 머문 시간 (§21.2에서 배운 축 — 전이 횟수가 아니라 머문 시간)
+  const starved = sim.hungerZeroTicks ?? 0;
+  if (starved > D.starveGraceTicks) {
+    risk += floorDiv((starved - D.starveGraceTicks) * D.starvePer100kPer100Ticks, 100);
+  }
+  // 외부 요인 ②: 질병
+  if (sim.sick) risk = floorDiv(risk * D.sickMultPct, 100) + D.sickFlat;
+  // 능력치: 체력이 낮을수록 위험하다 (기울기)
+  const stam = sim.abilities?.stamina ?? 50;
+  risk = floorDiv(risk * (100 + floorDiv((50 - stam) * D.staminaSpanPct, 100)), 100);
+  return Math.max(0, Math.min(D.maxPer100k, risk));
+}
+
+// 사망 처리 — 심을 실제로 제거하고 남은 참조를 정리한다 (89차 ③의 정리 목록).
+// 행렬은 묘비로 남긴다(행을 지우면 id 인덱싱이 무너진다).
+function removeSim(world, sim, t, emit, cause) {
+  const id = sim.id;
+  // 예약 해제 — 죽은 사람이 자리를 붙들고 있으면 안 된다
+  if (sim.state.facilityId !== null && sim.state.resourceId !== null) {
+    const key = `${sim.state.facilityId}:${sim.state.resourceId}`;
+    if (world.reservations[key] === id) delete world.reservations[key];
+  }
+  // 배우자 사별
+  const partner = world.partners[id];
+  if (partner !== undefined) {
+    delete world.partners[id]; delete world.partners[partner];
+    delete world.partnerStage[id]; delete world.partnerStage[partner];
+    const p = world.sims.find((s) => s.id === partner);
+    if (p) {
+      p.mood = clamp(p.mood + world.logic.mood.starving, -10000, 10000); // 사별은 깊은 상실 (starving은 음수 상수)
+      recordFact(p, t, world.logic, 'bereaved', { subjectSimId: id, tags: [`sim:${id}`, 'family'] });
+      emit('bereaved', partner, { lostSimId: id });
+    }
+  }
+  if (world.mayorId === id) world.mayorId = null; // 다음 선거에서 다시 뽑힌다
+  // 분실물 보관자가 죽으면 물건은 주인에게 갈 길이 없다 — 목록에서 뺀다
+  world.lostAndFound = world.lostAndFound.filter((lf) => lf.finderId !== id);
+  delete world.parents[id];
+  // §22.2 (91차 ①) 남은 참조 정리 — 빠뜨리면 죽은 사람이 계속 언급된다.
+  // 자녀의 부모 목록에서 뺀다. interaction.js의 family_talk가 죽은 부모를 참조하지 않게.
+  for (const childId of Object.keys(world.parents)) {
+    const ps = world.parents[childId];
+    if (ps.includes(id)) {
+      const left = ps.filter((p) => p !== id);
+      if (left.length === 0) delete world.parents[childId];
+      else world.parents[childId] = left;
+    }
+  }
+  // 동아리 명단
+  for (const key of Object.keys(world.clubs)) {
+    const i = world.clubs[key].indexOf(id);
+    if (i >= 0) world.clubs[key].splice(i, 1);
+  }
+  // §21.2 나눔의 '오늘 준 사람' 목록
+  for (const s of world.sims) {
+    if (s.sharedTo?.length) {
+      const i = s.sharedTo.indexOf(id);
+      if (i >= 0) s.sharedTo.splice(i, 1);
+    }
+  }
+  const idx = world.sims.findIndex((s) => s.id === id);
+  if (idx >= 0) world.sims.splice(idx, 1);
+  emit('died', id, { name: sim.name, age: sim.traits.age, cause, pop: world.sims.length });
+}
+
+// 일일 사망 판정 (id 오름차순 — 선거·수당·이민보다 먼저, 89차 ③).
+// riskHash라 rngSim을 소비하지 않는다. 인구를 직접 조작하지 않는다 —
+// 죽음은 나이·체력·질병·굶주림이라는 **조건에서 창발**한다.
+export function maybeDeaths(world, t, day, emit) {
+  const L = world.logic;
+  const doomed = [];
+  for (const sim of world.sims) { // sims는 id asc 유지
+    const risk = deathRiskPer100k(world, sim, L);
+    if (risk <= 0) continue;
+    if (riskHash(sim.id, day, 71) >= risk) continue;
+    const starved = (sim.hungerZeroTicks ?? 0) > L.mortality.starveGraceTicks;
+    doomed.push([sim, sim.sick ? 'illness' : (starved ? 'starvation' : 'age')]);
+  }
+  for (const [sim, cause] of doomed) removeSim(world, sim, t, emit, cause);
 }
