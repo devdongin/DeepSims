@@ -207,10 +207,31 @@ class TownScene extends Phaser.Scene {
         for (const r of fac.resources) put('bench', r.x, r.y, 18);
       } else if (fac.type === 'park') {
         fac.resources.forEach((r, i) => {
-          if (i < 4) put('bench', r.x, r.y, 22);
+          // §22.30 벤치 두 종류를 번갈아 — bench2는 로드만 되고 한 번도 안 그려지던 프롭이다.
+          if (i < 4) put(i % 2 ? 'bench2' : 'bench', r.x, r.y, 22);
           else if (i === 8) put('slide', r.x, r.y, 30);
           else if (i === 12) put('dumbbell', r.x, r.y, 18);
         });
+        // §22.30 낮은 나무 울타리 — 목업의 "구획 경계는 낮은 석벽·나무 울타리" 문법.
+        // Codex 배선 요청("fence_wood를 공원·화단 경계에 배치 필요")을 받은 자리다.
+        // 울타리 한 칸은 +x 축으로 2타일을 덮는다(32×24 원화를 h=24로 놓으면 폭 32px
+        // = 2칸의 수평 거리 2×TW/2). 그래서 2칸 간격으로 이어 붙인다.
+        // **공원 크기에 상대적으로** 놓는다 — 이 마을의 공원은 16×10짜리 하나와
+        // 7×5짜리 열 개가 섞여 있어서, 아래 분수·화단처럼 좌표를 박아 두면
+        // 작은 공원에서는 경계 밖으로 밀려난다.
+        //
+        // 2타일이 **온전히 들어갈 때만** 놓는다. 그냥 fx < x+w 로 돌면 폭이 홀수인
+        // 7×5 공원에서 마지막 울타리가 경계를 한 칸 넘어 이웃 도로를 가로막는다
+        // (Codex 리뷰 NO-GO 지적).
+        const fenceRow = (fy) => {
+          for (let fx = fac.x; fx + 1 < fac.x + fac.w; fx += 2) put('fence_wood', fx, fy, 24, -2);
+          // 폭이 홀수면 끝 한 칸이 빈다. 밖으로 내밀지 말고 안쪽에서 한 칸 겹쳐 채운다 —
+          // 널빤지 울타리는 겹쳐도 자연스럽지만 삐져나가면 남의 길을 막는다.
+          // w<3이면 2타일짜리가 아예 안 들어간다(넣으면 왼쪽으로 삐져나간다).
+          if (fac.w % 2 && fac.w >= 3) put('fence_wood', fac.x + fac.w - 2, fy, 24, -2);
+        };
+        fenceRow(fac.y - 1);          // 뒤쪽(-y) 경계
+        fenceRow(fac.y + fac.h);      // 앞쪽(+y) 경계
         put('fountain', fac.x + 8, fac.y + 5, 34);
         put('flowerbed', fac.x + 2, fac.y + 8, 18);
         put('flowerbed', fac.x + 13, fac.y + 2, 18);
@@ -231,6 +252,9 @@ class TownScene extends Phaser.Scene {
     // 가로등: 도로 교차 지점, 덤불: 공터, 고양이: 카페 앞 단골
     for (const [lx, ly] of [[22, 9], [25, 22], [22, 40], [45, 24], [10, 22], [25, 38]]) put('streetlamp', lx, ly, 38, 2);
     for (const [bx, by] of [[8, 12], [16, 16], [40, 6], [6, 28], [44, 36], [18, 44]]) put('bush', bx, by, 18);
+    // §22.30 등불 달린 가로수 — 이것도 PROP_KEYS에만 있고 그려진 적이 없던 프롭이다.
+    // 가로등과 같은 성격이라 같은 방식(중심가 고정 좌표)으로 둔다.
+    for (const [tx, ty] of [[24, 15], [20, 27], [30, 33], [12, 19], [38, 28]]) put('street_tree_lit', tx, ty, 40, 2);
     put('cat', 16, 31, 14);
     put('bus_stop', 3, 22, 26); // §17.1 이민자가 내리는 곳
     if ((world.campaigners ?? []).length > 0) put('campaign_banner', 24, 21, 26); // 유세 중
