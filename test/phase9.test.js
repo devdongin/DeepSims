@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } from '../sim/index.js';
 import { sameRegion, TILE } from '../sim/map.js';
-import { aptitudeFor, makeAbilities, ABILITIES } from '../sim/abilities.js';
+import { aptitudeFor, makeAbilities, ABILITIES, FALLBACK_SEED } from '../sim/abilities.js';
 
 // §21.1: 임금은 직업 기본급에 **능력치 보정**이 곱해진다 (이슈 #62). 테스트 공용 계산.
 function grossWageOf(sim, L) {
@@ -1483,4 +1483,16 @@ test('S-66. §21.1 적성 가중 졸업 — 드로우 수는 1회 그대로 (§1
   // 가중을 주면 배정 결과가 달라진다 (적성 쪽으로 기운다)
   const same = flat.grads.every((g, i) => g.payload.to === tilted.grads[i].payload.to);
   assert.ok(!same, '적성 가중이 실제로 배정을 바꾼다');
+});
+
+test('S-67. §21.1 seed 없는 구세이브도 조용히 같은 값이 되지 않는다 (82차 ②)', () => {
+  // seed가 undefined면 undefined+1 = NaN → Math.imul(NaN,x) = 0 이 되어
+  // **다른 시드의 세계가 같은 능력치를 갖는** 조용한 오류가 난다. 명시적 폴백으로 막는다.
+  const missing = makeAbilities(undefined, 7);
+  const zero = makeAbilities(0, 7);
+  assert.notDeepEqual(missing, zero, 'seed 없음이 seed 0과 같은 값이 되면 안 된다');
+  assert.deepEqual(missing, makeAbilities(FALLBACK_SEED, 7), '폴백 시드로 결정적으로 유도된다');
+  for (const k of ABILITIES) {
+    assert.ok(Number.isInteger(missing[k]) && missing[k] >= 0 && missing[k] < 100, k + ' 범위 유지');
+  }
 });

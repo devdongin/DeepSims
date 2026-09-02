@@ -437,5 +437,9 @@
    "n": 1
   }
  ],
- "topFails7d": []
+ "topFails7d": [],
+ "wageShortfall7d": {
+  "count": 4,
+  "total": 2440
+ }
 }

@@ -6,9 +6,16 @@
 
 export const ABILITIES = ['stamina', 'dexterity', 'intellect', 'charisma'];
 
+// seed가 없는 아주 오래된 세이브 대비 폴백 (82차 ②). 그냥 두면 undefined + 1 = NaN이 되고
+// Math.imul(NaN, x) = 0이라, **다른 시드의 세계가 같은 능력치를 갖는** 조용한 오류가 된다.
+// 마이그레이션을 실패시키지 않되(세이브를 못 쓰게 만들 수는 없다) 값이 우연히 맞아떨어지지
+// 않도록 명시적인 상수를 쓴다.
+export const FALLBACK_SEED = 0x5EED1;
+
 // 0~99. seed·simId·능력 인덱스에서 결정적으로 유도 (chrono.js dayHash와 같은 믹서 계열).
 export function abilityValue(seed, simId, idx) {
-  let h = Math.imul(seed + 1, 2654435761) ^ Math.imul(simId + 1, 40503) ^ Math.imul(idx + 1, 2246822519);
+  const s = Number.isSafeInteger(seed) ? seed : FALLBACK_SEED;
+  let h = Math.imul(s + 1, 2654435761) ^ Math.imul(simId + 1, 40503) ^ Math.imul(idx + 1, 2246822519);
   h = Math.imul(h ^ (h >>> 15), 3266489917);
   h = Math.imul(h ^ (h >>> 13), 668265263);
   return ((h ^ (h >>> 16)) >>> 0) % 100;
