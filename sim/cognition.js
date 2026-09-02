@@ -9,7 +9,7 @@ export function bindSocietyHooks(r, cJoin) { romanceHook = r; clubHook = cJoin; 
 
 const SHORTLIST = 32; // D1: 후보 독립 숏리스트 크기 (Codex 대안 채택)
 const MEMORY_MOD_CLAMP = 500000000000;  // §G memoryMod ±5e11
-const STATE_MOD_CLAMP = 250000000000;   // §G stateMod ±2.5e11
+export const STATE_MOD_CLAMP = 250000000000;   // §G stateMod ±2.5e11 (§20.3에서 tick.js도 사용)
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

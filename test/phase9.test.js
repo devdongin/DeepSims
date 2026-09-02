@@ -1,7 +1,7 @@
 // §17 사회 시뮬레이션 테스트: 이민·질병·선거·연애·동아리·사회적 영향
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, advance, tick, hashWorld } from '../sim/index.js';
+import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } from '../sim/index.js';
 import { applyRomance, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
 import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
@@ -1307,4 +1307,67 @@ test('S-60. §20.2 공공·기반 부문 임금은 매출과 무관하게 그대
   const net = Math.floor(gross * (100 - L.economy.taxPct) / 100);
   assert.equal(sim.money, net, '의사는 매출 0이어도 전액 받는다 (기반/공공 부문)');
   assert.equal(evs.filter((e) => e.type === 'wage_shortfall').length, 0);
+});
+
+test('S-61. §20.3 사회적 중력: 사람 수에 비례해 끌리고 상한에서 포화한다 (#33)', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+  const put = (kind, n, facId) => {
+    let k = 0;
+    for (const o of w.sims) {
+      if (k >= n) break;
+      o.state = { kind, action: 'socialize', facilityId: facId, resourceId: null, path: [], ticksLeft: 50, pairedTicks: 0 };
+      k++;
+    }
+  };
+  idleAll(w, []);
+  put('performing', 1, cafe.id);
+  const p1 = socialPresence(w, -1);
+  assert.equal(socialPullPct(w, cafe, p1, L), L.social.gravityPullPct, '1명이면 1인분');
+
+  idleAll(w, []);
+  put('performing', 2, cafe.id);
+  assert.equal(socialPullPct(w, cafe, socialPresence(w, -1), L), 2 * L.social.gravityPullPct, '2명이면 2인분');
+
+  idleAll(w, []);
+  put('performing', 10, cafe.id);
+  assert.equal(socialPullPct(w, cafe, socialPresence(w, -1), L), L.social.gravityPullCap, '상한에서 포화');
+
+  // 아무도 없는 시설은 0
+  idleAll(w, []);
+  assert.equal(socialPullPct(w, cafe, socialPresence(w, -1), L), 0, '빈 곳은 끌림 0');
+});
+
+test('S-62. §20.3 오는 중인 심은 절반 가중, 좌석이 다 차면 끌림이 꺼진다', () => {
+  const w = createWorld(SEED);
+  const L = w.logic;
+  const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+  idleAll(w, []);
+  // 2명이 그 카페로 '가는 중'
+  let k = 0;
+  for (const o of w.sims) {
+    if (k >= 2) break;
+    o.state = { kind: 'walking', action: 'socialize', facilityId: cafe.id, resourceId: null, path: [{ x: 1, y: 1 }], ticksLeft: 0, pairedTicks: 0 };
+    k++;
+  }
+  const walking = socialPullPct(w, cafe, socialPresence(w, -1), L);
+  assert.equal(walking, Math.floor(2 * L.social.gravityWalkingPct / 100) * L.social.gravityPullPct,
+    '오는 중인 심은 walkingPct 만큼만 센다 (기본 50% → 2명이 1인분)');
+
+  // 자기 자신은 세지 않는다
+  const self = w.sims[0];
+  assert.ok(socialPullPct(w, cafe, socialPresence(w, self.id), L) < walking, '자기 자신은 제외');
+
+  // 좌석이 다 차면 0 (79차 ③ — 몰려가도 앉을 자리가 없으면 헛걸음만 는다)
+  idleAll(w, []);
+  let s2 = 0;
+  for (const o of w.sims) {
+    if (s2 >= 3) break;
+    o.state = { kind: 'performing', action: 'socialize', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 50, pairedTicks: 0 };
+    s2++;
+  }
+  assert.ok(socialPullPct(w, cafe, socialPresence(w, -1), L) > 0, '좌석이 남으면 끌림이 있다');
+  for (const r of cafe.resources) w.reservations[`${cafe.id}:${r.id}`] = 999;
+  assert.equal(socialPullPct(w, cafe, socialPresence(w, -1), L), 0, '좌석이 다 차면 끌림 0');
 });
