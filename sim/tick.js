@@ -20,7 +20,7 @@ import {
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
   maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
-  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare } from './society.js';
+  updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
 
@@ -996,6 +996,9 @@ export function tick(world, inputsForThisTick = []) {
         maybeElection(world, t, day, emit);
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
+        // §21.3 전직: 손님이 몰린 가게에 누군가 일하러 간다 (복지 다음 — 서브순서 고정).
+        // 복지 뒤에 두는 이유: 오늘의 지원이 반영된 뒤에 진로를 정하는 게 순서상 자연스럽다.
+        maybeJobSwitch(world, t, day, emit);
         { // §17.24 분실물 귀속 (56차: dueDay ≤ day, itemId asc — 신고 시점 경찰 존재만 검사)
           const due = world.lostAndFound.filter((lf) => lf.dueDay <= day).sort((a, b) => a.itemId - b.itemId);
           for (const lf of due) {

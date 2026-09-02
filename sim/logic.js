@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 34, // §21.2 sharing 추가 (나눔 행동 — 사용자 규칙 §0.1)
+  logicSchemaVersion: 35, // §21.3 industry 추가 (수요가 일자리를 만든다 — 이슈 #63)
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -46,6 +46,9 @@ export const DEFAULT_LOGIC = {
     nurse: { workStart: 540, workEnd: 1080, wagePct: 120, startMoney: 1200, shift: 'rotating' },
     politician: { workStart: 540, workEnd: 1080, wagePct: 125, startMoney: 1500, flex: true },
     worker: { workStart: 540, workEnd: 1080, wagePct: 95, startMoney: 1000 }, // §18.T3 공장
+    // §21.3 민간 서비스 — 손님이 있는 시설에서 일한다. 주말에도 문을 연다.
+    chef: { workStart: 600, workEnd: 1260, wagePct: 100, startMoney: 1000, weekendWork: true },
+    clerk: { workStart: 540, workEnd: 1140, wagePct: 85, startMoney: 1000, weekendWork: true },
   },
   // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
   workplace: {
@@ -53,6 +56,7 @@ export const DEFAULT_LOGIC = {
     retired: 'office', doctor: 'hospital', civil_servant: 'city_hall', teacher: 'school',
     police: 'police_station', firefighter: 'fire_station', nurse: 'hospital', politician: 'city_hall',
     worker: 'factory', // §18.T3
+    chef: 'restaurant', clerk: 'market', // §21.3
   },
   persFactor: { socializeBase: 150, playBase: 100, workBase: 150 },
   affinity: {
@@ -70,6 +74,7 @@ export const DEFAULT_LOGIC = {
       office_worker: 'intellect', barista: 'dexterity', freelancer: 'intellect',
       student: 'intellect', doctor: 'intellect', civil_servant: 'intellect',
       teacher: 'charisma', police: 'stamina', firefighter: 'stamina',
+      chef: 'dexterity', clerk: 'charisma', // §21.3
       nurse: 'charisma', politician: 'charisma', worker: 'stamina',
     },
     // 임금 진폭(%): 능력 0 → -(span/2)%, 50 → 0%, 99 → +(span/2)% 로 완만하게 갈린다.
@@ -88,6 +93,17 @@ export const DEFAULT_LOGIC = {
     friendBonusPct: 35,     // 친구면 훨씬 잘 돕는다
     householdBonusPct: 55,  // 한집 식구가 가장 잘 돕는다
     partnerBonusPct: 45,    // 연인·배우자
+  },
+  // §21.3 수요가 일자리를 만든다 (이슈 #63, 사용자 규칙 §0.1).
+  // §20.2 매출 원장이 드러낸 문제: restaurant·market에 손님은 오는데 근무자가 없어 돈이 고인다.
+  // 시설을 더 짓는 게 아니라 **사람이 그 일을 하러 가는 행동**을 준다.
+  industry: {
+    openings: { restaurant: 'chef', market: 'clerk' }, // 시설 타입 → 그 일을 하는 직업
+    minRevenueToHire: 5000,   // 손님이 이만큼은 와야 사람을 쓴다 (수요에서 파생)
+    workersPerFacility: 1,
+    switchPctPerApt: 40,      // 적성 100이면 하루 40% — 이분 컷이 아니라 기울기
+    switchMaxPct: 40,
+    minAptGain: 10,           // 지금 일보다 이만큼은 더 잘해야 옮긴다 (잦은 이직 방지)
   },
   needCritical: 2000,
   // Phase 3 (logicSchemaVersion 2): 기억·회고·관계 티어 (PLAN §2.5 B/C/E + D2 델타)
@@ -274,7 +290,7 @@ export const DEFAULT_LOGIC = {
     welfareDailyCap: 5,     // 하루 최대 수급자 수 (필요도 순 — §20.1)
     // §20.2 임금이 '일한 시설의 매출'에서 나오는 민간 서비스 직군 (화이트리스트).
     // 여기 없는 직군은 기반 부문(외부 소득)·공공 부문으로 보고 기존대로 지급한다.
-    privateWageOccupations: ['barista'],
+    privateWageOccupations: ['barista', 'chef', 'clerk'], // §21.3: 매출에서 임금이 나온다
     taxMoodPer: 5,          // §18.T1: 납세 시점 mood 델타 = -floorDiv(tax×taxMoodPer, 10) (그라데이션)
   },
   // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
@@ -445,6 +461,26 @@ function checkRanges(p, errors) {
   inRange('sharing.amount', p.sharing.amount, 0, 100000);
   for (const k of ['basePct', 'friendBonusPct', 'householdBonusPct', 'partnerBonusPct']) {
     inRange(`sharing.${k}`, p.sharing[k], 0, 100);
+  }
+  inRange('industry.minRevenueToHire', p.industry.minRevenueToHire, 0, 10000000);
+  inRange('industry.workersPerFacility', p.industry.workersPerFacility, 0, 100);
+  inRange('industry.switchPctPerApt', p.industry.switchPctPerApt, 0, 100);
+  inRange('industry.switchMaxPct', p.industry.switchMaxPct, 0, 100);
+  inRange('industry.minAptGain', p.industry.minAptGain, 0, 100);
+  // §21.3 (86차 ②) 교차 검증: 일자리를 여는 직업은 반드시
+  //   ① 존재하는 직업이고 ② 그 시설에서 매출로 임금을 받으며 ③ 근무지 매핑이 일치해야 한다.
+  // 하나라도 어긋나면 '손님은 있는데 임금이 안 나오는' 조용한 고장이 된다.
+  for (const [facType, occ] of Object.entries(p.industry.openings)) {
+    if (!(occ in p.occupations)) {
+      errors.push(`industry.openings.${facType}: 알 수 없는 직업 ${occ}`);
+      continue;
+    }
+    if (!p.economy.privateWageOccupations.includes(occ)) {
+      errors.push(`industry.openings.${facType}: ${occ}는 economy.privateWageOccupations에 있어야 함 (매출에서 임금이 나온다)`);
+    }
+    if (p.workplace[occ] !== facType) {
+      errors.push(`industry.openings.${facType}: workplace.${occ}=${p.workplace[occ]} 가 시설 타입과 불일치`);
+    }
   }
   inRange('abilities.aptitudePoolWeight', p.abilities.aptitudePoolWeight, 0, 2000);
   for (const [o, k] of Object.entries(p.abilities.keyAbility)) {

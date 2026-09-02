@@ -3,7 +3,7 @@ import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
 import { generateTraits, occupationAllowed } from './traits.js';
 import { makeAbilities, aptitudeFor } from './abilities.js'; // §21.1 (RNG 미소비)
-import { pairHash } from './chrono.js'; // §21.2 나눔 의사확률 (rngSim 미소비)
+import { pairHash, dayHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 의사확률 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
 import { isResidence } from './map.js';
@@ -739,5 +739,56 @@ export function maybeShare(world, a, b, t, day, emit) {
       giverBalance: giver.money, takerBalance: taker.money,
       relation: giver.homeId === taker.homeId ? 'household' : (tier ?? 'stranger'),
     });
+  }
+}
+
+// ---- §21.3 전직 — 손님은 있는데 일할 사람이 없다 (이슈 #63, 사용자 규칙 §0.1) ----
+//
+// §20.2 매출 원장이 문제를 드러냈다: restaurant에 24,400원, market에 4,200원이 쌓이는데
+// 두 곳 다 **근무자가 없다**. 민간 임금 직군이 barista 하나뿐이라 돈이 고이기만 한다.
+//
+// 시설을 더 짓거나 매출을 재분배하는 처방은 계기판을 누르는 것이다(§0.1).
+// 대신 사람이 실제로 하는 행동을 준다 — **손님이 몰린 가게에 누군가 그 일을 하러 간다.**
+// 그래서 chef·clerk는 아무도 그 직업으로 **태어나지 않는다**(SWITCH_ONLY). 수요가 만든다.
+//
+// rngSim 미소비(dayHash), 인구 직접 조작 없음. 옮기는 것은 기존 심의 직업뿐이다.
+export function maybeJobSwitch(world, t, day, emit) {
+  const L = world.logic;
+  const I = L.industry;
+  // §21.3 (86차 ①): **정렬 필수**. Object.keys는 params 객체의 삽입 순서를 따르는데,
+  // 로직 파일을 손으로 고쳐 키 순서가 바뀌면 같은 날 후보가 달라진다.
+  // canonical hash가 키 순서를 무시한다면 '같은 로직 해시인데 다른 결과'가 되어버린다.
+  for (const facType of Object.keys(I.openings).sort()) {
+    const occ = I.openings[facType];
+    const facs = world.map.facilities.filter((f) => f.type === facType);
+    if (facs.length === 0) continue;
+    // 수요 신호: 손님이 실제로 돈을 쓴 만큼만 사람을 쓴다
+    let revenue = 0;
+    for (const f of facs) revenue += f.revenue ?? 0;
+    if (revenue < I.minRevenueToHire) continue;
+    let have = 0;
+    for (const s of world.sims) if (s.traits.occupation === occ) have++;
+    if (have >= facs.length * I.workersPerFacility) continue;
+    // 후보: 근로 가능하고, **지금 하는 일보다 이 일을 더 잘하는** 사람
+    const cands = [];
+    for (const s of world.sims) {
+      if (s.traits.occupation === occ) continue;
+      if (!occupationAllowed(occ, s.traits.age)) continue;
+      if (s.traits.occupation === 'retired' || s.traits.occupation === 'student') continue;
+      const gain = aptitudeFor(s, occ, L) - aptitudeFor(s, s.traits.occupation, L);
+      if (gain < I.minAptGain) continue; // 잦은 이직 방지 — 확실히 더 잘할 때만 옮긴다
+      cands.push(s);
+    }
+    if (cands.length === 0) continue;
+    // 적성 높은 순, 동점은 id 오름차순 — 전순서라 정렬 안정성에 기대지 않는다
+    cands.sort((a, b) => (aptitudeFor(b, occ, L) - aptitudeFor(a, occ, L)) || (a.id - b.id));
+    const pick = cands[0];
+    // 이분 컷이 아니라 확률: 적성이 높을수록 잘 옮긴다
+    const apt = aptitudeFor(pick, occ, L);
+    const pct = Math.min(I.switchMaxPct, floorDiv(apt * I.switchPctPerApt, 100));
+    if (dayHash(pick.id, day, 53) >= pct) continue;
+    const from = pick.traits.occupation;
+    pick.traits.occupation = occ;
+    emit('job_changed', pick.id, { from, to: occ, facilityType: facType, aptitude: apt, revenue });
   }
 }
