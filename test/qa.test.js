@@ -237,7 +237,7 @@ test('QA-14. §22.33 모든 직업에 work_gripe 대사가 있다', async () => 
 // 예전에는 발화 배열과 응답 배열이 따로 있었고, pick()이 tick으로 각각 뽑았다.
 // 그래서 "또 언성이 높아졌어"에 "가족이 최고지"가 돌아갈 수 있었고, 한쪽 배열에만
 // 줄을 더하면 조용히 어긋났다. 지금은 [발화, 응답] 한 줄이 최소 단위다.
-test('QA-15. §22.35 가족 대화 표가 [발화, 응답] 짝으로만 이뤄져 있다', () => {
+test('QA-15. §22.35·§22.38 대화 짝 표가 [발화, 응답] 구조를 지킨다', () => {
   const m = CLIENT.match(/const FAMILY_TALK = \{[\s\S]*?\n\};/);
   assert.ok(m, 'FAMILY_TALK 표를 찾지 못했다');
   const helpers = "const ga=(w)=>w+'이',wa=(w)=>w+'와',eul=(w)=>w+'을',"
@@ -254,6 +254,27 @@ test('QA-15. §22.35 가족 대화 표가 [발화, 응답] 짝으로만 이뤄�
       assert.ok(row[0]('아무개').length > 0, `${rel}[${i}] 발화가 빈 문자열이다`);
       assert.ok(row[1].length > 0, `${rel}[${i}] 응답이 빈 문자열이다`);
     });
+  }
+
+  // §22.38 날씨도 같은 짝 구조다. 여기선 실제로 어긋나 있었다 —
+  // §22.29에서 공용 응답 풀에 넣은 '우산은 챙겼어?'가 맑은 날 대사에 돌아갔다.
+  const wm = CLIENT.match(/const WEATHER_TALK = \{[\s\S]*?\n\};/);
+  assert.ok(wm, 'WEATHER_TALK 표를 찾지 못했다');
+  const WEATHER_TALK = new Function(`${wm[0]}; return WEATHER_TALK;`)();
+  for (const kind of ['sunny', 'cloudy', 'rain']) {
+    const rows = WEATHER_TALK[kind];
+    assert.ok(Array.isArray(rows) && rows.length >= 6, `${kind} 표가 비었다`);
+    rows.forEach((row, i) => {
+      assert.equal(row.length, 2, `${kind}[${i}]는 [발화, 응답] 두 칸이어야 한다`);
+      assert.equal(typeof row[0], 'string', `${kind}[${i}] 발화는 문자열이어야 한다`);
+      assert.equal(typeof row[1], 'string', `${kind}[${i}] 응답은 문자열이어야 한다`);
+      assert.ok(row[0].length > 0 && row[1].length > 0, `${kind}[${i}]에 빈 칸이 있다`);
+    });
+    // 맑은 날에 우산 얘기가 섞이면 안 된다 (그 반대도)
+    if (kind === 'sunny') {
+      const bad = rows.filter((r) => r.join(' ').includes('우산'));
+      assert.deepEqual(bad, [], '맑은 날 짝에 우산이 들어 있다');
+    }
   }
 });
 

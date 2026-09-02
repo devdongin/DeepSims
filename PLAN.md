@@ -2357,3 +2357,45 @@ Uncaught TypeError: Cannot read properties of undefined (reading 'welfareThresho
 
 확인: 재시작 후 새로 나온 이벤트 두 건이 `before {"taxPct":13} → changes {"taxPct":10}`로
 제대로 실렸고, 브라우저에서 40초간 새 예외가 없었다.
+
+## §22.38 날씨 얘기는 날씨에 관한 얘기가 아니다
+
+**관찰**: `weather`가 라이브 3000건 중 **330건(5위)**인데 detail 조합이 **하나뿐**이다
+(전부 `sunny` — 지금 이 세계가 맑다). 그 8줄이 330건을 다 감당하고 있었다.
+
+더 근본적인 문제는 수가 아니었다. **이 세계의 날씨 대사는 전부 날씨를 서술한다.**
+"하늘색 봐라", "바람이 선선해서" — 정보를 전달하는 말뿐이고, 정작 이 주제의 본령인
+**접촉을 만드는 말**이 없었다.
+
+**연구 근거**: Malinowski의 **교감적 언어사용(phatic communion)**.
+Senft, "Phatic communion" (*Handbook of Pragmatics*, John Benjamins). 인용된
+Malinowski(1936: 314–316)의 요지:
+
+> "Are words in Phatic Communion used primarily to convey meaning …? **Certainly not!**
+> They fulfil a social function and that is their principal aim"
+> "phatic communion serves to establish bonds of personal union … and **does not serve
+> any purpose of communicating ideas**"
+
+Malinowski가 이 개념을 만들며 든 예가 **바로 날씨였다** — "inquiries about health,
+comments on weather", 그리고 `'Nice day to-day'`. 그런 말이 필요한 이유는
+**마주 서서 침묵할 때의 낯설고 불편한 긴장을 넘기기 위해서**다. 첫 마디 뒤에는
+"purposeless expressions of preference or aversion … **comments on what is [obvious]**"가
+이어진다.
+
+**적용** — 세 갈래를 더했다:
+1. **침묵 깨기** — "어, 안녕. 날씨 좋네" · "여기서 다 보네" · "오늘은 날씨 얘기밖에 할 게 없네"
+2. **뻔한 것에 대한 논평**(Malinowski의 표현 그대로) — "해가 밝다" → "밝지" · "덥긴 덥다"
+3. **동조 요구** — "좋은 날이지? 안 그래?" · "이런 날 싫어하는 사람은 없지"
+
+응답은 **동의가 기본**이다. 날씨를 두고 반박하는 사람은 드물고, 그 무해함이야말로
+이 주제가 접촉의 도구로 쓰이는 이유다.
+
+### 그러다 내가 만든 어긋남을 찾았다
+
+§22.29에서 후속 질문을 넓히며 공용 날씨 응답 풀에 `'우산은 챙겼어?'`를 넣었다.
+그런데 그 풀은 `kind`를 안 보므로 **맑은 날 대사에도 우산 응답이 돌아가고 있었다.**
+§22.35의 짝 표 구조를 날씨에도 적용해 구조적으로 막았다 — `sunny`·`cloudy`·`rain`
+각각이 `[발화, 응답]` 쌍의 목록이다. QA-15를 확장해 두 표를 모두 검사하고,
+**맑은 날 짝에 '우산'이 들어 있으면 실패**하게 했다.
+
+문장 수: 21 → **33쌍**(발화 33 · 짝 응답 33). 시뮬 로직 무관(sim/ 미변경).

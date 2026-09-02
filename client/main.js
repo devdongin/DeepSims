@@ -823,6 +823,78 @@ const FAMILY_TALK = {
   ],
 };
 
+// §22.38 날씨 얘기는 날씨에 관한 얘기가 아니다 — 교감적 언어사용(phatic communion).
+//
+// Malinowski가 이 개념을 만들면서 든 예가 바로 "inquiries about health, comments on
+// weather"와 인사말이었다 (Senft, "Phatic communion", Handbook of Pragmatics 인용).
+// 그가 말하는 요지:
+//   · "Are words in Phatic Communion used primarily to convey meaning …? Certainly not!
+//      They fulfil a social function and that is their principal aim"
+//   · "phatic communion serves to establish bonds of personal union … and does not serve
+//      any purpose of communicating ideas"
+//   · 'Nice day to-day' 같은 말은 "마주 서서 침묵할 때 느끼는 낯설고 불편한 긴장을
+//      넘기기 위해" 필요하다 — 침묵을 깨는 것이 목적이다.
+//   · 첫 마디 뒤에는 "purposeless expressions of preference or aversion, accounts of
+//      irrelevant happenings, comments on what is [perfectly obvious]"가 이어진다.
+//
+// 라이브 3000건 중 weather가 330건(5위)인데 detail 조합이 **하나뿐**이고(전부 sunny)
+// 그 8줄이 330건을 다 감당하고 있었다. 게다가 이 세계의 날씨 대사는 전부 **날씨를
+// 서술**한다 — 정작 이 주제의 본령인 '접촉을 만드는 말'이 없었다. 그래서 세 갈래를
+// 더한다: 침묵 깨기 · 뻔한 것에 대한 논평 · 동조 요구.
+//
+// 발화·응답을 짝으로 둔다 (§22.35와 같은 이유, 그리고 여기선 실제로 어긋나 있었다 —
+// §22.29에서 공용 응답 풀에 넣은 '우산은 챙겼어?'가 맑은 날 대사에 돌아가고 있었다).
+// 교감적 대화에서 응답은 **동의**가 기본이다. 날씨를 두고 반박하는 사람은 드물고,
+// 그 무해함이야말로 이 주제가 접촉의 도구로 쓰이는 이유다.
+const WEATHER_TALK = {
+  sunny: [
+    // 서술
+    ['날씨 진짜 좋다~', '그러게, 딱 좋다'],
+    ['이런 날엔 공원이지', '나도 방금 그 생각 했어'],
+    ['햇살 봐, 나가길 잘했어', '나오길 잘했지'],
+    ['이런 날 집에 있으면 손해야', '맞아, 좀 걷자'],
+    ['빨래 널기 딱 좋은 날인데', '나도 아침에 널고 나왔어'],
+    ['바람이 선선해서 살 것 같다', '그늘은 더 좋더라'],
+    ['해 있을 때 좀 걷자', '좋지, 어디로?'],
+    ['하늘색 봐라. 사진 찍고 싶네', '진짜 파랗다'],
+    // 침묵 깨기 — 말의 목적이 내용이 아니라 접촉인 자리
+    ['어, 안녕. 날씨 좋네', '안녕! 그러게'],
+    ['여기서 다 보네', '그러게, 오랜만이야'],
+    ['오늘은 날씨 얘기밖에 할 게 없네', '그래도 좋으니까 됐지'],
+    // 뻔한 것에 대한 논평 — Malinowski가 'comments on what is obvious'라 부른 것
+    ['해가 밝다', '밝지'],
+    ['덥긴 덥다', '덥다 진짜'],
+    ['오늘은 그냥… 날씨가 좋다', '응, 좋다'],
+    // 동조 요구
+    ['좋은 날이지? 안 그래?', '응, 좋아'],
+    ['이런 날 싫어하는 사람은 없지', '없지'],
+  ],
+  cloudy: [
+    ['날이 꾸물꾸물하네', '그러게'],
+    ['흐린 날엔 괜히 기분도 가라앉아', '나도 좀 그래'],
+    ['비 올 것 같은데 우산 챙겼어?', '아, 안 챙겼는데'],
+    ['이런 날은 딱 낮잠인데', '그러게 말이야'],
+    ['해가 안 보이니 시간 감각이 없다', '지금 몇 시지?'],
+    ['구름이 낮게 깔렸어', '한바탕 오려나'],
+    ['뭐 이런 날도 있는 거지', '그렇지 뭐'],
+    ['흐리네', '흐리다'],
+  ],
+  rain: [
+    ['비 오는 소리 좋다…', '나도 그 소리 좋아해'],
+    ['우산 챙겨왔어? 밖에 비 많이 와', '아니, 같이 쓰자'],
+    ['이런 날엔 실내가 최고야', '나가기 싫다 진짜'],
+    ['신발 다 젖었어…', '좀 말리고 가'],
+    ['빗소리 들으면서 커피 마시는 거 좋아해', '그거 좋다'],
+    ['오늘은 일찍 들어가야겠다', '조심히 가'],
+    ['비 그치면 공기가 좋아지겠지', '그건 그래'],
+    ['비 온다', '오네'],
+    ['많이 온다, 그치?', '많이 오네'],
+  ],
+};
+const WEATHER_FALLBACK = [['날씨가 애매하네', '그러게, 뭐라 말하기 그렇다'],
+  ['오늘 날씨 뭐라 말하기 애매하다', '딱 잘라 말하기 어렵네']];
+function weatherPair(kind, t) { return pick(WEATHER_TALK[kind] ?? WEATHER_FALLBACK, t); }
+
 function conversationLine(e) {
   const t = e.tick;
   const d = e.payload.detail ?? {};
@@ -1163,18 +1235,7 @@ function conversationLine(e) {
       // §22.35 발화·응답 짝 표에서 뽑는다. 같은 tick → 같은 인덱스 → 짝이 맞는다.
       return pick(FAMILY_TALK[d.relation === 'child' ? 'child' : 'parent'], t)[0](about);
     }
-    case 'weather': {
-      return pick({
-        sunny: ['날씨 진짜 좋다~', '이런 날엔 공원이지', '햇살 봐, 나가길 잘했어',
-          '이런 날 집에 있으면 손해야', '빨래 널기 딱 좋은 날인데', '바람이 선선해서 살 것 같다',
-          '해 있을 때 좀 걷자', '하늘색 봐라. 사진 찍고 싶네'],
-        cloudy: ['날이 꾸물꾸물하네', '흐린 날엔 괜히 기분도 가라앉아', '비 올 것 같은데 우산 챙겼어?',
-          '이런 날은 딱 낮잠인데', '해가 안 보이니 시간 감각이 없다', '구름이 낮게 깔렸어'],
-        rain: ['비 오는 소리 좋다…', '우산 챙겨왔어? 밖에 비 많이 와', '이런 날엔 실내가 최고야',
-          '신발 다 젖었어…', '빗소리 들으면서 커피 마시는 거 좋아해', '오늘은 일찍 들어가야겠다',
-          '비 그치면 공기가 좋아지겠지'],
-      }[d.kind ?? 'sunny'] ?? ['날씨가 애매하네', '오늘 날씨 뭐라 말하기 애매하다'], t);
-    }
+    case 'weather': return weatherPair(d.kind ?? 'sunny', t)[0]; // §22.38 짝 표
     default: return pick(['요즘 어떻게 지내?', '별일 없지?', '오랜만이다, 잘 지냈어?', '오늘 하루 어땠어?'], t);
   }
 }
@@ -1264,10 +1325,12 @@ function replyLine(e) {
     }
     return pick(['다들 그렇지 뭐', '그래도 일이 있는 게 어디야'], t);
   }
+  // §22.38 날씨는 짝 표에서 받는다. 교감적 대화의 응답은 동의가 기본이고,
+  // 무엇보다 맑은 날 얘기에 "우산은 챙겼어?"가 돌아가면 안 된다(§22.29에서
+  // 공용 풀에 넣는 바람에 실제로 그러고 있었다).
   if (e.payload.topic === 'weather') {
-    return warm >= 0 ? pick(['그러게, 딱 좋다', '나도 방금 그 생각 했어', '이따 좀 걸을까?',
-      '이따 뭐 할 거야?', '우산은 챙겼어?'], t)
-      : pick(['그런가…', '난 잘 모르겠던데'], t);
+    if (warm >= 0) return weatherPair((e.payload.detail ?? {}).kind ?? 'sunny', t)[1];
+    return pick(['그런가…', '난 잘 모르겠던데', '음, 그렇네'], t);
   }
   if (e.payload.topic === 'food') {
     return warm >= 0 ? pick(['오 어디 거?', '나도 배고파졌어', '다음엔 같이 가자',
