@@ -2774,6 +2774,76 @@ function feedPasses(e) {
   return true;
 }
 
+// ---- §22.24 부재중 연대기 (이슈 #90, DF 레전드 방식) ----
+// 서버(server/chronicle.js)가 우선순위·상한으로 고른 사건을 시간순 이야기로 그린다.
+// 이벤트 로그에 있는 사실만 문장 틀에 끼운다 — 지어내지 않는다.
+const CHRON_KO = {
+  died: '사망', bereaved: '사별', child_settled: '자립', married: '결혼', election: '선거',
+  heroic_save: '구조', fire_started: '화재', fire_out: '진화', city_promoted: '승격',
+  job_changed: '전직', policy_changed: '정책 변경', started_dating: '연애', broke_up: '이별',
+  helped: '챙김', money_shared: '나눔', immigrated: '이민', grew_up: '성장', graduated: '졸업',
+  retired_now: '은퇴', facility_built: '완공', festival: '축제', petition: '청원',
+  car_bought: '차 구입', fell_sick: '병치레',
+};
+
+function chronicleText(e, nameOf) {
+  const n = nameOf(e.simId);
+  const p = e.payload;
+  const placeOfFac = (fid) => PLACE_KO[facTypeOf(fid)] ?? placeKo(fid);
+  // 살아 있으면 성+이름(§22.16), 죽었거나 못 찾으면 payload의 이름으로
+  const nOr = (fallback) => (fallback && n === `심${e.simId}` ? fallback : n);
+  switch (e.type) {
+    case 'died': {
+      const cause = { illness: '병으로', starvation: '굶주림 끝에', age: '노환으로' }[p.cause] ?? '';
+      return `🕯️ ${ga(nOr(p.name))} ${cause} 세상을 떠났습니다 (${p.age}세)`;
+    }
+    case 'bereaved': return `🖤 ${ga(n)} 배우자 ${eul(nameOf(p.lostSimId))} 잃었습니다`;
+    case 'child_settled': return `👶 ${wa(nameOf(p.parentA))} ${nameOf(p.parentB)} 부부의 자녀 ${ga(nOr(p.name))} 자립을 시작했습니다`;
+    case 'married': return `💒 ${wa(n)} ${ga(nameOf(p.withSimId))} 결혼했습니다`;
+    case 'election': {
+      const how = p.incumbent === e.simId ? '재선에 성공했습니다' : '새 시장이 되었습니다';
+      return `🗳️ 선거에서 ${ga(n)} ${how} (득표 ${(p.votes ?? []).join(':')})`;
+    }
+    case 'heroic_save': return `🎖️ ${ga(n)} ${placeOfFac(p.facilityId)} 화재에서 사람들을 구해 영웅이 되었습니다`;
+    case 'fire_started': return `🔥 ${placeOfFac(p.facilityId)}에 불이 났습니다`;
+    case 'fire_out': return p.by === 'self'
+      ? `💨 ${placeOfFac(p.facilityId)}의 불이 저절로 잦아들었습니다 (아무도 오지 않았습니다)`
+      : `🚒 ${ga(nameOf(p.by))} ${placeOfFac(p.facilityId)} 화재를 진압했습니다`;
+    case 'city_promoted': return `🏙️ 해솔이 ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
+    case 'job_changed': return `💼 ${ga(n)} ${OCC_KO[p.from] ?? p.from} 일을 접고 ${ro(OCC_KO[p.to] ?? p.to)} 전직했습니다`;
+    case 'policy_changed': {
+      const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
+      const parts = Object.entries(p.changes ?? {}).map(([k, v]) =>
+        `${ko[k] ?? k} ${p.before?.[k] !== undefined ? `${p.before[k]}→` : ''}${v}${k === 'taxPct' ? '%' : '원'}`);
+      const who = p.source === 'mayor' ? `시장 ${ga(n)} ` : '';
+      return `🏛️ ${who}정책을 바꿨습니다: ${parts.join(', ')}`;
+    }
+    case 'started_dating': return `💕 ${wa(n)} ${ga(nameOf(p.withSimId))} 사귀기 시작했습니다`;
+    case 'broke_up': return `💔 ${wa(n)} ${ga(nameOf(p.withSimId))} 헤어졌습니다`;
+    case 'helped': {
+      const why = { sick: '앓아누운', hungry: '굶주린', broke: '주머니가 빈' }[p.why] ?? '어려운';
+      return `🤝 ${ga(n)} ${why} ${eul(nameOf(p.toSimId))} 챙겼습니다`;
+    }
+    case 'money_shared': return `💝 ${ga(n)} 곤경에 처한 ${nameOf(p.toSimId)}에게 ${p.amount}원을 건넸습니다`;
+    case 'immigrated': return `🚌 ${ga(nOr(p.name))} 마을로 이사 왔습니다 (${OCC_KO[p.occupation] ?? p.occupation})`;
+    case 'grew_up': return `🎒 ${ga(n)} 자라서 학교에 다니기 시작했습니다 (${p.age}세)`;
+    case 'graduated': return `🎓 ${ga(n)} 학교를 졸업하고 ${ga(OCC_KO[p.to] ?? p.to)} 되었습니다`;
+    case 'retired_now': return `🌅 ${ga(n)} 일을 내려놓고 은퇴했습니다`;
+    case 'facility_built': {
+      const tp = p.type === 'house' ? '새 집' : (PLACE_KO[p.type] ?? p.type);
+      return `🎊 ${ga(tp)} 완공되어 마을이 넓어졌습니다`;
+    }
+    case 'festival': return `🏮 마을 축제가 공원에서 열렸습니다`;
+    case 'petition': {
+      const ko = { lonely: '외롭다', hungry: '배고프다' };
+      return `📢 주민들이 "${ko[p.kind] ?? p.kind}" 청원을 올렸습니다 (${p.total}건)`;
+    }
+    case 'car_bought': return `🚗 ${ga(n)} 차를 샀습니다`;
+    case 'fell_sick': return `🤒 ${ga(n)} 감기로 앓아누웠습니다`;
+    default: return eventText(e); // 테이블 밖 종류가 와도 피드 문장으로는 보여준다
+  }
+}
+
 function pushFeed(e) {
   const text = eventText(e); // 필터는 호출부에서 이미 걸렀다 (§23.19)
   if (!text) return;
@@ -3120,38 +3190,60 @@ async function showReport() {
   const rep = await fetch(`/api/report?cursor=${cursor}`).then((r) => r.json());
   lsSet('deepsims.lastSeenTick', String(rep.nextCursor));
   if (rep.toTick - rep.fromTick < 60) return; // 1게임시간 미만 공백은 생략
+  // §22.24: 죽은 사람은 world.sims에 없다 — 서버가 died payload에서 모아준 이름으로 푼다
+  const nameOf = (id) => (id === null || id === undefined) ? '누군가'
+    : (world?.sims.some((x) => x.id === id) ? simName(id) : (rep.deadNames?.[id] ?? `심${id}`));
   const lines = []; // 문자열은 전부 textContent로 렌더 (이름 유래 XSS 방지)
   const hours = Math.floor((rep.toTick - rep.fromTick) / 60);
   lines.push(`당신이 없는 동안 게임 시간 ${Math.floor(hours / 24)}일 ${hours % 24}시간이 흘렀습니다.`);
   const count = (t) => rep.counts.find((c) => c.type === t)?.n ?? 0;
-  lines.push(`완료된 행동 ${count('action_completed')}건, 말다툼 ${count('argument')}건, 굶주림 ${count('starving')}건.`);
-  // §22.102 식사 횟수는 뺀다 (사용자 지적: "요약에 식사 몇회 했는지 적는건 별로인 것 같다").
-  // 심마다 '몇 회 먹었다'는 이야기가 아니라 계기판이다 — 요약은 무슨 일이 있었는지를 말해야 한다.
-  for (const w of rep.works) lines.push(`· ${simName(w.sim_id)}: 근무 ${w.n}회`);
-  for (const mo of rep.moneyBySim) lines.push(`· ${simName(mo.sim_id)}: 잔액 ${mo.delta > 0 ? '+' : ''}${mo.delta}원 변동`);
-  if (rep.highlights.length) {
-    lines.push('◆ 주요 사건');
-    for (const h of rep.highlights.slice(0, 10)) {
-      const t = eventText({ ...h, simId: h.sim_id });
+  // ◆ 연대기 — 굵직한 사건을 시간순 이야기로 (이슈 #90, DF 레전드 방식).
+  // 예전 리포트는 74줄 중 61줄이 심별 식사 횟수였고 highlights 50칸 중 48칸을
+  // lonely가 먹었다 (§22.11 지적 5) — 이제 고빈도 지표는 아래 ◇ 집계 한 줄로 접힌다.
+  if (rep.chronicle?.length) {
+    lines.push('◆ 그동안 마을에서는');
+    const shown = {};
+    for (const h of rep.chronicle) {
+      shown[h.type] = (shown[h.type] ?? 0) + 1;
+      const t = chronicleText({ ...h, simId: h.sim_id }, nameOf);
       if (t) lines.push(`· ${fmtClock(h.tick)} ${t}`);
     }
+    // 종류별 상한으로 접힌 것 — 수치는 숨기지 않는다 (§0.1)
+    const folded = rep.counts
+      .filter((c) => CHRON_KO[c.type] && c.n > (shown[c.type] ?? 0))
+      .map((c) => `${CHRON_KO[c.type]} +${c.n - (shown[c.type] ?? 0)}`);
+    if (folded.length) lines.push(`(지면상 접힌 사건: ${folded.join(' · ')})`);
+  } else {
+    lines.push('큰 사건 없이 잔잔하게 흘러간 시간이었습니다.');
   }
+  // 인물 한 줄 — 이 공백 기간의 살림 승자와 곤경
+  const te = rep.totals?.topEarner, ts = rep.totals?.topSpender;
+  if (te && te.delta > 0) lines.push(`💰 벌이가 가장 좋았던 사람: ${nameOf(te.simId)} (+${te.delta}원)`);
+  if (ts && ts.delta < 0 && ts.simId !== te?.simId) lines.push(`🕳️ 주머니가 가장 가벼워진 사람: ${nameOf(ts.simId)} (${ts.delta}원)`);
+  // ◇ 요약 통계 — 하단 한 줄. 식사·근무는 심별 나열 대신 총계다.
+  const md = rep.totals?.moneyDelta ?? 0;
+  lines.push(`◇ 집계: 행동 ${count('action_completed')} · 식사 ${rep.totals?.meals ?? 0} · 근무 ${rep.totals?.works ?? 0}`
+    + ` · 말다툼 ${count('argument')} · 외로움 ${count('lonely')} · 굶주림 ${count('starving')}`
+    + ` · 주민 잔액 ${md > 0 ? '+' : ''}${md}원`);
   if (rep.prunedAggregates?.length) {
-    lines.push('◆ 오래된 기간 요약 (일 단위 집계)');
-    const byDay = new Map();
+    // 30일 넘게 비우면 원본 이벤트는 일 집계로 접혀 있다 — 날짜별 나열 대신 종류별로 뭉친다
+    const byCat = new Map(); let total = 0; let dmin = Infinity, dmax = -Infinity;
     for (const a of rep.prunedAggregates) {
       const day = Math.floor(a.day_start_tick / 1440);
-      byDay.set(day, (byDay.get(day) ?? 0) + a.count);
+      dmin = Math.min(dmin, day); dmax = Math.max(dmax, day);
+      total += a.count;
+      if (CHRON_KO[a.category]) byCat.set(a.category, (byCat.get(a.category) ?? 0) + a.count);
     }
-    for (const [day, n] of [...byDay.entries()].sort((x, y) => x[0] - y[0])) {
-      lines.push(`· Day ${day}: 사건 ${n}건`);
-    }
+    const cats = [...byCat.entries()].sort((x, y) => (y[1] - x[1]) || (x[0] < y[0] ? -1 : 1))
+      .map(([c, cnt]) => `${CHRON_KO[c]} ${cnt}`).join(' · ');
+    lines.push(`◆ 더 오래된 나날 (Day ${dmin}~${dmax}, 일 집계)`);
+    lines.push(`· ${cats || '굵직한 사건 없음'} — 그 밖의 것까지 사건 ${total}건`);
   }
   const rc = $('report');
   rc.replaceChildren(...lines.map((l) => {
     const div = document.createElement('div');
     div.textContent = l;
-    if (l.startsWith('◆')) div.style.fontWeight = 'bold';
+    if (l.startsWith('◆') || l.startsWith('◇')) div.style.fontWeight = 'bold';
     return div;
   }));
   $('modal').style.display = 'flex';
