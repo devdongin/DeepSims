@@ -24,7 +24,7 @@ const isoY = (x, y) => (x + y) * (TH / 2);
 const SPRITE_KEYS = [...Array.from({ length: 10 }, (_, i) => [`sim${i}`, `./sprites/sim${i}.png`]), ['player', './sprites/player.png']];
 // §17.14 걷기 시트 (Codex imagegen → tools/slice-sheet.js): 원형 N종 × 4프레임.
 // 존재하는 것만 로드 — 아직 생성 안 된 원형은 정적 sim 이미지로 폴백.
-const WALK_ARCHETYPES = 10;
+const WALK_ARCHETYPES = 14; // §22.5: 10 child · 11 chef · 12 clerk · 13 worker 추가
 const WALK_KEYS = [];
 for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
   WALK_KEYS.push([`walk${i}_${f}`, `./sprites/walk${i}_${f}.png`]);
@@ -43,6 +43,8 @@ const SIT_ACTIONS = ['eat', 'read', 'work', 'drink', 'cook_eat', 'see_doctor', '
 const ARCH_OF_OCCUPATION = {
   police: 7, firefighter: 8, doctor: 5, nurse: 5, teacher: 6, student: 3,
   retired: 4, barista: 2, office_worker: 1, civil_servant: 1, politician: 1, fisher: 9,
+  // §22.5 새 직군 — 매핑이 없으면 id%10으로 떨어져 **아이가 어른 모습으로** 보였다.
+  child: 10, chef: 11, clerk: 12, worker: 13,
 };
 // 심 스프라이트 일괄 폐기 — stopTimer 콜백이 폐기된 body를 만지지 않도록 함께 정리 (Codex 37차)
 function destroySimSprites() {
