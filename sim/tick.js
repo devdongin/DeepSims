@@ -13,7 +13,7 @@ import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor } from './abilities.js'; // §21.1
 import { makeSim, emptyState } from './simfactory.js';
-import { recordIndustryDemand } from './industry.js';
+import { recordIndustryDemand, recordCapacityShortfall } from './industry.js';
 import { makeAbilities } from './abilities.js';
 import { surnameFor, surnameHash } from './surnames.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
@@ -141,6 +141,44 @@ function scoreCandidate(sim, action, res, L) {
 // 아이는 먹고 자고 놀고 어울리고 배운다.
 const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol',
   'drink', 'binge_eat', 'shop', 'see_doctor', 'fish']);
+
+// §22.18 (Codex 110차 ①) **'갈 곳이 없다'와 '자리가 다 찼다'는 다르다.**
+// actionBlockReason이 null을 돌려줘도 그 안에는 시설 부재·만석·도달 불가가 섞여 있다.
+// 셋을 한 원장에 넣으면 "병원을 지어라"와 "병원을 키워라"가 구분되지 않는다.
+//   no_facility   — 이 행동을 제공하는 시설이 세계에 하나도 없다
+//   capacity_full — 시설은 있는데 자리가 전부 예약돼 있다
+//   unreachable   — 자리는 있는데 길이 막혀 있다 (§17.23 no_path 쿨다운)
+// rng 미소비, 세계를 바꾸지 않는다.
+export function facilityShortfallKind(world, sim, action, t) {
+  const L = world.logic;
+  const ftypes = action === 'work'
+    ? [].concat(L.workplace[sim.traits.occupation] ?? [])
+    : (ACTION_FACILITY[action] ?? []);
+  if (ftypes.length === 0) return null; // 시설을 쓰지 않는 행동
+  let anyFacility = false, anyFree = false, anyReachable = false;
+  for (const ftype of ftypes) {
+    for (const fac of world.map.facilities) {
+      if (fac.type !== ftype) continue;
+      if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue;
+      if (world.incidents.some((inc) => inc.facilityId === fac.id)) continue;
+      anyFacility = true;
+      for (const res of fac.resources) {
+        if (fac.type === 'mall'
+          && ((action === 'shop' && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
+        const holder = world.reservations[resKey(fac.id, res.id)];
+        if (holder !== undefined && holder !== sim.id) continue;
+        anyFree = true;
+        const cool = sim.noPathCool[`${fac.id}:${res.id}`];
+        if (cool !== undefined && t < cool) continue;
+        anyReachable = true;
+      }
+    }
+  }
+  if (!anyFacility) return 'no_facility';
+  if (!anyFree) return 'capacity_full';
+  if (!anyReachable) return 'unreachable';
+  return null;
+}
 
 export function actionBlockReason(world, sim, action, t) {
   const L = world.logic;
@@ -1248,7 +1286,11 @@ export function tick(world, inputsForThisTick = []) {
         // 196건이 '가구내 산업 수요'로 잘못 잡혔다.
         // 사유 없이 후보만 없는 경우 = 그 일을 할 자리가 세계에 없다.
         if (actionBlockReason(world, sim, act, t) !== null) continue;
-        recordIndustryDemand(world, act, day18);
+        // 시설 부재만 산업 수요다. 만석은 **같은 산업을 키우라**는 다른 신호이므로
+        // 따로 센다 — 섞으면 "병원을 지어라"와 "병원을 키워라"가 구분되지 않는다.
+        const kind18 = facilityShortfallKind(world, sim, act, t);
+        if (kind18 === 'no_facility') recordIndustryDemand(world, act, day18);
+        else if (kind18 === 'capacity_full') recordCapacityShortfall(world, act, day18);
       }
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });

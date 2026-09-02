@@ -124,17 +124,19 @@ test('I-8. 행동·시설·직업 조회가 서로 맞는다', () => {
 test('I-9. 시설을 없애면 그 산업의 수요가 실제로 쌓인다 (109차 ①)', () => {
   // 예전 적립 조건은 `위급 후보가 하나도 없을 때 critical[0]만`이라 너무 좁아,
   // 병원·도서관·시장을 통째로 지운 세계를 40,000틱 돌려도 원장이 **비어 있었다**.
+  // 절대값('대조군은 0건')으로 단언하면 세계의 다른 변화로 쉽게 깨진다 (110차 ④).
+  // **같은 시드에서 도서관만 빼고 그 델타**를 본다.
   const control = createWorld(4242);
   advance(control, {}, 40000);
-  assert.deepEqual(control.industryDemand, {}, '시설이 온전한데 수요가 잡혔다');
 
   const stripped = createWorld(4242);
-  stripped.map.facilities = stripped.map.facilities
-    .filter((f) => !['hospital', 'library', 'market'].includes(f.type));
+  stripped.map.facilities = stripped.map.facilities.filter((f) => f.type !== 'library');
   advance(stripped, {}, 40000);
-  const codes = Object.keys(stripped.industryDemand).sort();
-  assert.ok(codes.length > 0, '시설을 지웠는데 수요가 하나도 안 잡힌다');
-  assert.ok(codes.includes('P'), `도서관을 지웠는데 교육(P) 수요가 없다: ${codes.join(',')}`);
+
+  const before = control.industryDemand.P?.unmet ?? 0;
+  const after = stripped.industryDemand.P?.unmet ?? 0;
+  assert.ok(after > before,
+    `도서관을 뺐는데 교육(P) 수요가 안 늘었다: ${before} → ${after}`);
   const p = stripped.industryDemand.P;
   assert.ok(Number.isSafeInteger(p.unmet) && p.unmet > 0);
   assert.ok(p.firstDay >= 0 && p.lastDay >= p.firstDay, '날짜 범위가 뒤집혔다');
@@ -181,4 +183,54 @@ test('I-12. 손상된 수요 원장을 마이그레이션이 고친다 (109차 �
   w.schemaVersion = 44;
   migrateWorld(w);
   assert.deepEqual(Object.keys(w.industryDemand), ['P'], '멀쩡한 항목까지 버렸거나 깨진 항목이 남았다');
+});
+
+
+test('I-13. \'시설이 없다\'와 \'자리가 다 찼다\'를 구분한다 (110차 ①)', async () => {
+  // actionBlockReason이 null을 돌려줘도 그 안에는 시설 부재·만석·도달 불가가 섞여 있다.
+  // 셋을 한 원장에 넣으면 "병원을 지어라"와 "병원을 키워라"가 구분되지 않는다.
+  const { facilityShortfallKind } = await import('../sim/tick.js');
+  const w = createWorld(4242);
+  const sim = w.sims[0];
+
+  // ① 병원이 있고 자리도 비어 있다 → 부족이 아니다
+  assert.equal(facilityShortfallKind(w, sim, 'see_doctor', 100), null);
+
+  // ② 병원의 모든 자리를 다른 심이 예약한다 → 만석
+  const hospital = w.map.facilities.find((f) => f.type === 'hospital');
+  assert.ok(hospital, '이 세계에 병원이 있어야 한다');
+  for (const res of hospital.resources) w.reservations[`${hospital.id}:${res.id}`] = 999; // resKey 형식
+  assert.equal(facilityShortfallKind(w, sim, 'see_doctor', 100), 'capacity_full');
+
+  // ③ 병원 자체를 없앤다 → 시설 부재
+  const w2 = createWorld(4242);
+  w2.map.facilities = w2.map.facilities.filter((f) => f.type !== 'hospital');
+  assert.equal(facilityShortfallKind(w2, w2.sims[0], 'see_doctor', 100), 'no_facility');
+
+  // ④ 시설을 쓰지 않는 행동은 판정 대상이 아니다
+  assert.equal(facilityShortfallKind(w, sim, 'idle', 100), null);
+});
+
+test('I-14. 만석 원장이 부재 원장과 섞이지 않는다', () => {
+  const w = createWorld(4242);
+  advance(w, {}, 20000);
+  // 두 원장 모두 순수 객체이고 정수 카운터다
+  for (const led of [w.industryDemand, w.capacityShortfall]) {
+    assert.ok(led !== null && typeof led === 'object' && !Array.isArray(led));
+    for (const v of Object.values(led)) {
+      const n = v.unmet ?? v.full;
+      assert.ok(Number.isSafeInteger(n) && n > 0, `카운터가 정수 양수가 아니다: ${JSON.stringify(v)}`);
+      assert.ok(Number.isSafeInteger(v.firstDay) && v.firstDay >= 0);
+      assert.ok(Number.isSafeInteger(v.lastDay) && v.lastDay >= v.firstDay);
+    }
+  }
+  const byCode = new Map(industryStatus(w).map((s) => [s.code, s]));
+  for (const s of byCode.values()) {
+    assert.ok(Number.isSafeInteger(s.capacityFull) && s.capacityFull >= 0);
+    assert.ok(Number.isSafeInteger(s.housing) && s.housing >= 0);
+  }
+  // 주거는 L의 산업 시설이 아니지만 housing으로는 보고돼야 한다 (110차 ③)
+  const l = byCode.get('L');
+  assert.equal(l.facilities, 0, '집이 부동산업 시설로 세어졌다');
+  assert.ok(l.housing > 0, '집이 30채나 있는데 housing이 0이다 — 부재와 주택 부족이 혼동된다');
 });

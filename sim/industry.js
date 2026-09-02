@@ -175,6 +175,18 @@ export function recordIndustryDemand(world, action, day) {
   return code;
 }
 
+// 만석 원장 — **시설을 더 지으라**가 아니라 **있는 시설을 키우라**는 신호다 (110차 ①).
+export function recordCapacityShortfall(world, action, day) {
+  const code = industryOfAction(action);
+  if (code === null) return null;
+  if (world.capacityShortfall === undefined) world.capacityShortfall = {};
+  const d = world.capacityShortfall;
+  if (d[code] === undefined) d[code] = { full: 0, firstDay: day, lastDay: day };
+  d[code].full++;
+  d[code].lastDay = day;
+  return code;
+}
+
 // 세계가 이미 집계해 둔 불만(§19.5 complaints)에서 분류별 신호를 읽는다.
 // complaints는 회고에서 커서 기반으로 모이므로 틱 잡음이 없고 이미 중복 제거돼 있다.
 //   no_facility → 시설이 없어서 못 했다 = 진짜 산업 수요
@@ -205,7 +217,9 @@ export function purchasingPowerGap(world) {
 export function industryStatus(world) {
   const sig = complaintSignals(world);
   const facCount = new Map();
+  const rawFacCount = new Map();
   for (const f of world.map?.facilities ?? []) {
+    rawFacCount.set(f.type, (rawFacCount.get(f.type) ?? 0) + 1);
     const c = industryOfFacilityType(f.type);
     if (c !== null) facCount.set(c, (facCount.get(c) ?? 0) + 1);
   }
@@ -234,9 +248,12 @@ export function industryStatus(world) {
       nameKo: s.nameKo,
       state,
       facilities,
+      // 110차 ③: '부동산업 부재'와 '주택 부족'을 혼동하지 않게 주거 시설 수를 따로 싣는다.
+      housing: (s.housingFacilityTypes ?? []).reduce((n, ft) => n + (rawFacCount.get(ft) ?? 0), 0),
       workers,
       participants: participantCount.get(s.code) ?? 0, // 이용자 (학생 등) — 종사자가 아니다
-      directUnmet: dem?.unmet ?? 0,      // 실패 순간에 직접 센 것
+      directUnmet: dem?.unmet ?? 0,      // 시설이 없어서 못 했다 → 새로 지어야 한다
+      capacityFull: world.capacityShortfall?.[s.code]?.full ?? 0, // 자리가 없어서 못 했다 → 키워야 한다
       complaintEvidence: fromComplaints, // 세계가 불만으로 집계한 것 (같은 사건의 다른 표현일 수 있다)
       firstDay: dem?.firstDay ?? -1,
       lastDay: dem?.lastDay ?? -1,
