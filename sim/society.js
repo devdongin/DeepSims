@@ -3,6 +3,7 @@ import { rngInt } from './prng.js';
 import { recordFact } from './cognition.js';
 import { generateTraits, occupationAllowed } from './traits.js';
 import { makeAbilities, aptitudeFor } from './abilities.js'; // §21.1 (RNG 미소비)
+import { dayHash } from './chrono.js'; // §21.2 나눔 의사확률 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
 import { isResidence } from './map.js';
@@ -695,5 +696,40 @@ export function decayComplaints(world) {
     c.count = floorDiv(c.count * C.decayPct, 100);
     c.severity = floorDiv(c.severity * C.decayPct, 100);
     if (c.count <= 0) world.complaints.splice(i, 1); // 잊힌 불만은 사라진다
+  }
+}
+
+// ---- §21.2 나눔 — 가까운 사람이 곤경이면 돕는다 (이슈 #43/#51, 사용자 규칙 §0.1) ----
+//
+// 관찰에서 나온 행동이다: 빈곤층 10명 중 8명이 **은퇴자**였다. retired는 wagePct가 0이라
+// 소득 경로가 아예 없고, 저축을 다 쓰면 굶는다. 복지는 하루 5명 캡이라 은퇴자 11명을 못 받친다.
+//
+// 여기서 복지 캡을 올리면 지표는 내려가지만 그건 계기판을 손으로 누르는 것이다(§0.1).
+// 대신 사람이 실제로 하는 행동을 준다 — **만나서, 곤경에 처한 가까운 사람에게 나눠준다.**
+// 그래서 이 행동은 사교 페어링 안에서만 일어난다: 관계가 있어야 하고, 만나야 한다.
+// §20.3 사회적 중력으로 만남이 늘어난 것이 여기로 연결된다.
+//
+// rngSim을 소비하지 않는다 — dayHash 의사확률이라 드로우 순서 계약이 불변이다.
+// 심 사이의 이전이라 통화 총량은 보존된다(생성도 소멸도 아니다).
+export function maybeShare(world, a, b, t, day, emit) {
+  const S = world.logic.sharing;
+  for (const [giver, taker] of [[a, b], [b, a]]) {
+    if (taker.money >= S.needyBelow) continue;          // 곤경이 아니면 도울 일이 없다
+    if (giver.money < S.giverKeepMin + S.amount) continue; // 주는 쪽도 살아야 한다
+    // 관계가 가까울수록 잘 돕는다 — 이분 컷이 아니라 확률 가중 (사용자 규칙)
+    let pct = S.basePct;
+    if (giver.homeId === taker.homeId) pct += S.householdBonusPct; // 한집 식구
+    if (world.partners[giver.id] === taker.id) pct += S.partnerBonusPct;
+    const tier = giver.relTiers[taker.id];
+    if (tier === 'friend') pct += S.friendBonusPct;
+    else if (tier === 'rival') continue;                // 사이가 나쁘면 돕지 않는다
+    if (dayHash(giver.id * 97 + taker.id, day, 41) >= Math.min(100, pct)) continue;
+    giver.money -= S.amount;
+    taker.money += S.amount;
+    emit('money_shared', giver.id, {
+      toSimId: taker.id, amount: S.amount,
+      giverBalance: giver.money, takerBalance: taker.money,
+      relation: giver.homeId === taker.homeId ? 'household' : (tier ?? 'stranger'),
+    });
   }
 }

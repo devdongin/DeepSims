@@ -11,7 +11,7 @@ function grossWageOf(sim, L) {
   const apt = aptitudeFor(sim, sim.traits.occupation, L);
   return Math.floor(base * (100 + Math.floor((apt - 50) * L.abilities.wageSpanPct / 100)) / 100);
 }
-import { applyRomance, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
+import { applyRomance, maybeShare as maybeShareRef, pairDeltaBonus as pairDeltaBonusRef, maybeBuyCar as maybeBuyCarRef, collectComplaints as collectComplaintsRef, maybePetition as maybePetitionRef } from '../sim/society.js';
 import { recordFact as recordFactRef } from '../sim/cognition.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
@@ -1495,4 +1495,62 @@ test('S-67. §21.1 seed 없는 구세이브도 조용히 같은 값이 되지 �
   for (const k of ABILITIES) {
     assert.ok(Number.isInteger(missing[k]) && missing[k] >= 0 && missing[k] < 100, k + ' 범위 유지');
   }
+});
+
+test('S-68. §21.2 나눔: 가까운 사람이 곤경이면 나눠준다 — 통화 총량은 보존된다', () => {
+  const w = createWorld(SEED);
+  const S = w.logic.sharing;
+  const a = w.sims[0], b = w.sims[1];
+  a.money = 10000; b.money = 0;                 // a는 여유, b는 곤경
+  a.homeId = b.homeId;                          // 한집 식구 → 가장 잘 돕는다
+  const before = a.money + b.money;
+  const evs = [];
+  // 여러 날을 시도해 dayHash가 통과하는 날을 찾는다 (하루하루는 결정적으로 갈린다)
+  let shared = null;
+  for (let day = 0; day < 40 && !shared; day++) {
+    a.money = 10000; b.money = 0;
+    const out = [];
+    maybeShareRef(w, a, b, day * 1440, day, (type, simId, payload) => out.push({ type, simId, payload }));
+    shared = out.find((e) => e.type === 'money_shared');
+    if (shared) evs.push(...out);
+  }
+  assert.ok(shared, '언젠가는 나눈다 (한집 식구 확률 가중)');
+  assert.equal(shared.payload.amount, S.amount);
+  assert.equal(shared.payload.relation, 'household');
+  assert.equal(a.money + b.money, before, '통화 총량 보존 — 생성도 소멸도 아니다');
+  assert.equal(a.money, 10000 - S.amount);
+  assert.equal(b.money, S.amount);
+});
+
+test('S-69. §21.2 나눔의 안전장치: 주는 쪽도 살아야 하고, 사이가 나쁘면 안 준다', () => {
+  const w = createWorld(SEED);
+  const S = w.logic.sharing;
+  const run = (setup) => {
+    const a = w.sims[0], b = w.sims[1];
+    a.money = 10000; b.money = 0;
+    a.homeId = b.homeId;
+    delete a.relTiers[b.id];
+    setup(a, b);
+    const out = [];
+    for (let day = 0; day < 40; day++) {
+      a.money = Math.max(a.money, 0);
+      maybeShareRef(w, a, b, day * 1440, day, (type, simId, payload) => out.push({ type, simId, payload }));
+    }
+    return out.filter((e) => e.type === 'money_shared').length;
+  };
+  // 주는 쪽이 빠듯하면 안 준다 — 나눔이 새 빈곤을 만들면 안 된다
+  assert.equal(run((a) => { a.money = S.giverKeepMin; }), 0, '여유가 없으면 나누지 않는다');
+  // 사이가 나쁘면 안 준다
+  assert.equal(run((a, b) => { a.relTiers[b.id] = 'rival'; }), 0, '라이벌에겐 나누지 않는다');
+  // 곤경이 아니면 받을 일이 없다
+  assert.equal(run((a, b) => { b.money = S.needyBelow; }), 0, '문턱 위면 나눔 대상이 아니다');
+});
+
+test('S-70. §21.2 나눔은 rngSim을 소비하지 않는다 (드로우 순서 계약)', () => {
+  const w = createWorld(SEED);
+  const a = w.sims[0], b = w.sims[1];
+  a.money = 10000; b.money = 0; a.homeId = b.homeId;
+  const before = JSON.stringify(w.rngSim);
+  for (let day = 0; day < 20; day++) maybeShareRef(w, a, b, day * 1440, day, () => {});
+  assert.equal(JSON.stringify(w.rngSim), before, 'dayHash 의사확률 — 드로우 미소비');
 });
