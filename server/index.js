@@ -12,6 +12,7 @@ import { Engine, MAX_SPEED } from './engine.js';
 import { simsView } from './view.js'; // §22.8 전송용 투영
 import { PROTOCOL_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC, validatePolicy } from '../sim/logic.js';
+import { industryStatus, purchasingPowerGap } from '../sim/industry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -176,6 +177,17 @@ app.post('/api/screenshot', (req, res) => {
 
 // §20 배속: 서버 런타임 설정 (시뮬 상태 아님 — 입력 로그·세이브에 들어가지 않는다).
 // 틱 내용은 불변이므로 결정성·리플레이에 영향 없음.
+// §22.18 산업 현황 — 21개 대분류가 지금 이 마을에서 어떤 상태인지.
+// 건물을 세우기 전에 **무엇이 없어서 아쉬운지**를 먼저 보여준다.
+app.get('/api/industry', (_req, res) => {
+  res.json({
+    day: Math.floor(engine.world.worldTick / 1440),
+    population: engine.world.sims.length,
+    sections: industryStatus(engine.world),
+    purchasingPowerGap: purchasingPowerGap(engine.world),
+  });
+});
+
 app.post('/api/speed', (req, res) => {
   // §22.12 Number()는 [48]·"48"·" 48 "·true를 전부 삼킨다 (QA #5). 숫자만 받는다.
   const raw = req.body?.speed;

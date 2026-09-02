@@ -206,6 +206,9 @@ export function migrateWorld(world) {
     // 어긋났을 때 "버그"가 아니라 "행동 버전 차이"로 식별되도록 버전을 올린다.
     // 데이터 이관은 필요 없다 — 표식만으로 충분하다.
   }
+  if (from < 45) {
+    world.industryDemand ??= {}; // §22.18 산업 수요 원장
+  }
   if (from < 44) {
     // §22.16 성씨 백필/재계산.
     //

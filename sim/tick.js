@@ -13,6 +13,7 @@ import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor } from './abilities.js'; // §21.1
 import { makeSim, emptyState } from './simfactory.js';
+import { recordIndustryDemand } from './industry.js';
 import { makeAbilities } from './abilities.js';
 import { surnameFor, surnameHash } from './surnames.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
@@ -1228,6 +1229,11 @@ export function tick(world, inputsForThisTick = []) {
         const why = actionBlockReason(world, sim, critical[0], t);
         const kindTag = why === 'no_money' ? 'no_money' : (why === 'off_hours' ? 'blocked' : 'no_facility');
         recordFact(sim, t, L, 'unmet', { placeId: critical[0], tags: [critical[0], kindTag] });
+        // §22.18 **시설이 없어서** 못 한 것만 산업 수요로 적립한다. 돈이 없어서(no_money)나
+        // 영업시간이 아니어서(blocked) 못 한 것은 시설 수요가 아니다 — 그걸 섞으면
+        // '식당을 더 지어라'는 잘못된 처방이 나온다. §19.10에서 같은 이유로 불만 원인을
+        // 분화했고, 지금 살아 있는 세계의 no_money 불만 452건이 정확히 그 함정이다.
+        if (kindTag === 'no_facility') recordIndustryDemand(world, critical[0], floorDiv(t, 1440));
       }
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });

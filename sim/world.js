@@ -75,6 +75,9 @@ export function createWorld(seed) {
     policy: {},    // §18.T1 시장 정책 오버라이드 (화이트리스트: taxPct, welfareAmount, welfareThreshold)
     zoneOrders: [], // §18.T2 플레이어 건설 주문 FIFO: { plotId, type, dir }
     terrainVersion: 1, // §19 R-A 지형 생성 버전 (신규·마이그레이션 동일 계약 — 63차 ②)
+    // §22.18 산업 수요 원장 — '무엇이 없어서 아쉬웠는지'를 분류별로 센다.
+    // 건물을 미리 세우는 대신 세계가 필요를 기록하고, 그 필요에서 산업이 자란다.
+    industryDemand: {},
     externalInflow: 0,  // §22.4 경계 유입 누계 (기반 부문 임금·낚시·습득·이민 초기금)
     externalOutflow: 0, // §22.4 경계 유출 누계 (건설비·차값 — 마을 밖으로 나간다)
     nextSimId: SIM_COUNT, // §22.2 새 심 id 카운터 (사망 후 id 재사용 방지)
