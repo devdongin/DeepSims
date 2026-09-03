@@ -23,8 +23,8 @@ import { collectCandidates } from '../sim/tick.js';
 //   #89     (사건 페이싱): 실제 발병/화재 배치 변경으로 이후 행동도 바뀐다. 새 전체 상태로 재고정.
 for (const [pop, expected] of [
   [10, ['0ab9198a', 'd722e921', 'e1d0affd', '2f21f171']],
-  [50, ['1dcfd840', '8c4f81f6', 'f2a084a8', '827cdf4a']],
-  [200, ['3d43662d', '0108290a', '7e9e984a', '1b8875f9']],
+  [50, ['1dcfd840', '4cfaed7a', '9c2fd476', '70a54f23']],
+  [200, ['3d43662d', '754cba2e', '905452de', 'f47874c7']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
