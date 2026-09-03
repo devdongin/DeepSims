@@ -61,6 +61,10 @@
     #people-list .nm { color: #ffcf6a; min-width: 78px; }
     #people-list .sub { color: #9c8a6a; font-size: 11px; }
     #lifebtn:hover, #followbtn:hover { background: #4a3a26; border-color: #c9a86a; }
+    #minimap-box { position: absolute; right: 12px; bottom: 12px; z-index: 6;
+      background: #1a1610e6; border: 2px solid #6b5638; border-radius: 10px; padding: 5px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+    #minimap { display: block; cursor: crosshair; border-radius: 6px; }
     #feed-filter { display: flex; gap: 3px; margin: 0 0 6px; }
     #feed-filter button { flex: 1; font-size: 10.5px; padding: 3px 0; background: #241d14;
       color: #9c8a6a; border: 1px solid #3a2e1d; border-radius: 5px; cursor: pointer; }
@@ -118,6 +122,10 @@
       <div id="daynight"></div>
       <div id="rainfx" style="display:none;position:absolute;inset:0;pointer-events:none;z-index:5;background:repeating-linear-gradient(105deg, transparent 0 6px, rgba(140,170,220,.18) 6px 7px);animation:rainmove .35s linear infinite"></div>
       <style>@keyframes rainmove { from { background-position: 0 0; } to { background-position: -14px 40px; } }</style>
+      <!-- §23.21 미니맵 — 맵이 512×512이라 카메라가 어디 있는지 알 방법이 없었다 -->
+      <div id="minimap-box">
+        <canvas id="minimap" width="168" height="168"></canvas>
+      </div>
       <div id="simpanel">
         <div id="simhead"><img id="portrait" alt=""><h3 id="simname"></h3></div>
         <div class="bar"><span class="label">🍔 배고픔</span><div class="track"><div class="fill" id="b-hunger" style="background:#e8a94e"></div></div></div>
