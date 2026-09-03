@@ -9,15 +9,18 @@ import net from 'node:net';
 import WebSocket from 'ws';
 import { Storage } from '../db/storage.js';
 import { serialize } from '../sim/serialize.js';
+import { newGovernment } from '../sim/government.js';
 
-test('#119 HTTP input -> live event -> reconnect snapshot preserves a planned center', { timeout: 20000 }, async () => {
+for (const municipal of [false, true]) test(`#119/#32 HTTP input -> live event -> reconnect snapshot preserves a ${municipal ? 'municipal' : 'legacy'} planned center`, { timeout: 20000 }, async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'deepsims-center-http-'));
   const dbPath = path.join(dir, 'test.db');
   const st = new Storage(dbPath);
   const { world } = st.loadOrCreate({ seed: 119, nowUtcMs: Date.now() });
   world.treasury = 10000;
+  if (municipal) world.villages.push({ id: 'village:1', name: '새마을', foundedTick: 0,
+    center: { x: 80, y: 80 }, government: { ...newGovernment(), treasury: 10000 } });
   st.db.prepare('UPDATE snapshot SET state = ? WHERE id = 1').run(serialize(world));
-  const point = world.map.facilities[0].door;
+  const point = { ...world.map.facilities[0].door, ...(municipal ? { villageId: 'village:1' } : {}) };
   st.close();
   const reservation = net.createServer();
   reservation.listen(0, '127.0.0.1');
@@ -57,10 +60,14 @@ test('#119 HTTP input -> live event -> reconnect snapshot preserves a planned ce
     const batch = await received;
     const event = batch.events.find((e) => e.type === 'center_planned');
     assert.equal(event.payload.cost, 5000);
-    assert.equal(event.payload.treasury, initial.world.treasury - 5000);
+    assert.equal(event.payload.treasury, (municipal ? 10000 : initial.world.treasury) - 5000);
+    assert.equal(event.payload.villageId, municipal ? 'village:1' : undefined);
     const synced = waitMessage((m) => m.type === 'snapshot');
     ws.send(JSON.stringify({ type: 'resync' }));
-    assert.equal((await synced).world.centers[0].centerId, event.payload.centerId);
+    const final = (await synced).world;
+    assert.equal(final.centers[0].centerId, event.payload.centerId);
+    assert.equal(final.centers[0].villageId, municipal ? 'village:1' : undefined);
+    if (municipal) assert.equal(final.villages.find(v => v.id === 'village:1').government.treasury, 5000);
   } finally {
     ws?.terminate();
     const exited = once(server, 'exit');

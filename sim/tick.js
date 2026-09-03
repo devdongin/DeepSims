@@ -863,36 +863,49 @@ function applyZone(world, inp, t, emit) {
 // §18.T6: 플레이어가 지정한 계획 중심점 — 비용을 즉시 예약하고 자동 건설 점수에 반영한다.
 function applyPlanCenter(world, inp, t, emit, source = 'player') {
   const p = inp.payload ?? {};
+  const root = world.rootWorld ?? world;
+  const villageId = Object.hasOwn(p, 'villageId') ? p.villageId : world.municipalityId ?? 'village:0';
+  if (!root.villages.some(v => v.id === villageId)
+    || (villageId !== 'village:0' && !root.villages.find(v => v.id === villageId)?.government)) {
+    emit('input_rejected', null, { command: 'plan_center', reason: 'invalid_village' }); return;
+  }
+  const government = governmentFor(root, villageId);
   const cost = world.logic.zone.plannedCenterCost;
   const validCoord = Number.isSafeInteger(p.x) && Number.isSafeInteger(p.y)
     && p.x >= 0 && p.x < world.map.w && p.y >= 0 && p.y < world.map.h;
   let reason = null;
   if (!validCoord) reason = 'out_of_bounds';
   else if (!isWalkable(world.map, p.x, p.y)) reason = 'not_walkable';
-  else if ((world.centers ?? []).some((c) => c.x === p.x && c.y === p.y)) reason = 'duplicate';
-  else if (world.treasury < cost) reason = 'treasury_short';
+  else if ((root.centers ?? []).some((c) => c.x === p.x && c.y === p.y)) reason = 'duplicate';
+  else if (government.treasury < cost) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'plan_center', reason }); return; }
-  world.treasury -= cost;
-  world.externalOutflow = (world.externalOutflow ?? 0) + cost;
-  world.centers ??= [];
-  const centerId = `center${world.centers.length}`;
-  world.centers.push({ centerId, x: p.x, y: p.y, createdTick: t });
-  emit('center_planned', source === 'mayor' ? world.mayorId : null, { centerId, x: p.x, y: p.y, cost, treasury: world.treasury, source });
+  government.treasury -= cost;
+  root.externalOutflow = (root.externalOutflow ?? 0) + cost;
+  root.centers ??= [];
+  const centerId = `center${root.centers.length}`;
+  const jurisdiction = villageId === 'village:0' ? {} : { villageId };
+  root.centers.push({ centerId, x: p.x, y: p.y, createdTick: t, ...jurisdiction });
+  emit('center_planned', source === 'mayor' ? government.mayorId : null,
+    { centerId, x: p.x, y: p.y, cost, treasury: government.treasury, source, ...jurisdiction });
 }
 
 // 재정 리뷰일에 관측된 외곽 거주 수요를 본다. 기존 중심지 반경 안에는 중복 투자하지 않는다.
 export function maybePlanCenter(world, t, day, emit) {
   const mayor = world.sims.find((s) => s.id === world.mayorId);
-  if (!mayor || mayor.isPlayer || day % world.logic.fiscal.reviewIntervalDays !== 0) return;
+  if (!mayor || !canWork(mayor) || mayor.isPlayer || day % world.logic.fiscal.reviewIntervalDays !== 0) return;
   const Z = world.logic.zone;
   const cash = world.sims.reduce((n, s) => n + s.money, 0);
   const reserve = Math.max(0, floorDiv(cash * world.logic.election.hoardRatioPct, 100));
   if (world.treasury - Z.plannedCenterCost <= reserve) return;
-  const centers = [...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)), ...world.centers];
+  const villageId = world.municipalityId ?? 'village:0';
+  const centers = [...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)),
+    ...world.centers.filter(c => (c.villageId ?? 'village:0') === villageId)];
   const homes = new Map(world.map.facilities.filter(isResidence).map((f) => [f.id, f]));
   const residents = world.sims.map((s) => homes.get(s.homeId)).filter(Boolean);
   const busy = new Set(world.projects.map((p) => p.plotId));
-  const choices = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)
+  const choices = world.plots.filter((p) => (p.villageId ?? 'village:0') === villageId
+    && !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)
+    && !foundingSiteReserved(world.rootWorld ?? world, p, 'office')
     && centers.every((c) => manhattan(p.x, p.y, c.x, c.y) >= Z.centerRadius))
     .map((p) => ({ p, residents: residents.filter((h) => manhattan(p.x, p.y, h.door.x, h.door.y) < Z.centerRadius
       && sameRegion(world.map, p.x, p.y, h.door.x, h.door.y)).length }))
@@ -1531,7 +1544,7 @@ export function tick(world, inputsForThisTick = []) {
           maybeFiscalReview(local,t,day,localEmit);
         }
         maybePublicWorks(world, t, day, emit); // §22.26 순서 고정: 선거 → 재정 → 공공사업 (120차 ⑥)
-        maybePlanCenter(world, t, day, emit);
+        for(const local of governmentViews(world))maybePlanCenter(local, t, day, governmentEmitter(local,emit));
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
         // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야
@@ -1649,9 +1662,12 @@ export function tick(world, inputsForThisTick = []) {
         ...(world.centers ?? []),
       ];
       const distance = (p, f) => Math.abs(p.x - f.x) + Math.abs(p.y - f.y);
+      const centerScores = new Map(candidates.map(p => {
+        const local = centers.filter(c => (c.villageId ?? 'village:0') === (p.villageId ?? 'village:0'));
+        return [p.plotId, local.length === 0 ? 0 : Math.min(...local.map(f => distance(p, f)))];
+      }));
       let freePlot = candidates.sort((a, b) => {
-        const score = (p) => centers.length === 0 ? 0 : Math.min(...centers.map((f) => distance(p, f)));
-        return (score(a) - score(b)) || (a.plotId - b.plotId);
+        return (centerScores.get(a.plotId) - centerScores.get(b.plotId)) || (a.plotId - b.plotId);
       })[0];
       if (!freePlot) break;
       {
