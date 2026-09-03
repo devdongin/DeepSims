@@ -742,6 +742,20 @@ class TownScene extends Phaser.Scene {
       this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
       sp.setDepth(1000 + sim.x + sim.y);
     }
+    // §22.99 **떠난 심의 스프라이트를 지운다 — 브라우저 OOM의 실제 원인이었다.**
+    // 분실물(syncItems)·화재(syncFires)에는 이 정리가 있는데 심에만 없었다. 사망은 드물어
+    // 여태 티가 안 났지만, #115 이주가 들어오면서 사람이 계속 떠난다 — 컨테이너(몸·이름표·
+    // 그림자·차 아이콘)와 트윈이 통째로 남아 힙이 **분당 29MB**씩 자랐다(실측). 탭 한도
+    // 4GB면 두 시간 남짓에 페이지가 죽는다.
+    const live = new Set(world.sims.map((s) => s.id));
+    for (const [id, sp] of simSprites) {
+      if (live.has(id)) continue;
+      this.tweens.killTweensOf(sp); // repeat 트윈은 destroy로 죽지 않는다 (§22.10 전례)
+      sp.destroy();
+      simSprites.delete(id);
+      const b = bubbles.get(id);
+      if (b) { clearTimeout(b.timer); b.container.destroy(); bubbles.delete(id); }
+    }
   }
 }
 
