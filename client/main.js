@@ -162,7 +162,7 @@ const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', '
   // 에셋 에이전트가 다섯 회차 연속 이 키를 요청했는데 **배선이 없어서** 만들어도 안 보였다.
   // 배선을 먼저 둔다: 파일이 아직 없으면 loadImagesNative가 null로 받고 exists()가 false라
   // 아래 drawGardens가 통째로 건너뛴다 — 즉 지금은 무해하고, PNG가 생기는 순간 살아난다.
-  'tile_garden', 'wall_stone', 'hedge_low', 'flower_row', 'path_stone']
+  'tile_garden', 'wall_stone', 'hedge_low', 'flower_row', 'path_stone', 'garden_pot']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -535,6 +535,11 @@ class TownScene extends Phaser.Scene {
           if (t !== 1 && t !== 2 && this.textures.exists('path_stone') && (x * 2 + y) % 5 === 0) {
             const ps = this.add.image(isoX(x, y), isoY(x, y) - 2, 'path_stone').setDisplaySize(TW, 24).setDepth(-6);
             this.gardenSprites.push(ps);
+          }
+          // §22.76 화분은 단품이라 드물게 놓는다 — 잔디 가장자리(정원 첫 줄·끝 줄)에만 11칸 주기.
+          if (this.textures.exists('garden_pot') && (y === fac.y || y === fac.y + fac.h - 1) && (x * 3 + y) % 11 === 0) {
+            const gp = this.add.image(isoX(x, y), isoY(x, y) - 6, 'garden_pot').setDisplaySize(TW, 24).setDepth(isoY(x, y));
+            this.gardenSprites.push(gp);
           }
           if (t !== 1 && t !== 2 && this.textures.exists('flower_row') && (x + y * 2) % 7 === 0) {
             const fl = this.add.image(isoX(x, y), isoY(x, y) - 4, 'flower_row').setDisplaySize(TW, 24).setDepth(isoY(x, y));
