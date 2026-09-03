@@ -1252,6 +1252,14 @@ export function tick(world, inputsForThisTick = []) {
         const parkSpots = world.map.facilities.filter((f) => f.type === 'park')
           .reduce((n, f) => n + f.resources.length, 0);
         const pop = world.sims.length;
+        // 주거 수요는 고정 여유가 아니라 최근 관측된 인구 증가 속도를 반영한다.
+        // 통계가 없는 초기 세계는 기존 계약(headroomBeds)으로 시작한다.
+        const history = world.statsHistory ?? [];
+        const recent = history.slice(-7);
+        const growthPerDay = recent.length >= 2
+          ? Math.max(0, (recent[recent.length - 1].pop - recent[0].pop) / (recent.length - 1))
+          : 0;
+        const observedHeadroom = Math.min(20, L.growth.headroomBeds + Math.ceil(growthPerDay * 3));
         // §17.11: 별거 부부는 신혼집 수요 — 부부당 침대 1개 추가 필요분으로 계산
         let separated = 0;
         for (const [aStr, b] of Object.entries(world.partners)) {
@@ -1268,7 +1276,11 @@ export function tick(world, inputsForThisTick = []) {
         const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
           .reduce((n, f) => n + f.resources.length, 0);
         let type = null;
-        if (pop + separated + L.growth.headroomBeds > beds) type = 'house'; // 선제 주택 (§17.21)
+        if (pop + separated + observedHeadroom > beds) {
+          // 읍 이상에서는 같은 공터로 더 많은 침대를 제공하는 아파트를 우선한다.
+          // tier는 관측된 세계 상태이고, 타입 선택은 결정적이다.
+          type = world.cityTier >= 1 ? 'apartment' : 'house';
+        } // 선제 주택 (§17.21)
         else if (officeWorkers > officeDesks) type = 'office';
         else if (pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (pop > parkSpots * L.construct.parkRatio) type = 'park';
