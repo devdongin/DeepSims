@@ -330,3 +330,99 @@ test('QA-16. §22.36 스프라이트가 성별·나이와 모순되지 않는다
   assert.deepEqual(ageBad.slice(0, 5), [], `나이대가 어긋난다 (${ageBad.length}건)`);
   assert.deepEqual(genderBad.slice(0, 5), [], `성인의 성별이 모순된다 (${genderBad.length}건)`);
 });
+
+// §22.39 가중 선택과 질문-응답 사슬.
+//
+// 두 가지를 고정한다:
+//  ① pickW가 무게대로 뽑는가 — 무게가 곧 그 말이 나오는 빈도다.
+//  ② QA_CHAINS의 키가 **실제로 나올 수 있는 문장인가.** 오타나 옛 문장이 키로 남으면
+//     그 사슬은 영원히 안 걸린다 — §22.28(기억 종류)·§22.33(직업)·§22.30(프롭)에서
+//     세 번 반복된 "등록은 됐는데 도달 불가" 결함과 같은 부류다. 사이클이 매 회차
+//     이 표를 늘리므로 여기서 막지 않으면 조용히 죽은 줄이 쌓인다.
+test('QA-17. §22.39 pickW가 무게대로 뽑고, QA_CHAINS 키가 전부 도달 가능하다', async () => {
+  const occModule = await import('../sim/traits.js');
+  const MEMORY_KINDS = Object.keys(JSON.parse(
+    fs.readFileSync(new URL('../logic/params.json', import.meta.url), 'utf8'),
+  ).memory.importance);
+  const grabConst = (n, open = '{') => {
+    const close = open === '{' ? '}' : ']';
+    const i = CLIENT.indexOf(`const ${n} = `);
+    assert.ok(i > 0, `${n}을 찾지 못했다`);
+    let d = 0;
+    for (let k = CLIENT.indexOf(open, i); k < CLIENT.length; k++) {
+      if (CLIENT[k] === open) d++;
+      else if (CLIENT[k] === close) { d--; if (d === 0) return CLIENT.slice(i, k + 2); }
+    }
+    return null;
+  };
+  const grabFn = (n) => {
+    const i = CLIENT.indexOf(`function ${n}(`);
+    assert.ok(i > 0, `${n}을 찾지 못했다`);
+    let d = 0;
+    for (let k = CLIENT.indexOf('{', i); k < CLIENT.length; k++) {
+      if (CLIENT[k] === '{') d++;
+      else if (CLIENT[k] === '}') { d--; if (d === 0) return CLIENT.slice(i, k + 1); }
+    }
+    return null;
+  };
+  const helpers = "const PLACE_KO={park:'공원',cafe:'카페',restaurant:'식당',hospital:'병원',site:'공사장',library:'도서관'};"
+    + "function hasJong(w){const c=String(w??'').trim().slice(-1);if(!c)return false;"
+    + "const x=c.charCodeAt(0);if(x>=0xAC00&&x<=0xD7A3)return (x-0xAC00)%28!==0;return false;}"
+    + "const ga=(w)=>w+(hasJong(w)?'이':'가'),wa=(w)=>w+(hasJong(w)?'과':'와'),"
+    + "eul=(w)=>w+(hasJong(w)?'을':'를'),eun=(w)=>w+(hasJong(w)?'은':'는'),"
+    + "rang=(w)=>w+(hasJong(w)?'이랑':'랑'),ne=(w)=>w+(hasJong(w)?'이네':'네');"
+    + "const simName=(id)=>'아무개';const fmtClock=()=>'3시';";
+  const src = helpers + grabConst('WEATHER_TALK') + grabConst('WEATHER_FALLBACK', '[')
+    + grabConst('ACTION_TRY_KO') + grabConst('FAMILY_TALK') + grabConst('QA_CHAINS')
+    + grabFn('pick') + grabFn('pickW') + grabFn('weatherPair') + grabFn('actKo')
+    + grabFn('placeKo') + grabFn('conversationLine');
+  const { pickW, QA_CHAINS, conversationLine } = new Function(
+    `${src}; return {pickW, QA_CHAINS, conversationLine};`)();
+
+  // ① 무게대로 뽑히는가
+  const rows = [[5, 'a'], [3, 'b'], [2, 'c']];
+  const cnt = { a: 0, b: 0, c: 0 };
+  for (let t = 0; t < 1000; t++) cnt[pickW(rows, t)[1]]++;
+  assert.deepEqual(cnt, { a: 500, b: 300, c: 200 }, 'pickW가 무게를 안 지킨다');
+  // 음수 tick도 감싸서 유효한 행을 준다 (-3 → 위치 7 → b 구간 5~7)
+  assert.equal(pickW(rows, -3)[1], 'b', '음수 tick이 감싸지지 않는다');
+  for (const t of [-1, -7, -100]) {
+    assert.ok(rows.includes(pickW(rows, t)), `tick ${t}에서 유효한 행이 안 나온다`);
+  }
+
+  // 행 모양
+  for (const [q, answers] of Object.entries(QA_CHAINS)) {
+    assert.ok(Array.isArray(answers) && answers.length >= 2, `"${q}" 응답이 2개 미만이다`);
+    answers.forEach((r, i) => {
+      assert.equal(r.length, 2, `"${q}"[${i}]는 [무게, 문장]이어야 한다`);
+      assert.ok(Number.isInteger(r[0]) && r[0] > 0, `"${q}"[${i}] 무게가 양의 정수가 아니다`);
+      assert.ok(typeof r[1] === 'string' && r[1].length > 0, `"${q}"[${i}] 문장이 비었다`);
+    });
+  }
+
+  // ② 모든 키가 실제로 나올 수 있는 문장인가 — 발화 공간을 훑어 모은다
+  const said = new Set();
+  const topics = ['weather', 'family_talk', 'gossip', 'couple_news', 'work_gripe',
+    'memory_share', 'politics', 'food', 'party_invite', 'sweet_talk'];
+  const details = [{}, { kind: 'sunny' }, { kind: 'cloudy' }, { kind: 'rain' },
+    { relation: 'child' }, { relation: 'parent' }, { tier: 'friend', sentiment: 1 },
+    { tier: 'acquaintance', sentiment: 1 }, { kind: 'dating', otherId: 2 },
+    { kind: 'married', otherId: 2 }, { phase: 'campaign', mayorId: 1 }, { mayorId: 1 },
+    { hungry: true }, { hungry: false }, { stage: 'dating' }, { stage: 'married' },
+    { placeId: 'park', scheduledTick: 100 }];
+  // work_gripe는 occupation으로, memory_share는 kind로 갈린다 — 훑지 않으면
+  // 멀쩡한 키를 '도달 불가'로 오판한다(실제로 처음에 그렇게 잘못 잡았다).
+  const { OCCUPATIONS } = occModule;
+  for (const occupation of OCCUPATIONS) details.push({ occupation });
+  for (const kind of MEMORY_KINDS) details.push({ kind, placeId: 'park' }, { kind, placeId: null });
+  for (const topic of topics) {
+    for (const detail of details) {
+      for (let t = 0; t < 40; t++) {
+        said.add(conversationLine({ tick: t, payload: { topic, aboutSimId: 1, placeId: 'park', detail } }));
+      }
+    }
+  }
+  const dead = Object.keys(QA_CHAINS).filter((q) => !said.has(q));
+  assert.deepEqual(dead, [],
+    `아무도 하지 않는 말에 답을 달아 뒀다(영원히 안 걸린다): ${dead.join(' | ')}`);
+});
