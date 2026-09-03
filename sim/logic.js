@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 47, // #118 반복 우회 민원·연결로 공사
+  logicSchemaVersion: 48, // #96 경험과 나이에 따른 능력 성장
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -88,6 +88,10 @@ export const DEFAULT_LOGIC = {
     // 졸업 시 적성이 높은 직업이 뽑힐 확률을 얼마나 올릴지. 풀에 중복 삽입하는 방식이라
     // **rngInt 드로우 수는 1회 그대로**다 (§17.8 계약 불변).
     aptitudePoolWeight: 300,
+  },
+  development: {
+    birthPct: 10, adultPct: 70, matureAge: 25, ticksPerPoint: 7200,
+    physicalDeclineAge: 60, mentalDeclineAge: 75, declinePctPerYear: 1, minAgePct: 40,
   },
   // §21.2 나눔 (사용자 규칙 §0.1: 지표를 누르지 말고 행동을 준다).
   // 은퇴자는 소득이 0이라 저축을 쓰면 굶는다 — 복지 캡을 올리는 대신 '만나서 나눠주는' 행동을 준다.
@@ -597,6 +601,14 @@ function checkRanges(p, errors) {
   inRange('social.helpMoodTaker', p.social.helpMoodTaker, 0, 1000);
   inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);
   inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
+  inRange('development.birthPct', p.development.birthPct, 0, 100);
+  inRange('development.adultPct', p.development.adultPct, p.development.birthPct, 100);
+  inRange('development.matureAge', p.development.matureAge, 1, 100);
+  inRange('development.ticksPerPoint', p.development.ticksPerPoint, 1, 1000000);
+  inRange('development.physicalDeclineAge', p.development.physicalDeclineAge, p.development.matureAge, 150);
+  inRange('development.mentalDeclineAge', p.development.mentalDeclineAge, p.development.matureAge, 150);
+  inRange('development.declinePctPerYear', p.development.declinePctPerYear, 0, 10);
+  inRange('development.minAgePct', p.development.minAgePct, 0, 100);
   inRange('sharing.needyBelow', p.sharing.needyBelow, 0, 100000);
   inRange('sharing.giverKeepMin', p.sharing.giverKeepMin, 0, 1000000);
   inRange('sharing.amount', p.sharing.amount, 0, 100000);

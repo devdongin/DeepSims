@@ -4,7 +4,7 @@ import { recordFact } from './cognition.js';
 import { makeSim } from './simfactory.js';
 import { surnameFor } from './surnames.js';
 import { generateTraits, occupationAllowed } from './traits.js';
-import { makeAbilities, aptitudeFor } from './abilities.js'; // §21.1 (RNG 미소비)
+import { makeAbilities, aptitudeFor, developWithAge } from './abilities.js'; // §21.1 / #96
 import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
 import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 · §22.2 사망 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
@@ -236,6 +236,7 @@ export function maybeNewYear(world, t, day, emit) {
   for (const sim of world.sims) {
     // §22.2 상한을 없앴다. 예전엔 90에서 멈춰 '죽지 않는 90세'가 무한 누적됐다.
     sim.traits.age += 1;
+    developWithAge(world, sim, t, emit);
     if (sim.traits.occupation === 'child' && sim.traits.age >= S.schoolAge) {
       sim.traits.occupation = 'student'; // §22.2 아이가 자라 학교에 간다
       emit('grew_up', sim.id, { age: sim.traits.age, to: 'student' });
@@ -315,6 +316,7 @@ export function maybeChildren(world, t, day, emit) {
       y: home.door.y + 1,
       needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 },
       money: L.occupations.child.startMoney,
+      logic: L,
     });
     world.sims.push(child);
     growIdMatrices(world); // §22.2 id 공간 기준 확장 (sims.length는 사망 후 어긋난다)
@@ -429,6 +431,7 @@ function immigrateOne(world, t, emit) {
     y: 23, // 서쪽 도로 끝에서 걸어 들어온다
     needs: { hunger: 7000, energy: 7000, social: 7000, fun: 7000 },
     money: L.occupations[traits.occupation].startMoney,
+    logic: L,
   });
   world.sims.push(sim);
   // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).

@@ -13,7 +13,8 @@
 //
 // 주의: 이 팩토리는 rng를 소비하지 않는다. 월드젠의 rngWorldgen 소비 순서
 // (traits → needs×4 → money)는 호출자가 그대로 유지하고 결과 값만 넘긴다.
-import { makeAbilities } from './abilities.js';
+import { makeAbilities, initializeDevelopment } from './abilities.js';
+import { DEFAULT_LOGIC } from './logic.js';
 
 // 행동 상태의 빈 값. undefined 필드는 직렬화가 삼켜 왕복이 고정점이 아니게 되므로
 // 전부 명시적인 값을 둔다 (§22.13).
@@ -37,8 +38,9 @@ export function makeSim({
   id, name, surname, homeId, traits, seed,
   x, y, needs, money,
   isPlayer = false,
+  logic = DEFAULT_LOGIC,
 }) {
-  return {
+  const sim = {
     id,
     name,
     surname,              // §22.16 성 — 표시는 `${surname}${name}`
@@ -89,4 +91,6 @@ export function makeSim({
     wantDay: -1,
     wantedActions: [],
   };
+  initializeDevelopment(sim, seed, logic);
+  return sim;
 }

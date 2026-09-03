@@ -41,6 +41,9 @@
       border: 1px solid #3a2e1d; }
     .bar .fill { height: 100%; }
     #money { font-size: 14px; color: #ffcf6a; margin: 6px 0; }
+    #ability-label { font-size: 11px; color: #cdbb95; margin-top: 6px; }
+    #abilities { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px;
+      font-size: 12px; color: #e1d3b9; margin: 4px 0 8px; }
     #action { font-size: 12px; color: #b8d49a; margin-bottom: 8px; }
     #assigns { display: flex; flex-wrap: wrap; gap: 4px; }
     #assigns button { font-size: 11px; padding: 4px 9px; background: #3a2e1d; color: #ead9b0;
@@ -102,6 +105,8 @@
         <div id="traits" style="font-size:11px;color:#b6b0c4;margin:6px 0 2px"></div>
         <div id="relations" style="font-size:10px;color:#8fd48a;margin:2px 0"></div>
         <div id="money"></div>
+        <div id="ability-label">능력 · 현재 / 잠재</div>
+        <div id="abilities"></div>
         <div id="action"></div>
         <div id="assigns">
           <button data-a="eat">밥 먹기</button>
