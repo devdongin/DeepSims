@@ -377,8 +377,11 @@ test('QA-17. §22.39 pickW가 무게대로 뽑고, QA_CHAINS 키가 전부 도�
     + grabConst('ACTION_TRY_KO') + grabConst('FAMILY_TALK') + grabConst('QA_CHAINS')
     + grabFn('hash32') + grabFn('pick') + grabFn('pickW') + grabFn('weatherPair') + grabFn('actKo')
     + grabFn('placeKo') + grabFn('conversationLine');
+  // §22.89 placeKo가 시설 ID를 world에서 조회하게 바뀌면서(내부 키 노출 수정) 하네스에
+  // world가 필요해졌다. 빈 세계를 준다 — 이 검사는 **문장 공간**을 훑는 것이지 특정
+  // 시설을 보는 게 아니므로, 조회가 비어도 폴백 경로로 정상 동작해야 맞다.
   const { pickW, QA_CHAINS, conversationLine } = new Function(
-    `${src}; return {pickW, QA_CHAINS, conversationLine};`)();
+    `var world = { map: { facilities: [] }, sims: [] };\n${src}; return {pickW, QA_CHAINS, conversationLine};`)();
 
   // ① 무게 **비율대로** 뽑히는가 (§22.67: tick을 그대로 인덱스로 쓰지 않고 해시로 섞는다.
   //    예전에는 t를 직접 나눠 정확히 500/300/200이 나왔지만, 실제 대화는 30틱 간격으로만
