@@ -799,6 +799,54 @@ function pickW(rows, t) {
   return rows[rows.length - 1];
 }
 
+// §22.62 **같은 질문에 사람마다 다르게 답한다** (사용자 지시: "대화가 가중치를 그대로
+// 따라가려고 하니 성격 +mbti와 같이 가중치를 곱한 값으로 계산한다").
+//
+// 표의 무게는 "이 동네에서 이 답이 얼마나 흔한가"이고, 성격은 "이 사람이 그런 답을
+// 하는 사람인가"다. 둘을 곱한다 — 표를 다시 쓰지 않고도 답하는 사람이 바뀐다.
+//
+// 어조는 문장에서 읽는다. 60여 개 표에 태그를 손으로 달면 새 줄마다 빠뜨리기 때문에,
+// 문장 자체가 근거가 되게 했다.
+function toneOf(text) {
+  if (/[?？]\s*$/.test(text)) return 'ask';                                  // 되묻기
+  if (/(아니|안 |못 |싫|별로|그래도|난 |나는 |말고)/.test(text)) return 'deny'; // 반대·유보
+  if (/(그래|맞|좋|다행|고생|축하|괜찮|대단|고마|힘들|그치|그러게|알아|이해)/.test(text)) return 'warm'; // 공감·수용
+  return 'flat';                                                             // 담담한 진술
+}
+
+// 정수 나눗셈 — 음수에서도 0 쪽이 아니라 아래로 내린다(시뮬의 floorDiv과 같은 규약).
+// 성격 계수가 음수라 Math.trunc를 쓰면 방향에 따라 1씩 어긋난다.
+function floorDiv(a, b) { return Math.floor(a / b); }
+
+// 축은 0~100이고 50 미만이 E·S·T·J다(sim/traits.js mbtiString). dev = 값 - 50.
+// 계수는 십분율 정수 — 부동소수 없이 계산해 같은 입력이면 늘 같은 값이 나온다.
+const TONE_WEIGHTS = {
+  //        EI(+면 I)  SN(+면 N)  TF(+면 F)  JP(+면 P)
+  ask:  { EI: -5, SN: 6, TF: 0, JP: 4 },   // 외향·직관·인식형이 더 되묻는다
+  warm: { EI: -4, SN: 0, TF: 8, JP: 0 },   // 감정형이 더 받아 준다
+  deny: { EI: 2, SN: 0, TF: -7, JP: -3 },  // 사고형·판단형이 더 반박한다
+  flat: { EI: 5, SN: -3, TF: 0, JP: 0 },   // 내향·감각형이 짧고 담담하게 답한다
+};
+
+function personalityMult(text, mbti) {
+  if (!mbti) return 100;
+  const w = TONE_WEIGHTS[toneOf(text)];
+  let m = 100;
+  for (const axis of ['EI', 'SN', 'TF', 'JP']) {
+    const v = mbti[axis];
+    if (!Number.isFinite(v)) continue;
+    m += floorDiv(w[axis] * (v - 50), 10);
+  }
+  return Math.max(40, Math.min(220, m)); // 한쪽으로 쏠려도 어떤 답도 죽지 않는다
+}
+
+// 성격으로 무게를 곱해서 고른다. 무게가 0이 되는 답은 없다(최소 1) —
+// 성격이 극단이어도 "저 사람은 저런 말 절대 안 해"가 되지는 않게 한다.
+function pickWP(rows, t, mbti) {
+  const scaled = rows.map((r) => [Math.max(1, floorDiv(r[0] * personalityMult(r[1], mbti), 100)), r[1]]);
+  return pickW(scaled, t);
+}
+
 // §22.39 질문 → 가중 응답 사슬 (사용자 지시: "질문 응답을 연결시켜서").
 //
 // 키는 **실제로 뱉은 문장 그대로**다. replyLine은 conversationLine과 같은 이벤트를
@@ -1557,7 +1605,8 @@ function replyLine(e) {
   // 사슬은 대화를 이어가는 말들이고, 냉담한 청자는 잇지 않는다.
   if (warm >= 0) {
     const chain = QA_CHAINS[conversationLine(e)];
-    if (chain !== undefined) return pickW(chain, t)[1];
+    // §22.62 답하는 쪽은 청자다 — 그 사람의 성격으로 무게를 곱한다.
+    if (chain !== undefined) return pickWP(chain, t, simMbti(e.payload.withSimId))[1];
   }
 
   if (e.payload.topic === 'party_invite') {
@@ -1843,6 +1892,8 @@ function simName(id) {
 }
 // 말풍선·라벨처럼 좁은 자리에서는 이름만 쓴다 (성까지 넣으면 겹친다)
 function simGivenName(id) { return world?.sims.find((x) => x.id === id)?.name ?? `심${id}`; }
+// §22.62 대화 응답 선택에 쓰는 성격. 스냅샷의 traits.mbti는 §22.8 투영에 이미 들어 있다.
+function simMbti(id) { return world?.sims.find((x) => x.id === id)?.traits?.mbti ?? null; }
 
 // 판단 사유 문장화 (PLAN §14.1)
 function reasonText(r) {

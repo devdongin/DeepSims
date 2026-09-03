@@ -432,3 +432,63 @@ test('QA-17. §22.39 pickW가 무게대로 뽑고, QA_CHAINS 키가 전부 도�
   assert.deepEqual(dead, [],
     `아무도 하지 않는 말에 답을 달아 뒀다(영원히 안 걸린다): ${dead.join(' | ')}`);
 });
+
+// §22.62 성격(MBTI)이 응답 선택에 곱해진다 (사용자 지시: "대화가 가중치를 그대로
+// 따라가려고 하니 성격 +mbti와 같이 가중치를 곱한 값으로 계산한다").
+// 표의 무게 = 이 답이 얼마나 흔한가, 성격 = 이 사람이 그런 답을 하는가. 둘을 곱한다.
+test('QA-18. §22.62 성격이 응답 분포를 바꾸되, 어떤 답도 죽지 않는다', () => {
+  const a = CLIENT.indexOf('function pickW(rows, t)');
+  const b = CLIENT.indexOf('\n}', CLIENT.indexOf('function pickWP')) + 2;
+  assert.ok(a > 0 && b > a, 'pickW~pickWP 구간을 찾지 못했다');
+  const api = new Function(`${CLIENT.slice(a, b)}\nreturn { toneOf, personalityMult, pickWP, pickW };`)();
+
+  // 1) 어조 판정 — 되묻기·반대·공감·담담함
+  assert.equal(api.toneOf('뭐 먹을까?'), 'ask');
+  assert.equal(api.toneOf('난 별로'), 'deny');
+  assert.equal(api.toneOf('고생 많다'), 'warm');
+  assert.equal(api.toneOf('아직'), 'flat');
+
+  const ENFP = { EI: 20, SN: 80, TF: 80, JP: 80 }; // 외향·직관·감정·인식
+  const ISTJ = { EI: 80, SN: 20, TF: 20, JP: 20 }; // 내향·감각·사고·판단
+
+  // 2) 배수는 정수이고 [40, 220] 안에 있다 — 극단 성격도 답을 죽이지 못한다
+  for (const mbti of [ENFP, ISTJ, { EI: 0, SN: 0, TF: 0, JP: 0 }, { EI: 100, SN: 100, TF: 100, JP: 100 }]) {
+    for (const line of ['뭐 먹을까?', '난 별로', '고생 많다', '아직']) {
+      const m = api.personalityMult(line, mbti);
+      assert.ok(Number.isInteger(m), `배수가 정수가 아니다: ${m}`);
+      assert.ok(m >= 40 && m <= 220, `배수가 범위를 벗어났다: ${m}`);
+    }
+  }
+  assert.equal(api.personalityMult('아무 말', null), 100, '성격을 모르면 표 무게 그대로여야 한다');
+
+  // 3) 결정성 — 같은 (표, tick, 성격)이면 늘 같은 답
+  const rows = [[4, '그건 진짜 힘들지'], [3, '어떻게 참아'], [2, '고생이 많다'], [1, '그래도 할 말은 해야지']];
+  for (const t of [0, 7, 41, 1439, 99991]) {
+    const first = api.pickWP(rows, t, ENFP)[1];
+    for (let i = 0; i < 5; i++) assert.equal(api.pickWP(rows, t, ENFP)[1], first, '같은 입력에 다른 답이 나왔다');
+  }
+
+  // 4) 성격이 다르면 분포가 다르다 (같은 표, 같은 tick 범위)
+  const dist = (mbti) => {
+    const c = {};
+    for (let t = 0; t < 400; t++) { const x = api.pickWP(rows, t, mbti)[1]; c[x] = (c[x] ?? 0) + 1; }
+    return c;
+  };
+  const dE = dist(ENFP); const dI = dist(ISTJ);
+  assert.notDeepEqual(dE, dI, '성격이 반대인데 분포가 같다 — 곱셈이 작동하지 않는다');
+  // 감정형이 공감 답을 더 자주 한다
+  assert.ok((dE['그건 진짜 힘들지'] ?? 0) > (dI['그건 진짜 힘들지'] ?? 0), '감정형이 공감 답을 더 자주 해야 한다');
+
+  // 5) 어떤 답도 0회가 되지 않는다 (무게 하한 1)
+  for (const mbti of [ENFP, ISTJ]) {
+    const d = dist(mbti);
+    for (const r of rows) assert.ok((d[r[1]] ?? 0) > 0, `${r[1]}가 ${JSON.stringify(mbti)}에게 영원히 안 나온다`);
+  }
+
+  // 6) 표 자체가 한 어조로만 채워져 있으면 성격이 무의미하다 — 다수는 섞여 있어야 한다
+  const src = CLIENT.slice(CLIENT.indexOf('const QA_CHAINS'));
+  const chains = new Function(`return ${src.slice(src.indexOf('{'), src.indexOf('\n};') + 2)};`)();
+  const keys = Object.keys(chains);
+  const mixed = keys.filter((k) => new Set(chains[k].map((r) => api.toneOf(r[1]))).size >= 2).length;
+  assert.ok(mixed / keys.length >= 0.8, `어조가 섞인 표가 ${mixed}/${keys.length}뿐이다 — 성격 곱셈이 대부분의 대화에서 무의미해진다`);
+});
