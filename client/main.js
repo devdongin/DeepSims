@@ -2050,11 +2050,18 @@ function fmtClock(tick) {
   return `Day ${day} ${hh}:${mm}`;
 }
 
+// #110 행동 라벨(UI 명사형). sim/constants.js의 ACTIONS **전 원소**가 여기 있어야 한다 —
+// respond_fire가 빠져 있어 소방관이 출동할 때마다 피드가 'undefined 시작'으로 떴다.
+// 행동을 늘리면 test/qa.test.js QA-20이 먼저 깨진다.
 const ACTION_KO = {
   eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기',
   drink: '술 한잔', binge_eat: '폭식', hole_up: '은둔', exercise: '운동', build: '침대 만들기',
   read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기', see_doctor: '병원 진료',
+  respond_fire: '화재 진압',
 };
+// 직업 라벨과 같은 규칙 — 표를 직접 인덱싱하지 않는다. 미등록 행동이 와도
+// 피드에 'undefined 시작'이 아니라 '활동 시작'이 뜬다.
+function actionKo(id, fallback = '활동') { return ACTION_KO[id] ?? fallback; }
 const BLOCK_KO = {
   no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
   not_coping: '멀쩡함', not_needed: '불필요',
@@ -2106,7 +2113,7 @@ function reasonText(r) {
   // §15.1.C 사고 흐름: 막힌 대안 표시
   const blocked = (r.chain ?? []).filter((c) => ['no_money', 'off_hours', 'full'].includes(c.b));
   if (blocked.length) {
-    out += ` [${blocked.slice(0, 2).map((c) => `${ACTION_KO[c.a]}✗${BLOCK_KO[c.b]}`).join(', ')}]`;
+    out += ` [${blocked.slice(0, 2).map((c) => `${actionKo(c.a)}✗${BLOCK_KO[c.b]}`).join(', ')}]`;
   }
   return out;
 }
@@ -2159,8 +2166,8 @@ function facTypeOf(facId) {
 function eventText(e) {
   const n = simName(e.simId);
   switch (e.type) {
-    case 'action_started': return e.payload.action === 'idle' ? null : `${n}: ${ACTION_KO[e.payload.action]} 시작${reasonText(e.payload.reason)}`;
-    case 'action_completed': return `${n}: ${ACTION_KO[e.payload.action]} 완료`;
+    case 'action_started': return e.payload.action === 'idle' ? null : `${n}: ${actionKo(e.payload.action)} 시작${reasonText(e.payload.reason)}`;
+    case 'action_completed': return `${n}: ${actionKo(e.payload.action)} 완료`;
     case 'action_failed': return `${n}: 행동 실패 (${e.payload.reason})`;
     case 'money_changed': return `${n}: ${e.payload.delta > 0 ? '+' : ''}${e.payload.delta}원${e.payload.tax ? ` (세금 ${e.payload.tax}원)` : ''} (잔액 ${e.payload.balance})`;
     case 'welfare_paid': return `🏛️ 정부가 ${n}에게 생계 지원 +${e.payload.amount}원 (국고 ${e.payload.treasury}원)`;
@@ -2296,7 +2303,7 @@ function renderPanel() {
     $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${sim.isPlayer ? ' · ⭐나' : ''}${extra}`;
   }
   $('money').textContent = `💰 ${sim.money}원`;
-  $('action').textContent = `현재: ${ACTION_KO[sim.state.action] ?? '대기'} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
+  $('action').textContent = `현재: ${actionKo(sim.state.action, '대기')} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
 }
 
 $('assigns').addEventListener('click', async (ev) => {

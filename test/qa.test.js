@@ -513,3 +513,87 @@ test('QA-18. §22.62 성격이 응답 분포를 바꾸되, 어떤 답도 죽지 
   const mixed = keys.filter((k) => new Set(chains[k].map((r) => api.toneOf(r[1]))).size >= 2).length;
   assert.ok(mixed / keys.length >= 0.8, `어조가 섞인 표가 ${mixed}/${keys.length}뿐이다 — 성격 곱셈이 대부분의 대화에서 무의미해진다`);
 });
+
+// #107·#110 UI 번역표 배선 누락 방지 — QA-13/14(대사표)의 **라벨판**이다.
+//
+// 이 테스트가 없어서 생긴 일: 세계에는 직업 16종·행동 18종이 있는데 클라이언트
+// 라벨 표는 직업 5종·행동 17종만 알았다. 라이브 주민 173명 중 137명(79%)의 주민
+// 패널 직업 칸이 'undefined'였고(child만 71명), 이민 피드는 폴백이 원시 키라
+// '(worker)'처럼 영문이 그대로 나갔다. 소방관이 출동할 때마다 피드는
+// 'undefined 시작'이었다. enum을 늘리면 이 테스트가 먼저 깨지게 둔다.
+
+// 클라이언트는 Phaser 의존이라 import할 수 없다 — 소스에서 선언을 떼어 실행한다.
+function grabDecl(header, open = '{') {
+  const close = open === '{' ? '}' : ']';
+  const i = CLIENT.indexOf(header);
+  assert.ok(i >= 0, `${header}를 찾지 못했다`);
+  let d = 0;
+  for (let k = CLIENT.indexOf(open, i); k < CLIENT.length; k++) {
+    if (CLIENT[k] === open) d++;
+    else if (CLIENT[k] === close) { d--; if (d === 0) return CLIENT.slice(i, k + 1); }
+  }
+  throw new Error(`${header}의 끝을 찾지 못했다`);
+}
+const labelTable = (name) => {
+  const src = grabDecl(`const ${name} = {`);
+  return new Function(`return ${src.slice(src.indexOf('{'))};`)();
+};
+
+test('QA-19. #107 sim의 모든 직업이 클라이언트 직업 라벨 표에 있다', async () => {
+  const { OCCUPATIONS } = await import('../sim/traits.js');
+  assert.ok(OCCUPATIONS.length >= 16, `직업 목록을 못 읽었다 (${OCCUPATIONS.length}종)`);
+
+  const table = labelTable('OCC_KO');
+  const missing = OCCUPATIONS.filter((o) => table[o] === undefined);
+  assert.deepEqual(missing, [],
+    `OCC_KO에 없는 직업(주민 패널·이민 피드에 undefined나 영문 키로 나간다): ${missing.join(', ')}`);
+  for (const o of OCCUPATIONS) {
+    assert.match(table[o], /[가-힣]/, `${o}의 라벨이 한국어가 아니다: ${table[o]}`);
+  }
+
+  // 라벨은 한 곳에서만 푼다 — 표를 직접 인덱싱하는 자리가 다시 생기면 폴백이 갈린다.
+  const direct = [...CLIENT.matchAll(/OCC_KO\[/g)].length;
+  assert.equal(direct, 1, `OCC_KO를 직접 인덱싱하는 자리가 ${direct}곳이다 — occKo()만 쓰게 해라`);
+});
+
+test('QA-20. #110 sim의 모든 행동이 클라이언트 행동 라벨 표에 있다', async () => {
+  const { ACTIONS } = await import('../sim/constants.js');
+  assert.ok(ACTIONS.length >= 18, `행동 목록을 못 읽었다 (${ACTIONS.length}종)`);
+
+  const table = labelTable('ACTION_KO');
+  const missing = ACTIONS.filter((a) => table[a] === undefined);
+  assert.deepEqual(missing, [],
+    `ACTION_KO에 없는 행동(피드가 'undefined 시작'으로 뜬다): ${missing.join(', ')}`);
+  for (const a of ACTIONS) {
+    assert.match(table[a], /[가-힣]/, `${a}의 라벨이 한국어가 아니다: ${table[a]}`);
+  }
+
+  const direct = [...CLIENT.matchAll(/ACTION_KO\[/g)].length;
+  assert.equal(direct, 1, `ACTION_KO를 직접 인덱싱하는 자리가 ${direct}곳이다 — actionKo()만 쓰게 해라`);
+});
+
+// 표에 없는 키가 들어와도 **원시 키나 undefined가 화면에 나가지 않는다**.
+// 표를 채우는 것만으로는 부족하다 — 다음에 sim이 enum을 늘렸을 때 화면이
+// 깨지는 대신 일반명으로 버텨야 한다.
+test('QA-21. #107·#110 라벨 resolver가 미등록 키를 일반명으로 떨어뜨린다', () => {
+  const api = new Function(`${grabDecl('const OCC_KO = {')}
+${grabDecl('const ACTION_KO = {')}
+${grabDecl('function occKo(')}
+${grabDecl('function actionKo(')}
+return { occKo, actionKo };`)();
+
+  for (const [name, fn] of [['occKo', api.occKo], ['actionKo', api.actionKo]]) {
+    for (const bad of ['no_such_key', 'worker_v2', '', undefined, null]) {
+      const out = fn(bad);
+      assert.equal(typeof out, 'string', `${name}(${String(bad)})가 문자열이 아니다: ${out}`);
+      assert.match(out, /[가-힣]/, `${name}(${String(bad)})가 한국어 일반명이 아니다: ${out}`);
+      assert.notEqual(out, String(bad), `${name}이 원시 키를 그대로 화면에 내보낸다: ${out}`);
+      assert.doesNotMatch(out, /undefined/, `${name}이 'undefined'를 내보낸다`);
+    }
+    // 등록된 키는 표 그대로다 (폴백이 정상 라벨을 덮어쓰지 않는다)
+    assert.equal(fn === api.occKo ? fn('doctor') : fn('respond_fire'),
+      fn === api.occKo ? '의사' : '화재 진압', `${name}이 등록된 키를 잘못 푼다`);
+  }
+  // 호출자가 준 폴백이 우선한다 (주민 패널의 '대기')
+  assert.equal(api.actionKo(undefined, '대기'), '대기');
+});
