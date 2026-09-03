@@ -4,6 +4,22 @@ import assert from 'node:assert/strict';
 import { SURNAMES, SURNAME_TOTAL, surnameFor, surnameHash, fullName } from '../sim/surnames.js';
 import { makeSim, emptyState } from '../sim/simfactory.js';
 import { createWorld, advance, hashWorld, serialize, deserialize, findNonFinite } from '../sim/index.js';
+import { maybeChildren } from '../sim/society.js';
+
+function familyWorld() {
+  const w = createWorld(4242);
+  // 성의 상속/이관을 검증하므로 실제 출생 경로에 필요한 부부·주거·출생 확률을 고정한다.
+  // 장기 세계에서 우연히 결혼하고 아이를 낳을 때까지 기다리는 것은 이 계약의 전제가 아니다.
+  w.partners[0] = 1; w.partners[1] = 0;
+  w.partnerStage[0] = 'married'; w.partnerStage[1] = 'married';
+  w.sims[1].homeId = w.sims[0].homeId;
+  w.logic.family.childPermille = 1000;
+  const day = w.logic.society.childCheckDays;
+  maybeChildren(w, day * 1440, day, () => {});
+  maybeChildren(w, day * 2880, day * 2, () => {});
+  assert.equal(Object.keys(w.parents).length, 2, '실제 출생 함수에서 두 자녀를 만든다');
+  return w;
+}
 
 test('N-1. 성씨 표: 합계가 정확히 맞고 중복이 없다', () => {
   const sum = SURNAMES.reduce((a, s) => a + s.share, 0);
@@ -100,8 +116,7 @@ test('N-7. 모든 심에게 성이 있고 표시는 성+이름이다', () => {
 });
 
 test('N-8. 자녀는 부모의 성을 따른다', () => {
-  const w = createWorld(4242);
-  advance(w, {}, 120000); // 출생이 일어날 만큼
+  const w = familyWorld();
   const byId = new Map(w.sims.map((s) => [s.id, s]));
   let checked = 0;
   for (const [childId, pr] of Object.entries(w.parents ?? {})) {
@@ -169,8 +184,7 @@ test('N-12. 마이그레이션 성씨가 부모 생사에 좌우되지 않는다
   // 없어 id 순서로 뿌리를 찾는다 — 둘은 다를 수 있지만, 마이그레이션은 언제 돌려도
   // 같아야 한다. 그게 리플레이가 기대는 성질이다.
   const { migrateWorld } = await import('../sim/migrate.js');
-  const w = createWorld(4242);
-  advance(w, {}, 150000); // 출생·사망이 충분히 일어나도록
+  const w = familyWorld();
 
   const runMigration = (world) => {
     const c = deserialize(serialize(world));

@@ -292,16 +292,24 @@ test('I-16. 가상 자원을 쓰는 행동은 판정 대상이 아니다 (111차
 test('I-17. 일상 수요가 위급 원장과 따로 쌓인다 (이슈 #87)', () => {
   // §22.18 원장은 위급한 필요(needCritical 미만)에만 걸려서, 진료처럼 굶어 죽지는 않지만
   // 하고 싶은 일은 영원히 안 잡혔다 — 병원을 통째로 지워도 보건업 수요가 0건이었다.
-  const control = createWorld(4242);
-  advance(control, {}, 40000);
+  // 진료 의사와 지불 능력을 고정해 자연 발병·경제 변화와 시설 부재를 분리한다.
+  const patientWorld = () => {
+    const w = createWorld(4242);
+    w.lastDailyDay = 0;
+    w.sims[0].sick = { kind: 'cold', untilTick: 999999 };
+    w.sims[0].money = 10000;
+    return w;
+  };
+  const control = patientWorld();
+  advance(control, {}, 1);
 
-  const razed = createWorld(4242);
+  const razed = patientWorld();
   razed.map.facilities = razed.map.facilities.filter((f) => f.type !== 'hospital');
-  advance(razed, {}, 40000);
+  advance(razed, {}, 1);
 
-  const seated = createWorld(4242);
+  const seated = patientWorld();
   seated.map.facilities.find((f) => f.type === 'hospital').resources = []; // 건물은 있고 자리만 없다
-  advance(seated, {}, 40000);
+  advance(seated, {}, 1);
 
   const q = (w) => w.industryWant.Q ?? { noFacility: 0, capacityFull: 0 };
   assert.equal(q(control).noFacility, 0, '병원이 멀쩡한데 부재 수요가 잡혔다');
