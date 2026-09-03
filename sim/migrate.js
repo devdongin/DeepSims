@@ -9,6 +9,7 @@ import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 import { SCHEMA_VERSION } from './constants.js';
 import { makeTransportStats } from './transport-stats.js';
 import { makeStoryteller } from './storyteller.js';
+import { initializeFoodSupply } from './food-supply.js';
 import { newEducation } from './education.js';
 import { surnameFor } from './surnames.js';
 import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단일 정의 공유
@@ -421,6 +422,7 @@ export function migrateWorld(world) {
   }
   // §22.13 상수를 쓴다. 예전에는 리터럴이라 SCHEMA_VERSION을 올릴 때 같이 안 고치면
   // 로드된 세계가 구버전으로 되돌아가고, 라이브 세계와 상태가 갈렸다.
+  if (from < 63) initializeFoodSupply(world);
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }

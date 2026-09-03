@@ -26,7 +26,7 @@ test('#71 copay policy accepts only integer percentages and migrates without ret
   const { w } = fixture(), before = wealth(w), rng = serialize(w.rngSim);
   w.schemaVersion = 57; w.logic.logicSchemaVersion = 52; delete w.logic.economy.healthCopayPct;
   migrateWorld(w);
-  assert.equal(w.schemaVersion, 62); assert.equal(w.logic.economy.healthCopayPct, 100);
+  assert.equal(w.schemaVersion, 63); assert.equal(w.logic.economy.healthCopayPct, 100);
   assert.equal(wealth(w), before); assert.equal(serialize(w.rngSim), rng);
 });
 

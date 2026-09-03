@@ -3,6 +3,7 @@ import { TILE } from './map.js';
 
 const cell = (x, y) => `${Math.floor(x / 32)},${Math.floor(y / 32)}`;
 const purposeOf = action => action === 'work' ? 'work'
+  : action === 'supply_groceries' ? 'freight'
   : action === 'study' ? 'education'
   : ['eat', 'shop'].includes(action) ? 'shopping'
   : ['see_doctor', 'escort_child_doctor'].includes(action) ? 'health'

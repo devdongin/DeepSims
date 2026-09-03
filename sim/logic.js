@@ -4,7 +4,8 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 59, // #89 사건 페이싱 + §23.17 publicTrimRatePct
+  logicSchemaVersion: 60, // #76 공급 거래 (§23.17 publicTrimRatePct v59 다음)
+  supply: { openingStock: 12, targetStock: 12, reorderAt: 6, keepReserve: 3, maxDelivery: 3, unitPrice: 40 },
   storyteller: { minGapDays: 2, windowDays: 7, maxEventsPerWindow: 3 },
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
@@ -40,6 +41,8 @@ export const DEFAULT_LOGIC = {
     music: { duration: 35, recoverPerTick: 90, moodPerTick: 8 },
     volunteer: { duration: 60, recoverPerTick: 90, moodPerTick: 10, repGain: 1 },
     board_game: { duration: 40, recoverPerTick: 110, moodPerTick: 6, socialPerTick: 40, cost: 100 },
+    supply_groceries: { duration: 30, cost: 0 },
+    grow_groceries: { duration: 120, cost: 0, groceriesGain: 3 },
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
@@ -943,6 +946,13 @@ function checkRanges(p, errors) {
   inRange('storyteller.minGapDays', p.storyteller.minGapDays, 1, 120);
   inRange('storyteller.windowDays', p.storyteller.windowDays, 1, 120);
   inRange('storyteller.maxEventsPerWindow', p.storyteller.maxEventsPerWindow, 1, 120);
+  inRange('supply.openingStock', p.supply.openingStock, 0, 10000);
+  inRange('supply.targetStock', p.supply.targetStock, 1, 10000);
+  inRange('supply.reorderAt', p.supply.reorderAt, 0, p.supply.targetStock - 1);
+  inRange('supply.keepReserve', p.supply.keepReserve, 0, 100);
+  inRange('supply.maxDelivery', p.supply.maxDelivery, 1, 100);
+  inRange('supply.unitPrice', p.supply.unitPrice, 1, 1000000);
+  inRange('actions.grow_groceries.groceriesGain', p.actions.grow_groceries.groceriesGain, 1, 100);
   inRange('household.reserveMoney', p.household.reserveMoney, 0, 1000000000);
   inRange('housing.baseLandValue',p.housing.baseLandValue,0,1000000);
   inRange('housing.proximityRadius',p.housing.proximityRadius,1,10000);
