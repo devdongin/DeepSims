@@ -4,7 +4,7 @@ import { createWorld, tick, hashWorld, serialize, deserialize, migrateWorld } fr
 import { newEducation, schoolFor, considerUniversity, recordStudy, updateEducation, canWork, universityChance } from '../sim/education.js';
 import { riskHash } from '../sim/chrono.js';
 import { actionBlockReason, facilityShortfallKind } from '../sim/tick.js';
-import { addBuilding, plotBuildable, TILE } from '../sim/map.js';
+import { addBuilding, plotBuildable, TILE, ZONE_DIMS, zoneFootprint, isWalkable, sameRegion } from '../sim/map.js';
 
 function fixture() {
   const w=createWorld(96), s=w.sims[0];
@@ -16,6 +16,35 @@ function fixture() {
   s.abilities.intellect=99;s.traits.mbti.SN=0;s.traits.mbti.JP=100;
   return w;
 }
+
+test('#96 every constructed facility has reachable interior resources in all four orientations', () => {
+  for(const type of Object.keys(ZONE_DIMS))for(const dir of [0,1,2,3]) {
+    const w=createWorld(96),size=zoneFootprint(type,dir);
+    const plot=w.plots.find(p=>plotBuildable(w.map,p,size.w,size.h));
+    const fac=addBuilding(w.map,type,plot,dir);
+    for(const r of fac.resources) {
+      assert.ok(isWalkable(w.map,r.x,r.y),`${type}/d${dir}/${r.id}: walkable`);
+      assert.ok(sameRegion(w.map,fac.door.x,fac.door.y,r.x,r.y),`${type}/d${dir}/${r.id}: reachable`);
+    }
+    assert.equal(new Set(fac.resources.map(r=>`${r.x},${r.y}`)).size,fac.resources.length);
+  }
+});
+
+test('#96 migration repairs only invalid legacy campus resources and releases stale targets', () => {
+  const {w}=fixture(),s=w.sims[0];w.schemaVersion=54;
+  const f=w.map.facilities.find(f=>f.type==='university'),r=f.resources[3];
+  r.x=f.x+f.w-1;r.y=f.y+2;
+  const valid=JSON.stringify(f.resources.slice(0,3)),rng=JSON.stringify(w.rngSim);
+  s.state={...s.state,kind:'walking',action:'work',facilityId:f.id,resourceId:r.id};
+  const key=`${f.id}:${r.id}`;w.reservations[key]=s.id;s.noPathCool[key]=1000;
+  migrateWorld(w);
+  assert.equal(r.id,'slot3');assert.ok(isWalkable(w.map,r.x,r.y));
+  assert.ok(sameRegion(w.map,f.door.x,f.door.y,r.x,r.y));
+  assert.equal(JSON.stringify(f.resources.slice(0,3)),valid);
+  assert.equal(w.reservations[key],undefined);assert.equal(s.noPathCool[key],undefined);
+  assert.equal(s.state.kind,'idle');assert.equal(JSON.stringify(w.rngSim),rng);
+  assert.equal(hashWorld(w),hashWorld(migrateWorld(deserialize(serialize(w)))));
+});
 
 test('#96 school stages have exact primary/middle/high boundaries and university is opt-in', () => {
   const s={traits:{age:0},education:newEducation()};
