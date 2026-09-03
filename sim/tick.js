@@ -713,14 +713,14 @@ export function tick(world, inputsForThisTick = []) {
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
     sim.x = next.x; sim.y = next.y;
-    // §15.1.B 도로화: GRASS 밟힘 마모 누적 → 임계 도달 시 ROAD 전환 (rng 미사용)
+    // §22.91 보행 마모: 사람 발자국은 차도가 아니라 인도가 된다.
     const ti = sim.y * world.map.w + sim.x;
     if (world.map.tiles[ti] === TILE.GRASS) {
       world.wear[ti] = (world.wear[ti] ?? 0) + 1; // 희소 객체 (§17.0)
       if (world.wear[ti] >= world.logic.build.wearThreshold) {
-        world.map.tiles[ti] = TILE.ROAD;
+        world.map.tiles[ti] = TILE.SIDEWALK;
         delete world.wear[ti]; // 0 엔트리 금지 규칙의 연장 — 도로화된 칸은 제거
-        emit('road_formed', sim.id, { x: sim.x, y: sim.y });
+        emit('sidewalk_formed', sim.id, { x: sim.x, y: sim.y });
       }
     }
     // §16.C: 분실물 습득 — 현재 좌표의 아이템(itemId 오름차순 첫 번째). 틱당 1회.

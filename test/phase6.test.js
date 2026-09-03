@@ -7,6 +7,7 @@ import { SCHEMA_VERSION } from '../sim/constants.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { serialize, deserialize } from '../sim/serialize.js';
 import { recordFact, runReflection } from '../sim/cognition.js';
+import { TILE } from '../sim/map.js';
 
 const SEED = 3131;
 const L = DEFAULT_LOGIC;
@@ -87,7 +88,7 @@ test('R-A4. 중독 루프: 반복 음주 → habit[drink:bar] 형성 (창발)', 
   assert.ok((s.habit['drink:bar'] ?? 0) > 0, '음주 습관 형성');
 });
 
-test('R-B1. 도로화: 같은 잔디 타일을 임계만큼 밟으면 ROAD 전환 + 이벤트', () => {
+test('R-B1. 보행 마모: 같은 잔디 타일을 임계만큼 밟으면 SIDEWALK 전환 + 이벤트', () => {
   const w = createWorld(SEED);
   // wear 임계 직전으로 세팅한 타일 위로 심을 걷게 함
   const tx = 10, ty = 20; // 잔디
@@ -100,8 +101,8 @@ test('R-B1. 도로화: 같은 잔디 타일을 임계만큼 밟으면 ROAD 전�
   s.state = { kind: 'walking', action: 'play', facilityId: 'park', resourceId: 'spot0', path: [{ x: tx, y: ty }, { x: tx + 1, y: ty }], ticksLeft: 60, pairedTicks: 0 };
   w.reservations['park:spot0'] = 0;
   const evs = tick(w, []);
-  assert.ok(evs.some((e) => e.type === 'road_formed' && e.payload.x === tx && e.payload.y === ty));
-  assert.equal(w.map.tiles[ti], 1, 'ROAD 전환');
+  assert.ok(evs.some((e) => e.type === 'sidewalk_formed' && e.payload.x === tx && e.payload.y === ty));
+  assert.equal(w.map.tiles[ti], TILE.SIDEWALK, 'SIDEWALK 전환');
 });
 
 test('R-B2. 증축: 게이트(과밀+자금) 통과 시 build 완료 → 침대 추가, 상한 재검증', () => {
