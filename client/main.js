@@ -2610,14 +2610,22 @@ function pushSpark() {
   const ctx = cv.getContext('2d');
   ctx.clearRect(0, 0, cv.width, cv.height);
   const draw = (key, color) => {
-    const max = Math.max(1, ...sparkHist.map((p) => p[key]));
+    const values = sparkHist.map((p) => p[key]);
+    const min = Math.min(0, ...values);
+    const max = Math.max(1, ...values);
+    const span = Math.max(1, max - min);
     ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
     sparkHist.forEach((p, i) => {
       const x = (i / Math.max(1, sparkHist.length - 1)) * (cv.width - 4) + 2;
-      const y = cv.height - 3 - (p[key] / max) * (cv.height - 8);
+      const y = cv.height - 3 - ((p[key] - min) / span) * (cv.height - 8);
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.stroke();
+    if (min < 0 && max > 0) {
+      const zeroY = cv.height - 3 - ((0 - min) / span) * (cv.height - 8);
+      ctx.strokeStyle = '#6b5638'; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.moveTo(0, zeroY); ctx.lineTo(cv.width, zeroY); ctx.stroke();
+    }
   };
   draw('tre', '#c9a86a');
   draw('pop', '#8fd48a');
@@ -2689,14 +2697,22 @@ setInterval(pushSpark, 5000);
     if (hist.length < 2) { ctx.fillStyle = '#9c8a6a'; ctx.font = '12px sans-serif'; ctx.fillText('데이터를 모으는 중… (하루 1점)', 20, 60); return; }
     ctx.strokeStyle = '#3a2e1d'; ctx.strokeRect(0.5, 0.5, cv.width - 1, cv.height - 1);
     for (const [key, color] of SERIES) {
-      const max = Math.max(1, ...hist.map((p) => p[key]));
+      const values = hist.map((p) => p[key]);
+      const min = Math.min(0, ...values);
+      const max = Math.max(1, ...values);
+      const span = Math.max(1, max - min);
       ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.beginPath();
       hist.forEach((p, i) => {
         const x = 6 + (i / (hist.length - 1)) * (cv.width - 12);
-        const y = cv.height - 8 - (p[key] / max) * (cv.height - 20);
+        const y = cv.height - 8 - ((p[key] - min) / span) * (cv.height - 20);
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       });
       ctx.stroke();
+      if (key === 'treasury' && min < 0 && max > 0) {
+        const zeroY = cv.height - 8 - ((0 - min) / span) * (cv.height - 20);
+        ctx.strokeStyle = '#6b5638'; ctx.lineWidth = 1; ctx.beginPath();
+        ctx.moveTo(6, zeroY); ctx.lineTo(cv.width - 6, zeroY); ctx.stroke();
+      }
     }
     const last = hist[hist.length - 1];
     const happiness = Math.round(((last.avgMood + 10000) / 200)); // mood -10000..10000 → 0..100%
