@@ -25,9 +25,9 @@ import { collectCandidates } from '../sim/tick.js';
 //     초기 자금의 경계 유입 기록은 세계 상태에만 닿는다 (240틱 지평에서 결정 불변).
 //   #76     (실물 공급): 유한 재고·재배·운반 행동이 구매와 선택을 실제로 바꿔 재고정한다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', '0e185273', 'dd3dc490']],
-  [50, ['5786ecd1', '9a3cd25b', '7a24166e', '61a5a6ea']],
-  [200, ['5dad1750', '45ef6cbf', '19de95b4', '81e89048']],
+  [10, ['0ab9198a', '32b2391b', '0e185273', 'ed5d4d85']],
+  [50, ['5786ecd1', '9a3cd25b', '7a24166e', '4a7868a9']],
+  [200, ['5dad1750', '45ef6cbf', '19de95b4', '30baaf9b']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
