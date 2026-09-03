@@ -541,6 +541,7 @@ function applyCreatePlayer(world, inp, t, emit) {
   const name = typeof p.name === 'string' ? p.name : '';
   const nameLen = [...name].length; // 유니코드 코드포인트
   if (nameLen < 1 || nameLen > 12) return reject('invalid_name');
+  if (p.nameMode !== undefined && !['full', 'given'].includes(p.nameMode)) return reject('invalid_name_mode');
   // §22.17 주인공은 **이름·성별·MBTI만** 고른다 (사용자 지시). 나이와 직업은 세계가 정한다 —
   // 이 마을에 이사 오는 사람이 자기 나이를 고르지 않듯이, 그리고 직업은 이 세계에서
   // 무엇이 필요한지·내가 무엇을 잘하는지로 정해지는 것이지 메뉴에서 고르는 게 아니다.
@@ -575,7 +576,8 @@ function applyCreatePlayer(world, inp, t, emit) {
   const sim = makeSim({
     id,
     name,
-    surname: typeof p.surname === 'string' && p.surname.length >= 1 && p.surname.length <= 2
+    // 명시적 full 입력은 사용자가 적은 이름 그대로 표시한다. 과거 입력의 기본 동작은 보존한다.
+    surname: p.nameMode === 'full' ? '' : typeof p.surname === 'string' && p.surname.length >= 1 && p.surname.length <= 2
       ? p.surname
       : surnameFor(world.seed, id), // 플레이어가 성을 안 고르면 분포에서 뽑아 준다
     homeId: home.id,
