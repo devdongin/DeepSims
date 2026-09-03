@@ -1,6 +1,6 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
-import { publicPostAvailable, demotePublicIfOverQuota, fillPublicPosts } from './publicposts.js';
+import { publicPostAvailable, demotePublicIfOverQuota, fillPublicPosts, trimOverQuotaPosts } from './publicposts.js';
 import { recordFact } from './cognition.js';
 import { makeSim } from './simfactory.js';
 import { surnameFor } from './surnames.js';
@@ -249,12 +249,15 @@ export function maybeNewYear(world, t, day, emit, resetActivity) {
   updateEducation(world,t,emit,resetActivity);
   // §23.13 해마다 한 번, 인구에 맞춰 빈 공공 자리를 채운다. 마을이 문턱을 넘었는데
   // 아무도 그 일을 하지 않으면 파출소도 병원도 껍데기다. 정원은 상한이자 필요 인원이다.
-  const hired = fillPublicPosts(world);
-  if (hired > 0) {
+  // §23.14 정원 초과분은 해마다 자리당 한 명씩 줄이고(기존 세이브 연착륙), 빈 자리는
+  // **무직자로만** 채운다. 민간에서 사람을 빼 오지 않는다 (Codex 지적).
+  const trimmed = trimOverQuotaPosts(world, emit);
+  const hired = fillPublicPosts(world, emit);
+  if (hired > 0 || trimmed > 0) {
     for (const s2 of world.sims) {
       if (world.logic.economy.publicPosts?.[s2.traits.occupation]) resetActivity(s2);
     }
-    emit('public_posts_filled', null, { hired, population: world.sims.length });
+    emit('public_posts_filled', null, { hired, trimmed, population: world.sims.length });
   }
   return true;
 }
@@ -434,7 +437,12 @@ function immigrateOne(world, t, emit) {
   world.sims.push(sim);
   // §23.13 이민자의 직업은 인구를 모르는 generateTraits가 뽑는다. 정원이 찬 공공직으로
   // 들어왔으면 민간직으로 돌린다 — rng를 더 쓰지 않으므로 이후 드로우 순서는 그대로다.
-  demotePublicIfOverQuota(world, sim);
+  // §23.14 돈은 makeSim이 **강등 전 직업** 기준으로 줬다 (Codex 지적). 정치인으로
+  // 들어왔다가 사무직이 되면 정치인 초기 자금을 들고 사무직으로 사는 셈이다.
+  // 강등이 실제로 일어났을 때만 새 직업 기준으로 다시 맞춘다 — 경계 유입 회계도 함께.
+  if (demotePublicIfOverQuota(world, sim)) {
+    sim.money = L.occupations[sim.traits.occupation].startMoney;
+  }
   // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).
   world.externalInflow = (world.externalInflow ?? 0) + sim.money;
   growIdMatrices(world); // §22.2 id 공간 기준 확장

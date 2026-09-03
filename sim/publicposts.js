@@ -59,33 +59,59 @@ export function demotePublicIfOverQuota(world, sim) {
 // 실제로 정원제를 넣자마자 공공직이 0명인 세계가 나왔고(S-60), 그건 경찰도 의사도
 // 없는 마을이다. 그래서 빈 자리는 채운다. 적성이 가장 높은 사람을 쓰고, 같으면 id로
 // 끊는다. rng를 쓰지 않는다.
-export function fillPublicPosts(world) {
+// genesis = 세계를 만드는 중인가. 창세 때는 **누구를 뽑아도 된다** — 아직 아무의 생계도
+// 시작되지 않았고, 우리는 이 열 사람이 누구인지를 고르는 중이다. 반면 굴러가는 마을에서
+// 남의 직업을 바꾸는 것은 그 사람의 삶을 바꾸는 일이라 무직자만 뽑는다.
+export function fillPublicPosts(world, emit = null, genesis = false) {
   let hired = 0;
   for (const occ of Object.keys(world.logic.economy.publicPosts ?? {})) {
     const quota = publicQuota(world, occ);
     let have = publicHeadcount(world, occ);
     if (have >= quota) continue;
+    // §23.14 **무직자만 뽑는다** (Codex 지적, 재현됨: 인구 30명 전원이 office_worker인
+    // 세계에서 무직자가 0명인데도 7명을 공공직으로 데려갔다). "무직 우선 정렬"은 민간
+    // 인력을 보호하지 않는다 — 무직자가 모자라면 그냥 일하던 사람을 빼 온다.
+    // 자리가 비는 편이 낫다. 채울 사람이 없다는 것 자체가 마을의 상태다.
     const cands = world.sims.filter((s) => {
-      const o = s.traits.occupation;
-      if (o === occ) return false;
-      if (o === 'child' || o === 'student' || o === 'retired') return false;
-      if (world.logic.economy.publicPosts[o]) return false; // 다른 공공직을 빼내 오지 않는다
       if (!occupationAllowed(occ, s.traits.age)) return false;
-      return true;
+      if (s.traits.occupation === 'jobless') return true;
+      if (!genesis) return false; // 굴러가는 마을에서는 일하는 사람을 빼 오지 않는다
+      const o = s.traits.occupation;
+      return o !== occ && o !== 'child' && o !== 'student' && o !== 'retired'
+        && !world.logic.economy.publicPosts[o];
     });
-    // 무직 우선 — 놀고 있는 사람이 있는데 일하는 사람을 빼 오는 것은 마을에 손해다.
-    cands.sort((a, b) => {
-      const ja = a.traits.occupation === 'jobless' ? 0 : 1;
-      const jb = b.traits.occupation === 'jobless' ? 0 : 1;
-      if (ja !== jb) return ja - jb;
-      const d = aptitudeFor(b, occ, world.logic) - aptitudeFor(a, occ, world.logic);
-      return d || (a.id - b.id);
-    });
+    cands.sort((a, b) => (aptitudeFor(b, occ, world.logic) - aptitudeFor(a, occ, world.logic)) || (a.id - b.id));
     for (const s of cands) {
       if (have >= quota) break;
+      const from = s.traits.occupation;
       s.traits.occupation = occ;
+      s.unpaidDays = 0; // 새 자리에서 밀린 임금을 물려받지 않는다
       have++; hired++;
+      if (emit) emit('job_changed', s.id, { from, to: occ, reason: 'public_post' });
     }
   }
   return hired;
+}
+
+// §23.14 정원을 넘긴 공공직을 **조금씩** 줄인다. 기존 세이브에는 정원제 이전에 뽑힌
+// 공공직이 그대로 남아 국고를 계속 갉아먹는데(실측 49~51명), 한 해에 전부 자르면
+// 마을이 하루아침에 뒤집힌다. 해마다 자리당 한 명씩, 적성이 가장 낮은 사람부터 내보낸다.
+export function trimOverQuotaPosts(world, emit = null) {
+  let trimmed = 0;
+  for (const occ of Object.keys(world.logic.economy.publicPosts ?? {})) {
+    const over = publicHeadcount(world, occ) - publicQuota(world, occ);
+    if (over <= 0) continue;
+    const holders = world.sims.filter((s) => s.traits.occupation === occ);
+    holders.sort((a, b) => (aptitudeFor(a, occ, world.logic) - aptitudeFor(b, occ, world.logic)) || (a.id - b.id));
+    const s = holders[0];
+    if (!s) continue;
+    const from = s.traits.occupation;
+    demotePublicIfOverQuota(world, s);
+    if (s.traits.occupation !== from) {
+      s.unpaidDays = 0;
+      trimmed++;
+      if (emit) emit('job_changed', s.id, { from, to: s.traits.occupation, reason: 'over_quota' });
+    }
+  }
+  return trimmed;
 }

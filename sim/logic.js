@@ -693,6 +693,11 @@ function checkRanges(p, errors) {
   // §23.13 공공 정원표 검증 — 임금 직군과 어긋나면 '정원은 없는데 국고가 임금을 대는'
   // 자리가 생긴다. 표에 없는 공공 직군은 정원 무제한이 되므로 조용히 새는 구멍이 된다.
   const posts = p.economy.publicPosts ?? {};
+  // §23.14 공공 임금 직군인데 정원표에 없으면 정원이 Infinity가 된다 — 조용히 새는
+  // 구멍이다(Codex 지적). 직군을 늘릴 때 정원도 같이 정하도록 여기서 막는다.
+  for (const occ of p.economy.publicWageOccupations) {
+    if (!(occ in posts)) errors.push(`economy.publicPosts: ${occ}의 정원이 없다 (정원 없는 공공직은 국고를 무제한으로 쓴다)`);
+  }
   for (const [occ, spec] of Object.entries(posts)) {
     if (!p.economy.publicWageOccupations.includes(occ)) {
       errors.push(`economy.publicPosts: ${occ}는 공공 임금 직군이 아니다`);

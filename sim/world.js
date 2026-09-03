@@ -162,6 +162,6 @@ export function createWorld(seed) {
   // 보장하니 1일차에 국고 −10,766이다. 만들어진 순서대로 정원을 넘은 자리를 민간직으로
   // 돌린다 — rng를 쓰지 않아 월드젠의 드로우 순서는 그대로다.
   for (const sim of world.sims) demotePublicIfOverQuota(world, sim);
-  fillPublicPosts(world); // 빈 자리는 채운다 — 경찰도 의사도 없는 마을을 만들지 않는다
+  fillPublicPosts(world, null, true); // 창세: 빈 자리는 채운다 — 경찰도 의사도 없는 마을을 만들지 않는다
   return world;
 }

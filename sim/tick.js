@@ -5,6 +5,7 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
+import { demotePublicIfOverQuota } from './publicposts.js';
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
@@ -696,10 +697,16 @@ function applyCreatePlayer(world, inp, t, emit) {
     money: world.logic.occupations[traits.occupation].startMoney,   // 고정분만
   });
   world.sims.push(sim);
+  // §23.14 플레이어도 정원을 지킨다 (Codex 지적: 인구 11명 마을에 플레이어가 police로
+  // 태어났고 경찰 정원은 0이었다). 규칙이 사람을 가려서 적용되면 규칙이 아니다.
+  // 강등되면 돈도 새 직업 기준으로 맞춘다 — 이민자와 같은 이유다.
+  if (demotePublicIfOverQuota(world, sim)) {
+    sim.money = world.logic.occupations[sim.traits.occupation].startMoney;
+  }
   // 행렬은 **id 공간** 기준으로 늘린다. sims.length 기준으로 늘리면 사망으로 심이
   // 빠진 뒤 첨자가 어긋난다 (§22.2에서 같은 이유로 growIdMatrices를 만들었다).
   growIdMatrices(world);
-  emit('player_created', id, { name, occupation: traits.occupation, homeId: home.id });
+  emit('player_created', id, { name, occupation: sim.traits.occupation, homeId: home.id });
 }
 
 // announce (D7): 플레이어가 모임 공지 토큰을 주입 — 초기엔 플레이어만 알고 확산으로 퍼진다
