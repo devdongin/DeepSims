@@ -4,7 +4,10 @@ import { isWalkable } from './map.js';
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N, E, S, W
 
 // 경로: 시작 제외, 목적지 포함한 [{x,y}] 배열. 도달 불가면 null.
-let scratch = new Int32Array(0); // §17.0 성능: 호출 간 재사용 (순수성 불변 — 매 호출 초기화)
+let scratch = new Int32Array(0);
+let visited = new Uint32Array(0);
+let queue = new Int32Array(0);
+let generation = 0; // 탐색별 세대: 다른 지도·타일 변경에도 과거 방문 여부가 섞이지 않는다.
 export const pfStats = { calls: 0, ms: 0, cells: 0 }; // 계측 전용 (시뮬 동작 무영향)
 export function bfsPath(map, sx, sy, tx, ty) {
   const _t0 = performance.now();
@@ -16,14 +19,22 @@ export function bfsPath(map, sx, sy, tx, ty) {
 function bfsPathInner(map, sx, sy, tx, ty) {
   if (sx === tx && sy === ty) return [];
   if (!isWalkable(map, tx, ty)) return null;
-  if (scratch.length < map.w * map.h) scratch = new Int32Array(map.w * map.h);
+  if (scratch.length < map.w * map.h) {
+    scratch = new Int32Array(map.w * map.h);
+    visited = new Uint32Array(map.w * map.h);
+    queue = new Int32Array(map.w * map.h);
+    generation = 0;
+  }
+  generation = (generation + 1) >>> 0;
+  if (generation === 0) { visited.fill(0); generation = 1; }
   const prev = scratch;
-  prev.fill(-1, 0, map.w * map.h);
   const start = sy * map.w + sx;
   const goal = ty * map.w + tx;
   prev[start] = start;
-  const queue = [start];
-  for (let qi = 0; qi < queue.length; qi++) {
+  visited[start] = generation;
+  queue[0] = start;
+  let length = 1;
+  for (let qi = 0; qi < length; qi++) {
     const cur = queue[qi];
     if (cur === goal) break;
     const cx = cur % map.w, cy = (cur - cx) / map.w;
@@ -31,13 +42,14 @@ function bfsPathInner(map, sx, sy, tx, ty) {
       const nx = cx + dx, ny = cy + dy;
       if (!isWalkable(map, nx, ny)) continue;
       const ni = ny * map.w + nx;
-      if (prev[ni] !== -1) continue;
+      if (visited[ni] === generation) continue;
+      visited[ni] = generation;
       prev[ni] = cur;
-      queue.push(ni);
+      queue[length++] = ni;
     }
   }
-  pfStats.cells += queue.length;
-  if (prev[goal] === -1) return null;
+  pfStats.cells += length;
+  if (visited[goal] !== generation) return null;
   const path = [];
   for (let cur = goal; cur !== start; cur = prev[cur]) {
     path.push({ x: cur % map.w, y: Math.floor(cur / map.w) });
