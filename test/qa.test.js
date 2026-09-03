@@ -442,7 +442,9 @@ test('QA-17. §22.39 pickW가 무게대로 뽑고, QA_CHAINS 키가 전부 도�
   details.push({ phase: 'aftermath', mayorId: 1 });
   for (const topic of topics) {
     for (const detail of details) {
-      for (let t = 0; t < 40; t++) {
+      // §22.67 이후 선택이 tick 해시라 40틱 표본으로는 긴 표의 일부 줄이 안 나온다.
+      // 표본을 늘려 "정말 도달 불가"와 "표본이 모자람"을 가른다.
+      for (let t = 0; t < 400; t++) {
         said.add(conversationLine({ tick: t, payload: { topic, aboutSimId: 1, placeId: 'park', detail } }));
       }
     }
