@@ -517,7 +517,12 @@ class TownScene extends Phaser.Scene {
         for (let x = fac.x; x < fac.x + fac.w; x++) {
           if (x < 0 || y < 0 || x >= map.w || y >= map.h) continue;
           const t = map.tiles[y * map.w + x];
-          if (t === 1 || t === 2 || t === 3 || t === 5 || t === 6) continue; // 길·포장·벽·물은 그대로
+          if (t === 5 || t === 6) continue; // 물만 뺀다 — 연못 위에 잔디를 깔 수는 없다
+          // §22.66 **길 칸을 건너뛰면 잔디에 구멍이 뚫린다.** 이 마을의 큰 공원은 안쪽 510칸 중
+          // 292칸이 사람들이 다녀 생긴 길이라(§road_formed), 길을 비우면 잔디가 조각조각 나고
+          // 사이로 회갈색 바탕이 비친다 — 사용자가 "에셋이 타일에 올라가면 빈공간이 보임"으로
+          // 지적한 것이 이 자리다. 목업은 반대다: **잔디가 먼저 깔리고 그 위로 길이 지난다.**
+          // 깊이 -7은 도로 스탬프(-5)보다 아래라, 길 칸에도 깔아 두면 길이 위를 덮는다.
           const im = this.add.image(isoX(x, y), isoY(x, y), 'tile_garden').setDisplaySize(TW, TH).setDepth(-7);
           this.gardenSprites.push(im);
         }
@@ -754,6 +759,16 @@ function showBubble(simId, text, ms = 4000) {
   if (!scene) return;
   const sp = simSprites.get(simId);
   if (!sp) return;
+  // §22.68 화면 밖이면 만들지 않는다. Text 생성이 §22.10에서 잰 렌더 병목이었고,
+  // 배속을 올리면 보이지도 않는 말풍선이 초당 수십 개씩 생겼다 사라졌다.
+  {
+    const cam = scene.cameras?.main;
+    if (cam) {
+      const v = cam.worldView;
+      const pad = 80; // 말풍선은 심 위로 뻗으니 여유를 둔다
+      if (sp.x < v.x - pad || sp.x > v.right + pad || sp.y < v.y - pad || sp.y > v.bottom + pad) return;
+    }
+  }
   const old = bubbles.get(simId);
   if (old) { old.container.destroy(); clearTimeout(old.timer); }
   const label = scene.add.text(0, 0, text, {
@@ -812,7 +827,10 @@ function placeKo(id) {
 
 // 대화 문장 생성 — 구조화 payload(detail)의 실제 데이터로 구체적인 말을 만든다 (§16 강화).
 // 변형 선택은 tick 기반(코스메틱): 같은 이벤트는 항상 같은 문장.
-function pick(arr, t) { return arr[t % arr.length]; }
+function pick(arr, t, seed = '') {
+  // §22.67 pick도 같은 함정에 걸려 있었다: 간격 30, 표 길이 3·5·10이면 인덱스가 하나로 굳는다.
+  return arr[hash32(`${t}|${seed}`) % arr.length];
+}
 
 // §22.39 가중치 있는 결정적 선택 (사용자 지시: "가중치로 다르게 답변할 수 있게").
 //
@@ -822,14 +840,27 @@ function pick(arr, t) { return arr[t % arr.length]; }
 //
 // [무게, 문장] 행을 누적합으로 펼쳐 t를 대응시킨다. **rng를 쓰지 않으므로** 같은
 // 이벤트는 여전히 같은 문장이고, 드로우 순서 계약(§17.8)과 무관하다 — 클라 전용이다.
-function pickW(rows, t) {
+// §22.67 **tick을 그대로 인덱스로 쓰면 확률이 아니라 한 줄만 나온다.**
+// 같은 쌍의 대화는 30틱 간격으로 일어난다(실측: 1,676표본 중 1,323건이 30틱).
+// 그래서 t % 10 은 늘 같은 값이고, 무게 4/3/2/1(합 10)짜리 표는 **가장 흔한 답 하나로 고정**됐다.
+// 사용자 지적: "가중치가 가장 높은 대화만을 채택하는 게 아니라 전체가중치 분모의 확률로 얘기하는 것".
+// tick을 섞어서 그 확률이 실제로 나오게 한다 — 난수가 아니라 해시라 같은 입력이면 늘 같은 답이다.
+function hash32(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  h ^= h >>> 15; h = Math.imul(h, 0x2545f491) >>> 0; h ^= h >>> 13;
+  return h >>> 0;
+}
+
+function pickW(rows, t, seed = '') {
   let total = 0;
   for (const r of rows) total += r[0];
   if (total <= 0) return rows[0];
-  let x = ((t % total) + total) % total; // t가 음수여도 감싼다
+  let x = hash32(`${t}|${seed}`) % total; // 무게 비례 — 분모는 전체 무게
   for (const r of rows) { x -= r[0]; if (x < 0) return r; }
   return rows[rows.length - 1];
 }
+
 
 // §22.62 **같은 질문에 사람마다 다르게 답한다** (사용자 지시: "대화가 가중치를 그대로
 // 따라가려고 하니 성격 +mbti와 같이 가중치를 곱한 값으로 계산한다").
@@ -874,9 +905,9 @@ function personalityMult(text, mbti) {
 
 // 성격으로 무게를 곱해서 고른다. 무게가 0이 되는 답은 없다(최소 1) —
 // 성격이 극단이어도 "저 사람은 저런 말 절대 안 해"가 되지는 않게 한다.
-function pickWP(rows, t, mbti) {
+function pickWP(rows, t, mbti, seed = '') {
   const scaled = rows.map((r) => [Math.max(1, floorDiv(r[0] * personalityMult(r[1], mbti), 100)), r[1]]);
-  return pickW(scaled, t);
+  return pickW(scaled, t, seed);
 }
 
 // §22.39 질문 → 가중 응답 사슬 (사용자 지시: "질문 응답을 연결시켜서").
@@ -1647,7 +1678,7 @@ function replyLine(e) {
   if (warm >= 0) {
     const chain = QA_CHAINS[conversationLine(e)];
     // §22.62 답하는 쪽은 청자다 — 그 사람의 성격으로 무게를 곱한다.
-    if (chain !== undefined) return pickWP(chain, t, simMbti(e.payload.withSimId))[1];
+    if (chain !== undefined) return pickWP(chain, t, simMbti(e.payload.withSimId), `${e.simId}>${e.payload.withSimId}|reply`)[1];
   }
 
   if (e.payload.topic === 'party_invite') {
@@ -1840,10 +1871,21 @@ function handleVisualEvent(e) {
   const sp = (id) => simSprites.get(id);
   switch (e.type) {
     case 'conversation': {
+      // §22.68 대화는 순식간에 끝나지 않는다 (사용자 지시). 예전에는 발화가 즉시 뜨고 1.6초 뒤
+      // 답이 붙어, 배속을 올리면 말풍선이 한꺼번에 터졌다 — 읽을 수도 없고 렌더도 출렁였다.
+      //
+      // 셋을 바꾼다:
+      //  ① 말을 꺼내는 데도 뜸을 들인다 (0.3~1.1초) — 문장 길이에 비례. 긴 말은 늦게 나온다.
+      //  ② 답은 발화가 **뜬 뒤** 생각 시간을 두고 붙는다 (1.4~2.6초). 시간은 tick 해시라
+      //     같은 대화면 늘 같은 간격이다.
+      //  ③ 화면 밖 심의 말풍선은 만들지 않는다 — 안 보이는 글자에 Text 객체를 쓰지 않는다.
       const line = conversationLine(e);
-      showBubble(e.simId, line, 4500);
+      const think = (base, span, salt) => base + (hash32(`${e.tick}|${e.simId}|${salt}`) % span);
+      const openMs = think(300, 800, 'open') + Math.min(600, line.length * 12);
+      setTimeout(() => showBubble(e.simId, line, 4500), openMs);
       if (sp(e.payload.withSimId)) {
-        setTimeout(() => showBubble(e.payload.withSimId, replyLine(e), 2800), 1600);
+        const replyMs = openMs + think(1400, 1200, 'reply');
+        setTimeout(() => showBubble(e.payload.withSimId, replyLine(e), 2800), replyMs);
       }
       break;
     }

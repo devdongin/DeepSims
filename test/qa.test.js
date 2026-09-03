@@ -375,18 +375,37 @@ test('QA-17. §22.39 pickW가 무게대로 뽑고, QA_CHAINS 키가 전부 도�
     + "const simName=(id)=>'아무개';const fmtClock=()=>'3시';";
   const src = helpers + grabConst('WEATHER_TALK') + grabConst('WEATHER_FALLBACK', '[')
     + grabConst('ACTION_TRY_KO') + grabConst('FAMILY_TALK') + grabConst('QA_CHAINS')
-    + grabFn('pick') + grabFn('pickW') + grabFn('weatherPair') + grabFn('actKo')
+    + grabFn('hash32') + grabFn('pick') + grabFn('pickW') + grabFn('weatherPair') + grabFn('actKo')
     + grabFn('placeKo') + grabFn('conversationLine');
   const { pickW, QA_CHAINS, conversationLine } = new Function(
     `${src}; return {pickW, QA_CHAINS, conversationLine};`)();
 
-  // ① 무게대로 뽑히는가
+  // ① 무게 **비율대로** 뽑히는가 (§22.67: tick을 그대로 인덱스로 쓰지 않고 해시로 섞는다.
+  //    예전에는 t를 직접 나눠 정확히 500/300/200이 나왔지만, 실제 대화는 30틱 간격으로만
+  //    일어나므로 그 규칙에서는 **한 줄로 고정**됐다. 이제 분모는 전체 무게이고 빈도는 근사한다.)
   const rows = [[5, 'a'], [3, 'b'], [2, 'c']];
+  const near = (got, exp, tol, what) => assert.ok(Math.abs(got - exp) <= exp * tol,
+    `${what}: ${got}회는 기대 ${exp}회에서 ${(100 * tol).toFixed(0)}% 넘게 벗어났다`);
   const cnt = { a: 0, b: 0, c: 0 };
-  for (let t = 0; t < 1000; t++) cnt[pickW(rows, t)[1]]++;
-  assert.deepEqual(cnt, { a: 500, b: 300, c: 200 }, 'pickW가 무게를 안 지킨다');
-  // 음수 tick도 감싸서 유효한 행을 준다 (-3 → 위치 7 → b 구간 5~7)
-  assert.equal(pickW(rows, -3)[1], 'b', '음수 tick이 감싸지지 않는다');
+  for (let t = 0; t < 2000; t++) cnt[pickW(rows, t)[1]]++;
+  near(cnt.a, 1000, 0.12, '연속 tick a(무게 5)');
+  near(cnt.b, 600, 0.15, '연속 tick b(무게 3)');
+  near(cnt.c, 400, 0.18, '연속 tick c(무게 2)');
+
+  // ② **실제 대화 간격(30틱)** 에서도 비율이 나오는가 — 이 회귀가 §22.67의 본론이다.
+  const strideCnt = { a: 0, b: 0, c: 0 };
+  for (let i = 0; i < 1000; i++) strideCnt[pickW(rows, 1000 + i * 30, '7>9')[1]]++;
+  for (const k of ['a', 'b', 'c']) assert.ok(strideCnt[k] > 0, `30틱 간격에서 ${k}가 한 번도 안 나온다`);
+  near(strideCnt.a, 500, 0.2, '30틱 간격 a');
+  near(strideCnt.c, 200, 0.25, '30틱 간격 c');
+
+  // ③ 쌍이 다르면 같은 tick이라도 답이 갈릴 수 있다 (시드가 실제로 쓰이는가)
+  const samePair = new Set(); const otherPair = new Set();
+  for (let i = 0; i < 40; i++) { samePair.add(pickW(rows, 500 + i * 30, '1>2')[1]); otherPair.add(pickW(rows, 500 + i * 30, '3>4')[1]); }
+  assert.ok(samePair.size >= 2 && otherPair.size >= 2, '한 쌍 안에서도 답이 여러 개 나와야 한다');
+
+  // 음수 tick도 유효한 행을 준다
+  assert.ok(rows.includes(pickW(rows, -3)), '음수 tick에서 유효한 행이 안 나온다');
   for (const t of [-1, -7, -100]) {
     assert.ok(rows.includes(pickW(rows, t)), `tick ${t}에서 유효한 행이 안 나온다`);
   }
@@ -437,7 +456,7 @@ test('QA-17. §22.39 pickW가 무게대로 뽑고, QA_CHAINS 키가 전부 도�
 // 따라가려고 하니 성격 +mbti와 같이 가중치를 곱한 값으로 계산한다").
 // 표의 무게 = 이 답이 얼마나 흔한가, 성격 = 이 사람이 그런 답을 하는가. 둘을 곱한다.
 test('QA-18. §22.62 성격이 응답 분포를 바꾸되, 어떤 답도 죽지 않는다', () => {
-  const a = CLIENT.indexOf('function pickW(rows, t)');
+  const a = CLIENT.indexOf('function hash32');
   const b = CLIENT.indexOf('\n}', CLIENT.indexOf('function pickWP')) + 2;
   assert.ok(a > 0 && b > a, 'pickW~pickWP 구간을 찾지 못했다');
   const api = new Function(`${CLIENT.slice(a, b)}\nreturn { toneOf, personalityMult, pickWP, pickW };`)();
