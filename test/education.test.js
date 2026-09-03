@@ -31,7 +31,7 @@ test('#96 every constructed facility has reachable interior resources in all fou
 });
 
 test('#96 migration repairs only invalid legacy campus resources and releases stale targets', () => {
-  const {w}=fixture(),s=w.sims[0];w.schemaVersion=54;
+  const w=fixture(),s=w.sims[0];w.schemaVersion=54;
   const f=w.map.facilities.find(f=>f.type==='university'),r=f.resources[3];
   r.x=f.x+f.w-1;r.y=f.y+2;
   const valid=JSON.stringify(f.resources.slice(0,3)),rng=JSON.stringify(w.rngSim);
