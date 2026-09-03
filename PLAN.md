@@ -2602,7 +2602,8 @@ study는 평일 education.startMinute(540)~endMinute(900), 하루 dailyStudyTick
 학생/19세 미만은 work뿐 아니라 construct/build/respond_fire/patrol도 금지하며, 옛 수행은 진척·정산 전에 취소한다.
 
 고정 스냅샷 A/B는 docs/education-implementation.md 참조. 유급 학생 근무 제거 후 허기가
-악화한 실험을 확인했으므로 #57 식사 지원 연계·재검증 전 머지/이슈 종료 금지.
+악화한 실험을 확인했고 #57 식사 지원 연계 후 같은 배치30일 A/B와 전체332개 검증을 마쳤다.
+최종 수치는 docs/food-aid-validation.md의 마지막 표를 따른다. Claude 리뷰 요청·PR 병합 확인 후 종료한다.
 
 ## #57 공공 식사를 요청하는 행동 — #96 무소득 학생 회귀의 의존 작업
 
