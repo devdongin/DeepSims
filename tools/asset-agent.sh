@@ -34,7 +34,22 @@ done)
 CONSTRAINTS=$(cat docs/ASSET_CONSTRAINTS.md 2>/dev/null || echo '(제약 문서 없음)')
 PREV=$(ls -t logs/assets-*.md 2>/dev/null | head -3 | xargs cat 2>/dev/null | head -60 || echo '(첫 실행)')
 
-codex exec -m gpt-5.6-luna --sandbox workspace-write "너는 DeepSims의 **전담 픽셀아트 작가**다. 목업(docs/mockup.png)이 이 게임이 도달하려는 그림이고, 현재 에셋과의 간극을 매 회차 하나씩 줄이는 것이 네 일이다. 지시를 기다리지 말고 스스로 진행하라 (사용자 지시).
+# ── 사용량 가드 (사용자 지시 2026-09-03): 남은 사용량 20%까지는 5분 주기·high 추론,
+# 그 아래로 내려가면 원래대로(1시간 주기·기본 추론) 돌아간다.
+USAGE=$(./tools/codex-usage.sh 2>/dev/null || echo "-1 -1")
+USED=${USAGE%% *}; REMAIN=${USAGE##* }
+EFFORT_ARGS=(-c model_reasoning_effort="high")
+if [ "$USED" = "-1" ]; then
+  echo "USAGE_GUARD: 사용량을 읽지 못했다 — 안전하게 기본 추론으로 진행한다"
+  EFFORT_ARGS=()
+elif [ "${REMAIN%%.*}" -lt 20 ]; then
+  echo "USAGE_GUARD_TRIPPED: 남은 사용량 ${REMAIN}% (<20%) — 고속 모드를 끝내고 기본 추론으로 진행한다"
+  EFFORT_ARGS=()
+else
+  echo "USAGE_GUARD: 남은 사용량 ${REMAIN}% — high 추론으로 진행한다"
+fi
+
+codex exec -m gpt-5.6-luna "${EFFORT_ARGS[@]}" --sandbox workspace-write "너는 DeepSims의 **전담 픽셀아트 작가**다. 목업(docs/mockup.png)이 이 게임이 도달하려는 그림이고, 현재 에셋과의 간극을 매 회차 하나씩 줄이는 것이 네 일이다. 지시를 기다리지 말고 스스로 진행하라 (사용자 지시).
 
 ## 목업의 지면 문법
 목업: 마을 전체가 **따뜻한 회갈색 석재 포장 광장**이고, 잔디는 정원·화단 구획 안에만 있다. 구획 경계는 낮은 석벽·나무 울타리. 길은 검은 아스팔트가 아니라 밝은 돌바닥, 가장자리에 흙·꽃 테두리.
