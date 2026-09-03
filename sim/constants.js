@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 55; // #96 학업 기록·진학 선택
+export const SCHEMA_VERSION = 56; // #57 공공 식사 행동
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -19,12 +19,13 @@ export const NEED_MAX = 10000;
 // 확장은 뒤에 append (기존 타이브레이크 순서 보존). drink~build는 §15.1 로드맵 행동.
 export const ACTIONS = ['eat', 'sleep', 'work', 'socialize', 'play', 'idle',
   'drink', 'binge_eat', 'hole_up', 'exercise', 'build',
-  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire', 'study'];
+  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire', 'study', 'seek_food_aid'];
 export const COPING_ACTIONS = ['drink', 'binge_eat', 'hole_up', 'exercise'];
 export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat']; // 자기 집 시설만 후보
 
 // 행동 → 시설 타입 (구조), 행동 → 회복 욕구 (구조)
 export const ACTION_FACILITY = {
+  seek_food_aid: ['city_hall', 'market'],
   study: ['primary_school', 'middle_school', 'high_school', 'university'],
   eat: ['cafe', 'restaurant'], sleep: ['house', 'apartment'], work: ['office'],
   socialize: ['cafe', 'park'], idle: [],
@@ -34,7 +35,7 @@ export const ACTION_FACILITY = {
   construct: [], // 가상 현장(site) — collectCandidates 특수 경로 (§16.5.B)
   see_doctor: ['hospital'],
 };
-export const NEED_OF_ACTION = { eat: 'hunger', sleep: 'energy', socialize: 'social', play: 'fun', read: 'fun', fish: 'fun', cook_eat: 'hunger' };
+export const NEED_OF_ACTION = { eat: 'hunger', sleep: 'energy', socialize: 'social', play: 'fun', read: 'fun', fish: 'fun', cook_eat: 'hunger', seek_food_aid: 'hunger' };
 
 // 점수 산식 (PLAN §2.5.G): 전 중간값 < 2^53 증명은 PLAN 참조
 export const SCORE_SCALE = 100000; // 1e5
@@ -60,6 +61,7 @@ export const EVENT_TYPES = [
   'genius_born',
   'education_decided', 'school_enrolled',
   'school_planned',
+  'public_meal_taken',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

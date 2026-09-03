@@ -243,6 +243,10 @@ export function migrateWorld(world) {
       }
     }
   }
+  if (from < 56) {
+    // #57 appends an action; existing sim states remain valid. New action defaults
+    // are installed by mergeLogicDefaults, with no retroactive meals or spending.
+  }
   if (from < 33) {
     // §20.3 사회적 중력: 새 파라미터는 mergeLogicDefaults가 설치한다. 세계 데이터 이관은 없다 —
     // 거동이 바뀌므로 구 로그 재생 불일치를 '버전 차이'로 식별하기 위한 표식이다 (75차 ①).

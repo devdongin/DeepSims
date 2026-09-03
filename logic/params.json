@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 50,
+  "logicSchemaVersion": 51,
   "education": { "annualTuition": 2000, "degreeStudyTicks": 20000, "bachelorYears": 4, "mastersYears": 2, "doctorateYears": 4,
     "mastersStudyTicks": 10000, "doctorateStudyTicks": 20000, "postgraduatePctFactor": 50,
     "studyDeficit": 6500, "dailyStudyTicks": 240, "startMinute": 540, "endMinute": 900 },
@@ -21,6 +21,7 @@
     "oldEnergyAdd": 2
   },
   "actions": {
+    "seek_food_aid": { "duration": 30, "mealCost": 200, "hungerGain": 9000 },
     "study": { "duration": 60, "cost": 0 },
     "respond_fire": {
       "duration": 60,

@@ -9,6 +9,7 @@ import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkabl
 import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
 import { schoolFor, updateEducation, recordStudy, neededSchool, SCHOOL_TYPES, canWork } from './education.js';
+import { foodAidBlockReason, takePublicMeal } from './food-aid.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
@@ -195,6 +196,7 @@ export function facilityShortfallKind(world, sim, action, t) {
 
 export function actionBlockReason(world, sim, action, t) {
   const L = world.logic;
+  if (action === 'seek_food_aid') return foodAidBlockReason(world, sim);
   if (LABOR_ACTIONS.has(action) && !canWork(sim)) return sim.traits.occupation === 'child' ? 'too_young' : 'not_needed';
   if (action === 'study') {
     if (!schoolFor(sim) || sim.traits.occupation !== 'student') return 'not_needed';
@@ -965,7 +967,12 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'performing' || s.ticksLeft > 0) continue;
-    if (s.action === 'eat' || s.action === 'drink' || s.action === 'binge_eat') {
+    if (s.action === 'seek_food_aid') {
+      if (!takePublicMeal(world, sim, emit)) {
+        emit('action_failed', sim.id, { action: s.action, reason: foodAidBlockReason(world, sim) ?? 'invalid_site' });
+        releaseReservation(world, sim); sim.state = emptyState(); continue;
+      }
+    } else if (s.action === 'eat' || s.action === 'drink' || s.action === 'binge_eat') {
       if (s.action !== 'drink') sim.hungerZeroTicks = 0; // §22.2 먹으면 굶은 시계가 멈춘다
       const cost = L.actions[s.action].cost;
       sim.money -= cost;
@@ -1115,7 +1122,7 @@ export function tick(world, inputsForThisTick = []) {
       const kind = {
         eat: 'meal', work: 'work_done', socialize: 'small_talk', play: 'play_time',
         drink: 'drank', binge_eat: 'binge', hole_up: 'hole_up', exercise: 'workout', build: 'built_bed',
-        read: 'read_time', shop: 'shopping', fish: 'fishing', cook_eat: 'home_meal', construct: 'construct_work',
+        read: 'read_time', shop: 'shopping', fish: 'fishing', cook_eat: 'home_meal', construct: 'construct_work', seek_food_aid: 'public_meal',
         see_doctor: 'healed',
       }[s.action];
       if (kind) {
