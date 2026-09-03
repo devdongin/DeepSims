@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import { createWorld } from '../sim/world.js';
 import { tick } from '../sim/tick.js';
@@ -25,7 +26,7 @@ test('#32 old save migration assigns existing homes only and creates no historic
   const w=createWorld(32);w.schemaVersion=65;delete w.villages;delete w.nextVillageId;
   for(const s of w.sims)delete s.villageId;for(const f of w.map.facilities)delete f.villageId;
   const rng=serialize(w.rngSim),money=w.sims.map(s=>s.money),pop=w.sims.length,treasury=w.treasury;
-  migrateWorld(w);assert.equal(w.schemaVersion,66);assert.equal(w.logic.logicSchemaVersion,62);
+  migrateWorld(w);assert.equal(w.schemaVersion, SCHEMA_VERSION);assert.equal(w.logic.logicSchemaVersion,62);
   assert.equal(w.sims.length,pop);assert.deepEqual(w.sims.map(s=>s.money),money);assert.equal(w.treasury,treasury);
   assert.equal(serialize(w.rngSim),rng);const saved=serialize(w);migrateWorld(w);assert.equal(serialize(w),saved);
 });

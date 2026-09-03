@@ -39,6 +39,9 @@ export function dailyDiseaseDraws(world, t, emit, offer = null) {
   for (const sim of world.sims) {
     const roll = rngInt(world.rngSim, 1000);
     if (sim.sick) continue;
+    // §23.24 앓고 난 몸은 한동안 그 병에 안 걸린다. 드로우는 **위에서 이미 소비했으므로**
+    // 여기서 걸러도 rng 순서는 그대로다 (해시 계약).
+    if (t < (sim.immuneUntil ?? 0)) continue;
     let p = D.basePermille;
     if (sim.needs.hunger === 0) p += D.starvingBonus;
     if (world.weather.kind === 'rain') p += D.rainBonus;
@@ -61,8 +64,10 @@ export function contagionDraw(world, a, b, t, emit) {
   const aSick = a.sick !== null, bSick = b.sick !== null;
   if (aSick === bSick) return;
   const roll = rngInt(world.rngSim, 1000);
+  const target = aSick ? b : a;
+  if (t < (target.immuneUntil ?? 0)) return; // §23.24 드로우 뒤에 거른다 — 순서 보존
   if (roll < world.logic.disease.contagionPermille) {
-    infect(world, aSick ? b : a, t, emit);
+    infect(world, target, t, emit);
   }
 }
 
@@ -70,6 +75,7 @@ export function contagionDraw(world, a, b, t, emit) {
 export function naturalRecovery(world, sim, t, emit) {
   if (sim.sick && t >= sim.sick.untilTick) {
     sim.sick = null;
+    sim.immuneUntil = t + world.logic.disease.immuneTicks; // §23.24
     emit('recovered', sim.id, { how: 'natural' });
     recordFact(sim, t, world.logic, 'healed', { tags: ['health'] });
   }

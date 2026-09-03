@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import { createWorld } from '../sim/world.js';
 import { tick, actionBlockReason } from '../sim/tick.js';
@@ -69,6 +71,6 @@ test('#92 seasonal transitions emit once and save/resume remains identical acros
 test('#92 v63 migration derives current season and installs stock action without RNG draws', () => {
   const w=createWorld(92),rng=serialize(w.rngSim);w.worldTick=100*1440;w.schemaVersion=63;
   w.logic.logicSchemaVersion=60;delete w.logic.seasons;delete w.logic.actions[STOCK_ACTION];delete w.season;
-  migrateWorld(w);assert.equal(w.schemaVersion,66);assert.equal(w.logic.logicSchemaVersion,62);
+  migrateWorld(w);assert.equal(w.schemaVersion, SCHEMA_VERSION);assert.equal(w.logic.logicSchemaVersion, DEFAULT_LOGIC.logicSchemaVersion);
   assert.equal(w.season.name,'winter');assert.equal(serialize(w.rngSim),rng);
 });

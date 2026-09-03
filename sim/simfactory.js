@@ -82,6 +82,7 @@ export function makeSim({
     hangoverUntil: -1,
     groceries: 0,
     sick: null,
+    immuneUntil: 0,   // §23.24 앓고 난 뒤 이 틱까지는 다시 안 걸린다
     noPathCool: {},
     patrolIdx: 0,
     hasCar: false,

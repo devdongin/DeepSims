@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 62, // #91 욕구 충족 실적 계층
+  logicSchemaVersion: 63, // §23.24 disease.immuneTicks 추가
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
   seasons: { winterHarvestPct: 50, winterFishPct: 50, winterOutdoorEnergy: 1,
@@ -452,6 +452,17 @@ export const DEFAULT_LOGIC = {
     basePermille: 5, starvingBonus: 30, rainBonus: 10, lowEnergyBonus: 20,
     contagionPermille: 40,
     durationTicks: 4320,     // 자연 치유 3일
+    // §23.24 앓고 난 뒤의 면역 기간. 이게 없으면 모델에 '회복' 칸이 없어(감염↔건강만 있는
+    // SIS 구조) 유병률이 구조적으로 높은 값에 고정된다 — 실측 46~47%, 90일에 1인당 19번.
+    // 사람이 닷새에 한 번 앓는 마을은 관찰할 만한 마을이 아니다.
+    // 값은 실측으로 골랐다 (90일 × 2시드, 유병률 / 90일 발병 수):
+    //   0일 46~47% / 2,161~2,447   ← 지금까지. 사람이 닷새에 한 번 앓는다
+    //   2일 12~23% /   649~673     ← 채택. 17일에 한 번 앓는다
+    //   3일  0~15% /   381~402     ← 한 시드에서 병이 아예 사라진다
+    //   5일  0~10% /   177~337
+    // 3일 이상은 전염이 스스로 꺼져 병원·의사·see_doctor가 통째로 죽은 콘텐츠가 된다.
+    // 병을 없애는 게 목적이 아니라 **감기가 감기답게** 도는 게 목적이다.
+    immuneTicks: 2880,       // 2일 — 앓는 기간(3일)보다 짧다
     decayFactorNum: 1,       // 감쇠 가산 d += floorDiv(d × num, den) → +50%
     decayFactorDen: 2,
     doctorDeficit: 8500,     // see_doctor needValue = NEED_MAX - deficit (아플 때 최우선급)
@@ -1003,6 +1014,7 @@ function checkRanges(p, errors) {
     inRange(`disease.${k}`, p.disease[k], 0, 1000);
   }
   inRange('disease.durationTicks', p.disease.durationTicks, 1, 1000000);
+  inRange('disease.immuneTicks', p.disease.immuneTicks, 0, 1000000);
   inRange('disease.decayFactorNum', p.disease.decayFactorNum, 0, 100);
   inRange('disease.decayFactorDen', p.disease.decayFactorDen, 1, 100);
   inRange('disease.doctorDeficit', p.disease.doctorDeficit, 0, 10000);

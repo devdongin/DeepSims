@@ -1,5 +1,6 @@
 // §22.18 산업 분류 + 수요 원장 테스트.
 import { test } from 'node:test';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import { KSIC, KSIC_CODES, industryStatus, purchasingPowerGap, industryOfAction, industryOfFacilityType, industryOfOccupation, recordIndustryDemand, maybeUnlockIndustries, neededIndustryFacility } from '../sim/industry.js';
 import { createWorld, advance, hashWorld, serialize, deserialize, findNonFinite } from '../sim/index.js';
@@ -20,7 +21,7 @@ test('#63 schema56 and logic51 migrate new industry parameters without inventing
   const education=JSON.stringify(w.sims.map(s=>s.education)),rng=JSON.stringify(w.rngSim);
   migrateWorld(w);
   assert.deepEqual(w.unlockedIndustries,[]);assert.equal(w.logic.industryDevelopment.lab,3000);
-  assert.equal(w.logic.workplace.researcher,'lab');assert.equal(w.schemaVersion,66);
+  assert.equal(w.logic.workplace.researcher,'lab');assert.equal(w.schemaVersion, SCHEMA_VERSION);
   assert.equal(w.logic.logicSchemaVersion,DEFAULT_LOGIC.logicSchemaVersion); // 버전을 올릴 때마다 고치지 않게 상수를 본다
   assert.equal(JSON.stringify(w.sims.map(s=>s.education)),education);assert.equal(JSON.stringify(w.rngSim),rng);
   assert.equal(hashWorld(w),hashWorld(migrateWorld(deserialize(serialize(w)))));

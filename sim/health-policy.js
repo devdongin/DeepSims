@@ -48,6 +48,7 @@ export function completeMedicalVisit(world, patient, emit) {
   world.treasury -= quote.subsidy;
   facility.revenue = (facility.revenue ?? 0) + quote.cost;
   patient.sick = null;
+  patient.immuneUntil = world.worldTick + world.logic.disease.immuneTicks; // §23.24 앓고 난 몸
   emit('medical_visit_paid', patient.id, { facilityId: facility.id, cost: quote.cost,
     patientCost: quote.patientCost, subsidy: quote.subsidy, copayPct: quote.copayPct,
     payments: quote.payments, treasury: world.treasury });

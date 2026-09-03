@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import { createWorld, tick, serialize, deserialize, hashWorld, migrateWorld } from '../sim/index.js';
 import { validatePolicy } from '../sim/logic.js';
@@ -26,7 +27,7 @@ test('#71 copay policy accepts only integer percentages and migrates without ret
   const { w } = fixture(), before = wealth(w), rng = serialize(w.rngSim);
   w.schemaVersion = 57; w.logic.logicSchemaVersion = 52; delete w.logic.economy.healthCopayPct;
   migrateWorld(w);
-  assert.equal(w.schemaVersion,66); assert.equal(w.logic.economy.healthCopayPct, 100);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION); assert.equal(w.logic.economy.healthCopayPct, 100);
   assert.equal(wealth(w), before); assert.equal(serialize(w.rngSim), rng);
 });
 

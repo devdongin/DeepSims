@@ -30,10 +30,13 @@ import { collectCandidates } from '../sim/tick.js';
 //     이후 승급에 따른 새 행동은 의도된 변화다.
 //   #32     (마을 저장): 스키마/소속 메타데이터만 추가해 world 해시를 갱신한다.
 //     4320틱 원본 대조에서 이벤트·메타데이터 제외 전체 상태가 동일함을 별도 검증했다.
+//   §23.24  (회복 후 면역) : 감염 판정이 달라져 발병 시점이 옮겨 간다 — 아픈 사람은
+//     욕구 감쇠가 다르므로 그 뒤의 선택도 전부 달라진다. 240틱 지평에서는 아직 발병이
+//     갈리지 않아 candidates·choices·events는 그대로이고 world 해시만 움직였다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', 'ddff0557', '6cab2972']],
-  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '36b0b82c']],
-  [200, ['5dad1750', '45ef6cbf', 'b8398314', 'deaee076']],
+  [10, ['0ab9198a', '32b2391b', 'ddff0557', '4197d700']],
+  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', 'a415560c']],
+  [200, ['5dad1750', '45ef6cbf', 'b8398314', '48a527ef']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
