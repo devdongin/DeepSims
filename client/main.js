@@ -165,11 +165,35 @@ const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', '
   'tile_garden', 'wall_stone', 'hedge_low', 'flower_row', 'path_stone', 'garden_pot', 'tree_young']
   .map((p) => [p, `./props/${p}.png`]);
 
+// §22.98 **브라우저 페이지 OOM 수리** (사용자 지적: "브라우저에서 페이지 OOM이 나오던거였음").
+// 원인은 텍스처 총량이다. 원화를 그대로 GPU에 올리면 RGBA 4B/px로 **219MB**다
+// (props 142장 138MB + sprites 215장 81MB). 그런데 화면이 쓰는 크기는 훨씬 작다 —
+// 건물은 발자국 대각 폭 `(w+h)/2 × TW`라 7×5 건물이 192px, 소품은 h=16~42px다.
+// 즉 1,580px짜리 원화를 192px로 줄여 그리면서 그 큰 텍스처를 계속 들고 있었다.
+//
+// 로드 시점에 **높이 384 상한**으로 한 번 줄여 올린다(219MB → 115MB). 표시 최대치의
+// 1.5배가 남으므로 화면 품질은 그대로다. 픽셀아트라 보간을 끄고(nearest) 줄인다 —
+// 켜면 §4에서 겪은 "축소하면 뭉개진다"가 로드 시점에 박제된다.
+const TEXTURE_MAX_H = 384;
+let texDownscaled = 0; let texPixelsSaved = 0;
+function downscaleIfHuge(img) {
+  if (!img || img.height <= TEXTURE_MAX_H) return img;
+  const s = TEXTURE_MAX_H / img.height;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.width * s));
+  c.height = TEXTURE_MAX_H;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false; // 픽셀아트 — 뭉개지 않는다
+  g.drawImage(img, 0, 0, c.width, c.height);
+  texDownscaled++; texPixelsSaved += img.width * img.height - c.width * c.height;
+  return c;
+}
+
 function loadImagesNative() {
   const entries = [...SPRITE_KEYS, ...WALK_KEYS, ...BLD_KEYS, ...PROP_KEYS];
   return Promise.all(entries.map(([key, url]) => new Promise((res) => {
     const img = new Image();
-    img.onload = () => res([key, img]);
+    img.onload = () => res([key, downscaleIfHuge(img)]);
     img.onerror = () => res([key, null]); // 실패 시 폴백(색 도형)
     img.src = url;
   })));
@@ -346,6 +370,12 @@ class TownScene extends Phaser.Scene {
     loadImagesNative().then((pairs) => {
       for (const [key, img] of pairs) {
         if (img && !this.textures.exists(key)) this.textures.addImage(key, img);
+      }
+      if (texDownscaled > 0) {
+        // §22.98 확인용 한 줄 — 몇 장을 줄여 몇 MB를 아꼈는지 콘솔에서 바로 읽힌다
+        console.log(`[tex] ${texDownscaled}장 축소, GPU 텍스처 약 ${(texPixelsSaved * 4 / 1e6).toFixed(0)}MB 절약 (상한 h=${TEXTURE_MAX_H})`);
+      }
+      {
       }
       this.ensureTerrain();
       if (world) { simSprites.forEach((s) => s.destroy()); simSprites.clear(); this.drawWorld(); }
