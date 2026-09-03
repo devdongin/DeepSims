@@ -24,10 +24,12 @@ import { collectCandidates } from '../sim/tick.js';
 //   §23.17  (Codex 재검토)  : world 해시만 움직인다 — 강등의 unpaidDays 초기화와 플레이어
 //     초기 자금의 경계 유입 기록은 세계 상태에만 닿는다 (240틱 지평에서 결정 불변).
 //   #76     (실물 공급): 유한 재고·재배·운반 행동이 구매와 선택을 실제로 바꿔 재고정한다.
+//   #92     (계절·비축): 달력/비축 상태와 구매 이벤트 action을 추가한다. 240틱의 후보·선택은 불변,
+//     가을 이후에는 비축·겨울 수확으로 실제 행동이 달라지므로 전체 상태를 새 기준으로 고정한다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', '0e185273', 'ed5d4d85']],
-  [50, ['5786ecd1', '9a3cd25b', '7a24166e', '4a7868a9']],
-  [200, ['5dad1750', '45ef6cbf', '19de95b4', '30baaf9b']],
+  [10, ['0ab9198a', '32b2391b', 'ddff0557', '1205c5ef']],
+  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '65dca181']],
+  [200, ['5dad1750', '45ef6cbf', 'b8398314', '68e6f1cf']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
