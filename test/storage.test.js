@@ -198,3 +198,47 @@ test('R5. 프루닝 후 하루 중간 커서 리포트가 그 날 집계를 포�
   assert.ok(rep.prunedAggregates.length > 0, '교집합하는 날의 집계 포함');
   st.close();
 });
+
+// §22.97 집계 롤업 — 영구 누적을 막는다 (사용자 지적: 게임이 OOM 난다)
+test('16d. 오래된 집계는 마을 단위로 접히고 합계는 보존된다', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deepsims-rollup-'));
+  const st = new Storage(path.join(dir, 'x.db'));
+  const DAY = 1440;
+  // 200일치 × 3카테고리 × 20심 집계를 직접 심는다 (프루닝이 만드는 모양 그대로)
+  const ins = st.db.prepare(`INSERT INTO event_daily_aggregates(day_start_tick, category, sim_id, count, sum)
+    VALUES(?, ?, ?, ?, ?)`);
+  let planted = 0; let total = 0;
+  st.db.transaction(() => {
+    for (let d = 0; d < 200; d++) for (const cat of ['a', 'b', 'c']) for (let s = 0; s < 20; s++) {
+      ins.run(d * DAY, cat, s, 2, 5); planted++; total += 2;
+    }
+  })();
+  assert.equal(planted, 200 * 3 * 20);
+
+  const now = 200 * DAY;
+  const sumAll = () => st.db.prepare('SELECT SUM(count) AS c, COUNT(*) AS n FROM event_daily_aggregates').get();
+  const before = sumAll();
+  const removed = st.rollupOldAggregates(now, 90); // 최근 90일은 심 단위 유지
+  const after = sumAll();
+
+  assert.ok(removed > 0, '접힌 행이 없다');
+  assert.equal(after.c, before.c, `합계가 변했다: ${before.c} → ${after.c}`);
+  // 오래된 구간만 접힌다 — 최근 90일은 심 단위로 남으므로 전체 행수로 재면 안 된다.
+  // 접힌 구간(110일 × 3카테고리)은 심 20명분 6,600행 → 330행으로 20배 줄어야 한다.
+  const oldRows = st.db.prepare(
+    'SELECT COUNT(*) AS n FROM event_daily_aggregates WHERE day_start_tick < ?').get(now - 90 * DAY).n;
+  assert.equal(oldRows, 110 * 3, `접힌 구간 행수가 ${oldRows} — (일 × 카테고리)만 남아야 한다`);
+  assert.equal(removed, 110 * 3 * 20 - 110 * 3, `접힌 행 수가 ${removed}`);
+  // 오래된 구간에는 심 단위 행이 남아 있지 않다
+  const oldPerSim = st.db.prepare(
+    'SELECT COUNT(*) AS n FROM event_daily_aggregates WHERE day_start_tick < ? AND sim_id >= 0').get(now - 90 * DAY).n;
+  assert.equal(oldPerSim, 0, `오래된 구간에 심 단위 행 ${oldPerSim}개가 남았다`);
+  // 최근 구간은 그대로다
+  const recentPerSim = st.db.prepare(
+    'SELECT COUNT(*) AS n FROM event_daily_aggregates WHERE day_start_tick >= ? AND sim_id >= 0').get(now - 90 * DAY).n;
+  assert.equal(recentPerSim, 90 * 3 * 20, '최근 90일 심 단위 집계가 사라졌다');
+  // 멱등: 두 번 돌려도 합계 불변
+  st.rollupOldAggregates(now, 90);
+  assert.equal(sumAll().c, before.c, '두 번 접으면 합계가 변한다');
+  st.db.close(); fs.rmSync(dir, { recursive: true, force: true });
+});
