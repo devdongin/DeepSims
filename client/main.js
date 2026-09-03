@@ -665,6 +665,7 @@ class TownScene extends Phaser.Scene {
         const label = this.add.text(0, -30, sim.name, { fontSize: '10px', color: '#e8e2d8', stroke: '#14121a', strokeThickness: 3 }).setOrigin(0.5);
         const c = this.add.container(tx, ty, [shadow, body, label]);
         c.bodyRef = body; c.animKey = animKey;
+        c.labelRef = label; c.shadowRef = shadow; // §22.87 주행 중 숨길 것들
         sp = c; simSprites.set(sim.id, sp);
       }
       const arch = archOf(sim);
@@ -677,7 +678,14 @@ class TownScene extends Phaser.Scene {
         sp.carIcon = this.add.image(10, -4, 'car').setScale(16 / this.textures.get('car').getSourceImage().height);
         sp.add(sp.carIcon);
       }
-      if (sp.carIcon) sp.carIcon.setVisible(sim.state?.kind === 'walking');
+      // §22.87 차를 타면 **차만 보인다** (사용자 지시: "자동차를 타면 자동차만 보여야지
+      // 사람이랑 같이 보이지 않게 한다"). 예전에는 차 아이콘이 걸어가는 사람 위에 겹쳐서
+      // 사람과 차가 한 몸처럼 붙어 다녔다. 이동 중에는 몸·이름표를 숨기고 차만 남긴다.
+      const driving = sim.hasCar && sim.state?.kind === 'walking';
+      if (sp.carIcon) sp.carIcon.setVisible(driving);
+      if (sp.bodyRef) sp.bodyRef.setVisible(!driving);
+      if (sp.labelRef) sp.labelRef.setVisible(!driving);
+      if (sp.shadowRef) sp.shadowRef.setVisible(!driving);
       const dx = tx - sp.x;
       const moving = Math.abs(dx) + Math.abs(ty - sp.y) > 1;
       const body = sp.bodyRef;
