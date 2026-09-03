@@ -48,6 +48,8 @@ fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
     // §19.12 (이슈 #52): 이제 세계가 스스로 판정한다 — 수동 합산이 아니라
     // 일일 평가가 남긴 관측 상태를 그대로 싣는다.
     transit: w.transit ?? null,
+    today: w.transportStats?.today ?? null,
+    days14: w.transportStats?.history ?? [],
   },
   // §19.10 (73차 ②): 원인 분화 이전에 쌓인 no_facility 항목은 오라벨일 수 있어
   // 외부(로드맵 에이전트) 노출에서 legacy로 표시한다. 감쇠로 자연 소멸한다.
