@@ -207,7 +207,7 @@ app.post('/api/input', async (req, res) => {
     || payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
     return res.status(400).json({ error: 'clientInputId(문자열), command(문자열), payload(객체)가 필요합니다' });
   }
-  if (!['assign', 'create_player', 'announce', 'policy', 'zone'].includes(command)) {
+  if (!['assign', 'create_player', 'announce', 'policy', 'zone', 'plan_center'].includes(command)) {
     return res.status(400).json({ error: '허용되지 않은 명령입니다' }); // logic_update는 서버 내부 전용
   }
   if (command === 'assign'
@@ -264,6 +264,8 @@ function sendSnapshot(ws) {
     incidents: engine.world.incidents,
     policy: engine.world.policy,
     zoneOrders: engine.world.zoneOrders,
+    centers: engine.world.centers,
+    plannedCenterCost: engine.world.logic.zone.plannedCenterCost,
     cityTier: engine.world.cityTier,
     statsHistory: engine.world.statsHistory,
     clubs: engine.world.clubs,
@@ -275,7 +277,7 @@ function sendSnapshot(ws) {
 
 engine.onBatch((msg) => {
   for (const ws of clients) {
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit }); // §19.12
+    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, plannedCenterCost: engine.world.logic.zone.plannedCenterCost }); // §19.12
     else send(ws, msg);
   }
 });

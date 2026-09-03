@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 45,
+  "logicSchemaVersion": 46,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -646,7 +646,9 @@
       "university": 10000
     },
     "demolitionCostPerTile": 200,
-    "plannedCenterCost": 5000
+    "plannedCenterCost": 5000,
+    "centerRadius": 32,
+    "centerMinResidents": 4
   },
   "growth": {
     "headroomBeds": 2,

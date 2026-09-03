@@ -36,7 +36,7 @@ test('X-2. 도시계획 트리거: 인구>침대 → house 프로젝트 (생성 
   const started = evs.find((e) => e.type === 'project_started');
   assert.ok(started, '프로젝트 시작');
   assert.equal(started.payload.type, 'house');
-  assert.equal(started.payload.plotId, 0, '첫 공터부터');
+  assert.equal(started.payload.plotId, 6, '시청에 가장 가까운 공터부터 (#119)');
 });
 
 test('X-3. 건설 노동 → 완공 → 건물·이주, 결정적', () => {
@@ -88,7 +88,7 @@ test('X-4. 완공 건물의 자원 도달성 + 후속 프로젝트가 다음 공
     }
   }
   const plotIds = evs.filter((e) => e.type === 'project_started').map((e) => e.payload.plotId);
-  for (let i = 1; i < plotIds.length; i++) assert.ok(plotIds[i] > plotIds[i - 1], '공터 순서 사용');
+  assert.equal(new Set(plotIds).size, plotIds.length, '이미 착공한 공터를 재사용하지 않는다');
 });
 
 test('X-5. v7(48맵) → v8 마이그레이션: 확장·wear 좌표 보존·결정성', () => {
