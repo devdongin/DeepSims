@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld, tick, hashWorld, serialize, deserialize, migrateWorld } from '../sim/index.js';
 import { actionBlockReason } from '../sim/tick.js';
 import { takePublicMeal } from '../sim/food-aid.js';
+import { Storage } from '../db/storage.js';
 
 function fixture() {
   const w=createWorld(57),s=w.sims[0];
@@ -91,4 +92,18 @@ test('#57 autonomous choice and save/resume preserve the same meal and RNG traje
   const treasury=old.treasury;
   migrateWorld(old);assert.equal(old.logic.actions.seek_food_aid.mealCost,200);
   assert.equal(old.treasury,treasury);assert.equal(hashWorld(old),hashWorld(migrateWorld(deserialize(serialize(old)))));
+});
+
+test('#57 public meal events and resulting balances survive the storage/report path', () => {
+  const {w}=fixture(),start=w.worldTick,events=[];
+  for(let i=0;i<40;i++)events.push(...tick(w));
+  const st=new Storage(':memory:');
+  try {
+    st.loadOrCreate({seed:57,nowUtcMs:1000});
+    st.commitBatch({world:w,events,appliedInputIds:[],epochUtcMs:1000});
+    const report=st.getReport(start,w.worldTick);
+    assert.equal(report.counts.find(x=>x.type==='public_meal_taken')?.n,1);
+    const loaded=st.loadOrCreate({seed:57,nowUtcMs:2000});
+    assert.equal(hashWorld(loaded.world),hashWorld(w));
+  } finally { st.close(); }
 });
