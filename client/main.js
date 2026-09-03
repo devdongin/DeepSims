@@ -944,7 +944,7 @@ const ACTION_TRY_KO = {
   play: '놀려', drink: '한잔하려', binge_eat: '뭐 좀 먹으려', hole_up: '좀 쉬려',
   exercise: '운동하려', build: '뭘 좀 만들려', read: '책 좀 읽으려', study: '수업 들으려', shop: '장 보려',
   fish: '낚시하려', cook_eat: '밥 해 먹으려', construct: '공사 거들려',
-  see_doctor: '병원 가려', idle: '좀 쉬려',
+  see_doctor: '병원 가려', seek_food_aid: '공공 식사 받으려', idle: '좀 쉬려',
 };
 function actKo(id) { return ACTION_TRY_KO[id] ?? '뭘 좀 하려'; }
 
@@ -2235,14 +2235,14 @@ const ACTION_KO = {
   eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기',
   drink: '술 한잔', binge_eat: '폭식', hole_up: '은둔', exercise: '운동', build: '침대 만들기',
   read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기', see_doctor: '병원 진료',
-  respond_fire: '화재 진압', study: '학교 수업',
+  respond_fire: '화재 진압', study: '학교 수업', seek_food_aid: '공공 식사 요청',
 };
 // 직업 라벨과 같은 규칙 — 표를 직접 인덱싱하지 않는다. 미등록 행동이 와도
 // 피드에 'undefined 시작'이 아니라 '활동 시작'이 뜬다.
 function actionKo(id, fallback = '활동') { return ACTION_KO[id] ?? fallback; }
 const BLOCK_KO = {
   no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
-  not_coping: '멀쩡함', not_needed: '불필요',
+  not_coping: '멀쩡함', not_needed: '불필요', no_funds: '국고 부족',
 };
 // #107 직업 라벨. sim/traits.js의 OCCUPATIONS **전 원소**가 여기 있어야 한다 —
 // 5종만 있던 동안 라이브 주민 173명 중 137명(79%)의 직업 칸이 'undefined'였다(child만 71명).
@@ -2440,6 +2440,7 @@ function eventText(e) {
     case 'genius_born': return `⭐ ${ga(n)} 특별한 재능을 갖고 태어났습니다 (잠재치 ${e.payload.cap}, 성장에는 배움과 환경이 필요합니다)`;
     case 'school_enrolled': return `🎒 ${ga(n)} ${PLACE_KO[e.payload.stage]}에 다닙니다 (${e.payload.age}세)`;
     case 'school_planned': return `🏫 학생 수요에 따라 ${PLACE_KO[e.payload.type]} 공사를 시작했습니다 (국고 −${e.payload.cost}원)`;
+    case 'public_meal_taken': return `🍲 ${ga(n)} 공공 식사를 받았습니다 (국고 −${e.payload.cost}원)`;
     case 'education_decided': return e.payload.choice === 'degree' ? `🎓 ${ga(n)} ${{university:'학부',masters:'석사',doctorate:'박사'}[e.payload.course]} 과정을 졸업했습니다`
       : e.payload.choice === 'postgraduate' ? `🎓 ${ga(n)} ${{masters:'석사',doctorate:'박사'}[e.payload.course]} 과정에 진학합니다`
       : e.payload.choice === 'university' ? `🎓 ${ga(n)} ${{university:'학부',masters:'석사',doctorate:'박사'}[e.payload.course]??'대학'} 과정에 등록했습니다 (학비 ${e.payload.tuition}원)`

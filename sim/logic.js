@@ -4,10 +4,11 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 50, // #96 학제·학업·대학 진학
+  logicSchemaVersion: 51, // #57 실제 방문 공공 식사
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
+    seek_food_aid: { duration: 30, mealCost: 200, hungerGain: 9000 },
     study: { duration: 60, cost: 0 },
     respond_fire: { duration: 60, recoverPerTick: 0, cost: 0 }, // §17.20 화재 진압 (소방관 전용 위급 후보)
     eat: { duration: 30, recoverPerTick: 300, cost: 200 },
@@ -544,6 +545,8 @@ function checkRanges(p, errors) {
   const inRange = (path, v, lo, hi) => {
     if (v < lo || v > hi) errors.push(`범위 위반: ${path}=${v} (허용 ${lo}~${hi})`);
   };
+  inRange('actions.seek_food_aid.mealCost', p.actions.seek_food_aid.mealCost, 1, 1000000);
+  inRange('actions.seek_food_aid.hungerGain', p.actions.seek_food_aid.hungerGain, 1, 10000);
   for (const [k, v] of Object.entries(p.decay)) inRange(`decay.${k}`, v, 0, 1000);
   inRange('ageDecay.youngMax', p.ageDecay.youngMax, 15, 90);
   inRange('ageDecay.oldMin', p.ageDecay.oldMin, 15, 91);
