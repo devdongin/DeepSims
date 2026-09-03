@@ -10,6 +10,7 @@ w.villages.push({id:'village:1',name:'관측구역',center:{x:10,y:20},foundedTi
 for(const f of w.map.facilities)if(f.x<20)f.villageId='village:1';
 for(const s of w.sims)s.villageId=w.map.facilities.find(f=>f.id===s.homeId).villageId;
 const initialPopulation=w.sims.length,visits={},residenceMoves=[];
+const migration={gathered:0,departed:0,completed:0,failed:0},migrationIds=new Set();
 let observedDay=0,noPath=0;
 const collect=day=>{
   for(const [key,row] of Object.entries(day?.municipalVisits??{})){
@@ -22,6 +23,14 @@ for(let i=0;i<days*1440;i++){
   const events=tick(w);
   noPath+=events.filter(e=>e.type==='action_failed'&&e.payload.reason==='no_path').length;
   for(const e of events)if(e.type==='moved_home')residenceMoves.push(e);
+  for(const e of events){
+    if(e.type==='household_migration_gathering'){migration.gathered++;migrationIds.add(e.payload.intentId);}
+    if(e.type==='household_migration_departed')migration.departed++;
+    if(migrationIds.has(e.payload?.intentId)){
+      if(e.type==='household_intent_applied')migration.completed++;
+      if(e.type==='household_intent_failed')migration.failed++;
+    }
+  }
   if(w.transportStats.today.day!==observedDay){
     collect(w.transportStats.history.at(-1));observedDay=w.transportStats.today.day;
   }
@@ -29,4 +38,4 @@ for(let i=0;i<days*1440;i++){
 collect(w.transportStats.today);
 console.log(JSON.stringify({fixture:'existing-town jurisdiction split, not natural settlement',days,
   initialPopulation,finalPopulation:w.sims.length,noPath,visits:Object.values(visits),
-  residenceMoves:residenceMoves.length,hash:hashWorld(w)},null,2));
+  residenceMoves:residenceMoves.length,migration,hash:hashWorld(w)},null,2));

@@ -3,9 +3,10 @@ import { isResidence, isAvailableResidence } from './map.js';
 import { syncResidenceVillage } from './villages.js';
 import { askingRent } from './housing.js';
 import { isSettlementInTransit } from './settlement.js';
+import { beginHouseholdMigration } from './household-migration.js';
+import { canWork } from './education.js';
 
-const employed = (world, sim) => sim.traits.occupation !== 'student'
-  && sim.traits.occupation !== 'child'
+const employed = (world, sim) => canWork(sim)
   && (world.logic.occupations[sim.traits.occupation]?.wagePct ?? 0) > 0;
 
 const vacantResidences = (world, fromHomeId) => world.map.facilities.filter(isAvailableResidence)
@@ -27,6 +28,7 @@ export function applyHouseholdIntents(world, t, emit) {
   const due = (world.householdIntents ?? []).filter(i => i.applyTick <= t)
     .sort((a,b) => a.intentId-b.intentId);
   for (const intent of due) {
+    if(intent.relocation)continue; // Gathering/travel is revalidated by the physical migration path.
     if((intent.memberIds??[intent.simId]).some(id=>isSettlementInTransit(world,id)))continue;
     const sim = world.sims.find(s => s.id === intent.simId);
     let reason = null;
@@ -38,6 +40,10 @@ export function applyHouseholdIntents(world, t, emit) {
       else if(world.sims.some(s=>s.householdId===intent.fromHouseholdId&&s.homeId===intent.fromHomeId&&!intent.memberIds.includes(s.id)))reason='household_changed';
       else if(!target||world.sims.some(s=>s.homeId===target.id)||target.resources.length<members.length)reason='target_unavailable';
       else if(askingRent(world,target)>=intent.maxRent)reason='not_cheaper';
+      if(!reason&&target.villageId!==sim.villageId){
+        reason=beginHouseholdMigration(world,intent,target,t,emit);
+        if(!reason)continue;
+      }
       if(reason){world.householdDaily.failures[reason]=(world.householdDaily.failures[reason]??0)+1;
         emit('household_intent_failed',intent.simId,{intentId:intent.intentId,kind:intent.kind,reason});}
       else {for(const member of members){member.homeId=target.id;syncResidenceVillage(world,member.id);emit('moved_home',member.id,{from:intent.fromHomeId,to:target.id,reason:'rent_pressure'});}

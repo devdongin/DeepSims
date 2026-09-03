@@ -28,6 +28,7 @@ import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
   foundingSiteReserved, foundingWorkerAllowed, recordFoundingHome, cancelFoundingConstruction } from './founding.js';
 import { SETTLE_ACTION, isSettlementInTransit, settlementGatherTarget,
   advanceSettlementPlans, completeSettlementArrivals } from './settlement.js';
+import { advanceHouseholdMigrations, completeHouseholdMigrations } from './household-migration.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -973,6 +974,7 @@ export function tick(world, inputsForThisTick = []) {
   fundFoundingPlans(world,t,emit);
   updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
+  advanceHouseholdMigrations(world,t,emit,(sim,cand)=>startAction(world,sim,cand,t,emit,{migration:true}));
   advanceSettlementPlans(world,t,emit,(sim,cand)=>startAction(world,sim,cand,t,emit,{settlement:true}));
 
   // A guardian can die/emigrate between ticks. Never leave a child frozen or a
@@ -1062,6 +1064,7 @@ export function tick(world, inputsForThisTick = []) {
   }
 
   completeSettlementArrivals(world,t,emit);
+  completeHouseholdMigrations(world,t,emit);
   // 2a-2) 스쳐 지나가는 인사 (D9) — 전파(2b)보다 먼저: 같은 틱 전파는 인사 후 호감도를 본다
   processGreetings(world, t, emit);
 

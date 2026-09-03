@@ -7,12 +7,15 @@ import { cancelFoundingConstruction } from './founding.js';
 import { settlementHouseholdsUnchanged } from './settlement-households.js';
 import { newGovernment, initializeMunicipalHistory } from './government.js';
 import { allocateMunicipalLand } from './municipal-land.js';
+import { householdMigrationInTransit, householdMigrationGatherTarget } from './household-migration.js';
+
+export {ready as relocationReady,candidate as relocationCandidate,stop as stopRelocation};
 
 export const SETTLE_ACTION='settle_village';
 const pending=world=>(world.founding?.petitions??[]).filter(p=>p.status==='awaiting_settlement');
 const at=(s,p)=>s.x===p.x&&s.y===p.y;
 export function isSettlementInTransit(world,id){
-  return pending(world).some(p=>p.plan.relocation?.phase==='travelling'&&p.plan.residents.some(r=>r.simId===id));
+  return householdMigrationInTransit(world,id)||pending(world).some(p=>p.plan.relocation?.phase==='travelling'&&p.plan.residents.some(r=>r.simId===id));
 }
 function homeFor(world,p,id){
   const spec=p.plan.homes.find(h=>h.residentIds.includes(id));
@@ -49,7 +52,7 @@ function candidate(p,sim,target){
 // remain free to meet needs before returning; no instant assembly or forced work.
 export function settlementGatherTarget(world,sim){
   const p=pending(world).find(p=>p.plan.relocation?.phase==='gathering'&&p.plan.residents.some(r=>r.simId===sim.id));
-  if(!p)return null;
+  if(!p)return householdMigrationGatherTarget(world,sim);
   const home=homeFor(world,p,sim.id);if(!home)return null;
   const assembly=p.plan.relocation.assembly;
   const length=p.plan.relocation.distances?.[home.id];

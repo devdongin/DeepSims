@@ -2679,6 +2679,8 @@ function eventText(e) {
     case 'founding_cancelled': return `🏘️ 개척 계획의 조건이 달라져 취소됐습니다`;
     case 'founding_homes_built': return `🏘️ 개척 주택이 완공되어 정착을 기다립니다`;
     case 'founding_gathering': return `🏘️ 가족들이 이주를 준비합니다`;
+    case 'household_migration_gathering': return `📦 가족들이 다른 마을로 이사할 준비를 합니다`;
+    case 'household_migration_departed': return `📦 가족들이 새 집을 향해 출발했습니다`;
     case 'founding_departed': return `🏘️ 가족들이 새 정착지로 출발했습니다`;
     case 'village_founded': return `🏘️ 주민들이 도착해 새 마을을 세웠습니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
@@ -2783,6 +2785,7 @@ const FEED_STORY = new Set([
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
   'founding_gathering', 'founding_departed', 'village_founded',
+  'household_migration_gathering', 'household_migration_departed',
 ]);
 // conversation·greeting·gathering·invited는 뺐다. 실측에서 '이야기' 80줄이 전부 잡담(💬)이라
 // 결혼도 출생도 그 사이에 묻혔다 — 수다는 이 마을의 **바탕음**이지 사건이 아니다.
@@ -3593,6 +3596,13 @@ function connect() {
         updatePolicySummary();
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
         for (const e of msg.events ?? []) {
+          if(e.type==='household_migration_gathering'){
+            const home=world.map.facilities.find(f=>f.id===e.payload.targetHomeId);
+            if(home)home.migrationIntentId=e.payload.intentId;
+          }
+          if(['household_intent_applied','household_intent_failed'].includes(e.type)){
+            for(const home of world.map.facilities)if(home.migrationIntentId===e.payload.intentId)delete home.migrationIntentId;
+          }
           if (e.type === 'plot_relocated') {
             const p = world.plots?.find(p => p.plotId === e.payload.plotId);
             if (p) { p.x=e.payload.x; p.y=e.payload.y; }

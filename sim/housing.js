@@ -1,6 +1,7 @@
 // #93 Deterministic land value, closed-accounting rent, and durable cheaper-home moves.
 import { isResidence, isAvailableResidence } from './map.js';
 import { governmentFor } from './government.js';
+import { canWork } from './education.js';
 
 const cmp = (a,b) => a < b ? -1 : a > b ? 1 : 0;
 const at = f => f.door ?? { x:f.x, y:f.y };
@@ -25,7 +26,7 @@ export function askingRent(world,home,uses=world.facilityUseToday??{}){
     + home.resources.length*world.logic.housing.bedRent;
 }
 
-const incomeOf=(world,s)=>!['student','child'].includes(s.traits.occupation)
+const incomeOf=(world,s)=>canWork(s)
   ? Math.floor(world.logic.actions.work.wageBase*(world.logic.occupations[s.traits.occupation]?.wagePct??0)/100):0;
 
 function take(members,amount){
