@@ -130,7 +130,7 @@ function archOf(sim) {
   return pool[sim.id % pool.length];
 }
 // §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
-const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
+const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'workshop','lab','warehouse', 'house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
   'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 BLD_KEYS.push(['firework', './ui/fx_firework.png']); // §18.T4 승급 연출
@@ -141,10 +141,10 @@ for (const t of ['grass', 'pavement', 'road', 'river', 'river_bank', 'sand', 'mo
 const TILE_TEX = { 1: 'tile_road', 2: 'tile_pavement', 5: 'tile_water_deep', 6: 'tile_river',
   7: 'tile_river_bank', 8: 'tile_sand', 9: 'tile_mountain', 10: 'tile_hill', 11: 'tile_bridge', 12: 'tile_pavement' };
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
-for (const t of ['house_a', 'cafe', 'office']) for (const d of [1, 2, 3]) {
+for (const t of ['house_a', 'cafe', 'office','workshop','lab','warehouse']) for (const d of [1, 2, 3]) {
   BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
 }
-for (const t of ['apartment', 'factory', 'mall', 'university', 'house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
+for (const t of ['apartment', 'factory', 'mall', 'university', 'workshop','lab','warehouse', 'house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
   'cinema', 'bar', 'library', 'market', 'police', 'fire']) {
   BLD_KEYS.push([`bld_${t}_int`, `./props/bld_${t}_int.png`]); // §17.19 내부 컷어웨이
 }
