@@ -27,6 +27,9 @@ export class Engine {
     this.createdNow = loaded.created === true; // §22.7 이번 실행에서 새 마을을 만들었는가
     storage.retargetStaleInputs(this.world.worldTick, now());
     storage.pruneEvents(this.world.worldTick);
+    const filled = storage.backfillChronicle(); // §23.1 최초 1회: 남아 있는 이벤트에서 일대기 씨앗
+    if (filled > 0) console.log(`  연대기 초기화: ${filled}줄`);
+    storage.pruneChronicle();
     // §22.12 라이브 프루닝: 부팅에만 걸면 켜 둔 세션에서 events가 무한 증가한다
     // (실측 107게임일 205,092행·53.8MB, 시간당 +31MB). 일 경계를 지난 첫 커밋 뒤에
     // 다시 프루닝한다 — 커밋 트랜잭션과 분리된 후행 트랜잭션이라 커밋 순서와 충돌하지
@@ -123,6 +126,7 @@ export class Engine {
     const deleted = this.storage.pruneEvents(this.world.worldTick);
     // §22.97 집계도 접는다 — 안 접으면 events는 30일인데 집계는 영구 누적이다
     const rolled = this.storage.rollupOldAggregates(this.world.worldTick);
+    this.storage.pruneChronicle(); // §23.1 일대기 상한 (사람당 120줄 · 마을 600줄)
     if (rolled > 0) console.log(`  집계 롤업: ${rolled}행 접음 (90일 이전, 마을 단위로 합산)`);
     this.lastPruneDay = day;
     if (deleted > 0) this.storage.opsLog(this.now(), 'events_pruned', { deleted, day });

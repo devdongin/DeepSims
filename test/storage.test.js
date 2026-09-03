@@ -242,3 +242,61 @@ test('16d. 오래된 집계는 마을 단위로 접히고 합계는 보존된다
   assert.equal(sumAll().c, before.c, '두 번 접으면 합계가 변한다');
   st.db.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// §23.1 생애 연대기 — 투영 계층. 시뮬레이션 상태가 아니므로 결정성에 관여하지 않고,
+// events가 프루닝돼도 살아남아야 한다. 그게 이 표의 존재 이유다.
+test('C-1. 마일스톤은 chronicle에 남고, 일상 이벤트는 남지 않는다', () => {
+  const st = new Storage(tmpDb());
+  const world = st.loadOrCreate({ seed: SEED, nowUtcMs: 1000 });
+  const events = [
+    { tick: 10, ordinal: 0, type: 'married', simId: 1, payload: { partner: 2 } },
+    { tick: 10, ordinal: 1, type: 'action_completed', simId: 1, payload: { action: 'eat' } },
+    { tick: 11, ordinal: 0, type: 'festival', simId: null, payload: { kind: 'harvest' } },
+  ];
+  world.worldTick = 12;
+  st.commitBatch({ world, events, appliedInputIds: [], epochUtcMs: 1000 });
+  const mine = st.getChronicle(1, 50);
+  assert.equal(mine.length, 1, '혼인만 남는다 — 식사는 일상이다');
+  assert.equal(mine[0].type, 'married');
+  assert.equal(st.getChronicle(-1, 50).length, 1, '축제는 마을 연대기로');
+  st.close();
+});
+
+test('C-2. 이벤트가 프루닝돼도 일대기는 남는다', () => {
+  const st = new Storage(tmpDb());
+  const world = st.loadOrCreate({ seed: SEED, nowUtcMs: 1000 });
+  world.worldTick = 60;
+  st.commitBatch({
+    world, appliedInputIds: [], epochUtcMs: 1000,
+    events: [{ tick: 60, ordinal: 0, type: 'graduated', simId: 7, payload: { age: 19 } }],
+  });
+  st.pruneEvents(60 + 40 * 1440); // 30일 커트라인을 훌쩍 넘긴다
+  assert.equal(st.getChronicle(7, 50).length, 1, '졸업은 지워지지 않는다');
+  st.close();
+});
+
+test('C-3. 사람당 상한을 넘으면 오래된 줄부터 접힌다', () => {
+  const st = new Storage(tmpDb());
+  const world = st.loadOrCreate({ seed: SEED, nowUtcMs: 1000 });
+  const events = [];
+  for (let i = 0; i < 150; i++) events.push({ tick: 100 + i, ordinal: 0, type: 'job_changed', simId: 5, payload: { n: i } });
+  world.worldTick = 300;
+  st.commitBatch({ world, events, appliedInputIds: [], epochUtcMs: 1000 });
+  st.pruneChronicle();
+  const rows = st.getChronicle(5, 200);
+  assert.equal(rows.length, 120, '상한 120줄');
+  assert.equal(rows[rows.length - 1].payload.n, 149, '최근 것이 남는다');
+  st.close();
+});
+
+test('C-4. 연대기는 결정성에 관여하지 않는다 (해시 동일)', () => {
+  const a = createWorld(SEED); const b = createWorld(SEED);
+  const st = new Storage(tmpDb());
+  st.loadOrCreate({ seed: SEED, nowUtcMs: 1000 });
+  const evA = advance(a, {}, 1440);
+  st.commitBatch({ world: a, events: evA, appliedInputIds: [], epochUtcMs: 1000 });
+  st.pruneChronicle();
+  advance(b, {}, 1440);
+  assert.equal(hashWorld(a), hashWorld(b), '저장 계층을 거쳐도 세계는 같다');
+  st.close();
+});
