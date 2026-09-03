@@ -61,6 +61,11 @@
     #people-list .nm { color: #ffcf6a; min-width: 78px; }
     #people-list .sub { color: #9c8a6a; font-size: 11px; }
     #lifebtn:hover, #followbtn:hover { background: #4a3a26; border-color: #c9a86a; }
+    #feed-filter { display: flex; gap: 3px; margin: 0 0 6px; }
+    #feed-filter button { flex: 1; font-size: 10.5px; padding: 3px 0; background: #241d14;
+      color: #9c8a6a; border: 1px solid #3a2e1d; border-radius: 5px; cursor: pointer; }
+    #feed-filter button:hover { border-color: #6b5638; color: #ead9b0; }
+    #feed-filter button.on { background: #3a2e1d; color: #ffcf6a; border-color: #6b5638; }
     #lifelog { margin-top: 6px; max-height: 190px; overflow-y: auto; font-size: 10.5px;
       color: #cdc4d6; border-left: 2px solid #6b5638; padding-left: 8px; }
     #lifelog .yr { color: #ffcf6a; font-size: 10px; margin-top: 5px; }
@@ -148,6 +153,13 @@
     </div>
     <div id="sidebar">
       <h2>이벤트</h2>
+      <!-- §23.19 피드 필터 — 이백 명분의 사건이 쏟아지면 이야기가 묻힌다 -->
+      <div id="feed-filter">
+        <button data-f="all" class="on">전부</button>
+        <button data-f="story">이야기</button>
+        <button data-f="money">살림</button>
+        <button data-f="mine">이 사람</button>
+      </div>
       <div id="feed"></div>
     </div>
   </div>

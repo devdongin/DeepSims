@@ -2672,6 +2672,29 @@ function eventText(e) {
     case 'recovered': return e.payload.how === 'doctor' ? `💊 ${ga(n)} 진료를 받고 나았습니다` : `🌤️ ${ga(n)} 감기에서 회복했습니다`;
     case 'election': return `🗳️ 선거 결과 — ${ga(n)} 해솔마을 시장이 되었습니다! (득표 ${e.payload.votes.join(':')})`;
     case 'started_dating': return `💕 ${wa(n)} ${ga(simName(e.payload.withSimId))} 사귀기 시작했습니다!`;
+    // §23.19 '이야기' 필터를 켰더니 화면이 비었다. 이 여섯 가지는 마을에서 실제로
+    // 일어나는데 **피드에 문장이 없어서** 한 번도 보인 적이 없었다. 사건이 있는데
+    // 말이 없으면 없는 일이다.
+    case 'relationship_changed': {
+      const who = simName(e.payload.withSimId);
+      const TIER = { friend: `🤝 ${wa(n)} ${ga(who)} 친구가 되었습니다`,
+        rival: `💢 ${wa(n)} ${ga(who)} 사이가 틀어졌습니다`,
+        acquaintance: `🙂 ${wa(n)} ${ga(who)} 아는 사이가 되었습니다`,
+        stranger: `🍃 ${wa(n)} ${ga(who)} 멀어졌습니다` };
+      return TIER[e.payload.tier] ?? null;
+    }
+    case 'job_changed': {
+      const to = occKo(e.payload.to, null);
+      if (!to) return null;
+      if (e.payload.to === 'jobless') return `📄 ${ga(n)} 일자리를 잃었습니다`;
+      const why = { public_post: ' (공공 자리를 채웠습니다)', over_quota: ' (정원이 줄었습니다)',
+        immigration_quota: '', player_quota: '' }[e.payload.reason] ?? '';
+      return `💼 ${ga(n)} ${to}${'가 되었습니다'}${why}`;
+    }
+    case 'grew_up': return `🌱 ${ga(n)} ${e.payload.age}살이 되어 학교에 갑니다`;
+    case 'bereaved': return `🕯️ ${ga(n)} 가까운 사람을 떠나보냈습니다`;
+    case 'died': return `🕯️ ${ga(n)} 세상을 떠났습니다`;
+    case 'emigrated': return `🧳 ${ga(n)} 마을을 떠났습니다`;
     case 'married': return `💒 ${wa(n)} ${ga(simName(e.payload.withSimId))} 결혼했습니다! 🎉`;
     case 'broke_up': return `💔 ${wa(n)} ${ga(simName(e.payload.withSimId))} 헤어졌습니다…`;
     case 'new_year': return `🎆 해솔마을의 새해가 밝았습니다! (${e.payload.year}년차)`;
@@ -2718,8 +2741,37 @@ function eventText(e) {
   }
 }
 
+// §23.19 피드 필터. 이백 명이 사는 마을은 초당 수십 건을 쏟아내므로, 정작 "누가
+// 결혼했다"가 "누가 밥을 먹었다" 사이에 묻힌다. 무엇을 볼지는 보는 사람이 정한다.
+//   이야기 — 관계·생애·마을의 큰일
+//   살림   — 돈이 오간 일
+//   이 사람 — 지금 고른 사람의 일만
+const FEED_STORY = new Set([
+  'married', 'started_dating', 'broke_up', 'relationship_changed', 'child_settled', 'graduated',
+  'grew_up', 'died', 'emigrated', 'immigrated', 'bereaved', 'retired_now', 'moved_home',
+  'joined_club', 'genius_born', 'heroic_save', 'festival', 'new_year', 'election',
+  'city_promoted', 'station_unlocked', 'facility_built', 'argument', 'petition',
+  'public_posts_filled', 'job_changed',
+]);
+// conversation·greeting·gathering·invited는 뺐다. 실측에서 '이야기' 80줄이 전부 잡담(💬)이라
+// 결혼도 출생도 그 사이에 묻혔다 — 수다는 이 마을의 **바탕음**이지 사건이 아니다.
+// 잡담까지 보려면 '전부'가 있다.
+const FEED_MONEY = new Set([
+  'money_changed', 'welfare_paid', 'wage_shortfall', 'money_shared', 'treasury_debt',
+  'insolvent', 'public_revenue_remitted', 'car_bought', 'mayor_stipend', 'public_works',
+  'policy_changed', 'fish_caught', 'medical_visit_paid', 'child_allowance_paid',
+]);
+let feedFilter = 'all';
+function feedPasses(e) {
+  if (feedFilter === 'all') return true;
+  if (feedFilter === 'mine') return selectedSimId !== null && e.simId === selectedSimId;
+  if (feedFilter === 'story') return FEED_STORY.has(e.type);
+  if (feedFilter === 'money') return FEED_MONEY.has(e.type);
+  return true;
+}
+
 function pushFeed(e) {
-  const text = eventText(e);
+  const text = eventText(e); // 필터는 호출부에서 이미 걸렀다 (§23.19)
   if (!text) return;
   // 이름 등 사용자 유래 문자열이 섞이므로 innerHTML 금지 — DOM 노드로 조립
   const div = document.createElement('div');
@@ -2965,6 +3017,16 @@ function renderPanel() {
   $('action').textContent = `현재: ${actionKo(sim.state.action, '대기')} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
 }
 
+// §23.19 피드 필터 배선. 필터를 바꾸면 쌓인 줄을 지운다 — 섞여 있으면 무엇을 보고
+// 있는지 알 수 없다. 다음 배치부터 새 기준으로 채워진다.
+for (const b of document.querySelectorAll('#feed-filter button')) {
+  b.addEventListener('click', () => {
+    feedFilter = b.dataset.f;
+    for (const o of document.querySelectorAll('#feed-filter button')) o.classList.toggle('on', o === b);
+    $('feed').replaceChildren();
+  });
+}
+
 // §23.18 사람 목록·따라가기 배선
 $('people-btn').addEventListener('click', () => { $('people-modal').style.display = 'flex'; renderPeople(); });
 $('people-close').addEventListener('click', () => { $('people-modal').style.display = 'none'; });
@@ -3094,6 +3156,10 @@ async function showReport() {
 // ---- WebSocket ----
 let wsRef = null;
 const forcePausedStream = new URLSearchParams(location.search).get('stream') === 'paused'; // #143 진단 전용
+// #143의 짝 — 창이 숨어 있어도 스트림을 받게 한다. 임베디드 브라우저처럼 패널 자체가
+// 숨어 document.hidden이 늘 true인 환경에서 피드·필터를 실제로 검증하려면 필요하다.
+// ?stream=forced 로만 켜진다 (진단 전용).
+const forceLiveStream = new URLSearchParams(location.search).get('stream') === 'forced';
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -3103,7 +3169,7 @@ function connect() {
   // #143 숨은 탭에서는 서버 배치를 받지 않는다. 브라우저가 보이지 않는 동안 전체
   // sims JSON을 계속 파싱해 버리던 할당 폭주를 막고, 복귀 시 서버의 최신 snapshot
   // 하나로 회복한다. 시뮬레이션 자체와 다른 뷰어의 스트림은 계속 진행한다.
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'visibility', hidden: document.hidden || forcePausedStream }));
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'visibility', hidden: !forceLiveStream && (document.hidden || forcePausedStream) }));
 
   ws.onmessage = (raw) => {
     const msg = JSON.parse(raw.data);
@@ -3191,12 +3257,19 @@ function connect() {
           // 화면은 어차피 80줄만 보여준다. **한 배치에서 피드에 그리는 줄을 뒤에서 80개로
           // 자르고**, 숨은 탭에서는 연출(말풍선·이모트)을 건너뛴다 — 안 보이는 것에
           // 메모리를 쓰지 않는다. 상태 갱신은 그대로다.
+          //
+          // §23.19 **자르기는 거르기 다음에 온다.** 예전에는 배치의 마지막 80개만 피드에
+          // 넘겼는데, ×48에서는 한 배치가 수백 건이고 그중 생애 사건은 1%뿐이라
+          // (실측 4,305건 중 relationship_changed 42건) 필터를 켜면 화면이 **텅 비었다**.
+          // 먼저 거르고 나서 마지막 80개를 그린다 — DOM 상한은 그대로고, 희귀한 사건은
+          // 더 이상 흔한 사건에 밀려 잘리지 않는다.
           const evs = msg.events;
-          const feedFrom = Math.max(0, evs.length - 80);
+          const shown = [];
           for (let i = 0; i < evs.length; i++) {
-            if (i >= feedFrom) pushFeed(evs[i]);
+            if (feedPasses(evs[i])) shown.push(evs[i]);
             if (!document.hidden) handleVisualEvent(evs[i]);
           }
+          for (let i = Math.max(0, shown.length - 80); i < shown.length; i++) pushFeed(shown[i]);
         }
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
         let mapDirty = false;
@@ -3254,7 +3327,7 @@ connect();
 
 document.addEventListener('visibilitychange', () => {
   if (wsRef?.readyState === WebSocket.OPEN) {
-    wsRef.send(JSON.stringify({ type: 'visibility', hidden: document.hidden || forcePausedStream }));
+    wsRef.send(JSON.stringify({ type: 'visibility', hidden: !forceLiveStream && (document.hidden || forcePausedStream) }));
   }
 });
 
