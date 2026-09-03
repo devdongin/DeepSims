@@ -1004,12 +1004,17 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
     // §22.14 옆 사람과 말이 트였으면 헛걸음이 아니다
+    if (s.action !== 'idle') {
+      emit('action_completed', sim.id, {
+        action: s.action, facilityId: s.facilityId,
+        result: s.action === 'socialize' && s.pairedTicks === 0 && (s.sideTalkTicks ?? 0) === 0 ? 'lonely' : 'success',
+      });
+    }
     if (s.action === 'socialize' && s.pairedTicks === 0 && (s.sideTalkTicks ?? 0) === 0) {
       emit('lonely', sim.id, { facilityId: s.facilityId });
       applyMood(sim, L.mood.lonely);
       recordFact(sim, t, L, 'lonely', { placeId: s.facilityId, tags: ['socialize', `facility:${s.facilityId}`] });
     } else if (s.action !== 'idle') {
-      emit('action_completed', sim.id, { action: s.action, facilityId: s.facilityId });
       applyMood(sim, L.mood.actionCompleted);
       const kind = {
         eat: 'meal', work: 'work_done', socialize: 'small_talk', play: 'play_time',
