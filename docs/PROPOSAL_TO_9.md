@@ -1,6 +1,16 @@
-# 제안: 평가 평균 5.5 → 9.0 (Opus 구현용 로드맵) — v10, Codex 9차 조건부 GO의 조건 4개 반영
+# 제안: 평가 평균 5.5 → 9.0 (Opus 구현용 로드맵) — v11, Codex 10차 반영 + 범위 경계 확정
 
 **성격**: 제안서. 구현하지 않는다. 한 항목 = *파일·함수 / 완료 기준(숫자) / 테스트 / 점수*.
+
+**v11에서 바뀐 것** (Codex 10차 — 9차 "조건부 GO"에서 다시 NO-GO. 구체 계약 8건은 반영, 범위 확장 요구는 §9에서 경계를 긋는다):
+- `vacancy` **이벤트 계약**(§0.8 행 + `EVENT_TYPES` 끝 append — 저장 계층이 미등록 타입을 거부한다, `constants.js:44`), payload `{facilityId, occupation, before, after, simId, inputId: null}`.
+- **초대 경로 전체**: 현재 `invitedTo = {facilityId, untilTick}`는 §22.6 *동석 초대*(`society.js:1353`)이지 모임 초대가 아니다 → announce 토큰 생성 시
+  **`invite_to_party` 단계**(같은 §22.6 수락 해시, `invitedTo = {facilityId: token.placeId, untilTick: token.scheduledTick + 60, partyId: token.tokenId}`)
+  → `attend_party` → 집계 루프 `party_attended`. 동석 초대는 `partyId: null`.
+- **T0-4 원자성**: 스냅샷 직전 `engine.flushLive()`(`engine.js:147`)를 호출해 `pendingEvents`를 커밋한 뒤 같은 트랜잭션 범위에서 이벤트를 읽는다.
+- `world.goals[id].doneTick`으로 통일. 위기 창 = **일별 비중첩(day 경계)** 3일. `NAME_BEARING_EVENT_TYPES` 문서에 열거. reply payload =
+  `{speakerSeq, replySeq}`. BFS·공간 캐시에 `mapVersion` 무효화 + 도로·신축 후 해시 동일 테스트. 결과 카드는 **DB 이벤트에서 재구성**
+  (`GET /api/inputs/:uuid/events`). T3-3a = 30분 실행 후 **마지막** 1,000프레임.
 
 **v10에서 바뀐 것** (Codex 9차 **조건부 GO** — 남은 조건 4개 + 측정 보강 7건):
 - **T1-0 굶주림 지표를 상태 기반으로**: `starving`은 *진입 전이* 이벤트라 자주 먹을수록 더 찍힌다(`tick.js:1051-1056` 주석이 이미 그렇게 말한다).
@@ -138,7 +148,7 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 싣는다(화자·청자·제3자·사망자 포함), ② `world.nameRegistry`(append-only, 사망해도 삭제 안 함)를 두고 직렬화·스냅샷·해시·
 마이그레이션에 포함 — 부재중 리포트와 과거 이벤트 렌더는 여기서 읽는다, ③ `create_player`는 클라 `surname`을 **무시**하고
 서버 결정 성만 저장(사용자 지시 유지).
-**우선순위 고정**: 렌더는 `payload.names` → `world.nameRegistry[simId]` → (둘 다 없으면, 프루닝된 구이벤트 등) **`#simId` 고정 표기** 순이다. 구형 top-level `name`은 **읽지 않는다**(§0.10과 동일 규칙). 이름을 싣는 타입은 `NAME_BEARING_EVENT_TYPES`로 코드에서 열거(`player_created`·`died`·`married`·`child_born`·`immigrated`·`job_changed`·`conversation`·`elected`… 구현 시 전수 확정).
+**우선순위 고정**: 렌더는 `payload.names` → `world.nameRegistry[simId]` → (둘 다 없으면, 프루닝된 구이벤트 등) **`#simId` 고정 표기** 순이다. 구형 top-level `name`은 **읽지 않는다**(§0.10과 동일 규칙). 이름을 싣는 타입은 `NAME_BEARING_EVENT_TYPES`로 코드에서 열거— 현재 `EVENT_TYPES`에서 이름을 싣거나 이름으로 렌더되는 타입 열거: `argument·money_shared·job_changed·died·bereaved·grew_up·invited·player_created·conversation·greeting·immigrated·married·child_settled` (구현 시 이 목록을 코드 상수로 옮기고 totality 테스트가 목록 == 렌더에서 이름을 쓰는 타입임을 검사).
 - 완료: `NAME_BEARING_EVENT_TYPES` 전부에서 C-2 이후 발생 이벤트 `names` 누락 0, 구이벤트는 registry 조회 또는 `#simId` 표기(미정의 표기 0), 사망·리싱크 후 같은 이벤트 문자열 해시 100/100 동일, **과거 DB
   이벤트 100건 재생 문자열 동일**, 악의적 `surname` 주입 시 무시 10/10.
 
@@ -164,6 +174,8 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 | `party_attended` | EVENT | **행동 완료가 아니라** `expireAndMeasureTokens` 집계 루프에서, scheduledTick에 그 장소에서 performing 중인 심마다 emit(§0.7 C-3) | — | — | — | payload `{partyId, simId, role}`; 행동을 골랐어도 도착 못 하면 참석 아님 |
 | `side_job` | ACTION | 민간 서비스 직, `wageShortfallDays ≥ 3`, **매출 > 0인 다른 민간 시설**에 근무 슬롯 있음 | 기존 `work.duration` | 기존 `work` 식 | 소비 0 | 소득은 기존 `money_changed` |
 | `job_changed` | EVENT | 기존 §21.3 전직 경로 재사용 | — | — | — | 기존 |
+| `vacancy` | EVENT | `job_changed`로 원 시설 근무 슬롯이 비는 순간 emit | — | — | — | **`EVENT_TYPES` 끝에 append**(저장 계층이 미등록 타입 거부, `constants.js:44`); payload `{facilityId, occupation, before, after, simId, inputId: null}`(자동 원인) |
+| `invite_to_party` | (단계, 행동 아님) | announce 토큰 생성 tick에 §22.6 수락 해시(`pairHash(host, target, day, 83)`)로 후보 N명 판정 | — | — | 소비 0 (pairHash) | 수락 시 `invitedTo = {facilityId: token.placeId, untilTick: token.scheduledTick + 60, partyId: token.tokenId}`; 동석 초대(§22.6 기존)는 `partyId: null` 유지 |
 
 - 완료(계약 자체): `ACTIONS`·`EVENT_TYPES` 기존 원소 인덱스 불변 테스트, 신규 필드 마이그레이션 왕복(`deserialize(serialize(w))` 고정점),
   해시·리플레이 동일, `makeSim` 키 집합 4경로 동일(QA 기존 테스트 확장).
@@ -181,7 +193,8 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 | `world.pairTopicSeq` | world | `{}` (`{"a>b:topic:variant": int}` + `"…:reply"`) | T2-3B | variant = `memory_share` kind / `gossip` tier·sentiment / 그 외 `''`; speaker·reply 카운터 분리; emit **직전** +1 |
 | `token.hostId` | world.tokens[] | `null` | C-3 | `tokenId`는 기존 필드 그대로 partyId로 사용; 구세이브 토큰은 `null` |
 | `world.nameRegistry` | world | `{}` (`{[simId]: {given, surname}}`) | C-2 | append-only; 생성(`player_created`·출생) 시 기록, 사망해도 유지. **구세이브 백필**: 마이그레이션이 현재 `sims` 전원 + DB 이벤트 중 이름 필드를 가진 `player_created`·`died` payload에서 채움. 클라 표기 = `payload.names?.[simId] ?? nameRegistry[simId]`(top-level 이름 fallback은 **폐기**) |
-| `sim.invitedTo.partyId` | sim | `null` | C-3 | 기존 `{facilityId, untilTick}` 확장 |
+| `sim.invitedTo.partyId` | sim | `null` | C-3 | 기존 `{facilityId, untilTick}` 확장; 동석 초대는 `null`, 모임 초대는 `token.tokenId` |
+| `world.map.version` | world.map | `0` | G1-3 | 도로 형성·신축·철거·공공사업마다 +1; BFS·공간 캐시 키 |
 | `sim.wageShortfallDays` | sim | `0` | T2-2 | **민간 서비스 직만**(`L.economy.privateWageOccupations`); 그날 `wage_shortfall`(source: facility) 있으면 +1, 전액 지급된 날 0, 전직 시 0 |
 | `sim.state.inputId` | sim.state | `null` | C-1 | `emptyState()`에 추가 |
 | `zoneOrders[].inputId` | world | `null` | C-1 | `applyZone`에서 설정 |
@@ -247,7 +260,7 @@ construct 575쌍의 시작→완료 차이 **최소 60·중앙 60·같은 틱 0*
 **해시 정의**: 이벤트 하나 = canonical JSON `{tick, ordinal, type, simId, payload}`(키 정렬, 공백 없음, UTF-8) — **payload까지 보존**한다;
 멀티셋 해시 = 각 이벤트 SHA-256을 `(tick, ordinal)` 순으로 이어 붙인 SHA-256. 스냅샷에 포함하는 최근 이벤트 = **`[worldTick−59, worldTick]`**
 (N = 60틱). 사건 allowlist = T1-2의 allowlist와 동일 목록. fixture ≥ 500 이벤트(루틴·비루틴 혼합, 창 경계 걸침 포함).
-**리싱크 커서 프로토콜**(현재 스냅샷엔 이벤트가 없고 `seq`만 있다, `server/index.js:243-275`): 메시지 필드 추가 —
+**리싱크 커서 프로토콜**(현재 스냅샷엔 이벤트가 없고 `seq`만 있다, `server/index.js:243-275`; 미커밋 이벤트는 `engine.pendingEvents`에 최대 30틱 머문다, `engine.js:39,138`): 스냅샷 직전 **`engine.flushLive()` 호출 → 같은 동기 구간에서 DB 이벤트 읽기 → 스냅샷 전송**(Node 단일 스레드 + better-sqlite3 동기라 그 사이 틱이 끼지 않는다). 메시지 필드 추가 —
 snapshot: `events: [{tick, ordinal, type, simId, payload}]`(범위 `[worldTick−59, worldTick]`), `cursor: {tick, ordinal}`(포함된 마지막 이벤트,
 없으면 `{tick: worldTick, ordinal: -1}`); tickBatch: `prevCursor`(이 배치 직전 커서), `cursor`(이 배치 마지막). 클라: 피드는 `Map` 키
 `` `${tick}:${ordinal}` ``, 스냅샷 이벤트와 기존 피드는 **키 합집합**, 같은 키에 내용이 다르면 **스냅샷 값으로 교체하고 `console.error`**(테스트에선
@@ -301,6 +314,7 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 행동 시작당 1회 BFS. 제안: 후보 스캔 공간 인덱스/근접 캐시, 맵 불변 구간 BFS 결과 캐시. **캐시는 같은 입력에 같은 출력만**(결정성).
 **workload 재정의**(Codex 지적): 현재 `bench/popscale.js`는 얕은 합성 인구·best-of-2라 실제 세계를 대표하지 않는다. fixture는 **실제
 138~200명 세계의 스냅샷**(라이브 DB 복사, 기억·관계·프로젝트·상호작용 포함)으로 고정하고, best-of를 폐기해 **5회 중 최악값**을 쓴다.
+- **캐시 무효화 계약**: BFS·공간 인덱스 캐시는 `world.map.version`(정수, 도로 형성·시설 신축·철거·공공사업마다 +1; §0.10 표에 추가, 초기 0)을 키로 하고 버전이 다르면 폐기. 테스트: 캐시 on/off 리플레이 해시 동일(도로 형성·신축·공공사업 각 1회 포함), 적중/미적중 카운터 기록.
 - 완료: fixture = **커밋된 파일 `test/fixtures/perf-pop200.json`**(헤드리스 seed 실행으로 1회 생성: `{seed, worldTick, population: 200, sha256, manifest: {memories, relations, projects, facilities, interactionsLastDay}}`를
   파일 헤더와 이 문서에 기록(manifest가 실제 workload임을 보인다 — 라이브 인구 200 시점 관측치와 ±20% 이내); 재생성은 커밋 메시지에 사유 명시) — 라이브 DB 의존 없음; Node 버전·CPU 유휴 상태 기록,
   워밍업 1일·측정 3일, **5회 최악 ≥ 2,000 tick/s(10배)**, 해시·리플레이 동일. 통과 시 성능 8.5 인정. **20,000 tick/s는 조건부 목표**다 — 인구 10의
@@ -321,7 +335,7 @@ base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효�
 
 ## 3. Tier 1: 게임이 되게 하기
 
-**T1-0 핵심 루프 (게이트) — 선행: G1-0(C-1), 그리고 T1-4(목표 트리)가 먼저다.** 루프: 행동(정책·건설·심 지시, 각각 `clientInputId`) →
+**T1-0 핵심 루프 (게이트) — 선행: G1-0(C-1), 그리고 T1-4(목표 트리)가 먼저다.** **카드 영속성**: 카드는 클라 메모리가 아니라 **DB 이벤트에서 재구성**한다 — `GET /api/inputs/:uuid/events`(그 UUID를 `payload.inputId`로 가진 이벤트 전부 + 관찰창 통계), 재접속 시 최근 입력 10건의 카드를 이 API로 복원(테스트: 재접속 후 카드 문자열 동일 10/10). 루프: 행동(정책·건설·심 지시, 각각 `clientInputId`) →
 접수 응답 `{targetTick, sequence}` → **`inputId`를 실은 첫 이벤트**로 `applyTick=(tick, ordinal)` 확정 → 결과 카드 → 다음 목표(T1-4 노드).
 **인과 판정 규칙**: 카드의 관찰창은 **`[applyTick, applyTick + 4320]`**, 내용은 창 시작 값 vs 창 끝 값의 **전후 비교**다. 카드는 인과를
 증명한다고 주장하지 않는다(§0.1 — "이 행동 덕분"이 아니라 "이 행동 이후 3일간"). 같은 창 안에 다른 플레이어 입력이 있으면 카드에
@@ -329,10 +343,10 @@ base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효�
 - 성공: 목표 트리 노드 달성(T1-4) → 카드(입력 ID·적용 tick·실측값 표기) + 다음 노드.
 - 실패(위기): 국고가 **3일(4320틱) 연속 음수** 또는 **굶주림: 3일 창에서 전 심 `Σ hungerZeroTicks` 증가분 ≥ 1440**(= 심 1명이 하루 종일 굶은 양; `starving` 건수는 진입 전이라 지표로 쓰지 않는다 — `tick.js:1051` 주석) → `world.crisis = {kind, since}` + "위기" 카드 +
   회복 행동 3개 — **전부 기존 명령**: `policy`(세율↑), `policy`(복지 기준↓), `zone`(주거 지시). "건설 취소"는 명령이 없으므로 쓰지 않는다.
-  관찰 구간 = 위기 진입 tick부터; 해제 = 국고 ≥ 0 **3일 연속** 또는 3일 창 `Σ hungerZeroTicks` 증가분 < 1440 **3일 연속**. fixture: 국고 음수 5/5 **+ 굶주림(식료품 공급 0) 5/5**, 각각 진입·해제 tick 결정적.
+  관찰 구간 = 위기 진입 tick부터; 창은 **day 경계 비중첩**(§22 `day` 단위, 슬라이딩 아님); 해제 = 국고 ≥ 0 **비중첩 3일 연속** 또는 일별 `Σ hungerZeroTicks` 증가분 < 480 **3일 연속**. fixture: 국고 음수 5/5 **+ 굶주림(식료품 공급 0) 5/5**, 각각 진입·해제 tick 결정적.
 - 단순 지표 상승은 성공으로 인정하지 않는다 — 카드는 반드시 입력 ID를 참조한다(§0.1).
 **상태 전이**(§0.1 "행동 추가" — 카드만 붙이면 루프처럼 보이는 UI다): 성공 = 목표 노드의 달성 이벤트(`city_promoted`·`station_unlocked`·
-`facility_built`)가 실제로 발생 → `world.goals[node].done = tick` 기록 + 다음 노드 활성(보상은 곧 언락이다 — 이미 있는 §18 승급 언락을
+`facility_built`)가 실제로 발생 → `world.goals[node].doneTick = tick` 기록 + 다음 노드 활성(보상은 곧 언락이다 — 이미 있는 §18 승급 언락을
 그대로 쓴다). 실패 = 위기 조건 충족 → `world.crisis = {kind, since}` → 회복 행동 3개 제시 → 회복 이벤트(국고 ≥ 0 3일 유지 등)로 해제.
 - 완료: 고정 시나리오 3개(`assign`·`policy`·`zone`) × **seed 5개**에서 입력 ID·적용 tick·ordinal·결과 카드 **1:1**(15/15); 성공 fixture
   (인구 25 도달 → 읍 승급 → 카드 → 다음 노드 활성) 5/5, 실패 fixture(국고 3일 음수 → 위기 → 회복 행동 → 해제) 5/5; 30분 플레이에서
@@ -406,7 +420,7 @@ base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효�
 - **중복 기준 정정**: 발화 간격이 15틱(`sim/logic.js` `conversation.lineInterval`)이라 6시간 = 24회이고 표는 3~7줄이다 — "6시간 내
   재사용 0"은 **불가능**하다. 기준: **같은 쌍·같은 주제에서 테이블 길이 L 내 최초 L회는 중복 0**(B는 `pairSeq mod L` 라운드로빈으로
   보장, A는 통계적 감소만 — A의 완료 기준은 "연속 2회 동일 문장 ≤ 5%").
-- **채택: B**(A는 B 전 임시 폴백). `pairTopicSeq` 키 `"speakerId>listenerId:topic:variant"`(variant = `memory_share` kind / `gossip` tier·sentiment / 그 외 `''`), reply는 `"…:reply"` 별도 카운터, 초기 0, **conversation 이벤트 emit 직전 +1**, payload에 `pairTopicSeq` 실음, 클라 인덱스 = `pairTopicSeq mod L`(L = 그 주제·kind 표 길이, 표 길이는 배열 추가로만 늘어남 §22.12). A의 reply 규칙: 같은 해시에 salt `|reply`. **표본**(A 검사용): 라이브 DB 같은 쌍 연속 대화 1,000쌍, 분모 = 쌍 수, "연속 동일" = 직전 발화와 문자열 동일.
+- **채택: B**(A는 B 전 임시 폴백). `pairTopicSeq` 키 `"speakerId>listenerId:topic:variant"`(variant = `memory_share` kind / `gossip` tier·sentiment / 그 외 `''`), reply는 `"…:reply"` 별도 카운터, 초기 0, **conversation 이벤트 emit 직전 +1**, payload에 **`{speakerSeq, replySeq}`** 실음(`conversation` payload 확장, 둘 다 정수), 클라 인덱스 = `speakerSeq mod L_speaker`, 응답 = `replySeq mod L_reply`(현재 `replyLine()`은 `t`로 고른다, `main.js:1339` → 교체); variant별 표본 = 라이브 DB에서 variant마다 ≥ 200쌍(L = 그 주제·kind 표 길이, 표 길이는 배열 추가로만 늘어남 §22.12). A의 reply 규칙: 같은 해시에 salt `|reply`. **표본**(A 검사용): 라이브 DB 같은 쌍 연속 대화 1,000쌍, 분모 = 쌍 수, "연속 동일" = 직전 발화와 문자열 동일.
 - 완료: 동일 이벤트 100건을 재접속·리싱크·재생성에서 비교해 문자열 해시 100/100 동일; B는 L회 내 중복 0, A는 연속 동일 ≤ 5%(1,000쌍).
 
 **T2-4 모임 0명 — 초대 이행 *행동* 추가 (튜닝 금지)** — 가설: 초대 이행(§22.6)이 construct 고정 급함(`logic.js:85`)에 밀림.
@@ -426,7 +440,7 @@ enum 순서가 바뀌지 않았음을 테스트로 고정**한다(§21.3의 appe
 **T3-3a 성능(렌더·전송) — §22.10 나머지 병목** — #3 타일 1칸 변경이 전면 재빌드(2,218 스프라이트 + 61 Text/6초) → 증분 갱신,
 #4 스냅샷 map 542KB(12값을 2.0B) → 팔레트 인코딩, #5 스프라이트 70.5MB → 아틀라스 다운스케일, Text 재생성(261/4초) → 캐시,
 resync 0.85MB/4~5초 → 증분.
-- 완료(측정 명세 고정): 하드웨어(이 Mac, 12코어)·브라우저(내장 Chromium, GPU 가속 on)·**DPR 2**·인구 100·뷰포트 1440×900·**워밍업 5분**·
+- 완료(측정 명세 고정): 하드웨어(이 Mac, 12코어)·브라우저(내장 Chromium, GPU 가속 on)·**DPR 2**·인구 100·뷰포트 1440×900·**워밍업 5분**·30분 실행 후 **마지막** 1,000프레임·
   **rAF 매 프레임 샘플링**(간헐 샘플 금지), 30분/1,000프레임 p95 < 16.7ms, heap **벽시계 24시간** 증가 < 1MB(**측정 직전 수동 GC 후**
   DevTools 힙 스냅샷, 시작·종료 2회 차), uncaught 0. (#3·#4·Text·resync는 G1-4로 이동, 여기는 #5 스프라이트 + 소크.)
 
@@ -627,3 +641,31 @@ T0-4b 삭제(오진 확인) · T1-0 신설 · T2-3 로컬 캐시 폐기 · rende
 | G2-1 위치 | G2-0 → G2-1 → T2-4 |
 | T0-3 폭, T0-9 kind별, G1-3 manifest, T2-2 통제군, T3-1 fixture | 반영 |
 | 20k tick/s 전 성능 9 주장 불가 | 유지(조건부) |
+
+## 9. 범위 경계 (Codex 10차의 확장 요구에 대한 답)
+
+10차 리뷰는 PLAN §0.2의 프로젝트 대목표(폐쇄경제 지표 G1·인구 200 soak·다중 정착지 G3·가구 구조 G4)와 20,000 tick/s 근거를 이 제안서의
+완료 게이트에 넣으라고 했다. **넣지 않는다.** 이유:
+- 이 문서의 목적은 "5인 테스터 평가 평균 5.5 → 9"이지 PLAN 대목표 달성이 아니다. G3·G4는 평가표 8항목 어디에도 점수로 걸리지 않고,
+  3차 플레이테스트의 감점 사유에도 없다. 게이트에 넣으면 9점과 무관한 일이 9점의 조건이 된다.
+- G1 폐쇄경제 지표는 이미 §22.4·§22.22·§22.23으로 진행 중인 별도 트랙이고 그 계약(§0.1)은 본 제안이 존중하도록 §0.7·§0.8에 박아 두었다.
+- 20k tick/s는 v8부터 **조건부 목표**로 명시했고 "통과 전 성능 9 주장 불가"는 이미 문서의 입장이다. 근거를 더 요구하는 것은 계측 후에나 답할 수
+  있는 일이며, 계측은 구현 단계(G1-3)의 산출물이다.
+따라서 최종 판정은 사용자 몫이다: Codex는 9차에서 조건부 GO, 10차에서 새 항목을 더해 NO-GO를 냈고, 10회에 걸쳐 남은 지적은 구현 계약의
+세부(이 버전에서 8건 반영)와 범위 확장뿐이다. 남은 검토는 구현하는 Opus가 코드와 함께 하는 편이 정확하다.
+
+## 부록 J. Codex 10차 리뷰 반영
+
+| 지적 | 반영 |
+|---|---|
+| `vacancy`가 `EVENT_TYPES`·§0.8에 없음 | 행 추가, append 규약, payload 명시 |
+| announce → `invitedTo.partyId` 경로 없음(현재 초대는 동석 초대) | `invite_to_party` 단계 정의, 동석 초대는 `partyId: null` |
+| 스냅샷이 `pendingEvents` 미포함 | 스냅샷 직전 `flushLive()` + 동기 구간 읽기 |
+| `done` vs `doneTick` | `doneTick` 통일 |
+| 3일 창 정의 | day 경계 비중첩 |
+| `NAME_BEARING_EVENT_TYPES` 미열거 | 문서에 열거 |
+| reply payload 미정, `replyLine()`이 `t` 사용 | `{speakerSeq, replySeq}`, variant별 표본 ≥ 200 |
+| BFS·공간 캐시 무효화 없음 | `world.map.version` + 캐시 on/off 해시 동일 |
+| 결과 카드 영속성 없음 | `GET /api/inputs/:uuid/events`로 재구성 |
+| T3-3a 창 모호 | 30분 후 마지막 1,000프레임 |
+| G1~G4 대목표·20k 근거를 게이트로 | **§9: 범위 밖** |
