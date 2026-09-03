@@ -2916,6 +2916,88 @@ function renderDayCard() {
   box.style.display = 'block';
 }
 
+// §23.23 마을의 목표. 이 게임에는 **방향이 없었다** — 잘 굴러가는지, 무엇을 더 해야
+// 하는지 화면이 말해 주지 않으니 오래 볼 이유가 생기지 않는다. 목표는 규칙이 아니라
+// **읽는 방법**이다: 세계에 아무것도 강제하지 않고, 이미 일어난 일을 척도로 접는다.
+// 그래서 전부 world 하나에서 계산된다 — 서버도, 저장도, 시뮬레이션 변경도 없다.
+const GOALS = [
+  { g: '사람', k: 'pop50', t: '마을이 되다', d: '주민 50명', max: 50, v: (w) => w.sims.length },
+  { g: '사람', k: 'pop100', t: '읍이 되다', d: '주민 100명', max: 100, v: (w) => w.sims.length },
+  { g: '사람', k: 'pop200', t: '도시가 되다', d: '주민 200명', max: 200, v: (w) => w.sims.length },
+  { g: '사람', k: 'couples', t: '짝을 찾다', d: '커플 20쌍', max: 20,
+    v: (w) => Object.keys(w.partners ?? {}).length / 2 },
+  { g: '사람', k: 'genius', t: '남다른 아이', d: '천재가 태어난다', max: 1,
+    v: (w) => w.sims.some((s) => s.isGenius) ? 1 : 0 },
+  { g: '사람', k: 'elder', t: '오래 살다', d: '여든을 넘긴 주민', max: 1,
+    v: (w) => w.sims.some((s) => (s.traits?.age ?? 0) >= 80) ? 1 : 0 },
+
+  { g: '살림', k: 'treasury', t: '곳간을 채우다', d: '국고 100만 원', max: 1000000, v: (w) => w.treasury },
+  { g: '살림', k: 'solvent', t: '빚 없는 마을', d: '국고가 흑자다', max: 1, v: (w) => w.treasury > 0 ? 1 : 0 },
+  { g: '살림', k: 'rich', t: '넉넉한 살림', d: '평균 소지금 3,000원', max: 3000,
+    v: (w) => w.sims.length ? Math.round(w.sims.reduce((a, s) => a + (s.money ?? 0), 0) / w.sims.length) : 0 },
+  { g: '살림', k: 'employed', t: '일자리가 있다', d: '고용률 70%', max: 70,
+    v: (w) => { const adults = w.sims.filter((s) => !['child', 'student', 'retired'].includes(s.traits?.occupation)); 
+      return adults.length ? Math.round(100 * adults.filter((s) => s.traits.occupation !== 'jobless').length / adults.length) : 0; } },
+
+  { g: '도시', k: 'facTypes', t: '없는 게 없다', d: '시설 종류 12가지', max: 12,
+    v: (w) => new Set(w.map.facilities.map((f) => f.type)).size },
+  { g: '도시', k: 'beds', t: '누울 자리', d: '침대가 인구보다 많다', max: 1,
+    v: (w) => { const beds = w.map.facilities.filter((f) => f.type === 'house' || f.type === 'apartment')
+      .reduce((n, f) => n + f.resources.length, 0); return beds > w.sims.length ? 1 : 0; } },
+  { g: '도시', k: 'rep', t: '소문난 마을', d: '평판 500', max: 500, v: (w) => w.reputation ?? 0 },
+  { g: '도시', k: 'tier', t: '승격', d: '도시 등급 3', max: 3, v: (w) => w.cityTier ?? 0 },
+  { g: '도시', k: 'industry', t: '산업이 서다', d: '산업 3종 해금', max: 3,
+    v: (w) => (w.unlockedIndustries ?? []).length },
+
+  { g: '삶', k: 'healthy', t: '건강한 마을', d: '아픈 사람이 열 명 미만', max: 1,
+    v: (w) => w.sims.filter((s) => s.sick).length < 10 ? 1 : 0 },
+  { g: '삶', k: 'happy', t: '살 만하다', d: '평균 기분이 양수인 주민 70%', max: 70,
+    v: (w) => w.sims.length ? Math.round(100 * w.sims.filter((s) => (s.mood ?? 0) > 0).length / w.sims.length) : 0 },
+  { g: '삶', k: 'cars', t: '길이 붐빈다', d: '자가용 20대', max: 20, v: (w) => w.sims.filter((s) => s.hasCar).length },
+];
+
+function renderGoals() {
+  const box = $('goals-list');
+  if (!box || !world) return;
+  box.replaceChildren();
+  let done = 0;
+  let lastGroup = null;
+  for (const g of GOALS) {
+    let v = 0;
+    try { v = g.v(world) ?? 0; } catch { v = 0; }
+    const pct = Math.max(0, Math.min(100, Math.round(100 * v / g.max)));
+    if (pct >= 100) done++;
+    if (g.g !== lastGroup) {
+      const h = document.createElement('h3');
+      h.textContent = g.g;
+      box.append(h); lastGroup = g.g;
+    }
+    const row = document.createElement('div');
+    row.className = 'g' + (pct >= 100 ? ' done' : '');
+    const head = document.createElement('div');
+    head.className = 'gh';
+    const nm = document.createElement('span');
+    nm.textContent = (pct >= 100 ? '✅ ' : '') + g.t;
+    const val = document.createElement('span');
+    val.className = 'v';
+    val.textContent = g.max === 1 ? (pct >= 100 ? '달성' : '아직')
+      : `${Math.round(v).toLocaleString()} / ${g.max.toLocaleString()}`;
+    head.append(nm, val);
+    const desc = document.createElement('div');
+    desc.className = 'gd';
+    desc.textContent = g.d;
+    const track = document.createElement('div');
+    track.className = 'gt';
+    const fill = document.createElement('div');
+    fill.className = 'gf';
+    fill.style.width = `${pct}%`;
+    track.append(fill);
+    row.append(head, desc, track);
+    box.append(row);
+  }
+  $('goals-count').textContent = `— ${done} / ${GOALS.length} 달성`;
+}
+
 // §23.21 미니맵. 맵은 512×512이고 화면에는 그중 30칸 남짓이 보인다 — 카메라를 끌다 보면
 // **내가 어디 있는지, 마을이 어디였는지** 알 방법이 없었다. 따라가기를 넣고 나니 더 그랬다.
 //
@@ -3158,6 +3240,10 @@ for (const b of document.querySelectorAll('#feed-filter button')) {
     $('feed').replaceChildren();
   });
 }
+
+// §23.23 목표 배선
+$('goals-btn').addEventListener('click', () => { $('goals-modal').style.display = 'flex'; renderGoals(); });
+$('goals-close').addEventListener('click', () => { $('goals-modal').style.display = 'none'; });
 
 // §23.21 미니맵 클릭 = 그 자리로 간다. 따라가는 중이었다면 손이 이겼으니 따라가기는 끈다.
 $('minimap').addEventListener('click', (ev) => {

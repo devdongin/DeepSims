@@ -363,6 +363,10 @@ function sendSnapshot(ws) {
     centers: engine.world.centers,
     plannedCenterCost: engine.world.logic.zone.plannedCenterCost,
     cityTier: engine.world.cityTier,
+    // §23.23 목표 화면이 지금 값을 읽어야 한다. 평판은 statsHistory에 하루 단위로만 있어
+    // "지금 얼마인가"를 물으면 어제 값이 나온다 — 실측에서 목표가 0/500으로 보였다.
+    reputation: engine.world.reputation,
+    unlockedIndustries: engine.world.unlockedIndustries,
     statsHistory: engine.world.statsHistory,
     transportStats: { today: engine.world.transportStats.today, history: engine.world.transportStats.history },
     storyteller: engine.world.storyteller,
