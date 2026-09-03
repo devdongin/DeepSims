@@ -35,12 +35,12 @@ import { collectCandidates } from '../sim/tick.js';
 //     갈리지 않아 candidates·choices·events는 그대로이고 world 해시만 움직였다.
 //   §23.25  (기분 바닥선) : 인구 200에서는 240틱 안에도 선택이 갈린다 — 바닥선이 높으면
 //     mood < 0 조건의 play·socialize 보정이 덜 걸리기 때문이다. 10·50은 world만 움직인다.
-//   #32 개척/행정 저장은 mood.baseline 위에 schema72/logic72로 통합했다. main 대비
+//   #32 개척/행정 저장은 mood.baseline 위에 schema72/logic73로 통합했다. main 대비
 //     후보·선택·이벤트는 동일하며 개척 관측/저장 필드 때문에 world 해시만 갱신한다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', 'ddff0557', '78576d83']],
-  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '64510cd3']],
-  [200, ['5dad1750', '0928031a', 'e157d46b', '77c2f87e']],
+  [10, ['0ab9198a', '32b2391b', 'ddff0557', '8964dd76']],
+  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', 'be8f7894']],
+  [200, ['5dad1750', '0928031a', 'e157d46b', '2e3fc677']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

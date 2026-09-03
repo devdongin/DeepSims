@@ -20,6 +20,8 @@ import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExpos
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
 import { syncResidenceVillage } from './villages.js';
 import { allocateMunicipalLand } from './municipal-land.js';
+import { repairCenterPlots, campusSiteReserved } from './center-plots.js';
+import { projectMunicipality, municipalProjectLimit, planMunicipalConstruction } from './municipal-construction.js';
 import { governmentFor, governmentViews, governmentEmitter, changeReputation,
   reputationVillage, recordMunicipalStats, publicBalance } from './government.js';
 import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
@@ -833,6 +835,7 @@ function applyZone(world, inp, t, emit) {
   else if (!ZONEABLE.includes(p.type)) reason = 'bad_type'; // 언락됐지만 레시피 미구현(T3 대기)
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
   else if (foundingSiteReserved(world,plot,p.type,p.dir)) reason='site_reserved';
+  else if (campusSiteReserved(world,plot,p.type,p.dir)) reason='site_reserved';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionTiles = () => { const fp = zoneFootprint(p.type, p.dir); let n = 0;
     for (let y = plot.y; y < plot.y + fp.h; y++) for (let x = plot.x; x < plot.x + fp.w; x++) {
@@ -1628,8 +1631,15 @@ export function tick(world, inputsForThisTick = []) {
     // §19.3: 계획 단계 시작 시 슬롯 수를 한 번 계산 (틱 중 국고 변동에 흔들리지 않게 — 66차 ②)
     const maxProjects = Math.max(1, Math.min(L.growth.maxProjectSlots,
       1 + floorDiv(world.treasury, L.growth.slotPerTreasury)));
-    while (world.projects.length < maxProjects && world.zoneOrders.length > 0) {
-      const order = world.zoneOrders[0];
+    const municipal=world.villages.length>1;
+    const limits=new Map(world.villages.map(v=>[v.id,municipalProjectLimit(world,v.id)]));
+    while (world.zoneOrders.length > 0) {
+      const index=municipal?world.zoneOrders.findIndex(o=>{
+        const id=projectMunicipality(world,o);
+        return world.projects.filter(p=>projectMunicipality(world,p)===id).length<limits.get(id);
+      }):world.projects.length<maxProjects?0:-1;
+      if(index<0)break;
+      const order = world.zoneOrders[index];
       const plot = world.plots.find((p) => p.plotId === order.plotId);
       const fp2 = plot ? zoneFootprint(order.type, order.dir) : null;
       if (!plot || plot.used || !plotBuildable(world.map, plot, fp2.w, fp2.h)
@@ -1637,14 +1647,14 @@ export function tick(world, inputsForThisTick = []) {
         if(order.foundingPetitionId!==undefined){
           if(cancelFoundingConstruction(world,order.foundingPetitionId,'stale_order',t,emit))continue;
         }
-        world.zoneOrders.shift();
+        world.zoneOrders.splice(index,1);
         emit('input_rejected', null, { command: 'zone', reason: 'stale_order', plotId: order.plotId });
         continue;
       }
-      world.zoneOrders.shift();
+      world.zoneOrders.splice(index,1);
       // §22.23 공기 차등 — 타입별 노동량. 시장 행정력 할인은 그대로 곱한다.
       const base4 = L.construct.requiredByType?.[order.type] ?? L.construct.laborRequired;
-      const required = governmentFor(world,plot.villageId).mayorId !== null
+      const required = governmentFor(world,projectMunicipality(world,order)).mayorId !== null
         ? floorDiv(base4 * L.election.mayorLaborPct, 100)
         : base4;
       world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true,
@@ -1653,12 +1663,15 @@ export function tick(world, inputsForThisTick = []) {
     }
     if (world.lastPlanDay !== day) {
       world.lastPlanDay = day;
+      repairCenterPlots(world, emit);
+      if(municipal)planMunicipalConstruction(world,t,limits,emit);
+      else {
       // §19.3 (67차 ①): 슬롯이 찰 때까지 수요를 재평가하며 반복 착공
       while (world.projects.length < maxProjects) {
       // §19.3: 이미 착공 중인 공터는 제외 (중복 배정 금지)
       const busy = new Set(world.projects.map((p) => p.plotId));
       const candidates = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)
-        &&!foundingSiteReserved(world,p,'office')); // 기본 후보 footprint 7×5
+        &&!foundingSiteReserved(world,p,'office')&&!campusSiteReserved(world,p,'office')); // 기본 후보 footprint 7×5
       const centers = [
         ...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)),
         ...(world.centers ?? []),
@@ -1699,12 +1712,17 @@ export function tick(world, inputsForThisTick = []) {
           }
         }
         // §17.21 일자리 수요: office 근무 직업 심 수 vs 책상 슬롯 합
-        const officeWorkers = world.sims.filter((s2) => L.workplace[s2.traits.occupation] === 'office'
+        const officeWorkers = world.sims.filter((s2) => canWork(s2) && L.workplace[s2.traits.occupation] === 'office'
           && L.occupations[s2.traits.occupation].wagePct > 0).length;
         const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
           .reduce((n, f) => n + f.resources.length, 0);
         let type = neededSchool(world);
         if (type === 'university' && !candidates.some(p => zoneAllowedTypes(world,p.villageId).includes(type))) type = null;
+        if (type === 'university' && !candidates.some(p => {
+          const fp=zoneFootprint(type,0);
+          return plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type)
+            &&!campusSiteReserved(world,p,type);
+        })) type=null; // An unavailable campus site must not block urgent housing.
         if (!type) type = neededIndustryFacility(world);
         if (!type && pop + separated + observedHeadroom > beds) {
           // 읍 이상에서는 같은 공터로 더 많은 침대를 제공하는 아파트를 우선한다.
@@ -1718,7 +1736,8 @@ export function tick(world, inputsForThisTick = []) {
         if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
           const fp=zoneFootprint(type,0);
           freePlot=candidates.find(p=>zoneAllowedTypes(world,p.villageId).includes(type)
-            &&plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type));
+            &&plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type)
+            &&!campusSiteReserved(world,p,type));
           if(!freePlot) break;
           const cost=L.zone.costs[type];
           const government=governmentFor(world,freePlot.villageId);
@@ -1726,6 +1745,7 @@ export function tick(world, inputsForThisTick = []) {
           government.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
           if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:government.treasury});
         }
+        if (campusSiteReserved(world,freePlot,type)) break;
         {
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
           const base5 = L.construct.requiredByType?.[type] ?? L.construct.laborRequired;
@@ -1737,6 +1757,7 @@ export function tick(world, inputsForThisTick = []) {
         }
       }
       } // while 슬롯
+      }
     }
   }
 

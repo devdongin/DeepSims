@@ -101,6 +101,8 @@ test('#119 NPC mayor invests in an inhabited outlying cluster, respects funds an
 
 test('#32 selected center treasury and ownership survive replay without spending the neighboring balance', () => {
   const w = emptyTown();
+  w.sims = createWorld(119).sims; // Construction needs actual residents, not an empty municipality.
+  for (const s of w.sims) s.state={...s.state,kind:'performing',action:'idle',ticksLeft:10000};
   w.villages.push({ id: 'village:1', name: '새마을', center: { x: 80, y: 80 }, government: newGovernment() });
   const g = w.villages[1].government;
   g.treasury = 6000;

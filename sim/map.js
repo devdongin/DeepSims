@@ -384,7 +384,7 @@ export function rotatedSize(w0, h0, dir) { return dir % 2 === 0 ? { w: w0, h: h0
 // §18.T2: 타입별 기본 footprint (dir 0 기준) — zone 검증·회전 치수의 단일 권위
 export const ZONE_DIMS = { house: [6, 5], cafe: [7, 5], office: [7, 5], park: [7, 5],
   primary_school: [8,6], middle_school: [8,6], high_school: [8,6],
-  apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [8, 6], workshop:[8,6],lab:[8,6],warehouse:[8,6] };
+  apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [12, 10], workshop:[8,6],lab:[8,6],warehouse:[8,6] };
 // §18.T3: 주거 시설 판정 단일 권위 — 이민·합가·자녀·완공 이사·수면(HOME_ONLY는 homeId 기준이라 무관)
 export function isResidence(f) { return f.type === 'house' || f.type === 'apartment'; }
 // Founding houses are real buildings, but their beds are held for the arriving
@@ -402,6 +402,7 @@ export function addBuilding(map, type, plot, dir = 0) {
   const id = `${type}${count}`;
   const W = map.w;
   const bld = (bx, by, bw, bh, dx, dy) => {
+    if (dir > 0) return; // Stamp only the final rotated footprint below.
     for (let j = by; j < by + bh; j++) for (let i = bx; i < bx + bw; i++) map.tiles[j * W + i] = TILE.WALL;
     for (let j = by + 1; j < by + bh - 1; j++) for (let i = bx + 1; i < bx + bw - 1; i++) map.tiles[j * W + i] = TILE.FLOOR;
     map.tiles[dy * W + dx] = TILE.FLOOR;
@@ -470,10 +471,16 @@ export function addBuilding(map, type, plot, dir = 0) {
       ],
     };
   } else if (['university','primary_school','middle_school','high_school'].includes(type)) {
-    bld(x, y, 8, 6, x + 4, y + 5);
+    // Legacy in-progress universities may have reserved only 8×6. New orders
+    // validate the larger footprint, but completing an old order cannot erase roads.
+    const campus = rotatedSize(12,10,dir);
+    const [w,h] = type === 'university' && !plotBuildable(map,plot,campus.w,campus.h)
+      ? [8,6] : ZONE_DIMS[type];
+    const dx = Math.floor(w/2);
+    bld(x, y, w, h, x + dx, y + h - 1);
     fac = {
-      id, type, x, y, w: 8, h: 6, door: { x: x + 4, y: y + 5 },
-      resources: [0, 1, 2, 3].map((k) => ({ id: `slot${k}`, kind: 'slot', x: x + 2 + (k % 2) * 3, y: y + 2 + Math.floor(k / 2) * 2 })),
+      id, type, x, y, w, h, door: { x: x + dx, y: y + h - 1 },
+      resources: [0, 1, 2, 3].map((k) => ({ id: `slot${k}`, kind: 'slot', x: x + 2 + (k % 2) * (w-5), y: y + 2 + Math.floor(k / 2) * (h-4) })),
     };
   } else { // park: 무벽 스팟 6
     fac = {
@@ -491,11 +498,8 @@ export function addBuilding(map, type, plot, dir = 0) {
       const r = rotateLocal(px - x, py - y, w0, h0, dir);
       return { x: x + r.x, y: y + r.y };
     };
-    // 타일 재배치: 기존 분기가 그린 dir0 벽·바닥을 지우고(초지) 회전본으로 다시
+    // Paint only the rotated area: the unrotated area may contain a road.
     if (fac.type !== 'park') {
-      for (let j = y; j < y + Math.max(w0, h0); j++) for (let i = x; i < x + Math.max(w0, h0); i++) {
-        if (i < x + w0 && j < y + h0) map.tiles[j * W + i] = TILE.GRASS;
-      }
       for (let j = y; j < y + sz.h; j++) for (let i = x; i < x + sz.w; i++) map.tiles[j * W + i] = TILE.WALL;
       for (let j = y + 1; j < y + sz.h - 1; j++) for (let i = x + 1; i < x + sz.w - 1; i++) map.tiles[j * W + i] = TILE.FLOOR;
     }

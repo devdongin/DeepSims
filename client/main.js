@@ -3593,6 +3593,10 @@ function connect() {
         updatePolicySummary();
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
         for (const e of msg.events ?? []) {
+          if (e.type === 'plot_relocated') {
+            const p = world.plots?.find(p => p.plotId === e.payload.plotId);
+            if (p) { p.x=e.payload.x; p.y=e.payload.y; }
+          }
           if (e.type === 'village_land_assigned') {
             const ids = new Set(e.payload.plotIds);
             for (const p of world.plots ?? []) if (ids.has(p.plotId)) p.villageId=e.payload.villageId;
