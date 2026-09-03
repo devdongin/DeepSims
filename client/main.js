@@ -505,6 +505,34 @@ class TownScene extends Phaser.Scene {
     return best;
   }
 
+  // §23.12 **차도와 인도를 나눈다.** 시뮬레이션의 도로는 한 종류(TILE.ROAD)뿐이라
+  // 17,323칸이 전부 같은 아스팔트로 보였다 — 사용자 지적 "차도와 인도가 아직 분리가
+  // 안 되어 있다".
+  //
+  // 어디를 인도로 볼 것인가로 두 규칙을 재봤다:
+  //   ① 도로 덩어리의 가장자리(비도로와 맞닿은 칸) → 15,214칸(88%). 거의 전부가 인도가
+  //      되어 차도가 사라진다. 뒤집힌 그림이다.
+  //   ② 건물 발자국에 맞닿은 칸 → 1,748칸(10%). 건물을 두르는 띠가 생기고 그 사이가
+  //      차도로 남는다. 실제 거리의 생김새다.
+  // ②를 쓴다. 이건 **그리기 분류**이지 지형 변경이 아니다 — 세계는 그대로다.
+  sidewalkSet() {
+    const map = world.map;
+    const key = `${map.facilities.length}:${world.terrainVersion ?? 0}`;
+    if (this.__swKey === key && this.__sw) return this.__sw;
+    const set = new Set();
+    for (const f of map.facilities) {
+      for (let y = f.y - 1; y <= f.y + f.h; y++) {
+        if (y < 0 || y >= map.h) continue;
+        for (let x = f.x - 1; x <= f.x + f.w; x++) {
+          if (x < 0 || x >= map.w) continue;
+          set.add(y * map.w + x);
+        }
+      }
+    }
+    this.__swKey = key; this.__sw = set;
+    return set;
+  }
+
   // §22.104 타일 컬링. 맵은 512×512 = 26만 칸이고 그중 비-잔디가 37,594칸이다.
   // 지금까지는 화면 밖 · 접근조차 못 하는 변두리까지 전부 폴리곤으로 채웠다. 아이소 좌표는
   // u = x-y (가로), v = x+y (세로)로 분리되므로 카메라 사각형을 u·v 구간으로 뒤집으면
@@ -617,9 +645,12 @@ class TownScene extends Phaser.Scene {
     const STAMP_MAX = 2500; // 명시적 오브젝트 상한 (60차)
     const map = world.map;
     const bounds = uv ?? this.visibleUV();
+    const sidewalk = this.textures.exists('tile_pavement') ? this.sidewalkSet() : null;
     this.forEachVisibleTile(bounds, (x, y, i) => {
       if (this.roadSprites.length >= STAMP_MAX) return;
-      const key = TILE_TEX[map.tiles[i]];
+      let key = TILE_TEX[map.tiles[i]];
+      // §23.12 건물을 두르는 도로 칸은 인도로 깐다 (차도는 그 사이에 남는다)
+      if (key === 'tile_road' && sidewalk && sidewalk.has(i)) key = 'tile_pavement';
       if (!key || !this.textures.exists(key)) return;
       const im = this.add.image(isoX(x, y), isoY(x, y), key).setDisplaySize(TW, TH).setDepth(-5);
       this.roadSprites.push(im);
