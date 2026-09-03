@@ -38,7 +38,8 @@ for (let i = 0; i < WALK_ARCHETYPES; i++) for (let f = 0; f < 4; f++) {
   WALK_KEYS.push([`pose${i}_${f}`, `./sprites/pose${i}_${f}.png`]);       // 서기↙·앉기↙·서기↖·앉기↖
 }
 for (let f = 0; f < 4; f++) WALK_KEYS.push([`posep_${f}`, `./sprites/posep_${f}.png`]);
-const SIT_ACTIONS = ['eat', 'read', 'work', 'drink', 'cook_eat', 'see_doctor', 'binge_eat'];
+const SIT_ACTIONS = ['eat', 'read', 'work', 'drink', 'cook_eat', 'see_doctor', 'binge_eat',
+  'music', 'board_game']; // §23.8 연주·보드게임은 앉아서 한다 (산책·텃밭·봉사는 선 자세)
 // 직업 → 스프라이트 원형 (제복 정합): 경찰은 경찰복, 의사·간호사는 가운, 소방관은 소방복
 const ARCH_OF_OCCUPATION = {
   police: 7, firefighter: 8, doctor: 5, nurse: 5, teacher: 6, student: 3,
@@ -887,6 +888,7 @@ class TownScene extends Phaser.Scene {
 
 // §22.99 진단 창구 — OOM을 쫓을 때 "무엇이 몇 개인가"를 콘솔에서 바로 본다.
 // 힙 수치만 보면 GC 타이밍에 속는다. 개수는 속지 않는다.
+window.__select = (id) => selectSim(id); // §23.1 진단 창구 — 패널·일대기 검증용
 window.__diag = () => ({
   tileCmds: window.__game?.scene?.scenes?.[0]?.tileLayer?.commandBuffer?.length ?? 0, // §22.104 바닥 그리기 명령 수
   sims: world?.sims?.length ?? 0,
@@ -1040,6 +1042,14 @@ const eul = (w) => `${w}${hasJong(w) ? '을' : '를'}`;
 const eun = (w) => `${w}${hasJong(w) ? '은' : '는'}`;
 const rang = (w) => `${w}${hasJong(w) ? '이랑' : '랑'}`;
 const ne = (w) => `${w}${hasJong(w) ? '이네' : '네'}`;
+// §23.1 로/으로 — 받침이 없거나 받침이 ㄹ이면 '로'다 ("점원로"가 아니라 "점원으로").
+const ro = (w) => {
+  const ch = String(w ?? '').trim().slice(-1);
+  const code = ch.charCodeAt(0);
+  const isHangul = code >= 0xac00 && code <= 0xd7a3;
+  const jong = isHangul ? (code - 0xac00) % 28 : 0;
+  return `${w}${(!isHangul || jong === 0 || jong === 8) ? '로' : '으로'}`; // 8 = ㄹ
+};
 
 // §22.28 unmet 기억의 placeId는 **장소가 아니라 행동 이름**이다(라이브 확인: 'eat').
 // placeKo에 넣으면 "eat 하려는데"가 그대로 찍힌다 — 장소 이름과 행동 이름은 다른 어휘다.
@@ -1052,6 +1062,8 @@ const ACTION_TRY_KO = {
   fish: '낚시하려', cook_eat: '밥 해 먹으려', construct: '공사 거들려',
   see_doctor: '병원 가려', seek_food_aid: '공공 식사 받으려', idle: '좀 쉬려',
   escort_child_doctor: '아이와 병원 가려',
+  stroll: '바람 좀 쐬려', garden: '텃밭 좀 보려', music: '악기 좀 켜려',
+  volunteer: '봉사 좀 하려', board_game: '보드게임 한판 하려',
 };
 function actKo(id) { return ACTION_TRY_KO[id] ?? '뭘 좀 하려'; }
 
@@ -2403,6 +2415,8 @@ const ACTION_KO = {
   read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기', see_doctor: '병원 진료',
   respond_fire: '화재 진압', study: '학교 수업', seek_food_aid: '공공 식사 요청',
   escort_child_doctor: '아이 병원 동행',
+  // §23.8 여가 확대
+  stroll: '산책', garden: '텃밭 가꾸기', music: '악기 연주', volunteer: '봉사 활동', board_game: '보드게임',
 };
 // 직업 라벨과 같은 규칙 — 표를 직접 인덱싱하지 않는다. 미등록 행동이 와도
 // 피드에 'undefined 시작'이 아니라 '활동 시작'이 뜬다.
@@ -2643,7 +2657,74 @@ function pushFeed(e) {
   while (feed.children.length > 80) feed.lastChild.remove();
 }
 
-function selectSim(id) { selectedSimId = id; renderPanel(); }
+// §23.1 일대기. 같은 사건이라도 피드에서는 "방금 무슨 일이 있었나"이고, 여기서는
+// "이 사람이 어떻게 살아왔나"다. 그래서 문장을 따로 쓴다 — 시제도, 고르는 사건도 다르다.
+// 나이는 지금 나이에서 지난 햇수를 빼서 되짚는다 (한 해 = 1440틱 × 365).
+const TICKS_PER_YEAR = 1440 * 365;
+function lifeLine(r, ctx) {
+  const p = r.payload ?? {};
+  const occ = (id) => occKo(id, '일');
+  switch (r.type) {
+    case 'immigrated': return '이 마을에 왔다';
+    case 'grew_up': return '학교에 갈 나이가 되었다';
+    case 'graduated': return `학교를 마치고 ${ga(occ(p.to ?? p.occupation))} 되었다`;
+    case 'job_changed':
+      if (p.to === 'jobless') return '일자리를 잃었다';
+      if (p.from === 'jobless' && p.to) return `${ro(occ(p.to))} 다시 일을 잡았다`;
+      return p.to ? `${ro(occ(p.to))} 일을 옮겼다` : '하던 일을 바꿨다';
+    case 'started_dating': return `${simName(p.partner ?? p.with)}와 사귀기 시작했다`;
+    case 'married': return `${simName(p.partner ?? p.with)}와 결혼했다`;
+    case 'broke_up': return `${simName(p.partner ?? p.with)}와 헤어졌다`;
+    case 'child_settled': return '아이가 제 살림을 차렸다';
+    case 'moved_home': return '집을 옮겼다';
+    case 'retired_now': return '일을 놓고 은퇴했다';
+    case 'bereaved': return `${simName(p.who ?? p.simId)}를 떠나보냈다`;
+    case 'car_bought': return '차를 장만했다';
+    case 'joined_club': return `${CLUB_KO[p.clubId] ?? '모임'}에 들었다`;
+    case 'heroic_save': return '불길에서 사람을 구했다';
+    case 'genius_born': return '남다른 재능을 가지고 태어났다';
+    case 'ability_changed': return `${ga(ABIL_KO[p.ability] ?? p.ability)} ${p.value}까지 늘었다`;
+    case 'died': return '세상을 떠났다';
+    case 'emigrated': return '마을을 떠났다';
+    default: return null;
+  }
+}
+const CLUB_KO = { book_club: '독서회', fishing_club: '낚시회', fitness_club: '운동회', drinking_pals: '술벗' };
+const ABIL_KO = { stamina: '체력', dexterity: '손재주', intellect: '지능', charisma: '사교성' };
+
+let lifeOpenFor = null;
+async function renderLifeLog(simId) {
+  const box = $('lifelog');
+  box.style.display = 'block';
+  box.textContent = '불러오는 중…';
+  try {
+    const d = await fetch(`/api/chronicle?sim=${simId}`).then((r) => r.json());
+    const rows = (d.rows ?? []).map((r) => ({ r, text: lifeLine(r, d) })).filter((x) => x.text);
+    if (rows.length === 0) {
+      box.innerHTML = '<div class="ln">아직 남길 만한 일이 없었다.</div>';
+      return;
+    }
+    // 나이로 묶는다. 지금 나이에서 지난 햇수를 빼면 그때 몇 살이었는지가 나온다.
+    let html = ''; let lastAge = null;
+    for (const { r, text } of rows) {
+      const yearsAgo = Math.floor((d.nowTick - r.tick) / TICKS_PER_YEAR);
+      const age = d.age != null ? Math.max(0, d.age - yearsAgo) : null;
+      const head = age != null ? `${age}살` : `${Math.floor(r.tick / 1440)}일`;
+      if (head !== lastAge) { html += `<div class="yr">${head}</div>`; lastAge = head; }
+      html += `<div class="ln">${text}</div>`;
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = '<div class="ln">일대기를 못 읽었다.</div>';
+  }
+}
+
+function selectSim(id) {
+  selectedSimId = id;
+  lifeOpenFor = null;
+  const box = $('lifelog'); if (box) box.style.display = 'none';
+  renderPanel();
+}
 
 function renderPanel() {
   const panel = $('simpanel');
@@ -2684,6 +2765,15 @@ function renderPanel() {
     }));
   $('action').textContent = `현재: ${actionKo(sim.state.action, '대기')} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
 }
+
+// §23.1 일대기 토글. 열려 있을 때만 다시 읽는다 — 배치마다 서버를 찌르지 않는다.
+$('lifebtn').addEventListener('click', () => {
+  if (selectedSimId === null) return;
+  const box = $('lifelog');
+  if (lifeOpenFor === selectedSimId) { box.style.display = 'none'; lifeOpenFor = null; return; }
+  lifeOpenFor = selectedSimId;
+  renderLifeLog(selectedSimId);
+});
 
 $('assigns').addEventListener('click', async (ev) => {
   const a = ev.target.dataset?.a;

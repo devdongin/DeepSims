@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 53, // #71 진료 자기부담 정책과 완료 시 원자 정산
+  logicSchemaVersion: 54, // #71 진료 자기부담 + §23.8 여가 5종
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
@@ -33,6 +33,12 @@ export const DEFAULT_LOGIC = {
     construct: { duration: 60 }, // §16.5 스틴트
     see_doctor: { duration: 30, cost: 800 }, // §17.3 진료
     escort_child_doctor: { duration: 1 },
+    // §23.8 여가 확대 — 사람마다 다른 하루를 살게 하는 다섯 가지
+    stroll: { duration: 30, recoverPerTick: 70, moodPerTick: 6 },
+    garden: { duration: 45, recoverPerTick: 55, moodPerTick: 7, groceriesGain: 1 },
+    music: { duration: 35, recoverPerTick: 90, moodPerTick: 8 },
+    volunteer: { duration: 60, recoverPerTick: 90, moodPerTick: 10, repGain: 1 },
+    board_game: { duration: 40, recoverPerTick: 110, moodPerTick: 6, socialPerTick: 40, cost: 100 },
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },

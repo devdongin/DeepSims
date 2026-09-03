@@ -47,6 +47,12 @@ export function developFromActivity(world, sim, t, emit) {
     key = world.logic.abilities.keyAbility[sim.traits.occupation];
     source = sim.traits.occupation === 'student' ? 'study' : 'career';
   } else if (s.action === 'exercise') { key = 'stamina'; source = 'exercise'; }
+  // §23.8 여가도 사람을 기른다. 노는 시간이 그저 사라지지 않게 한다.
+  else if (s.action === 'music') { key = 'dexterity'; source = 'exercise'; }
+  else if (s.action === 'garden') { key = 'dexterity'; source = 'exercise'; }
+  else if (s.action === 'stroll') { key = 'stamina'; source = 'exercise'; }
+  else if (s.action === 'volunteer') { key = 'charisma'; source = 'exercise'; }
+  else if (s.action === 'board_game') { key = 'intellect'; source = 'study'; }
   if (!key || !source) return;
   if (source === 'study') D.studyTicks = Math.min(1000000000, D.studyTicks + 1);
   if (source === 'career') {

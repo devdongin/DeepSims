@@ -66,11 +66,15 @@ test('W-3. 성격 가중치가 행동을 바꾼다 — socializeBase를 올리�
 });
 
 test('W-4. 행동 지속시간 레버가 연결돼 있다 — 길게 하면 완료 수가 준다', () => {
-  const quick = run(4242, (w) => { w.logic.actions.play.duration = 20; });
-  const slow = run(4242, (w) => { w.logic.actions.play.duration = 240; });
-  const q = quick.actions.play ?? 0; const s = slow.actions.play ?? 0;
-  assert.ok(q + s > 0, 'play 행동이 없다 — 표본이 성립하지 않는다');
-  assert.ok(s < q, `오래 걸리는 놀이 완료 수(${s})가 짧을 때(${q})보다 많다 — duration이 안 걸린다`);
+  // §23.8 예전에는 play로 쟀는데, 여가가 다섯 가지 늘면서 play 완료가 12일에 17건까지
+  // 줄었다. 17 대 17에서는 레버가 걸렸는지 아닌지 **구분할 수 없다** — 표본이 죽은 것이지
+  // 레버가 죽은 것이 아니다. 그래서 누구나 하루에 여러 번 하는 식사로 옮긴다.
+  // (§0.1: 여기서 보는 것은 레버의 연결 여부이지 특정 행동의 빈도가 아니다.)
+  const quick = run(4242, (w) => { w.logic.actions.eat.duration = 20; });
+  const slow = run(4242, (w) => { w.logic.actions.eat.duration = 120; });
+  const q = quick.actions.eat ?? 0; const s = slow.actions.eat ?? 0;
+  assert.ok(q > 50, `표본이 너무 작다 (${q}건) — 이 테스트가 방향을 못 가린다`);
+  assert.ok(s < q, `오래 걸리는 식사 완료 수(${s})가 짧을 때(${q})보다 많다 — duration이 안 걸린다`);
 });
 
 test('W-5. 레버를 바꿔도 결정성은 유지된다 — 같은 파라미터면 같은 세계', () => {

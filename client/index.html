@@ -30,7 +30,8 @@
     #feed .ev.warn { background: #33221a; border-color: #6b4230; }
     #simpanel { position: absolute; left: 12px; bottom: 12px; width: 268px;
       background: linear-gradient(#2b2117f2, #221a11f2); border: 2px solid #6b5638; border-radius: 12px;
-      padding: 12px; display: none; box-shadow: 0 6px 18px rgba(0,0,0,.5); z-index: 6; }
+      padding: 12px; display: none; box-shadow: 0 6px 18px rgba(0,0,0,.5); z-index: 6;
+      max-height: calc(100vh - 120px); overflow-y: auto; }
     #simhead { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
     #portrait { width: 52px; height: 52px; object-fit: contain; image-rendering: pixelated;
       background: #171310; border: 2px solid #c9a86a; border-radius: 8px; padding: 3px; }
@@ -49,6 +50,16 @@
     #assigns button { font-size: 11px; padding: 4px 9px; background: #3a2e1d; color: #ead9b0;
       border: 1px solid #6b5638; border-radius: 6px; cursor: pointer; }
     #assigns button:hover { background: #4a3a26; border-color: #c9a86a; }
+    /* §23.1 일대기 — 사건이 아니라 삶으로 읽히게 세로선 하나에 매단다 */
+    #lifebar { margin-top: 8px; }
+    #lifebtn { font-size: 11px; padding: 4px 10px; background: #3a2e1d; color: #ead9b0;
+      border: 1px solid #6b5638; border-radius: 6px; cursor: pointer; width: 100%; }
+    #lifebtn:hover { background: #4a3a26; border-color: #c9a86a; }
+    #lifelog { margin-top: 6px; max-height: 190px; overflow-y: auto; font-size: 10.5px;
+      color: #cdc4d6; border-left: 2px solid #6b5638; padding-left: 8px; }
+    #lifelog .yr { color: #ffcf6a; font-size: 10px; margin-top: 5px; }
+    #lifelog .ln { margin: 2px 0; line-height: 1.45; }
+    #lifelog .em { color: #ead9b0; }
     #modal { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: center; justify-content: center; z-index: 10; }
     #modal .box { width: 440px; max-height: 70vh; overflow-y: auto; background: #241d14; border: 2px solid #c9a86a; border-radius: 12px; padding: 20px; }
     #modal h2 { color: #ffcf6a; font-size: 16px; margin-bottom: 10px; }
@@ -117,7 +128,15 @@
           <button data-a="play">놀기</button>
           <button data-a="drink">술 한잔</button>
           <button data-a="exercise">운동</button>
+          <button data-a="stroll">산책</button>
+          <button data-a="garden">텃밭</button>
+          <button data-a="music">악기</button>
+          <button data-a="volunteer">봉사</button>
+          <button data-a="board_game">보드게임</button>
         </div>
+        <!-- §23.1 일대기 — 이 사람이 어떻게 살아왔는가 -->
+        <div id="lifebar"><button id="lifebtn" type="button">📖 일대기</button></div>
+        <div id="lifelog" style="display:none"></div>
       </div>
     </div>
     <div id="sidebar">

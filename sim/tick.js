@@ -45,6 +45,22 @@ function resKey(facilityId, resourceId) { return `${facilityId}:${resourceId}`; 
 // 이번의 결정적 차이는 **오는 중인 심도 센다**는 것이다 — 지금은 의도가 보이지 않아
 // 랑데부가 성립하지 못한다(A가 도착하면 B는 이미 떠났다).
 // 심 전체를 시설마다 훑지 않고 **한 번만** 훑어 Map으로 만든다 (성능 이슈 #17 고려).
+// §23.8 시설별 재실 인원 (하는 일과 무관). "혼자서는 못 하는 놀이"를 가리는 데 쓴다.
+// socialPresence는 수다 떠는 사람만 세므로 여기서는 쓸 수 없다.
+const LEISURE_COMPANY = new Set(['socialize', 'board_game', 'play', 'read', 'idle', 'stroll']);
+export function occupancyAt(world, selfId) {
+  const m = new Map();
+  for (const o of world.sims) {
+    if (selfId !== null && o.id === selfId) continue;
+    const st = o.state;
+    if (st.facilityId === null || st.kind !== 'performing') continue;
+    // 점심을 급히 먹는 사람은 판의 맞은편에 앉아 줄 수 없다. **한가한 사람**만 센다.
+    if (!LEISURE_COMPANY.has(st.action)) continue;
+    m.set(st.facilityId, (m.get(st.facilityId) ?? 0) + 1);
+  }
+  return m;
+}
+
 export function socialPresence(world, selfId) {
   const m = new Map();
   for (const o of world.sims) {
@@ -113,6 +129,12 @@ function persFactorFor(sim, action, L) {
   else if (action === 'read') f = 100 + (m.SN - 50) + floorDiv(m.EI - 50, 2);
   else if (action === 'fish') f = 100 + (m.EI - 50);
   else if (action === 'construct') f = 100 + floorDiv(100 - m.JP, L.construct.persJDiv); // J형이 부지런 (§16.5)
+  // §23.8 여가 확대 — 성향이 다르면 쉬는 법도 다르다.
+  else if (action === 'stroll') f = 100 + floorDiv(50 - m.EI, 2);   // 혼자 걷는 쪽은 I
+  else if (action === 'garden') f = 100 + (m.SN - 50) + floorDiv(100 - m.JP, 4); // 손에 잡히는 것(S)·꾸준함(J)
+  else if (action === 'music') f = 100 + (50 - m.SN) + floorDiv(50 - m.EI, 2);   // 안으로 향하는 N
+  else if (action === 'volunteer') f = 100 + (50 - m.TF) + floorDiv(m.EI - 50, 2); // 사람을 향한 F
+  else if (action === 'board_game') f = 100 + (m.EI - 50) + floorDiv(m.TF - 50, 2); // 마주 앉는 E·규칙을 즐기는 T
   return clamp(f, 50, 200);
 }
 
@@ -153,7 +175,8 @@ function scoreCandidate(sim, action, res, L, prepared = null) {
 // §22.2 (91차 ②) 아이가 하지 않는 일. 어른의 노동·대처·공적 임무는 아이의 몫이 아니다.
 // 아이는 먹고 자고 놀고 어울리고 배운다.
 const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol',
-  'drink', 'binge_eat', 'shop', 'see_doctor', 'fish']);
+  'drink', 'binge_eat', 'shop', 'see_doctor', 'fish',
+  'volunteer']); // §23.8 봉사는 어른 몫 — 산책·텃밭·연주·보드게임은 아이도 한다
 const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol']);
 
 // §22.18 (Codex 110차 ①) **'갈 곳이 없다'와 '자리가 다 찼다'는 다르다.**
@@ -176,6 +199,11 @@ export function facilityShortfallKind(world, sim, action, t) {
   if (action === 'respond_fire') return null;
   if (action === 'work' && sim.traits.occupation === 'police') return null;
   if (action === 'work' && sim.traits.occupation === 'jobless') return null;
+  // §23.9 집에서만 하는 일(집밥·텃밭·연주·은둔·침대 만들기)은 시설 수를 셀 대상이 아니다.
+  // 집이 없어서 못 한 것은 **주거 부족**이지 '가구내 자가소비 생산활동 수요'가 아니다.
+  // 원장이 그렇게 말하면 처방이 "식당을 지어라"가 되고, 정작 필요한 것은 집이다.
+  if (HOME_ONLY_ACTIONS.includes(action)
+      && !world.map.facilities.some((f) => f.id === sim.homeId)) return null;
   const ftypes = action === 'work'
     ? [].concat(L.workplace[sim.traits.occupation] ?? [])
     : action === 'study' ? [schoolFor(sim)] : (ACTION_FACILITY[action] ?? []);
@@ -271,6 +299,7 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
   const byType = facilitiesByType(world.map);
   const stateModCache = new Map(); // 같은 결정 내 시설별 캐시 (심 상태 불변 구간 — 결과 동일)
   let presence = null;             // §20.3 사교 후보가 처음 나올 때 한 번만 만든다
+  let occupancy = null;            // §23.8 보드게임 후보가 처음 나올 때 한 번만 만든다
   const memoCache = new Map(); // (action|facility) → {mm, pl} — 자원들이 공유 (결과 동일, §17.22)
   // Decision-local only: reservations/cooldowns may change before the next sim or tick.
   // Preserve resource order; own reservations remain available, not counted as full.
@@ -383,6 +412,18 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
       const facilities = HOME_ONLY_ACTIONS.includes(action)
         ? (home?.type === ftype ? [home] : []) : (byType.get(ftype) ?? []);
       for (const fac of facilities) {
+        // §23.8 보드게임은 **혼자 할 수 없다.** 사람이 없는 카페에서는 후보가 아니다.
+        // 게이트를 안 두면 30일 실측에서 480건까지 치솟아 놀이(71)·독서(72)를 밀어냈다.
+        // 이건 가중치를 눌러 고칠 문제가 아니라 규칙이 빠진 문제다(§0.1) — 판을 펴려면
+        // 맞은편에 사람이 앉아 있어야 한다.
+        if (action === 'board_game') {
+          occupancy ??= ctx?.occ ?? occupancyAt(world, null);
+          let here = occupancy.get(fac.id) ?? 0;
+          // 스냅샷은 자기 자신도 세므로 여기서 뺀다 — 혼자 앉아 있는 것은 동반이 아니다.
+          const my = sim.state;
+          if (my.facilityId === fac.id && my.kind === 'performing' && LEISURE_COMPANY.has(my.action)) here--;
+          if (here <= 0) continue;
+        }
         if (world.incidents.some((inc) => inc.facilityId === fac.id)) continue; // §17.20 화재 중 사용 불가
         let available = availableCache.get(fac.id);
         if (!available) {
@@ -1031,6 +1072,10 @@ export function tick(world, inputsForThisTick = []) {
     if (def.funPerTick) sim.needs.fun = Math.min(NEED_MAX, sim.needs.fun + def.funPerTick);
     if (def.energyPerTick) sim.needs.energy = Math.min(NEED_MAX, sim.needs.energy + def.energyPerTick);
     if (def.hungerPerTick) sim.needs.hunger = Math.min(NEED_MAX, sim.needs.hunger + def.hungerPerTick);
+    // §23.10 마주 앉아 하는 놀이는 사교도 채운다 (Codex 지적: 보드게임 이용자가 남의
+    // 존재만 소비하고 아무것도 돌려주지 않았다). 주 욕구는 '재미'로 두어 대화와
+    // 정면 충돌하지 않게 하고, 사교는 부수 효과로 붙인다.
+    if (def.socialPerTick) sim.needs.social = Math.min(NEED_MAX, sim.needs.social + def.socialPerTick);
   }
 
   // 3) 완료 정산 (id 오름차순) — 기분 델타는 사실 발생 지점에서 즉시 (PLAN §12.1)
@@ -1059,6 +1104,19 @@ export function tick(world, inputsForThisTick = []) {
         emit('hangover', sim.id, { untilTick: sim.hangoverUntil });
       }
       if (s.action === 'binge_eat') applyMood(sim, -L.actions.binge_eat.regretMood); // 후회
+    } else if (s.action === 'garden') {
+      // §23.8 텃밭은 **먹거리를 만든다** — 여가가 살림에 닿는 유일한 통로다.
+      // 바깥에서 들어온 것이 아니라 땅에서 난 것이므로 돈이 아니라 식재료로 센다.
+      sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.garden.groceriesGain);
+    } else if (s.action === 'volunteer') {
+      // 봉사는 마을의 평판을 올린다. 평판은 이민을 부르므로(§society.immigration)
+      // "좋은 사람들이 사는 곳"이 실제로 사람을 불러들인다.
+      world.reputation = Math.min(L.growth.repCap, (world.reputation ?? 0) + L.actions.volunteer.repGain);
+    } else if (s.action === 'board_game') {
+      const cost = L.actions.board_game.cost;
+      sim.money -= cost;
+      payToFacility(world, s.facilityId, cost); // 카페의 두 번째 매출원
+      emit('money_changed', sim.id, { delta: -cost, balance: sim.money, action: s.action });
     } else if (s.action === 'exercise') {
       applyMood(sim, L.actions.exercise.completeMoodBonus);
     } else if (s.action === 'fish') {
@@ -1500,6 +1558,12 @@ export function tick(world, inputsForThisTick = []) {
   }
 
   // 5) idle 심 결정 (id 오름차순, world.reservations = 틱-로컬 원장)
+  // §23.10 재실 인원은 **결정을 시작하기 전에 한 번** 찍는다 (Codex 지적).
+  // 심마다 그때그때 세면, 앞 순번이 방금 카페에 앉은 것이 뒷 순번에게 보인다.
+  // 결과는 재현되지만 **id 순서가 세계의 의미를 바꾼다** — 같은 상황에서 1번이 먼저
+  // 결정했느냐 2번이 먼저 결정했느냐로 보드게임이 열리기도 하고 안 열리기도 한다.
+  // 모두가 같은 세계를 보고 결정해야 한다. 자기 자신은 읽는 쪽에서 뺀다.
+  const occSnapshot = occupancyAt(world, null);
   for (const sim of world.sims) {
     if (sim.state.kind !== 'idle') continue;
     const shortlist = shortlistMemories(sim, t, L); // D1: 심당 1회 계산
@@ -1510,7 +1574,7 @@ export function tick(world, inputsForThisTick = []) {
     let cands = [];
     let urgency = false;
     if (critical.length > 0) {
-      cands = collectCandidates(world, sim, critical, t, false, { shortlist, prep, urgency: true });
+      cands = collectCandidates(world, sim, critical, t, false, { shortlist, prep, urgency: true, occ: occSnapshot });
       urgency = cands.length > 0;
       // §19.5 (71차 ①): 위급한데 갈 곳이 없다 = 시설 부재. 첫 위급 행동 하나만 기록(틱당 ≤1,
       // ACTIONS 순이라 결정적) → 회고에서 no_facility 불만으로 집계된다.
@@ -1546,7 +1610,7 @@ export function tick(world, inputsForThisTick = []) {
         else if (kind18 === 'capacity_full') recordCapacityShortfall(world, act, day18);
       }
     }
-    if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false });
+    if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false, occ: occSnapshot });
     const best = pickBest(cands);
 
     // §22.19 일상 수요 (이슈 #87). §22.18 원장은 **위급한 필요**에만 걸려서, 진료·독서·여가처럼

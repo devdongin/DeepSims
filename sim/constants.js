@@ -19,9 +19,13 @@ export const NEED_MAX = 10000;
 // 확장은 뒤에 append (기존 타이브레이크 순서 보존). drink~build는 §15.1 로드맵 행동.
 export const ACTIONS = ['eat', 'sleep', 'work', 'socialize', 'play', 'idle',
   'drink', 'binge_eat', 'hole_up', 'exercise', 'build',
-  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire', 'study', 'seek_food_aid', 'escort_child_doctor'];
+  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire', 'study', 'seek_food_aid',
+  'escort_child_doctor',
+  // §23.8 여가 확대. 배열 순서는 pickBest의 동점 처리 순서라 **끝에만 붙인다**.
+  // 마을에 할 일이 여덟 가지뿐이면 사람들은 여덟 가지 삶만 산다.
+  'stroll', 'garden', 'music', 'volunteer', 'board_game'];
 export const COPING_ACTIONS = ['drink', 'binge_eat', 'hole_up', 'exercise'];
-export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat']; // 자기 집 시설만 후보
+export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat', 'garden', 'music']; // 자기 집 시설만 후보
 
 // 행동 → 시설 타입 (구조), 행동 → 회복 욕구 (구조)
 export const ACTION_FACILITY = {
@@ -35,8 +39,18 @@ export const ACTION_FACILITY = {
   construct: [], // 가상 현장(site) — collectCandidates 특수 경로 (§16.5.B)
   see_doctor: ['hospital'],
   escort_child_doctor: [],
+  // §23.8 여가 확대
+  stroll: ['park', 'pond'],           // 돈이 한 푼도 안 드는 유일한 즐거움
+  garden: ['house', 'apartment'],     // 텃밭 — 먹거리가 나온다
+  music: ['house', 'apartment'],      // 악기 — 손이 는다
+  volunteer: ['hospital', 'library'], // 봉사 — 마을 평판이 오른다
+  board_game: ['cafe'],               // 보드게임 — 카페의 두 번째 쓸모
 };
-export const NEED_OF_ACTION = { eat: 'hunger', sleep: 'energy', socialize: 'social', play: 'fun', read: 'fun', fish: 'fun', cook_eat: 'hunger', seek_food_aid: 'hunger' };
+export const NEED_OF_ACTION = { eat: 'hunger', sleep: 'energy', socialize: 'social', play: 'fun', read: 'fun', fish: 'fun', cook_eat: 'hunger', seek_food_aid: 'hunger',
+  stroll: 'fun', garden: 'fun', music: 'fun', volunteer: 'social', board_game: 'fun' };
+// 보드게임을 '사교'로 두면 같은 카페에서 대화와 정면 충돌한다. 점수는 욕구 결핍으로
+// 정해지므로 성격 계수만으로 승부가 갈리고, 외향형이 수다 대신 보드게임만 하게 된다.
+// 이 마을의 심장은 대화다 — 보드게임은 재미를 채우고, 사교는 그 자리에서 따라온다.
 
 // 점수 산식 (PLAN §2.5.G): 전 중간값 < 2^53 증명은 PLAN 참조
 export const SCORE_SCALE = 100000; // 1e5

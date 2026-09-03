@@ -34,7 +34,7 @@ export function candidateContract(pop = 50) {
   // copay default. Keep the PRE-optimization vectors, not newly generated golden values.
   // Normalize only these documented observational additions. A real subsidy, family
   // payment, changed choice or changed balance must still fail the old-world oracle.
-  if (w.schemaVersion === 58 && w.logic.logicSchemaVersion === 53) {
+  if (w.schemaVersion === 58 && w.logic.logicSchemaVersion === 53) { // §23.8 이후 54 — 이 정규화 경로는 더 이상 타지 않는다
     assert.equal(w.logic.economy.healthCopayPct, 100);
     assert.equal(w.policy.healthCopayPct, undefined);
     assert.equal(w.logic.economy.childAllowance, 0);

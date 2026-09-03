@@ -8,6 +8,7 @@ import { addBuilding, plotBuildable } from '../sim/map.js';
 import { zoneAllowedTypes } from '../sim/society.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { occupationAllowed } from '../sim/traits.js';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
 
 test('#63 schema56 and logic51 migrate new industry parameters without inventing an unlock', () => {
   const w=createWorld(63);w.schemaVersion=56;w.logic.logicSchemaVersion=51;
@@ -20,7 +21,7 @@ test('#63 schema56 and logic51 migrate new industry parameters without inventing
   migrateWorld(w);
   assert.deepEqual(w.unlockedIndustries,[]);assert.equal(w.logic.industryDevelopment.lab,3000);
   assert.equal(w.logic.workplace.researcher,'lab');assert.equal(w.schemaVersion,58);
-  assert.equal(w.logic.logicSchemaVersion,53);
+  assert.equal(w.logic.logicSchemaVersion,DEFAULT_LOGIC.logicSchemaVersion); // 버전을 올릴 때마다 고치지 않게 상수를 본다
   assert.equal(JSON.stringify(w.sims.map(s=>s.education)),education);assert.equal(JSON.stringify(w.rngSim),rng);
   assert.equal(hashWorld(w),hashWorld(migrateWorld(deserialize(serialize(w)))));
 });

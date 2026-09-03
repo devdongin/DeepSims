@@ -4,11 +4,23 @@ import { candidateContract } from '../bench/candidate-contract.js';
 import { createWorld } from '../sim/world.js';
 import { collectCandidates } from '../sim/tick.js';
 
-// Captured from unoptimized 328458d, not regenerated after the optimization.
+// 원래는 최적화 이전 328458d에서 뜬 벡터였다. #71(진료 자기부담)까지는 관측만 늘어난
+// 변화라 정규화로 옛 벡터를 지킬 수 있었다.
+//
+// §23.8은 다르다. 여가 5종을 **후보 집합에 넣는 변경**이라, 산책을 택한 사람은 그 뒤로
+// 다른 삶을 산다. 이건 정규화로 지울 수 있는 관측 차이가 아니라 세계 자체의 차이다.
+// 그래서 여기서만은 벡터를 다시 뜬다 — 옛 값을 억지로 지키려면 새 행동을 후보에서
+// 빼야 하는데, 그러면 지키는 대상이 더 이상 이 게임이 아니다.
+//
+// 이 오라클이 계속 지키는 것: 이 커밋 이후의 리팩터링·최적화가 후보 순서·선택·이벤트·
+// 세계 해시를 **한 비트도** 바꾸지 않는가. 벡터를 다시 뜨는 것은 행동 집합이 의도적으로
+// 바뀔 때뿐이고, 그때는 이유를 여기 남긴다.
+//   328458d (최적화 이전): 7e987d33 / 5c93dd7d / ce050617
+//   §23.8   (여가 5종)   : 아래 값
 for (const [pop, expected] of [
-  [10, ['7e987d33', '478b3b6a', 'cfb70613', '2fa36c30']],
-  [50, ['5c93dd7d', 'da40b3d7', '28f8b23c', '1c512401']],
-  [200, ['ce050617', '9c7c4bba', 'a72b7412', 'c34ec4fd']],
+  [10, ['8aa9fa43', '0d4b2685', '8722c560', '494ee9c4']],
+  [50, ['23d3d592', 'e673588d', '685a71b7', 'ad84e2c0']],
+  [200, ['6e5c98db', '87150621', 'c3f41517', 'cc057354']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
