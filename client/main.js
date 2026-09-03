@@ -2903,6 +2903,13 @@ function pushFeed(e) {
 // "이 사람이 어떻게 살아왔나"다. 그래서 문장을 따로 쓴다 — 시제도, 고르는 사건도 다르다.
 // 나이는 지금 나이에서 지난 햇수를 빼서 되짚는다 (한 해 = 1440틱 × 365).
 const TICKS_PER_YEAR = 1440 * 365;
+// 일대기는 **떠난 사람**을 자주 부른다 (사별·이별·옛 동료). 그 사람은 이미 world.sims에
+// 없으므로 simName이 'sim{id}'를 만들어 낸다. 없는 이름을 지어내느니 이름 없이 쓴다.
+function withName(id, withIt, without) {
+  if (id == null) return without;
+  const s2 = world?.sims?.find((x) => x.id === id);
+  return s2 ? withIt(simName(id)) : without;
+}
 function lifeLine(r, ctx) {
   const p = r.payload ?? {};
   const occ = (id) => occKo(id, '일');
@@ -2914,13 +2921,15 @@ function lifeLine(r, ctx) {
       if (p.to === 'jobless') return '일자리를 잃었다';
       if (p.from === 'jobless' && p.to) return `${ro(occ(p.to))} 다시 일을 잡았다`;
       return p.to ? `${ro(occ(p.to))} 일을 옮겼다` : '하던 일을 바꿨다';
-    case 'started_dating': return `${simName(p.partner ?? p.with)}와 사귀기 시작했다`;
-    case 'married': return `${simName(p.partner ?? p.with)}와 결혼했다`;
-    case 'broke_up': return `${simName(p.partner ?? p.with)}와 헤어졌다`;
+    // 짝 이벤트의 payload 키는 withSimId다 (sim/society.js). 예전엔 partner/with를 봐서
+    // 화면에 "심undefined와 사귀기 시작했다"가 찍혔다 — 이름을 모르면 이름을 빼고 쓴다.
+    case 'started_dating': return withName(p.withSimId, (n) => `${wa(n)} 사귀기 시작했다`, '누군가와 사귀기 시작했다');
+    case 'married': return withName(p.withSimId, (n) => `${wa(n)} 결혼했다`, '결혼했다');
+    case 'broke_up': return withName(p.withSimId, (n) => `${wa(n)} 헤어졌다`, '헤어졌다');
     case 'child_settled': return '아이가 제 살림을 차렸다';
     case 'moved_home': return '집을 옮겼다';
     case 'retired_now': return '일을 놓고 은퇴했다';
-    case 'bereaved': return `${simName(p.who ?? p.simId)}를 떠나보냈다`;
+    case 'bereaved': return withName(p.lostSimId, (n) => `${eul(n)} 떠나보냈다`, '가까운 사람을 떠나보냈다');
     case 'car_bought': return '차를 장만했다';
     case 'joined_club': return `${CLUB_KO[p.clubId] ?? '모임'}에 들었다`;
     case 'heroic_save': return '불길에서 사람을 구했다';
@@ -3061,6 +3070,37 @@ const GOALS = [
     v: (w) => w.sims.length ? Math.round(w.sims.reduce((a, s) => a + (s.mood ?? 0), 0) / w.sims.length) : 0 },
   { g: '삶', k: 'cars', t: '길이 붐빈다', d: '자가용 20대', max: 20, v: (w) => w.sims.filter((s) => s.hasCar).length },
 ];
+
+// §23.27 목표는 열어 봐야 보였다. **달성하는 순간**이 화면에 없으면 목표가 아니라 표다.
+// 배치마다 값을 다시 재기엔 열여덟 개가 무겁지 않다 — 전부 world 한 번 훑기다.
+// 처음 켤 때 이미 달성한 것들은 알리지 않는다 (2,000일 된 마을에서 열한 줄이 쏟아진다).
+const goalHit = new Set();
+let goalPrimed = false;
+function checkGoals() {
+  if (!world) return;
+  for (const g of GOALS) {
+    let v = 0;
+    try { v = g.v(world) ?? 0; } catch { v = 0; }
+    if (v < g.max || goalHit.has(g.k)) continue;
+    goalHit.add(g.k);
+    if (!goalPrimed) continue; // 첫 통과는 현재 상태를 담는 것뿐이다
+    pushGoalLine(g);
+  }
+  goalPrimed = true;
+}
+function pushGoalLine(g) {
+  if (feedFilter === 'money' || feedFilter === 'mine') return; // 그 화면의 주제가 아니다
+  const div = document.createElement('div');
+  div.className = 'ev';
+  div.style.color = '#ffcf6a';
+  const ts = document.createElement('span');
+  ts.className = 't';
+  ts.textContent = fmtClock(world.worldTick);
+  div.append(ts, document.createTextNode(`🏆 ${g.t} — ${g.d}`));
+  const feed = $('feed');
+  feed.prepend(div);
+  while (feed.children.length > 80) feed.lastChild.remove();
+}
 
 function renderGoals() {
   const box = $('goals-list');
@@ -3658,6 +3698,7 @@ function connect() {
             if (!document.hidden) handleVisualEvent(evs[i]);
           }
           for (let i = Math.max(0, shown.length - 80); i < shown.length; i++) pushFeed(shown[i]);
+          checkGoals(); // §23.27 목표 달성은 배치 끝에서 한 번만 본다
         }
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
         let mapDirty = false;

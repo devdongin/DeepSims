@@ -79,6 +79,7 @@ test('#32 unfinished students cannot generate office-job demand even with a stal
 
 test('#32 a full neighboring queue cannot block local paid orders, preserving local FIFO and save replay',()=>{
   const w=fixture();
+  w.logic.growth.maxProjectSlots=3; // Explicit full-queue boundary, independent of the production default.
   w.projects=w.plots.slice(0,3).map(p=>({plotId:p.plotId,type:'house',progress:0,required:99999}));
   w.zoneOrders=[{plotId:4,type:'house',dir:0},{plotId:6,type:'house',dir:0},{plotId:7,type:'cafe',dir:0}];
   const saved=deserialize(serialize(w)),events=tick(w);

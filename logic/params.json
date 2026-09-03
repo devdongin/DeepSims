@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 76,
+  "logicSchemaVersion": 77,
   "founding": { "petitionDays": 3, "minSettlers": 2 },
   "needsTiers": {
     "fulfilledMin": 4000,
@@ -453,6 +453,10 @@
       "jobless": -500,
       "perHabit": 120,
       "habitCap": 480,
+      "dailyNeed": 600,
+      "broke": -600,
+      "secure": 300,
+      "unpaid": -400,
       "span": 2500
     }
   },
@@ -878,7 +882,7 @@
     "immigPerExtra": 80,
     "immigWaveMax": 3,
     "slotPerTreasury": 150000,
-    "maxProjectSlots": 3
+    "maxProjectSlots": 6
   },
   "economy": {
     "healthCopayPct": 100,

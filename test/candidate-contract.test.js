@@ -35,12 +35,15 @@ import { collectCandidates } from '../sim/tick.js';
 //     갈리지 않아 candidates·choices·events는 그대로이고 world 해시만 움직였다.
 //   §23.25  (기분 바닥선) : 인구 200에서는 240틱 안에도 선택이 갈린다 — 바닥선이 높으면
 //     mood < 0 조건의 play·socialize 보정이 덜 걸리기 때문이다. 10·50은 world만 움직인다.
-//   #32 개척/행정 저장은 mood.baseline 위에 schema72/logic76로 통합했다. main 대비
-//     후보·선택·이벤트는 동일하며 개척 관측/저장 필드 때문에 world 해시만 갱신한다.
+//   §23.26  (건설 슬롯 6) : 국고가 쌓인 세계에서만 갈린다. 창세 직후 국고로는 슬롯이
+//     1개라 240틱 지평에서는 아무것도 안 바뀌어야 하는데, world 해시는 로직 파라미터를
+//     포함하므로 그 값만 움직인다.
+//   §23.29  (기분에 돈) : 현금 여력이 바닥선에 들어가 첫 틱부터 기분이 갈린다.
+//   #32 schema72/logic77 통합: main의 기분/건설 변경을 보존하고 world 해시 재측정.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', 'ddff0557', '222a2d67']],
-  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', 'f414a3ef']],
-  [200, ['5dad1750', '0928031a', 'e157d46b', '65a0078a']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', 'b490af47']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '35832df8']],
+  [200, ['91f50dd7', 'a23787ba', '2179523f', '084ff737']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

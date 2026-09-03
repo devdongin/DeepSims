@@ -84,6 +84,8 @@ if(process.argv.includes('--government')){
   assert.equal(money(w),before,'actual post-settlement economy must conserve currency across both treasuries');
   assert.equal(hashWorld(w),hashWorld(saved));assert.deepEqual(findNonFinite(w),[]);
   const residents=w.sims.filter(s=>s.villageId===village.id);
+  for(const member of w.founding.petitions[0].plan.residents)
+    assert.ok(residents.some(s=>s.id===member.simId),'every founding family member remains in its municipality');
   assert.ok(residents.length>0);assert.ok(residents.some(s=>s.id===village.government.mayorId&&canWork(s)));
   assert.ok(events.some(e=>e.type==='election'&&e.payload.villageId===village.id));
   governmentCheck={days:2,residents:residents.length,

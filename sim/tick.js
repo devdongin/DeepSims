@@ -158,6 +158,12 @@ export function moodBaseline(sim, world, L) {
   if (sim.homeId) v += B.home;
   if (sim.sick) v += B.sick;              // 아프면 바닥이 내려간다
   if (sim.traits.occupation === 'jobless') v += B.jobless;
+  // §23.29 돈은 잔액이 아니라 **며칠 버티는가**로 읽는다. 쪼들림과 여유는 대칭이 아니다 —
+  // 없는 쪽이 훨씬 크게 느껴진다(broke 600 vs secure 300).
+  const daysCovered = floorDiv(Math.max(0, sim.money), B.dailyNeed);
+  if (daysCovered < 2) v += B.broke;
+  else if (daysCovered >= 10) v += B.secure;
+  if ((sim.unpaidDays ?? 0) >= 3) v += B.unpaid; // 일했는데 못 받은 날이 사흘 넘는다
   // 즐겨 하는 일이 있는 삶 — 습관이 붙은 여가 하나당 조금씩 (§17.6 클럽과 같은 신호)
   let habits = 0;
   for (const [k, n] of Object.entries(sim.habit ?? {})) {
@@ -1689,12 +1695,21 @@ export function tick(world, inputsForThisTick = []) {
       })[0];
       if (!freePlot) break;
       {
+        // §23.28 **착공한 것도 세어야 한다** (Codex 지적). 완공된 침대만 세면, 집 한 채가
+        // 필요한 마을이 슬롯이 비어 있는 만큼 계속 착공한다 — 실측: 인구 10·침대 10인
+        // 마을에 국고 300만을 주자 첫 계획 틱에 집 6채가 한꺼번에 올라갔다.
+        // §23.26으로 슬롯을 3 → 6으로 올리면서 이 잠재 결함이 여섯 배로 드러났다.
+        const PLANNED_BEDS = { house: 2, apartment: 8 };
+        const pendingBeds = world.projects.reduce((n, p2) => n + (PLANNED_BEDS[p2.type] ?? 0), 0);
         const beds = world.map.facilities.filter(isAvailableResidence)
-          .reduce((n, f) => n + f.resources.length, 0);
+          .reduce((n, f) => n + f.resources.length, 0) + pendingBeds;
+        // §23.28 카페·공원도 착공 중인 것을 함께 센다 — 침대와 같은 이유다.
+        const PLANNED_SEATS = { cafe: 4, park: 1 }; // addBuilding이 만드는 자원 수와 같다
+        const pending = (type) => world.projects.filter((p2) => p2.type === type).length * (PLANNED_SEATS[type] ?? 0);
         const cafeSeats = world.map.facilities.filter((f) => f.type === 'cafe')
-          .reduce((n, f) => n + f.resources.length, 0);
+          .reduce((n, f) => n + f.resources.length, 0) + pending('cafe');
         const parkSpots = world.map.facilities.filter((f) => f.type === 'park')
-          .reduce((n, f) => n + f.resources.length, 0);
+          .reduce((n, f) => n + f.resources.length, 0) + pending('park');
         const pop = world.sims.length;
         // 주거 수요는 고정 여유가 아니라 최근 관측된 인구 증가 속도를 반영한다.
         // 통계가 없는 초기 세계는 기존 계약(headroomBeds)으로 시작한다.
@@ -1717,8 +1732,10 @@ export function tick(world, inputsForThisTick = []) {
         // §17.21 일자리 수요: office 근무 직업 심 수 vs 책상 슬롯 합
         const officeWorkers = world.sims.filter((s2) => canWork(s2) && L.workplace[s2.traits.occupation] === 'office'
           && L.occupations[s2.traits.occupation].wagePct > 0).length;
+        const PLANNED_DESKS = 4; // office 자원 수와 같은 값 — 착공 중인 사무실도 센다
         const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
-          .reduce((n, f) => n + f.resources.length, 0);
+          .reduce((n, f) => n + f.resources.length, 0)
+          + world.projects.filter((p2) => p2.type === 'office').length * PLANNED_DESKS;
         let type = neededSchool(world);
         if (type === 'university' && !candidates.some(p => zoneAllowedTypes(world,p.villageId).includes(type))) type = null;
         if (type === 'university' && !candidates.some(p => {

@@ -1317,6 +1317,10 @@ function removeSim(world, sim, t, emit, cause, eventType = 'died') {
       const i = s.sharedTo.indexOf(id);
       if (i >= 0) s.sharedTo.splice(i, 1);
     }
+    // §23.28 관계 티어도 지운다 (Codex 지적). 동아리는 지우면서 관계는 남겨 뒀는데,
+    // §23.25가 친구 수를 기분의 바닥으로 쓰기 시작하면서 **죽은 친구가 산 사람의 기분을
+    // 떠받치는** 상태가 됐다. 떠난 사람은 관계에서도 떠나야 한다.
+    if (s.relTiers?.[id] !== undefined) delete s.relTiers[id];
   }
   const idx = world.sims.findIndex((s) => s.id === id);
   if (idx >= 0) world.sims.splice(idx, 1);

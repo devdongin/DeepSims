@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 76, // #32 conditional gravity destination choice after rent pressure
+  logicSchemaVersion: 77, // Integrate #32 with main construction capacity and financial mood.
   founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
@@ -104,6 +104,13 @@ export const DEFAULT_LOGIC = {
       perFriend: 150, friendCap: 900, perRival: 200, rivalCap: 800,
       home: 300, sick: -700, jobless: -500,
       perHabit: 120, habitCap: 480,
+      // §23.29 돈 (Codex 지적: 기분 바닥선에 돈이 없어 저임금자와 여유 있는 사람이 같은
+      // 자리로 갔다). **잔액이 아니라 며칠 버티는가**를 본다 — 같은 1,000원도 하루치가
+      // 200원인 마을과 2,000원인 마을에서 뜻이 다르다.
+      dailyNeed: 600,      // 하루치 필수 지출 어림 (식사 세 번 남짓)
+      broke: -600,         // 이틀치도 없다
+      secure: 300,         // 열흘치 넘게 있다
+      unpaid: -400,        // 임금이 사흘 넘게 밀렸다
       span: 2500, // 바닥선 자체의 상한 — 사건이 주는 진폭(±10000)을 삼키지 않게
     },
   },
@@ -408,7 +415,12 @@ export const DEFAULT_LOGIC = {
     repCap: 500, repDecayPct: 95, // 일일 ×95% 감쇠
     immigPerExtra: 80, immigWaveMax: 3, // 웨이브 = 1 + floor(평판/80), 캡
     slotPerTreasury: 150000, // §19.3 국고 15만당 동시 건설 슬롯 +1 (돈이 시공 능력을 만든다)
-    maxProjectSlots: 3,      // 동시 착공 상한
+    // §23.26 동시 착공 상한. 3이면 국고 45만을 넘는 순간부터 **돈이 아무것도 사지 않는다**
+    // (Codex 지적: 1.4~1.9M 국고가 경제에 연결되지 않은 저수지). 라이브 마을은 국고 600만에
+    // 침대가 18개 모자란 상태로 멈춰 있었다 — 살 돈이 있는데 집이 없다.
+    // 상한을 올린다고 억지로 짓지는 않는다: 슬롯은 수요(neededSchool·침대 부족·책상 부족)가
+    // 있을 때만 채워지고, 실제 진척은 심들이 construct에 쓰는 노동이 정한다.
+    maxProjectSlots: 6,      // 동시 착공 상한
   },
   // §17.15 경제 순환: 소득세 → 국고 → 복지·시장 수당 (Lengnick baseline 차용, 드로우 0회)
   economy: {
@@ -1031,7 +1043,9 @@ function checkRanges(p, errors) {
   // §23.25 바닥선 검증 — span이 사건 진폭(±10000)에 가까워지면 기분이 사건에 반응하지 않는다.
   for (const k of ['married', 'dating', 'perFriend', 'friendCap', 'perRival', 'rivalCap',
     'home', 'perHabit', 'habitCap']) inRange(`mood.baseline.${k}`, p.mood.baseline[k], 0, 5000);
-  for (const k of ['sick', 'jobless']) inRange(`mood.baseline.${k}`, p.mood.baseline[k], -5000, 0);
+  for (const k of ['sick', 'jobless', 'broke', 'unpaid']) inRange(`mood.baseline.${k}`, p.mood.baseline[k], -5000, 0);
+  inRange('mood.baseline.dailyNeed', p.mood.baseline.dailyNeed, 1, 1000000);
+  inRange('mood.baseline.secure', p.mood.baseline.secure, 0, 5000);
   inRange('mood.baseline.span', p.mood.baseline.span, 0, 5000);
   inRange('disease.decayFactorNum', p.disease.decayFactorNum, 0, 100);
   inRange('disease.decayFactorDen', p.disease.decayFactorDen, 1, 100);
