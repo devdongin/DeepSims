@@ -157,7 +157,12 @@ const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', '
   // §22.10: 'car'·'smoke'는 렌더 코드(main.js 차량 아이콘·굴뚝 연기)와 에셋이 둘 다 있는데
   // 이 목록에만 빠져 있었다 — 텍스처 주입점이 여기뿐이라 exists()가 영원히 false였고,
   // 두 기능이 조용히 죽어 있었다. 차 구매(society.js)·이동속도 2배(tick.js)는 계속 돌고 있었다.
-  'car', 'smoke']
+  'car', 'smoke',
+  // §22.63 정원 잔디 — 목업의 지면 문법은 "마을 전체가 석재 포장, 잔디는 정원·화단 구획 안에만".
+  // 에셋 에이전트가 다섯 회차 연속 이 키를 요청했는데 **배선이 없어서** 만들어도 안 보였다.
+  // 배선을 먼저 둔다: 파일이 아직 없으면 loadImagesNative가 null로 받고 exists()가 false라
+  // 아래 drawGardens가 통째로 건너뛴다 — 즉 지금은 무해하고, PNG가 생기는 순간 살아난다.
+  'tile_garden']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -494,6 +499,28 @@ class TownScene extends Phaser.Scene {
     }
   }
 
+  // §22.63 정원 잔디. 목업에서 잔디는 **구획 안에만** 있다 — 공원 발자국이 그 구획이다.
+  // 스탬프(-5)·바탕(-10) 사이(-7)에 깔아 도로 타일을 덮지 않는다. 도로·물·벽 타일이 지나가는
+  // 칸은 건너뛴다 — 길이 잔디에 잘리면 목업의 "길은 이어진다"가 깨진다.
+  drawGardens() {
+    for (const im of this.gardenSprites ?? []) im.destroy();
+    this.gardenSprites = [];
+    if (!this.textures.exists('tile_garden')) return; // 에셋이 아직 없다 (무해)
+    const map = world.map;
+    for (const fac of map.facilities) {
+      if (fac.type !== 'park') continue;
+      for (let y = fac.y; y < fac.y + fac.h; y++) {
+        for (let x = fac.x; x < fac.x + fac.w; x++) {
+          if (x < 0 || y < 0 || x >= map.w || y >= map.h) continue;
+          const t = map.tiles[y * map.w + x];
+          if (t === 1 || t === 2 || t === 3 || t === 5 || t === 6) continue; // 길·포장·벽·물은 그대로
+          const im = this.add.image(isoX(x, y), isoY(x, y), 'tile_garden').setDisplaySize(TW, TH).setDepth(-7);
+          this.gardenSprites.push(im);
+        }
+      }
+    }
+  }
+
   drawWorld() {
     const g = this.mapLayer; g.clear();
     const { map } = world;
@@ -511,6 +538,7 @@ class TownScene extends Phaser.Scene {
       g.closePath(); g.fillPath();
     }
     this.bakeGround(); // 스탬프 셋을 타일 루프 전에 확정 (60차)
+    this.drawGardens(); // §22.63 공원 발자국 = 잔디 구획 (텍스처 없으면 무동작)
     // 비-GRASS 타일만 개별 렌더
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       const t = map.tiles[y * map.w + x];
