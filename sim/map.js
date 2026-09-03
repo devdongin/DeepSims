@@ -448,7 +448,7 @@ export function addBuilding(map, type, plot, dir = 0) {
     fac = {
       id, type, x, y, w: 8, h: 6, door: { x: x + 4, y },
       resources: Array.from({ length: 8 }, (_, k) => ({
-        id: `slot${k}`, kind: 'slot', x: x + 1 + (k % 4) * 2, y: y + 2 + Math.floor(k / 4) * 2,
+        id: `slot${k}`, kind: 'slot', x: x + 1 + (k % 4) + Math.floor((k % 4) / 2), y: y + 2 + Math.floor(k / 4) * 2,
       })),
     };
   } else if (type === 'mall') { // §18.T3: 쇼핑(till)+여가(seat) 복합 — 51차: till 결정적 명시
@@ -468,7 +468,7 @@ export function addBuilding(map, type, plot, dir = 0) {
     bld(x, y, 8, 6, x + 4, y + 5);
     fac = {
       id, type, x, y, w: 8, h: 6, door: { x: x + 4, y: y + 5 },
-      resources: [0, 1, 2, 3].map((k) => ({ id: `slot${k}`, kind: 'slot', x: x + 1 + k * 2, y: y + 2 })),
+      resources: [0, 1, 2, 3].map((k) => ({ id: `slot${k}`, kind: 'slot', x: x + 2 + (k % 2) * 3, y: y + 2 + Math.floor(k / 2) * 2 })),
     };
   } else { // park: 무벽 스팟 6
     fac = {
