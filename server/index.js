@@ -272,12 +272,13 @@ function sendSnapshot(ws) {
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,
     transit: engine.world.transit ?? null, // §19.12 역 수요 관측·언락 (zone 메뉴 게이트)
+    unlockedIndustries: engine.world.unlockedIndustries ?? [],
   } });
 }
 
 engine.onBatch((msg) => {
   for (const ws of clients) {
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, plannedCenterCost: engine.world.logic.zone.plannedCenterCost }); // §19.12
+    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, unlockedIndustries:msg.unlockedIndustries, plannedCenterCost: engine.world.logic.zone.plannedCenterCost });
     else send(ws, msg);
   }
 });

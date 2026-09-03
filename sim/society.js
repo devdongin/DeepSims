@@ -699,6 +699,7 @@ export function zoneAllowedTypes(world) {
   // 건설 레시피(ZONEABLE·비용·footprint)는 후속 라운드 — 그 전까지 zone 주문은
   // 기존 'bad_type'(언락됐지만 레시피 미구현) 분기로 결정적으로 거부된다.
   if (world.transit?.stationUnlocked) out.push('train_station');
+  for (const id of world.unlockedIndustries ?? []) if (!out.includes(id)) out.push(id);
   return out;
 }
 
@@ -1107,7 +1108,11 @@ export function maybeJobSwitch(world, t, day, emit) {
     // 수요 신호: 손님이 실제로 돈을 쓴 만큼만 사람을 쓴다
     let revenue = 0;
     for (const f of facs) revenue += f.revenue ?? 0;
-    if (revenue < I.minRevenueToHire) continue;
+    const productive = ['workshop','lab','warehouse'].includes(facType)
+      && world.unlockedIndustries?.includes(facType);
+    // Export-producing industries recruit from the demand that unlocked them;
+    // local services recruit only after customers leave revenue.
+    if (!productive && revenue < I.minRevenueToHire) continue;
     let have = 0;
     for (const s of world.sims) if (s.traits.occupation === occ) have++;
     if (have >= facs.length * I.workersPerFacility) continue;

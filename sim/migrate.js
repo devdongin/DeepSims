@@ -208,6 +208,7 @@ export function migrateWorld(world) {
   if (from < 54) {
     for (const sim of world.sims) { sim.isGenius ??= false; sim.geniusBirth ??= null; }
   }
+  if (from < 57) world.unlockedIndustries ??= [];
   if (from < 55) {
     for (const sim of world.sims) {
       sim.education ??= newEducation();

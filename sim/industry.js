@@ -33,7 +33,7 @@ export const KSIC = [
   },
   {
     code: 'C', nameKo: '제조업',
-    facilityTypes: ['factory'], occupations: ['worker'], actions: [],
+    facilityTypes: ['factory','workshop'], occupations: ['worker','artisan'], actions: [],
     note: '공장은 정의돼 있으나 살아 있는 마을에 아직 지어지지 않았다.',
   },
   {
@@ -58,7 +58,7 @@ export const KSIC = [
   },
   {
     code: 'H', nameKo: '운수 및 창고업',
-    facilityTypes: [], occupations: [], actions: [],
+    facilityTypes: ['warehouse'], occupations: ['logistician'], actions: [],
     note: '차는 개인 소유물일 뿐 운수업이 아니다. 창고·대중교통이 없다. '
       + '이동 수요는 transit 필드로 따로 관측한다(§19.12) — 시설 부재 좌절(directUnmet)과 다른 축이다.',
   },
@@ -89,7 +89,7 @@ export const KSIC = [
   },
   {
     code: 'M', nameKo: '전문, 과학 및 기술 서비스업',
-    facilityTypes: ['office'], occupations: ['office_worker', 'freelancer'], actions: [],
+    facilityTypes: ['office','lab'], occupations: ['office_worker', 'freelancer','researcher'], actions: [],
     // 109차 ③: office를 M에 넣은 것은 편의적 배정이다. 실제로는 사무직이 무슨 일을
     // 하는지가 세계에 없어서 J(정보통신)·K(금융)·N(사업지원) 어디로도 갈 수 있다.
     note: '사무직의 일이 무엇인지가 아직 추상이라 M에 임시 배정했다. '
@@ -232,6 +232,49 @@ function complaintSignals(world) {
 // 구매력 부족 총량 — 산업 수요와 **따로** 보고한다.
 export function purchasingPowerGap(world) {
   return complaintSignals(world).noMoneyTotal;
+}
+
+// §21.2 산업은 인구 등급이 아니라 세계가 실제로 만든 수요 증거로 열린다.
+// 문턱은 서로 다른 단위이므로 합산하지 않고 각각의 계약으로 판정한다.
+export const INDUSTRY_DEVELOPMENTS = [
+  { id:'workshop', facility:'workshop', occupation:'artisan', keyAbility:'dexterity',
+    signal:'construction' },
+  { id:'lab', facility:'lab', occupation:'researcher', keyAbility:'intellect',
+    signal:'study' },
+  { id:'warehouse', facility:'warehouse', occupation:'logistician', keyAbility:'stamina',
+    signal:'transport' },
+];
+
+export function industryDevelopmentEvidence(world, def) {
+  if (def.signal === 'construction') return (world.map?.facilities ?? []).filter(f =>
+    !['house','park','pond'].includes(f.type)).length;
+  if (def.signal === 'study') return (world.sims ?? []).reduce((n,s) => n + (s.development?.studyTicks ?? 0), 0);
+  if (def.signal === 'transport') return world.transit?.demand ?? 0;
+  return 0;
+}
+
+export function maybeUnlockIndustries(world, day, emit) {
+  world.unlockedIndustries ??= [];
+  for (const def of INDUSTRY_DEVELOPMENTS) {
+    if (world.unlockedIndustries.includes(def.id)) continue;
+    const evidence=industryDevelopmentEvidence(world,def);
+    const threshold=world.logic.industryDevelopment[def.id];
+    if(evidence<threshold) continue;
+    world.unlockedIndustries.push(def.id); // definition order is canonical and append-only
+    emit('industry_unlocked',null,{id:def.id,facility:def.facility,occupation:def.occupation,
+      signal:def.signal,evidence,threshold,day});
+  }
+}
+
+export function neededIndustryFacility(world) {
+  for(const def of INDUSTRY_DEVELOPMENTS) {
+    if(!world.unlockedIndustries?.includes(def.id)) continue;
+    if(world.map.facilities.some(f=>f.type===def.facility)) continue;
+    if(world.projects.some(p=>p.type===def.facility)||world.zoneOrders.some(o=>o.type===def.facility)) continue;
+    if(world.treasury < world.logic.zone.costs[def.facility]) continue;
+    return def.facility;
+  }
+  return null;
 }
 
 // 지금 세계의 산업 현황. 읽기 전용 — 세계를 바꾸지 않는다.

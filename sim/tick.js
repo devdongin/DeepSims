@@ -16,7 +16,7 @@ import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor, developFromActivity } from './abilities.js'; // §21.1 / #96
 import { makeSim, emptyState } from './simfactory.js';
-import { recordIndustryDemand, recordCapacityShortfall, recordIndustryWant } from './industry.js';
+import { recordIndustryDemand, recordCapacityShortfall, recordIndustryWant, maybeUnlockIndustries, neededIndustryFacility } from './industry.js';
 import { makeAbilities } from './abilities.js';
 import { surnameFor, surnameHash } from './surnames.js';
 import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
@@ -1276,6 +1276,7 @@ export function tick(world, inputsForThisTick = []) {
         // §21.3 전직: 손님이 몰린 가게에 누군가 일하러 간다 (복지 다음 — 서브순서 고정).
         // 복지 뒤에 두는 이유: 오늘의 지원이 반영된 뒤에 진로를 정하는 게 순서상 자연스럽다.
         maybeJobSwitch(world, t, day, emit);
+        maybeUnlockIndustries(world,day,emit);
         { // §17.24 분실물 귀속 (56차: dueDay ≤ day, itemId asc — 신고 시점 경찰 존재만 검사)
           const due = world.lostAndFound.filter((lf) => lf.dueDay <= day).sort((a, b) => a.itemId - b.itemId);
           for (const lf of due) {
@@ -1393,22 +1394,23 @@ export function tick(world, inputsForThisTick = []) {
           .reduce((n, f) => n + f.resources.length, 0);
         let type = neededSchool(world);
         if (type === 'university' && !zoneAllowedTypes(world).includes(type)) type = null;
+        if (!type) type = neededIndustryFacility(world);
         if (!type && pop + separated + observedHeadroom > beds) {
           // 읍 이상에서는 같은 공터로 더 많은 침대를 제공하는 아파트를 우선한다.
           // tier는 관측된 세계 상태이고, 타입 선택은 결정적이다.
           type = world.cityTier >= 1 ? 'apartment' : 'house';
         } // 선제 주택 (§17.21)
-        else if (!type && officeWorkers > officeDesks) type = 'office';
+        if (!type && officeWorkers > officeDesks) type = 'office';
         else if (!type && pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (!type && pop > parkSpots * L.construct.parkRatio) type = 'park';
         if (!type) break;
-        if (SCHOOL_TYPES.includes(type)) {
+        if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
           const fp=zoneFootprint(type,0);
           freePlot=candidates.find(p=>plotBuildable(world.map,p,fp.w,fp.h));
           if(!freePlot) break;
           const cost=L.zone.costs[type];
           world.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
-          emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:world.treasury});
+          if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:world.treasury});
         }
         {
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
