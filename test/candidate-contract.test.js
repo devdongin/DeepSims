@@ -28,10 +28,12 @@ import { collectCandidates } from '../sim/tick.js';
 //     가을 이후에는 비축·겨울 수확으로 실제 행동이 달라지므로 전체 상태를 새 기준으로 고정한다.
 //   #91     (생활 단계): 충족 시간/문화 수요 상태 추가. 첫240틱 후보·선택·이벤트 불변,
 //     이후 승급에 따른 새 행동은 의도된 변화다.
+//   #32     (마을 저장): 스키마/소속 메타데이터만 추가해 world 해시를 갱신한다.
+//     4320틱 원본 대조에서 이벤트·메타데이터 제외 전체 상태가 동일함을 별도 검증했다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', 'ddff0557', '2004c3e9']],
-  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '1c24fdc5']],
-  [200, ['5dad1750', '45ef6cbf', 'b8398314', 'aa6a5708']],
+  [10, ['0ab9198a', '32b2391b', 'ddff0557', '6cab2972']],
+  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '36b0b82c']],
+  [200, ['5dad1750', '45ef6cbf', 'b8398314', 'deaee076']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

@@ -84,7 +84,7 @@ test('#89 v61 migration installs empty pacing state and logic defaults without R
   const w = createWorld(89), rng = serialize(w.rngSim); w.schemaVersion = 61;
   w.logic.logicSchemaVersion = 57; delete w.logic.storyteller; delete w.storyteller;
   migrateWorld(w);
-  assert.equal(w.schemaVersion,65); assert.equal(w.logic.logicSchemaVersion, DEFAULT_LOGIC.logicSchemaVersion);
+  assert.equal(w.schemaVersion,66); assert.equal(w.logic.logicSchemaVersion, DEFAULT_LOGIC.logicSchemaVersion);
   assert.deepEqual(w.storyteller, makeStoryteller()); assert.equal(serialize(w.rngSim), rng);
 });
 

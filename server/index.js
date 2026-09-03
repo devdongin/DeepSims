@@ -1,5 +1,6 @@
 // DeepSims 로컬 서버 (PLAN §5). 부팅: 락 → DB → 따라잡기 → 라이브.
 import express from 'express';
+import { villageSummary } from '../sim/villages.js';
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -368,6 +369,7 @@ function sendSnapshot(ws) {
     storyteller: engine.world.storyteller,
     foodSupply: engine.world.foodSupply,
     season: engine.world.season,
+    villages: villageSummary(engine.world),
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,

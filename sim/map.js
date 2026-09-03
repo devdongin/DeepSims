@@ -1,4 +1,5 @@
 import { rngInt } from './prng.js'; // §19 R-A 지형 생성 (별도 스트림 주입)
+import { PRIMARY_VILLAGE_ID } from './villages.js';
 // 고정 저작 맵 48×48 (PLAN §2). rng를 쓰지 않는 순수 상수 데이터 생성.
 // 타일: 0=grass(가능) 1=road(가능) 2=floor(가능,실내) 3=wall(불가) 4=tree(불가) 5=water(불가)
 
@@ -503,6 +504,7 @@ export function addBuilding(map, type, plot, dir = 0) {
     fac.w = sz.w; fac.h = sz.h;
   }
   fac.dir = dir;
+  fac.villageId = plot.villageId ?? PRIMARY_VILLAGE_ID;
   fac.revenue ??= 0; // §20.2 매출 원장 — 신축 시설도 0에서 시작 (이슈 #43)
   if(isResidence(fac))fac.ownerSimId??=null; // #93 소유자 없는 신축 주택의 임대료는 국고 귀속
   map.reachVersion = (map.reachVersion ?? 0) + 1; // §20.3 벽이 생기면 도달 영역이 바뀐다
