@@ -9,7 +9,7 @@
 // 클라이언트가 실제로 읽는 필드는 아래가 전부다(client/main.js 전수 확인):
 //   id · name · x · y · state · needs · mood · money · sick · hasCar · isPlayer · traits
 // memories/relTiers/habit/plan/knownTokens/abilities/complaintDays/noPathCool/
-// sharedTo/approachedTo/hungerZeroTicks/groceries/patrolIdx/invitedTo/homeId 은 한 곳도 쓰지 않는다.
+// sharedTo/approachedTo/hungerZeroTicks/groceries/patrolIdx/invitedTo 는 한 곳도 쓰지 않는다.
 //
 // 이건 **전송 계층만의 변화**다 — 시뮬 상태·결정성·리플레이는 그대로다.
 // 새 필드가 화면에 필요해지면 여기에 한 줄 추가하면 된다.
@@ -28,6 +28,8 @@ export function simView(sim) {
     hasCar: sim.hasCar,
     isPlayer: sim.isPlayer,
     isGenius: sim.isGenius,
+    homeId: sim.homeId, // #51 가구/거주 관측
+    householdId: sim.householdId,
     education: sim.education ? { universityEnrolled: sim.education.universityEnrolled,
       universityGraduated: sim.education.universityGraduated, stage: sim.education.lastStage,
       tuitionPaid: sim.education.tuitionPaid, course: sim.education.course,

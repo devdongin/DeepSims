@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 58; // #71 실제 진료 자기부담·가족 지불·완료 재검증
+export const SCHEMA_VERSION = 59; // #51 명시적 가구와 내구 분가 의도
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -81,6 +81,9 @@ export const EVENT_TYPES = [
   'medical_visit_paid',
   'child_allowance_paid',
   'child_escorted',
+  'household_intent_created',
+  'household_intent_applied',
+  'household_intent_failed',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

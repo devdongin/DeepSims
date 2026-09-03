@@ -1,9 +1,10 @@
 {
-  "logicSchemaVersion": 54,
+  "logicSchemaVersion": 55,
   "industryDevelopment": { "workshop": 20, "lab": 3000, "warehouse": 300 },
   "education": { "annualTuition": 2000, "degreeStudyTicks": 20000, "bachelorYears": 4, "mastersYears": 2, "doctorateYears": 4,
     "mastersStudyTicks": 10000, "doctorateStudyTicks": 20000, "postgraduatePctFactor": 50,
     "studyDeficit": 6500, "dailyStudyTicks": 240, "startMinute": 540, "endMinute": 900 },
+  "household": { "independenceAge": 19, "stableDays": 7, "reserveMoney": 2400 },
   "development": {
     "geniusMin": 120, "geniusMax": 150,
     "birthPct": 10, "adultPct": 70, "matureAge": 25, "ticksPerPoint": 7200,

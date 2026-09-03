@@ -295,6 +295,7 @@ export function maybeChildren(world, t, day, emit) {
       name,
       surname: nameParent.surname ?? surnameFor(world.seed, nameParent.id),
       homeId: pa.homeId,
+      householdId: pa.householdId,
       traits,
       seed: world.seed,
       x: home.door.x,
@@ -411,6 +412,7 @@ function immigrateOne(world, t, emit) {
     name,
     surname: surnameFor(world.seed, id),
     homeId: home.id,
+    householdId: `household:${id}`,
     traits,
     seed: world.seed,
     x: 2,
@@ -455,6 +457,7 @@ export function applyRomance(world, sim, t, emit) {
     const other = world.sims.find((s2) => s2.id === partner);
     if (other.homeId !== sim.homeId) {
       const [lo, hi] = sim.id < partner ? [sim, other] : [other, sim];
+      lo.householdId = hi.householdId = `household:marriage:${lo.id}:${hi.id}`;
       const loHome = world.map.facilities.find((f) => f.id === lo.homeId);
       const residents = world.sims.filter((s2) => s2.homeId === lo.homeId).length;
       if (loHome.resources.length > residents) {
@@ -509,6 +512,7 @@ export function applyRomance(world, sim, t, emit) {
       }
       // 이주: id 높은 쪽이 낮은 쪽 집으로 (빈 침대 있을 때만 — 없으면 건설 수요로 해소될 때까지 대기)
       const [lo, hi] = sim.id < partner ? [sim, other] : [other, sim];
+      lo.householdId = hi.householdId = `household:marriage:${lo.id}:${hi.id}`;
       const loHome = world.map.facilities.find((f) => f.id === lo.homeId);
       const residents = world.sims.filter((s) => s.homeId === lo.homeId).length;
       if (hi.homeId !== lo.homeId && loHome.resources.length > residents) {

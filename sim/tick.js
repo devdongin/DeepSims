@@ -12,6 +12,7 @@ import { schoolFor, updateEducation, recordStudy, neededSchool, SCHOOL_TYPES, ca
 import { foodAidBlockReason, takePublicMeal } from './food-aid.js';
 import { medicalBlockReason, completeMedicalVisit } from './health-policy.js';
 import { applyChildAllowance } from './family-policy.js';
+import { applyHouseholdIntents, evaluateHouseholds } from './household.js';
 import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
@@ -683,6 +684,7 @@ function applyCreatePlayer(world, inp, t, emit) {
       ? p.surname
       : surnameFor(world.seed, id), // 플레이어가 성을 안 고르면 분포에서 뽑아 준다
     homeId: home.id,
+    householdId: `household:${id}`,
     isPlayer: true,
     logic: world.logic,
     traits,
@@ -867,6 +869,7 @@ export function tick(world, inputsForThisTick = []) {
 
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
+  applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
 
   // A guardian can die/emigrate between ticks. Never leave a child frozen or a
   // hospital seat owned by that child when the escort no longer exists.
@@ -1404,6 +1407,7 @@ export function tick(world, inputsForThisTick = []) {
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
         applyChildAllowance(world, t, emit); // #71 실제 부모 가구에 이전, RNG 없음
+        evaluateHouseholds(world,t,day,emit); // #51 지원·현재 잔고 뒤, 다음 틱 분가 의도 생성
         // §21.3 전직: 손님이 몰린 가게에 누군가 일하러 간다 (복지 다음 — 서브순서 고정).
         // 복지 뒤에 두는 이유: 오늘의 지원이 반영된 뒤에 진로를 정하는 게 순서상 자연스럽다.
         maybeJobSwitch(world, t, day, emit);
