@@ -131,7 +131,8 @@ function archOf(sim) {
 }
 // §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
 const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
-  'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
+  'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire',
+  'primary_school', 'middle_school', 'high_school'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 BLD_KEYS.push(['firework', './ui/fx_firework.png']); // §18.T4 승급 연출
 for (const t of ['grass', 'pavement', 'road', 'river', 'river_bank', 'sand', 'mountain', 'hill', 'bridge', 'water_deep']) {
@@ -141,16 +142,18 @@ for (const t of ['grass', 'pavement', 'road', 'river', 'river_bank', 'sand', 'mo
 const TILE_TEX = { 1: 'tile_road', 2: 'tile_pavement', 5: 'tile_water_deep', 6: 'tile_river',
   7: 'tile_river_bank', 8: 'tile_sand', 9: 'tile_mountain', 10: 'tile_hill', 11: 'tile_bridge', 12: 'tile_pavement' };
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
-for (const t of ['house_a', 'cafe', 'office']) for (const d of [1, 2, 3]) {
+for (const t of ['house_a', 'cafe', 'office', 'primary_school', 'middle_school', 'high_school']) for (const d of [1, 2, 3]) {
   BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
 }
 for (const t of ['apartment', 'factory', 'mall', 'university', 'house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
-  'cinema', 'bar', 'library', 'market', 'police', 'fire']) {
+  'cinema', 'bar', 'library', 'market', 'police', 'fire', 'primary_school', 'middle_school', 'high_school']) {
   BLD_KEYS.push([`bld_${t}_int`, `./props/bld_${t}_int.png`]); // §17.19 내부 컷어웨이
 }
 const BLD_OF_FACILITY = { apartment: 'bld_apartment', factory: 'bld_factory', mall: 'bld_mall', university: 'bld_university',
   cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
-  city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
+  city_hall: 'bld_city_hall', school: 'bld_school',
+  primary_school: 'bld_primary_school', middle_school: 'bld_middle_school', high_school: 'bld_high_school',
+  restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
   police_station: 'bld_police', fire_station: 'bld_fire' };
 const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern', 'police_car', 'fire_truck', 'ambulance', 'well', 'jangdok', 'laundry', 'bicycle', 'cart', 'flower_bed2', 'fence_wood', 'lamp_stone', 'street_tree_lit', 'bench2',
@@ -682,7 +685,7 @@ class TownScene extends Phaser.Scene {
     this.drawProps();
     let houseIdx = 0;
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학' }[fac.type];
+      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학' }[fac.type];
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
       const mode = this.facMode.get(fac.id) ?? 'tile';
       const opened = interiorOpen.has(fac.id);
@@ -980,6 +983,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
 }
 
 const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', site: '공사장' };
+Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교'});
 // §22.12 한국어 조사 — 종성(받침)으로 고른다.
 // 예전에는 이름 뒤에 조사를 하드코딩해 "수아이(가)", "은지이(가)", "수아과(와)"가
 // 나왔다. 이벤트 피드는 가상 플레이어 3인이 모두 이 게임 최고의 자산으로 꼽은
@@ -1006,9 +1010,9 @@ const ne = (w) => `${w}${hasJong(w) ? '이네' : '네'}`;
 const ACTION_TRY_KO = {
   eat: '밥 먹으려', sleep: '자려', work: '일하려', socialize: '사람 만나려',
   play: '놀려', drink: '한잔하려', binge_eat: '뭐 좀 먹으려', hole_up: '좀 쉬려',
-  exercise: '운동하려', build: '뭘 좀 만들려', read: '책 좀 읽으려', shop: '장 보려',
+  exercise: '운동하려', build: '뭘 좀 만들려', read: '책 좀 읽으려', study: '수업 들으려', shop: '장 보려',
   fish: '낚시하려', cook_eat: '밥 해 먹으려', construct: '공사 거들려',
-  see_doctor: '병원 가려', idle: '좀 쉬려',
+  see_doctor: '병원 가려', seek_food_aid: '공공 식사 받으려', idle: '좀 쉬려',
 };
 function actKo(id) { return ACTION_TRY_KO[id] ?? '뭘 좀 하려'; }
 
@@ -2299,14 +2303,14 @@ const ACTION_KO = {
   eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기',
   drink: '술 한잔', binge_eat: '폭식', hole_up: '은둔', exercise: '운동', build: '침대 만들기',
   read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기', see_doctor: '병원 진료',
-  respond_fire: '화재 진압',
+  respond_fire: '화재 진압', study: '학교 수업', seek_food_aid: '공공 식사 요청',
 };
 // 직업 라벨과 같은 규칙 — 표를 직접 인덱싱하지 않는다. 미등록 행동이 와도
 // 피드에 'undefined 시작'이 아니라 '활동 시작'이 뜬다.
 function actionKo(id, fallback = '활동') { return ACTION_KO[id] ?? fallback; }
 const BLOCK_KO = {
   no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
-  not_coping: '멀쩡함', not_needed: '불필요',
+  not_coping: '멀쩡함', not_needed: '불필요', no_funds: '국고 부족',
 };
 // #107 직업 라벨. sim/traits.js의 OCCUPATIONS **전 원소**가 여기 있어야 한다 —
 // 5종만 있던 동안 라이브 주민 173명 중 137명(79%)의 직업 칸이 'undefined'였다(child만 71명).
@@ -2502,6 +2506,14 @@ function eventText(e) {
     case 'road_work_planned': return `🏗️ 시장이 우회 연결로 ${e.payload.tiles}칸 공사를 계획했습니다 (예상 ${e.payload.cost}원)`;
     case 'ability_changed': return `📚 ${ga(n)} ${{stamina:'체력',dexterity:'손재주',intellect:'지능',charisma:'사교성'}[e.payload.ability]} ${e.payload.value}/${e.payload.potential} (${{study:'배움',career:'근무',exercise:'운동',age:'나이'}[e.payload.source]})`;
     case 'genius_born': return `⭐ ${ga(n)} 특별한 재능을 갖고 태어났습니다 (잠재치 ${e.payload.cap}, 성장에는 배움과 환경이 필요합니다)`;
+    case 'school_enrolled': return `🎒 ${ga(n)} ${PLACE_KO[e.payload.stage]}에 다닙니다 (${e.payload.age}세)`;
+    case 'school_planned': return `🏫 학생 수요에 따라 ${PLACE_KO[e.payload.type]} 공사를 시작했습니다 (국고 −${e.payload.cost}원)`;
+    case 'public_meal_taken': return `🍲 ${ga(n)} 공공 식사를 받았습니다 (국고 −${e.payload.cost}원)`;
+    case 'education_decided': return e.payload.choice === 'degree' ? `🎓 ${ga(n)} ${{university:'학부',masters:'석사',doctorate:'박사'}[e.payload.course]} 과정을 졸업했습니다`
+      : e.payload.choice === 'postgraduate' ? `🎓 ${ga(n)} ${{masters:'석사',doctorate:'박사'}[e.payload.course]} 과정에 진학합니다`
+      : e.payload.choice === 'university' ? `🎓 ${ga(n)} ${{university:'학부',masters:'석사',doctorate:'박사'}[e.payload.course]??'대학'} 과정에 등록했습니다 (학비 ${e.payload.tuition}원)`
+      : e.payload.choice === 'employment' ? `💼 ${ga(n)} 대학 대신 취업을 선택했습니다`
+      : `🎒 ${ga(n)} 대학 진학을 보류했습니다 (${{tuition:'학비 부족',unreachable:'통학로 없음',no_university:'대학 없음'}[e.payload.reason]})`;
     case 'side_talk': return `💬 ${ga(n)} 옆자리 ${wa(simName(e.payload.withSimId))} 말을 텄습니다`;
     case 'helped': {
       const why = { sick: '아픈', hungry: '배곯는', broke: '주머니가 빈' }[e.payload.why] ?? '';
@@ -2550,6 +2562,10 @@ function renderPanel() {
     if (pid !== undefined) extra += ` · ${world.partnerStage?.[sim.id] === 'married' ? '💍' : '💕'}${simName(pid)}`;
     if (world.mayorId === sim.id) extra += ' · 👑시장';
     if (sim.sick) extra += ' · 🤒';
+    if (sim.education?.stage) extra += ` · ${PLACE_KO[sim.education.stage]}`;
+    if (sim.education?.universityGraduated) extra += ' · 🎓대졸';
+    if (sim.education?.course) extra += ` · ${{university:'학부',masters:'석사',doctorate:'박사'}[sim.education.course]} ${sim.education.universityEnrolled?'재학':'등록 보류'}`;
+    if (sim.education?.highestDegree && sim.education.highestDegree !== 'bachelor') extra += ` · 🎓${{masters:'석사',doctorate:'박사'}[sim.education.highestDegree]}`;
     $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${sim.isPlayer ? ' · ◆나' : ''}${sim.isGenius ? ' · ⭐천재' : ''}${extra}`;
   }
   $('money').textContent = `💰 ${sim.money}원`;
@@ -2894,7 +2910,7 @@ setInterval(pushSpark, 5000);
   const modal = document.getElementById('zone-modal');
   if (!modal) return;
   let cur = null; let dir = 0; let type = 'house';
-  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000 };
+  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school:4000,middle_school:5000,high_school:6000 };
   const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**가 언락한다 (world.transit, 이슈 #52).
   // 착공 레시피(ZONEABLE·비용)는 후속 라운드 — 언락 전에는 충족도 %를, 언락 후에는

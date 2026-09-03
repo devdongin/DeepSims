@@ -14,7 +14,9 @@ export function buildDailyPlan(sim, L, day) {
   slots.push({ from: L.plan.mealSlot2Start, to: L.plan.mealSlot2End, intent: 'eat' });
   // §17.13 개인 근무 창: 크로노타입·야근(일별 의사확률)·교대 반영 (to > 1440 자정 랩)
   const ww = workWindowFor(sim, L, day);
-  if (ww) slots.push({ from: ww.from, to: ww.to, intent: 'work' });
+  if (sim.traits.occupation === 'student') {
+    if (!isWeekend(day)) slots.push({from:L.education.startMinute,to:L.education.endMinute,intent:'study'});
+  } else if (ww) slots.push({ from: ww.from, to: ww.to, intent: 'work' });
   // 여가 의도 의사확률: p(사교)=100-EI — E 성향일수록 어울리는 날이 많고, I도 가끔 어울린다
   // §17.17 주말은 여가 창이 근무 시간대까지 확장 (근무 슬롯이 빠진 자리를 여가가 채움)
   slots.push({

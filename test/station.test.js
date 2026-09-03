@@ -150,6 +150,8 @@ test('ST-7. 장거리 이동이 칸수를 함께 누적한다 (거리 분포의 
 test('ST-8. zone 계약 — 언락 전 tier_locked, 언락 후 bad_type (레시피는 후속 라운드)', () => {
   const w = createWorld(SEED);
   zeroTransport(w);
+  // 명령 거부의 회계만 검증한다. 일일 학교 수요 착공은 education.test.js에서 검증.
+  w.lastPlanDay = 0;
   w.treasury = 99999;
   const free = w.plots.find((p) => !p.used && plotBuildable(w.map, p));
   // 언락 전: 허용 타입에 없음 → tier_locked

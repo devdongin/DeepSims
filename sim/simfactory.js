@@ -15,6 +15,7 @@
 // (traits → needs×4 → money)는 호출자가 그대로 유지하고 결과 값만 넘긴다.
 import { makeAbilities, initializeDevelopment } from './abilities.js';
 import { DEFAULT_LOGIC } from './logic.js';
+import { newEducation, schoolFor } from './education.js';
 
 // 행동 상태의 빈 값. undefined 필드는 직렬화가 삼켜 왕복이 고정점이 아니게 되므로
 // 전부 명시적인 값을 둔다 (§22.13).
@@ -48,6 +49,7 @@ export function makeSim({
     isPlayer,
     isGenius: false,
     geniusBirth: null,
+    education: newEducation(),
     traits,
     abilities: makeAbilities(seed, id), // §21.1 드로우 없이 seed·id에서 유도
     mood: 0,
@@ -94,5 +96,6 @@ export function makeSim({
     wantedActions: [],
   };
   initializeDevelopment(sim, seed, logic);
+  sim.education.lastStage = schoolFor(sim);
   return sim;
 }

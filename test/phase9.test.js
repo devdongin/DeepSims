@@ -872,16 +872,20 @@ test('S-29. §18.T3 시설 티어: 레시피·mall 자원 분리·공해·졸업
   tick(w2, []);
   // 일일 감쇠(×95%)와 공해 순서: 공해(복지 다음) → ... → 감쇠(블록 끝): (100-6)×95/100 = 89
   assert.equal(w2.reputation, Math.floor((100 - 6) * 95 / 100), '공해 -6 후 감쇠');
-  // 졸업 가중: 대학 있으면 확장 풀에서 나올 수 있음 (풀 멤버십)
+  // 졸업 가중: 대학 건물 존재가 아니라 실제 누적 학업량으로 확장 풀 자격을 얻는다.
   const w3 = createWorld(SEED);
   const pc = w3.plots.find((p) => plotBuildableRef(w3.map, p, 8, 6));
   addBuildingRef(w3.map, 'university', pc);
-  w3.sims[0].traits = { ...w3.sims[0].traits, age: 25, occupation: 'student' };
+  w3.sims[0].traits = { ...w3.sims[0].traits, age: 22, occupation: 'student' };
+  w3.sims[0].education.universityEnrolled = true;
+  w3.sims[0].education.course = 'university';w3.sims[0].education.courseStartAge=19;
+  w3.logic.education.postgraduatePctFactor=0;
+  w3.sims[0].education.studied.university = DEFAULT_LOGIC.education.degreeStudyTicks;
   idleAll(w3, []);
   w3.worldTick = 360 * 1440 - 1; w3.weather.day = 360; w3.lastDailyDay = 359; w3.lastPlanDay = 360;
   const evs = tick(w3, []);
   const g = evs.find((e) => e.type === 'graduated' && e.simId === 0);
-  assert.ok(g && g.payload.uni === true, '대학 인지');
+  assert.ok(g && g.payload.uni === true, '대학 학업량 충족');
   const pool = [...DEFAULT_LOGIC.graduation.poolBase, ...DEFAULT_LOGIC.graduation.poolUni];
   assert.ok(pool.includes(g.payload.to), '확장 풀 멤버십');
 });
