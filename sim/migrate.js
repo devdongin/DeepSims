@@ -10,7 +10,7 @@ import { SCHEMA_VERSION } from './constants.js';
 import { newEducation } from './education.js';
 import { surnameFor } from './surnames.js';
 import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단일 정의 공유
-import { isWalkable } from './map.js';
+import { isWalkable, isResidence } from './map.js';
 import { emptyState } from './simfactory.js';
 
 export function migrateWorld(world) {
@@ -405,6 +405,11 @@ export function migrateWorld(world) {
     world.householdIntents ??= [];
     world.nextHouseholdIntentId ??= 0;
     world.householdDaily ??= { day:-1, households:[], failures:{} };
+  }
+  if(from<60){
+    for(const f of world.map.facilities)if(isResidence(f))f.ownerSimId??=null;
+    world.facilityUseToday??={};world.housingMarket??={day:-1,homes:[],facilityUse:{},totals:{charged:0,paid:0,shortfall:0}};
+    world.rentPressure??={};
   }
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {

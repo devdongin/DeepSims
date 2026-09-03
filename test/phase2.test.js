@@ -70,6 +70,7 @@ test('P2-4. create_player: 이름·성별·MBTI만 받고 나이·직업은 세�
   // 나이는 시드에서, 직업은 능력치 적성에서 나온다. 페이로드에 나이·직업을 실어 보내도
   // **무시된다** (예전에는 그게 곧 캐릭터였다).
   const w = createWorld(SEED);
+  w.lastDailyDay = 0; // 이 테스트는 플레이어 생성 계약만 검증한다.
   const evs = tick(w, [{ sequence: 0, command: 'create_player', payload: PLAYER }]);
   assert.ok(evs.some((e) => e.type === 'player_created'));
   const p = w.sims.find((s) => s.isPlayer);
@@ -84,6 +85,7 @@ test('P2-4. create_player: 이름·성별·MBTI만 받고 나이·직업은 세�
 
   // 나이·직업을 실어 보내도 무시된다
   const w2 = createWorld(SEED);
+  w2.lastDailyDay = 0;
   tick(w2, [{ sequence: 0, command: 'create_player', payload: { ...PLAYER, age: 88, occupation: 'politician' } }]);
   const p2 = w2.sims.find((s) => s.isPlayer);
   assert.equal(p2.traits.age, p.traits.age, '보낸 나이가 반영되면 안 된다');

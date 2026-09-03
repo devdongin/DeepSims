@@ -172,6 +172,7 @@ export function buildMap() {
   addSocietyVenuesTo(map.tiles, map.facilities, map.w);
   addLeisureVenuesTo(map.tiles, map.facilities, map.w);
   addCivicVenuesTo(map.tiles, map.facilities, map.w); // §17.13
+  for(const f of map.facilities)if(isResidence(f))f.ownerSimId=null; // #93 신규 주택은 공공 소유로 시작
   return map;
 }
 
@@ -503,6 +504,7 @@ export function addBuilding(map, type, plot, dir = 0) {
   }
   fac.dir = dir;
   fac.revenue ??= 0; // §20.2 매출 원장 — 신축 시설도 0에서 시작 (이슈 #43)
+  if(isResidence(fac))fac.ownerSimId??=null; // #93 소유자 없는 신축 주택의 임대료는 국고 귀속
   map.reachVersion = (map.reachVersion ?? 0) + 1; // §20.3 벽이 생기면 도달 영역이 바뀐다
   map.facilities.push(fac);
   return fac;

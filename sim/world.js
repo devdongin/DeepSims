@@ -93,6 +93,9 @@ export function createWorld(seed) {
     householdIntents: [], // #51 다음 틱에 재검증할 분가 의도
     nextHouseholdIntentId: 0,
     householdDaily: { day: -1, households: [], failures: {} },
+    facilityUseToday: {}, // #93 완료된 실제 시설 이용 횟수(일 경계에서 주택시장 스냅샷으로 소비)
+    housingMarket: { day:-1, homes:[], facilityUse:{}, totals:{charged:0,paid:0,shortfall:0} },
+    rentPressure: {},
     zoneOrders: [], // §18.T2 플레이어 건설 주문 FIFO: { plotId, type, dir }
     centers: [], // §18.T6 플레이어가 지정한 도시계획 중심점: { centerId, x, y, createdTick }
     terrainVersion: 1, // §19 R-A 지형 생성 버전 (신규·마이그레이션 동일 계약 — 63차 ②)

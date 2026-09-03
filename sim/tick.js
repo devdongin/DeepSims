@@ -13,6 +13,7 @@ import { foodAidBlockReason, takePublicMeal } from './food-aid.js';
 import { medicalBlockReason, completeMedicalVisit } from './health-policy.js';
 import { applyChildAllowance } from './family-policy.js';
 import { applyHouseholdIntents, evaluateHouseholds } from './household.js';
+import { settleHousing } from './housing.js';
 import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
@@ -1241,6 +1242,7 @@ export function tick(world, inputsForThisTick = []) {
     }
     // §22.14 옆 사람과 말이 트였으면 헛걸음이 아니다
     if (s.action !== 'idle') {
+      if(world.map.facilities.some(f=>f.id===s.facilityId))world.facilityUseToday[s.facilityId]=(world.facilityUseToday[s.facilityId]??0)+1;
       emit('action_completed', sim.id, {
         action: s.action, facilityId: s.facilityId,
         result: s.action === 'socialize' && s.pairedTicks === 0 && (s.sideTalkTicks ?? 0) === 0 ? 'lonely' : 'success',
@@ -1407,6 +1409,7 @@ export function tick(world, inputsForThisTick = []) {
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
         applyChildAllowance(world, t, emit); // #71 실제 부모 가구에 이전, RNG 없음
+        settleHousing(world,t,day,emit); // #93 지원 뒤 임대 정산, 다음 tick 이사 의도
         evaluateHouseholds(world,t,day,emit); // #51 지원·현재 잔고 뒤, 다음 틱 분가 의도 생성
         // §21.3 전직: 손님이 몰린 가게에 누군가 일하러 간다 (복지 다음 — 서브순서 고정).
         // 복지 뒤에 두는 이유: 오늘의 지원이 반영된 뒤에 진로를 정하는 게 순서상 자연스럽다.

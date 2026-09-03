@@ -152,6 +152,7 @@ test('ST-8. zone 계약 — 언락 전 tier_locked, 언락 후 bad_type (레시�
   zeroTransport(w);
   // 명령 거부의 회계만 검증한다. 일일 학교 수요 착공은 education.test.js에서 검증.
   w.lastPlanDay = 0;
+  w.lastDailyDay = 0; // #93 일일 임대 정산과 주문 거부 회계를 분리
   w.treasury = 99999;
   const free = w.plots.find((p) => !p.used && plotBuildable(w.map, p));
   // 언락 전: 허용 타입에 없음 → tier_locked
