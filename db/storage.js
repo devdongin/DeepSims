@@ -4,6 +4,7 @@ import { createWorld } from '../sim/world.js';
 import { serialize, deserialize } from '../sim/serialize.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { SCHEMA_VERSION, TICKS_PER_DAY, EVENT_TYPES } from '../sim/constants.js';
+import { CHRONICLE_PRIORITY, selectChronicle } from '../server/chronicle.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
@@ -221,46 +222,77 @@ export class Storage {
       .run(nowUtcMs, type, JSON.stringify(detail));
   }
 
-  // 부재중 리포트: (cursor, upto] 이벤트 집계 + 하이라이트 (PLAN §5)
   //
   // 의미 계약 (§22.12 라이브 프루닝 후 명시 — Codex 교차 리뷰 ①):
-  // counts/meals/works/moneyBySim은 **원본 events가 남아 있는 구간(최근 30게임일)**의
+  // counts/totals은 **원본 events가 남아 있는 구간(최근 30게임일)**의
   // 세부 통계다. 그보다 오래된 구간은 prunedAggregates(일×타입×심 단위 집계)로만
   // 돌아온다 — 합산하지 않는 것은 의도다: 두 해상도(틱 단위 원본 vs 일 단위 집계)를
   // 한 숫자로 섞으면 리포트가 어느 쪽 정밀도인지 알 수 없게 된다. 표시층이 구분해
   // 보여준다. 이는 부팅 프루닝 시절에도 같았고, 라이브 프루닝은 이 경계가 세션 중에도
   // 굴러간다는 점만 다르다.
+  // 부재중 리포트: (cursor, upto] 연대기 + 집계 (PLAN §5, §22.24 이슈 #90)
+  // 예전 형태(심별 식사/근무/잔액 목록 + lonely가 48/50을 먹는 highlights)는 §22.11
+  // 지적 5로 폐기했다. 화면이 쓰는 필드만 보낸다(§22.8): 연대기, 총계, 사망자 이름.
   getReport(cursorTick, uptoTick) {
     const counts = this.db.prepare(
       `SELECT type, COUNT(*) AS n FROM events WHERE tick > ? AND tick <= ? GROUP BY type`)
       .all(cursorTick, uptoTick);
-    const meals = this.db.prepare(
-      `SELECT sim_id, COUNT(*) AS n FROM events WHERE tick > ? AND tick <= ?
-       AND type = 'action_completed' AND json_extract(payload, '$.action') = 'eat' GROUP BY sim_id`)
-      .all(cursorTick, uptoTick);
-    const works = this.db.prepare(
-      `SELECT sim_id, COUNT(*) AS n FROM events WHERE tick > ? AND tick <= ?
-       AND type = 'action_completed' AND json_extract(payload, '$.action') = 'work' GROUP BY sim_id`)
-      .all(cursorTick, uptoTick);
-    const moneyBySim = this.db.prepare(
-      `SELECT sim_id, SUM(json_extract(payload, '$.delta')) AS delta FROM events
-       WHERE tick > ? AND tick <= ? AND type = 'money_changed' GROUP BY sim_id`)
-      .all(cursorTick, uptoTick);
-    const highlights = this.db.prepare(
+    // 총계 한 줄용 스칼라 — 심별 목록(인구 63이면 189줄)은 화면이 더는 그리지 않는다
+    const actionTotal = (action) => this.db.prepare(
+      `SELECT COUNT(*) AS n FROM events WHERE tick > ? AND tick <= ?
+       AND type = 'action_completed' AND json_extract(payload, '$.action') = ?`)
+      .get(cursorTick, uptoTick, action).n;
+    const moneyDelta = this.db.prepare(
+      `SELECT COALESCE(SUM(json_extract(payload, '$.delta')), 0) AS s FROM events
+       WHERE tick > ? AND tick <= ? AND type = 'money_changed'`)
+      .get(cursorTick, uptoTick).s;
+    // 인물 중심 한 줄: 이 공백 기간의 최대 증감자 (동률은 sim_id 낮은 쪽 — 결정적)
+    const mover = (dir) => {
+      const r = this.db.prepare(
+        `SELECT sim_id, SUM(json_extract(payload, '$.delta')) AS delta FROM events
+         WHERE tick > ? AND tick <= ? AND type = 'money_changed' AND sim_id IS NOT NULL
+         GROUP BY sim_id ORDER BY delta ${dir}, sim_id ASC LIMIT 1`)
+        .get(cursorTick, uptoTick);
+      return r ? { simId: r.sim_id, delta: r.delta } : null;
+    };
+    // 연대기 후보: 우선순위 테이블의 종류만, 시간순. 선별(상한·예산)은 server/chronicle.js.
+    const chronicleRows = this.db.prepare(
       `SELECT tick, ordinal, type, sim_id, payload FROM events WHERE tick > ? AND tick <= ?
-       AND type IN ('argument', 'starving', 'lonely', 'input_rejected', 'election', 'married', 'started_dating', 'broke_up', 'immigrated', 'facility_built', 'festival', 'fell_sick')
-       ORDER BY tick DESC, ordinal DESC LIMIT 50`)
-      .all(cursorTick, uptoTick)
+       AND type IN (${CHRONICLE_PRIORITY.map(() => '?').join(', ')})
+       ORDER BY tick ASC, ordinal ASC`)
+      .all(cursorTick, uptoTick, ...CHRONICLE_PRIORITY)
       .map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+    // 죽은 사람은 world.sims에 없어 클라이언트가 이름을 못 찾는다. 이름은 커서 구간이
+    // 아니라 **보존 창(30일)**의 died payload에서 모은다 (Codex 지적 ①: 지난 리포트
+    // 구간에서 죽은 부모를 이번 구간의 자립 문장이 참조할 수 있다). 창의 하한은
+    // pruneEvents와 같은 30일 기준이라 (Codex 지적 ②) 프루닝이 아직 안 돌았어도
+    // 리포트 내용이 같고, 장기 실행 중 무한 누적도 없다. 커서가 그보다 과거를 보면
+    // 그 구간 안의 사망은 항상 포함한다. 창 밖 사망은 클라이언트가 '심N'으로 접는다.
+    // 상한도 uptoTick — 과거 시점 리포트가 '그 이후의 사망'을 미리 알면 안 된다 (Codex ③).
+    const nameFloor = Math.min(cursorTick, uptoTick - 30 * TICKS_PER_DAY);
+    const deadNames = {};
+    for (const r of this.db.prepare(
+      `SELECT sim_id, json_extract(payload, '$.name') AS name FROM events
+       WHERE type = 'died' AND tick > ? AND tick <= ?`).all(nameFloor, uptoTick)) {
+      deadNames[r.sim_id] = r.name;
+    }
+    const chronicle = selectChronicle(chronicleRows);
     // 집계는 일 단위라 커서가 하루 중간이면 그 날 전체 집계를 포함시킨다 (교집합 기준).
     // 부분일 정밀도 손실은 의도된 근사 — 원본 이벤트는 이미 프루닝됨.
+    // §22.8: 화면은 (day, category, count)만 읽는다 — sim_id·sum 열은 보내지 않는다.
     const aggregates = this.db.prepare(
-      `SELECT day_start_tick, category, sim_id, count, sum FROM event_daily_aggregates
-       WHERE day_start_tick + ${TICKS_PER_DAY} - 1 > ? AND day_start_tick <= ?`)
+      `SELECT day_start_tick, category, SUM(count) AS count FROM event_daily_aggregates
+       WHERE day_start_tick + ${TICKS_PER_DAY} - 1 > ? AND day_start_tick <= ?
+       GROUP BY day_start_tick, category`)
       .all(cursorTick, uptoTick);
     return {
       fromTick: cursorTick, toTick: uptoTick, nextCursor: uptoTick,
-      counts, meals, works, moneyBySim, highlights, prunedAggregates: aggregates,
+      counts, chronicle, deadNames,
+      totals: {
+        meals: actionTotal('eat'), works: actionTotal('work'), moneyDelta,
+        topEarner: mover('DESC'), topSpender: mover('ASC'),
+      },
+      prunedAggregates: aggregates,
     };
   }
 
