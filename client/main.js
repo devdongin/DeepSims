@@ -162,7 +162,7 @@ const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', '
   // 에셋 에이전트가 다섯 회차 연속 이 키를 요청했는데 **배선이 없어서** 만들어도 안 보였다.
   // 배선을 먼저 둔다: 파일이 아직 없으면 loadImagesNative가 null로 받고 exists()가 false라
   // 아래 drawGardens가 통째로 건너뛴다 — 즉 지금은 무해하고, PNG가 생기는 순간 살아난다.
-  'tile_garden']
+  'tile_garden', 'wall_stone']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -290,8 +290,12 @@ class TownScene extends Phaser.Scene {
         // 2타일이 **온전히 들어갈 때만** 놓는다. 그냥 fx < x+w 로 돌면 폭이 홀수인
         // 7×5 공원에서 마지막 울타리가 경계를 한 칸 넘어 이웃 도로를 가로막는다
         // (Codex 리뷰 NO-GO 지적).
+        // §22.65 목업의 경계는 "낮은 석벽·나무 울타리" **둘 다**다. Codex가 wall_stone(32×24,
+        // fence_wood와 같은 규격)을 만들며 혼합 배치를 요청했다. 무작위가 아니라 위치로 정한다 —
+        // 3칸마다 한 번 석벽. 같은 공원은 늘 같은 무늬가 나오고, 리플레이·리싱크에도 안 흔들린다.
+        const edgeKey = (fx, fy) => (((fx - fac.x) / 2 + fy) % 3 === 0 ? 'wall_stone' : 'fence_wood');
         const fenceRow = (fy) => {
-          for (let fx = fac.x; fx + 1 < fac.x + fac.w; fx += 2) put('fence_wood', fx, fy, 24, -2);
+          for (let fx = fac.x; fx + 1 < fac.x + fac.w; fx += 2) put(edgeKey(fx, fy), fx, fy, 24, -2);
           // 폭이 홀수면 끝 한 칸이 빈다. 밖으로 내밀지 말고 안쪽에서 한 칸 겹쳐 채운다 —
           // 널빤지 울타리는 겹쳐도 자연스럽지만 삐져나가면 남의 길을 막는다.
           // w<3이면 2타일짜리가 아예 안 들어간다(넣으면 왼쪽으로 삐져나간다).
