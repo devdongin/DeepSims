@@ -144,6 +144,10 @@ export function migrateWorld(world) {
   if (from < 51) {
     world.centers ??= []; // §18.T6
   }
+  if (from < 52) {
+    world.roadReports ??= [];
+    for (const sim of world.sims) sim.state.journey ??= null;
+  }
   if (from < 22) {
     world.cityTier ??= 0; // §18.T4 — 기존 세이브는 다음 일일 평가에서 자연 승급 (축하 이벤트 라이브)
   }

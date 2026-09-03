@@ -12,6 +12,7 @@ import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js
 import { TILE, isRoadProtected } from './map.js';
 import { isResidence } from './map.js';
 import { learnToken as learnTokenRef } from './planning.js';
+import { maybeRoadWorks } from './roads.js';
 
 // §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
 function pushRecentCouple(world, a, b, t, kind) {
@@ -1053,6 +1054,10 @@ export function maybePublicWorks(world, t, day, emit) {
   const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
   if (world.treasury <= floorDiv(cashTotal * E.hoardRatioPct, 100)) return;
   world.lastPublicWorksDay = day;
+  if (maybeRoadWorks(world, t, day, emit)) {
+    recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', 'public_works'] });
+    return;
+  }
 
   // 후보: 마모가 임계의 pavePickPct% 이상인 타일. Object 키 순서에 기대지 않는다
   // (120차 ⑤) — 정수 검증 후 (wear desc, index asc)로 완전 순서를 강제한다.

@@ -117,6 +117,7 @@ export function createWorld(seed) {
     interactions, // 페어링 틱 카운트 (대칭, PLAN §12.1 D3)
     lastGreetDay, // 인사 하루 1회 가드 (대칭, D9)
     wear: {}, // 경로 마모 → 도로화 — 희소 객체 (§17.0 성능 계약)
+    roadReports: [],
     weather: { day: 0, kind: 'sunny' }, // §16.D — day 0은 드로우 없이 sunny 고정 (Codex 22차 항목 1)
     lostItems: [],   // §16.C 동적 오브젝트
     itemCounter: 0,

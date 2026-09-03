@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 51; // §18.T6 계획 중심점
+export const SCHEMA_VERSION = 52; // #118 완료된 우회 이동·도로 민원
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -54,6 +54,7 @@ export const EVENT_TYPES = [
   // §22.91 인도 형성 — 병합된 §117 인도 기능이 emit하는데 등록이 빠져 저장 계층이
   // 거부했다(테스트 16c: 'unregistered event type'). append-only 규약대로 끝에 붙인다.
   'sidewalk_formed',
+  'road_requested', 'road_work_planned',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

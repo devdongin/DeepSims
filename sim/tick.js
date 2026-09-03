@@ -7,6 +7,7 @@ import {
 } from './constants.js';
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
+import { recordRoadTrip } from './roads.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
@@ -478,6 +479,7 @@ function startAction(world, sim, cand, t, emit, reason) {
     facilityId: cand.facilityId,
     resourceId: cand.resourceId,
     path,
+    journey: path.length ? { x: sim.x, y: sim.y, walked: 0 } : null,
     ticksLeft: actionDuration(cand.action, world.logic),
   };
   emit('action_started', sim.id, {
@@ -659,16 +661,21 @@ function applyZone(world, inp, t, emit) {
   else if (reason === null && world.treasury < cost + Math.max(0, demolished) * (L.zone.demolitionCostPerTile ?? 0)) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionCost = demolished * (L.zone.demolitionCostPerTile ?? 0);
+  const tileChanges = [];
   if (demolished > 0) for (let y = plot.y; y < plot.y + zoneFootprint(p.type, p.dir).h; y++) for (let x = plot.x; x < plot.x + zoneFootprint(p.type, p.dir).w; x++) {
     const tile = world.map.tiles[y * world.map.w + x];
-    if (tile === TILE.ROAD || tile === TILE.SIDEWALK) world.map.tiles[y * world.map.w + x] = TILE.GRASS;
+    if (tile === TILE.ROAD || tile === TILE.SIDEWALK) {
+      world.map.tiles[y * world.map.w + x] = TILE.GRASS;
+      tileChanges.push({ index: y * world.map.w + x, tile: TILE.GRASS });
+    }
+    delete world.wear[y * world.map.w + x];
   }
   world.treasury -= cost + demolitionCost;
   // §22.4 (93차 ②) 건설비는 마을 밖 시공사에게 나간다 — 경계 **유출**로 명시한다.
   // 안 세면 '내부에서 돈이 사라지는' 회계가 되어 G1 폐쇄 회계가 성립하지 않는다.
   world.externalOutflow = (world.externalOutflow ?? 0) + cost + demolitionCost;
   world.zoneOrders.push({ plotId: p.plotId, type: p.type, dir: p.dir });
-  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, treasury: world.treasury });
+  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, tileChanges, treasury: world.treasury });
 }
 
 // §18.T6: 플레이어가 지정한 계획 중심점 — 비용을 즉시 예약하고 자동 건설 점수에 반영한다.
@@ -770,6 +777,7 @@ export function tick(world, inputsForThisTick = []) {
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
     sim.x = next.x; sim.y = next.y;
+    if (s.journey) s.journey.walked++;
     // §22.91 보행 마모: 사람 발자국은 차도가 아니라 인도가 된다.
     const ti = sim.y * world.map.w + sim.x;
     if (world.map.tiles[ti] === TILE.GRASS) {
@@ -810,6 +818,8 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
     if (s.path.length === 0) {
+      recordRoadTrip(world, sim, s.journey, t, emit);
+      s.journey = null;
       s.kind = 'performing';
       // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
       if (s.action === 'sleep') { runReflection(world, sim, t, emit); maybeBuyCar(world, sim, t, emit); collectComplaints(world, sim, t, emit); } // §19 R-B/§19.5
