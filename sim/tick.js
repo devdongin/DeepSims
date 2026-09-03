@@ -19,7 +19,8 @@ import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
 import { syncResidenceVillage } from './villages.js';
-import { governmentFor, governmentViews, governmentEmitter } from './government.js';
+import { governmentFor, governmentViews, governmentEmitter, changeReputation,
+  reputationVillage, recordMunicipalStats, publicBalance } from './government.js';
 import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
   foundingSiteReserved, foundingWorkerAllowed, recordFoundingHome, cancelFoundingConstruction } from './founding.js';
 import { SETTLE_ACTION, isSettlementInTransit, settlementGatherTarget,
@@ -1230,7 +1231,8 @@ export function tick(world, inputsForThisTick = []) {
     } else if (s.action === 'volunteer') {
       // 봉사는 마을의 평판을 올린다. 평판은 이민을 부르므로(§society.immigration)
       // "좋은 사람들이 사는 곳"이 실제로 사람을 불러들인다.
-      world.reputation = Math.min(L.growth.repCap, (world.reputation ?? 0) + L.actions.volunteer.repGain);
+      const facility=world.map.facilities.find(f=>f.id===s.facilityId);
+      changeReputation(world,L.actions.volunteer.repGain,facility?.villageId??sim.villageId);
     } else if (s.action === 'board_game') {
       const cost = L.actions.board_game.cost;
       sim.money -= cost;
@@ -1362,7 +1364,7 @@ export function tick(world, inputsForThisTick = []) {
       if (tax > 0) applyMood(sim, -floorDiv(tax * L.economy.taxMoodPer, 10)); // §18.T1 납세 불만 (그라데이션)
       if (sim.traits.occupation === 'police' && s.facilityId === 'patrol') { // §17.24 순찰 정산
         sim.patrolIdx++;
-        world.reputation = Math.min(L.growth.repCap, world.reputation + L.patrol.repPerPatrol);
+        changeReputation(world,L.patrol.repPerPatrol,sim.villageId);
       }
     }
     // §22.14 옆 사람과 말이 트였으면 헛걸음이 아니다
@@ -1575,9 +1577,11 @@ export function tick(world, inputsForThisTick = []) {
             }
           }
         }
-        { // §18.T3 공장 공해 (51차: 복지 다음·이민 전 고정) — 전역 평판 감소
-          const nf = world.map.facilities.filter((f) => f.type === 'factory').length;
-          if (nf > 0) world.reputation = Math.max(0, world.reputation - nf * L.pollution.repPerFactoryPerDay);
+        { // Factory pollution belongs to its actual municipality.
+          for(const local of governmentViews(world)){
+            const nf=local.map.facilities.filter(f=>f.type==='factory').length;
+            if(nf>0)local.reputation=Math.max(0,local.reputation-nf*L.pollution.repPerFactoryPerDay);
+          }
         }
         maybeImmigration(world, t, day, emit);
         maybeEmigration(world, t, day, emit);
@@ -1587,19 +1591,22 @@ export function tick(world, inputsForThisTick = []) {
         if(!aged) updateEducation(world, t, emit, resetStudent);
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10
-        world.reputation = floorDiv(world.reputation * world.logic.growth.repDecayPct, 100); // §17.21 일일 감쇠
-        maybePetition(world, t, day, emit); // §19.5 (70차 ③: 평판 합산·감쇠 뒤)
+        for(const local of governmentViews(world)){
+          local.reputation=floorDiv(local.reputation*world.logic.growth.repDecayPct,100);
+          maybePetition(local,t,day,governmentEmitter(local,emit));
+        }
         decayComplaints(world); // §19.7 불만 망각 — 청원 판정 뒤에 적용 (당일 불만은 온전히 반영)
         { // §18.T5 일일 통계 (평판 감쇠 다음 — 54차 고정, 캡 180 shift)
           const pop = world.sims.length;
           const sumMood = world.sims.reduce((n, s2) => n + s2.mood, 0);
           const employed = world.sims.filter((s2) => world.logic.occupations[s2.traits.occupation].wagePct > 0
             && s2.traits.occupation !== 'student').length;
-          world.statsHistory.push({ day, pop, treasury: world.treasury, reputation: world.reputation,
+          world.statsHistory.push({ day, pop, treasury: publicBalance(world), reputation: world.reputation,
             avgMood: pop > 0 ? floorDiv(sumMood, pop) : 0, employed, tier: world.cityTier,
             incidents: world.incidents.length,
             transport: world.transportStats.history.length ? transportSummary(world.transportStats.history.at(-1)) : null });
           while (world.statsHistory.length > 180) world.statsHistory.shift();
+          recordMunicipalStats(world,day);
         }
         // §19.12 역 수요 판정 (일일 통계 다음 — 서브순서 고정). RNG 미소비라 드로우
         // 순서 계약과 무관하고, world.transit 관측 필드와 1회성 언락 이벤트만 만든다.
@@ -1861,7 +1868,7 @@ export function tick(world, inputsForThisTick = []) {
       child_settled: G.repChild, election: G.repElection, gathering: G.repGathering };
     for (const e of events) {
       const r = REP[e.type];
-      if (r) world.reputation = Math.min(G.repCap, world.reputation + r);
+      if (r) changeReputation(world,r,reputationVillage(world,e));
     }
   }
 

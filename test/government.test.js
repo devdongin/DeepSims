@@ -1,14 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, tick, serialize, deserialize, hashWorld, migrateWorld } from '../sim/index.js';
-import { newGovernment, governmentFor, governmentViews, governmentEmitter, publicBalance } from '../sim/government.js';
-import { maybeElection, applyWelfare, remitPublicRevenue, maybeFiscalReview, mayorStipend } from '../sim/society.js';
+import { newGovernment, governmentFor, governmentViews, governmentEmitter, publicBalance,
+  recordMunicipalStats, reputationVillage } from '../sim/government.js';
+import { maybeElection, applyWelfare, remitPublicRevenue, maybeFiscalReview, mayorStipend,
+  fireSelfOut, maybePetition } from '../sim/society.js';
 import { medicalQuote } from '../sim/health-policy.js';
 import { foodAidBlockReason } from '../sim/food-aid.js';
 import { openSupplyMarket } from '../sim/food-supply.js';
 import { emptyState } from '../sim/simfactory.js';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 
 function twoVillages(){
   const w=createWorld(32),home=w.map.facilities.find(f=>f.id===w.sims[0].homeId);
@@ -30,7 +33,7 @@ test('#32 migration adds empty independent accounts without copying the original
   const {w,village}=twoVillages();w.schemaVersion=68;delete village.government;
   const before={money:w.treasury,rng:serialize(w.rngSim),sims:serialize(w.sims)};
   migrateWorld(w);
-  assert.equal(w.schemaVersion,69);assert.equal(village.government.treasury,0);
+  assert.equal(w.schemaVersion,SCHEMA_VERSION);assert.equal(village.government.treasury,0);
   assert.equal(publicBalance(w),before.money);assert.equal(serialize(w.rngSim),before.rng);
   assert.equal(serialize(w.sims),before.sims);
   const snapshot=serialize(w);migrateWorld(w);assert.equal(serialize(w),snapshot);
@@ -138,9 +141,11 @@ test('#32 the original town also excludes a student incumbent and never pays a s
 test('#32 diagnostic village government summaries are detached, not a second wallet',async()=>{
   const {villageSummary}=await import('../sim/villages.js');
   const {w,g}=twoVillages();g.treasury=75;g.policy.taxPct=20;
+  recordMunicipalStats(w,1);
   const before=serialize(w),rows=villageSummary(w);
   assert.equal(rows[0].government.treasury,w.treasury);assert.equal(rows[1].government.treasury,75);
   rows[1].government.treasury=999;rows[1].government.policy.taxPct=0;
+  rows[0].statsHistory[0].treasury=999;rows[1].statsHistory[0].pop=999;
   assert.equal(serialize(w),before);assert.equal(publicBalance(w),w.treasury+75);
 });
 
@@ -150,4 +155,84 @@ test('#32 actual family settlement sustains its own government and conserved fin
   const result=JSON.parse(output);
   assert.equal(result.governmentCheck.days,2);assert.equal(result.governmentCheck.residents,3);
   assert.ok(result.governmentCheck.treasury>0);assert.equal(result.governmentCheck.mayorId,0);
+});
+
+test('#32 actual volunteer completion and neglected fire change only the served facility municipality',()=>{
+  const {w,g,s}=twoVillages(),hall=w.map.facilities.find(f=>f.type==='city_hall'),r=hall.resources[0];
+  hall.villageId=s.villageId;w.reputation=100;g.reputation=100;
+  s.x=r.x;s.y=r.y;s.state={...emptyState(),kind:'performing',action:'volunteer',facilityId:hall.id,resourceId:r.id,ticksLeft:1};
+  w.reservations[`${hall.id}:${r.id}`]=s.id;
+  tick(w);
+  assert.equal(w.reputation,100);assert.equal(g.reputation,100+w.logic.actions.volunteer.repGain);
+  w.incidents=[{facilityId:hall.id,sinceTick:0}];
+  fireSelfOut(w,w.logic.incidents.selfOutTicks,()=>{});
+  assert.equal(w.reputation,100);assert.equal(g.reputation,100+w.logic.actions.volunteer.repGain-w.logic.incidents.selfOutRepPenalty);
+  assert.equal(w.incidents.length,0);
+});
+
+test('#32 reputation event attribution prefers explicit municipality, then facility, then resident',()=>{
+  const {w,s,home}=twoVillages();
+  for(const field of ['facilityId','homeId','placeId'])assert.equal(reputationVillage(w,{payload:{[field]:home.id}}),s.villageId);
+  assert.equal(reputationVillage(w,{simId:s.id,payload:{}}),s.villageId);
+  assert.equal(reputationVillage(w,{simId:s.id,payload:{villageId:'village:0'}}),'village:0');
+  assert.equal(reputationVillage(w,{payload:{}}),'village:0');
+});
+
+test('#32 a municipal petition neither lowers neighboring reputation nor disarms its petition',()=>{
+  const {w,g,s}=twoVillages();w.reputation=100;g.reputation=100;
+  w.complaints=[{kind:'hungry',count:10,sinceDay:0}];
+  for(const resident of w.sims.filter(x=>x.villageId===s.villageId))resident.complaintDays.hungry=0;
+  const events=[];
+  for(const local of governmentViews(w))maybePetition(local,600,0,governmentEmitter(local,(...e)=>events.push(e)));
+  assert.equal(events.length,1);assert.equal(events[0][2].villageId,s.villageId);
+  assert.equal(w.reputation,100);assert.equal(g.reputation,100-w.logic.complaints.petitionRepPenalty);
+  assert.equal(g.petitions.hungry.armed,false);assert.equal(w.petitions.hungry,undefined);
+});
+
+test('#32 fiscal trends use local observed balances, not the global series or another municipality',()=>{
+  const {w,g}=twoVillages();for(const s of w.sims)s.money=1000;
+  const allowance=2*w.logic.fiscal.stepWelfare;
+  w.policy.welfareAmount=allowance;g.policy.welfareAmount=allowance;
+  const globalBefore=serialize(w.statsHistory);
+  w.treasury=10;g.treasury=20;recordMunicipalStats(w,1);
+  w.treasury=20;g.treasury=10;recordMunicipalStats(w,2);
+  assert.equal(serialize(w.statsHistory),globalBefore);
+  const locals=governmentViews(w);
+  assert.deepEqual(locals.map(v=>v.statsHistory.map(row=>row.treasury)),[[10,20],[20,10]]);
+  const day=w.logic.fiscal.reviewIntervalDays;
+  for(const local of locals)maybeFiscalReview(local,day*1440,day,()=>{});
+  assert.equal(w.policy.welfareAmount,allowance,'rising primary balance does not trigger a cut');
+  assert.ok(g.policy.welfareAmount<allowance,'declining secondary balance triggers its own fiscal response');
+  const before=serialize(w),saved=deserialize(before);
+  recordMunicipalStats(w,2);recordMunicipalStats(saved,2);
+  assert.equal(serialize(w),serialize(saved));assert.equal(g.statsHistory.length,2,'same-day observations replace, not append');
+  for(let d=3;d<=200;d++)recordMunicipalStats(w,d);
+  for(const local of governmentViews(w)){assert.equal(local.statsHistory.length,180);assert.equal(local.statsHistory[0].day,21);}
+});
+
+test('#32 migration starts missing municipal observations empty, without relabeling historical global data',()=>{
+  const {w,g}=twoVillages();w.schemaVersion=69;delete g.petitions;
+  w.statsHistory=[{day:1,pop:10,treasury:500}];g.statsHistory=[{day:2,pop:2,treasury:7}];
+  const before=serialize(w.statsHistory),money=publicBalance(w);
+  migrateWorld(w);
+  assert.equal(serialize(w.statsHistory),before);assert.equal(publicBalance(w),money);
+  assert.deepEqual(w.villages[0].statsHistory,[]);assert.deepEqual(g.statsHistory,[{day:2,pop:2,treasury:7}]);
+  assert.deepEqual(g.petitions,{});const once=serialize(w);migrateWorld(w);assert.equal(serialize(w),once);
+});
+
+test('#32 the real daily tick applies factory pollution and decay to only the factory municipality',()=>{
+  const {w,g,s}=twoVillages();w.worldTick=1439;w.reputation=100;g.reputation=200;
+  w.logic.incidents.fireBasePermille=0;w.logic.incidents.kitchenBonusPermille=0;
+  w.map.facilities.push({id:'fixture-polluter',type:'factory',villageId:s.villageId,
+    x:400,y:400,w:1,h:1,door:{x:400,y:400},resources:[]});
+  const control=deserialize(serialize(w));
+  control.map.facilities.find(f=>f.id==='fixture-polluter').type='office';
+  tick(w);tick(control);
+  assert.equal(w.reputation,control.reputation,'another town cannot receive the pollution penalty');
+  const expected=Math.floor(200*w.logic.growth.repDecayPct/100)
+    -Math.floor((200-w.logic.pollution.repPerFactoryPerDay)*w.logic.growth.repDecayPct/100);
+  assert.equal(control.villages[1].government.reputation-g.reputation,expected);
+  assert.equal(g.statsHistory.length,1);assert.equal(g.statsHistory[0].pop,2);
+  assert.equal(w.villages[0].statsHistory[0].pop,w.sims.filter(x=>x.villageId==='village:0').length);
+  assert.equal(w.statsHistory.at(-1).treasury,publicBalance(w));
 });

@@ -4,10 +4,17 @@ export const PRIMARY_GOVERNMENT='village:0';
 export function newGovernment(){
   return {treasury:0,reputation:0,mayorId:null,policy:{},lastElectionDay:-1,
     termStartPolicy:null,lastFiscalDay:-1,playerPolicyDay:-1,campaigners:[],
-    childAllowanceDay:-1,statsHistory:[]};
+    childAllowanceDay:-1,statsHistory:[],petitions:{}};
 }
 export function initializeGovernments(world){
   for(const v of world.villages??[])if(v.id!==PRIMARY_GOVERNMENT)v.government??=newGovernment();
+}
+export function initializeMunicipalHistory(world){
+  if((world.villages?.length??0)<=1)return;
+  for(const v of world.villages){
+    if(v.id===PRIMARY_GOVERNMENT)v.statsHistory??=[];
+    else {v.government.statsHistory??=[];v.government.petitions??={};}
+  }
 }
 export function governmentFor(world,villageId=world.municipalityId??PRIMARY_GOVERNMENT){
   if(villageId==null||villageId===PRIMARY_GOVERNMENT)return world.rootWorld??world;
@@ -36,8 +43,36 @@ export function governmentViews(world){
         &&day-s.complaintDays[c.kind]<=window))};
     for(const key of FIELDS)Object.defineProperty(view,key,{enumerable:true,configurable:true,
       get:()=>authority[key],set:value=>{authority[key]=value;}});
+    if(v.id===PRIMARY_GOVERNMENT)Object.defineProperty(view,'statsHistory',{enumerable:true,configurable:true,
+      get:()=>v.statsHistory??[],set:value=>{v.statsHistory=value;}});
     return view;
   });
+}
+export function changeReputation(world,delta,villageId){
+  const authority=governmentFor(world,villageId);
+  authority.reputation=Math.max(0,Math.min(world.logic.growth.repCap,(authority.reputation??0)+delta));
+}
+export function reputationVillage(world,event){
+  const p=event.payload??{};
+  if(p.villageId)return p.villageId;
+  const facilityId=p.facilityId??p.homeId??p.placeId;
+  const facility=world.map.facilities.find(f=>f.id===facilityId);
+  if(facility)return facility.villageId??PRIMARY_GOVERNMENT;
+  return world.sims.find(s=>s.id===event.simId)?.villageId??PRIMARY_GOVERNMENT;
+}
+// The global series remains global. Municipal decisions consume only their own
+// observed days; founding and migration never fabricate an earlier local trend.
+export function recordMunicipalStats(world,day){
+  if((world.villages?.length??0)<=1)return;
+  for(const local of governmentViews(world)){
+    const pop=local.sims.length,ids=new Set(local.map.facilities.map(f=>f.id));
+    const row={day,pop,treasury:local.treasury,reputation:local.reputation,
+      avgMood:pop?Math.floor(local.sims.reduce((n,s)=>n+s.mood,0)/pop):0,
+      incidents:world.incidents.filter(i=>ids.has(i.facilityId)).length};
+    const history=local.statsHistory;
+    if(history.at(-1)?.day===day)local.statsHistory=[...history.slice(0,-1),row];
+    else local.statsHistory=[...history,row].slice(-180);
+  }
 }
 export function governmentEmitter(view,emit){
   return view.municipalityId&&view.municipalityId!==PRIMARY_GOVERNMENT

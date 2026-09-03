@@ -5,7 +5,7 @@ import { isWalkable } from './map.js';
 import { emptyState } from './simfactory.js';
 import { cancelFoundingConstruction } from './founding.js';
 import { settlementHouseholdsUnchanged } from './settlement-households.js';
-import { newGovernment } from './government.js';
+import { newGovernment, initializeMunicipalHistory } from './government.js';
 
 export const SETTLE_ACTION='settle_village';
 const pending=world=>(world.founding?.petitions??[]).filter(p=>p.status==='awaiting_settlement');
@@ -125,6 +125,7 @@ export function completeSettlementArrivals(world,t,emit){
     const id=`village:${world.nextVillageId++}`;
     const village={id,name:plan.name,foundedTick:t,center:{...homes[0].door},government:newGovernment()};
     world.villages.push(village);
+    initializeMunicipalHistory(world);
     for(const f of new Set(homes)){f.villageId=id;delete f.foundingPetitionId;}
     for(const plot of world.plots)if(plot.foundingPetitionId===p.id){
       plot.villageId=id;delete plot.foundingPetitionId;delete plot.foundingType;

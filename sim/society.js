@@ -18,7 +18,7 @@ import { learnToken as learnTokenRef } from './planning.js';
 import { maybeRoadWorks } from './roads.js';
 import { applyBirthTalent } from './genius.js';
 import { updateEducation, canWork } from './education.js';
-import { governmentFor, PRIMARY_GOVERNMENT } from './government.js';
+import { governmentFor, PRIMARY_GOVERNMENT, changeReputation } from './government.js';
 
 // §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
 function pushRecentCouple(world, a, b, t, kind) {
@@ -699,7 +699,8 @@ export function fireSelfOut(world, t, emit) {
     const inc = world.incidents[i];
     if (t - inc.sinceTick >= I.selfOutTicks) {
       world.incidents.splice(i, 1);
-      world.reputation = Math.max(0, world.reputation - I.selfOutRepPenalty);
+      const facility=world.map.facilities.find(f=>f.id===inc.facilityId);
+      changeReputation(world,-I.selfOutRepPenalty,facility?.villageId);
       emit('fire_out', null, { facilityId: inc.facilityId, by: 'self' });
     }
   }

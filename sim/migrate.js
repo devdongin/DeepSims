@@ -12,7 +12,7 @@ import { makeStoryteller } from './storyteller.js';
 import { initializeFoodSupply } from './food-supply.js';
 import { seasonAt } from './seasons.js';
 import { initializeVillages } from './villages.js';
-import { initializeGovernments } from './government.js';
+import { initializeGovernments, initializeMunicipalHistory } from './government.js';
 import { newFoundingState } from './founding.js';
 import { newNeedsTier } from './needs-tiers.js';
 import { newEducation } from './education.js';
@@ -435,6 +435,7 @@ export function migrateWorld(world) {
   if (from < 67) for (const sim of world.sims) sim.immuneUntil ??= 0;
   if (from < 68) world.founding ??= newFoundingState();
   if (from < 69) initializeGovernments(world);
+  if (from < 70) initializeMunicipalHistory(world);
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }
