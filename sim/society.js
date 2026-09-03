@@ -13,6 +13,7 @@ import { TILE, isRoadProtected } from './map.js';
 import { isResidence } from './map.js';
 import { learnToken as learnTokenRef } from './planning.js';
 import { maybeRoadWorks } from './roads.js';
+import { applyBirthTalent } from './genius.js';
 
 // §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
 function pushRecentCouple(world, a, b, t, kind) {
@@ -318,6 +319,7 @@ export function maybeChildren(world, t, day, emit) {
       money: L.occupations.child.startMoney,
       logic: L,
     });
+    applyBirthTalent(world, child, day, t, emit);
     world.sims.push(child);
     growIdMatrices(world); // §22.2 id 공간 기준 확장 (sims.length는 사망 후 어긋난다)
     world.parents[id] = [a, b];

@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 48, // #96 경험과 나이에 따른 능력 성장
+  logicSchemaVersion: 49, // #96 천재 잠재치 범위
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -90,6 +90,7 @@ export const DEFAULT_LOGIC = {
     aptitudePoolWeight: 300,
   },
   development: {
+    geniusMin: 120, geniusMax: 150,
     birthPct: 10, adultPct: 70, matureAge: 25, ticksPerPoint: 7200,
     physicalDeclineAge: 60, mentalDeclineAge: 75, declinePctPerYear: 1, minAgePct: 40,
   },
@@ -602,6 +603,8 @@ function checkRanges(p, errors) {
   inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);
   inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
   inRange('development.birthPct', p.development.birthPct, 0, 100);
+  inRange('development.geniusMin', p.development.geniusMin, 100, 150);
+  inRange('development.geniusMax', p.development.geniusMax, p.development.geniusMin, 150);
   inRange('development.adultPct', p.development.adultPct, p.development.birthPct, 100);
   inRange('development.matureAge', p.development.matureAge, 1, 100);
   inRange('development.ticksPerPoint', p.development.ticksPerPoint, 1, 1000000);

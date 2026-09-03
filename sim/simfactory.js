@@ -46,6 +46,8 @@ export function makeSim({
     surname,              // §22.16 성 — 표시는 `${surname}${name}`
     homeId,
     isPlayer,
+    isGenius: false,
+    geniusBirth: null,
     traits,
     abilities: makeAbilities(seed, id), // §21.1 드로우 없이 seed·id에서 유도
     mood: 0,
