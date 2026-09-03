@@ -12,7 +12,7 @@ import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
-import { aptitudeFor } from './abilities.js'; // §21.1
+import { aptitudeFor, developFromActivity } from './abilities.js'; // §21.1 / #96
 import { makeSim, emptyState } from './simfactory.js';
 import { recordIndustryDemand, recordCapacityShortfall, recordIndustryWant } from './industry.js';
 import { makeAbilities } from './abilities.js';
@@ -584,6 +584,7 @@ function applyCreatePlayer(world, inp, t, emit) {
       : surnameFor(world.seed, id), // 플레이어가 성을 안 고르면 분포에서 뽑아 준다
     homeId: home.id,
     isPlayer: true,
+    logic: world.logic,
     traits,
     seed: world.seed,
     x: home.door.x,
@@ -903,6 +904,7 @@ export function tick(world, inputsForThisTick = []) {
     const s = sim.state;
     if (s.kind !== 'performing') continue;
     s.ticksLeft--;
+    developFromActivity(world, sim, t, emit);
     const def = L.actions[s.action];
     const need = NEED_OF_ACTION[s.action];
     if (need && def.recoverPerTick) {

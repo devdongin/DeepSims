@@ -1,5 +1,9 @@
 {
-  "logicSchemaVersion": 47,
+  "logicSchemaVersion": 48,
+  "development": {
+    "birthPct": 10, "adultPct": 70, "matureAge": 25, "ticksPerPoint": 7200,
+    "physicalDeclineAge": 60, "mentalDeclineAge": 75, "declinePctPerYear": 1, "minAgePct": 40
+  },
   "decay": {
     "hunger": 6,
     "energy": 4,

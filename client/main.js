@@ -2341,6 +2341,7 @@ function eventText(e) {
     }
     case 'road_requested': return `🚶 ${ga(n)} 반복 우회로 개선을 요청했습니다 (${e.payload.walked}칸, 직선 ${e.payload.direct}칸)`;
     case 'road_work_planned': return `🏗️ 시장이 우회 연결로 ${e.payload.tiles}칸 공사를 계획했습니다 (예상 ${e.payload.cost}원)`;
+    case 'ability_changed': return `📚 ${ga(n)} ${{stamina:'체력',dexterity:'손재주',intellect:'지능',charisma:'사교성'}[e.payload.ability]} ${e.payload.value}/${e.payload.potential} (${{study:'배움',career:'근무',exercise:'운동',age:'나이'}[e.payload.source]})`;
     case 'side_talk': return `💬 ${ga(n)} 옆자리 ${wa(simName(e.payload.withSimId))} 말을 텄습니다`;
     case 'helped': {
       const why = { sick: '아픈', hungry: '배곯는', broke: '주머니가 빈' }[e.payload.why] ?? '';
@@ -2392,6 +2393,12 @@ function renderPanel() {
     $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${sim.isPlayer ? ' · ⭐나' : ''}${extra}`;
   }
   $('money').textContent = `💰 ${sim.money}원`;
+  $('abilities').replaceChildren(...Object.entries({stamina:'체력',dexterity:'손재주',intellect:'지능',charisma:'사교성'})
+    .map(([key, label]) => {
+      const entry = document.createElement('span');
+      entry.textContent = `${label} ${sim.abilities?.[key] ?? '—'} / ${sim.potential?.[key] ?? '—'}`;
+      return entry;
+    }));
   $('action').textContent = `현재: ${actionKo(sim.state.action, '대기')} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
 }
 

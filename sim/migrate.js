@@ -1,7 +1,7 @@
 // 세이브 마이그레이션 (PLAN §12.1): 입력 처리 전 로드 시점에 완료.
 // 결정적 — 임시 RNG만 사용, world의 rngSim/rngWorldgen 상태를 소비하지 않는다.
 import { migrationTraits } from './traits.js';
-import { makeAbilities } from './abilities.js'; // §21.1
+import { makeAbilities, initializeDevelopment } from './abilities.js'; // §21.1 / #96
 import { growIdMatrices as growIdMatricesRef } from './society.js'; // §22.2
 import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
@@ -198,6 +198,9 @@ export function migrateWorld(world) {
     // §21.1 능력치 (이슈 #62): seed·simId에서 결정적으로 유도하므로 rngSim을 소비하지 않는다.
     // 기존 심도 즉시 같은 값을 갖고, 리플레이 스트림이 어긋나지 않는다.
     for (const sim of world.sims) sim.abilities ??= makeAbilities(world.seed, sim.id);
+  }
+  if (from < 53) {
+    for (const sim of world.sims) initializeDevelopment(sim, world.seed, DEFAULT_LOGIC, true);
   }
   if (from < 33) {
     // §20.3 사회적 중력: 새 파라미터는 mergeLogicDefaults가 설치한다. 세계 데이터 이관은 없다 —
