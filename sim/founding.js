@@ -5,6 +5,7 @@ import { isResidence, plotBuildable, zoneFootprint, sameRegion, addBuilding } fr
 import { PRIMARY_VILLAGE_ID } from './villages.js';
 import { emptyState } from './simfactory.js';
 import { planSettlementHouseholds, settlementHouseholdsUnchanged } from './settlement-households.js';
+import { governmentFor } from './government.js';
 
 const active=p=>['pending','approved','building','awaiting_settlement'].includes(p.status);
 
@@ -113,7 +114,7 @@ export function quoteFoundingSites(world, petitionId, homePlotIds, status='pendi
   if(homes.some(f=>!sameRegion(preview,source.center.x,source.center.y,f.door.x,f.door.y)))return fail('blocked_entrance');
   if(evidence.population<evidence.beds||evidence.vacantHomes||evidence.localBuildablePlots||evidence.pendingHomes)return fail('conditions_changed');
   const cost=family.homes.reduce((n,h)=>n+world.logic.zone.costs[h.type],0);
-  if(!Number.isSafeInteger(cost)||cost<0||world.treasury<cost)return fail('treasury_short');
+  if(!Number.isSafeInteger(cost)||cost<0||governmentFor(world,source.id).treasury<cost)return fail('treasury_short');
   return {ok:true,petitionId,sourceVillageId:source.id,homePlotIds:plots.map(p=>p.plotId),cost,
     settlerIds:[...workers],residents:family.residents,
     homes:family.homes.map((h,i)=>({...h,plotId:plots[i].plotId}))};
@@ -160,7 +161,7 @@ export function fundFoundingPlans(world,t,emit){
     }
     // All checks precede the single payment; construction costs use the same
     // external-contractor accounting as normal paid zoning. No new wallet.
-    world.treasury-=quote.cost;world.externalOutflow=(world.externalOutflow??0)+quote.cost;
+    governmentFor(world,petition.villageId).treasury-=quote.cost;world.externalOutflow=(world.externalOutflow??0)+quote.cost;
     petition.status='building';plan.fundedTick=t;plan.fundedCost=quote.cost;plan.completedHomeIds=[];plan.completedHomes=[];
     for(const {plotId,type} of plan.homes){
       const plot=world.plots.find(p=>p.plotId===plotId);plot.foundingPetitionId=petition.id;plot.foundingType=type;
@@ -213,7 +214,7 @@ export function cancelFoundingConstruction(world,petitionId,reason,t,emit){
   endFoundingWorkAt(world,new Set(unbuilt.keys()));
   world.zoneOrders=world.zoneOrders.filter(q=>q.foundingPetitionId!==petitionId);
   world.projects=world.projects.filter(q=>q.foundingPetitionId!==petitionId);
-  world.treasury+=refund;world.externalInflow=(world.externalInflow??0)+refund;
+  governmentFor(world,p.villageId).treasury+=refund;world.externalInflow=(world.externalInflow??0)+refund;
   for(const plot of world.plots)if(plot.foundingPetitionId===petitionId){delete plot.foundingPetitionId;delete plot.foundingType;}
   for(const fac of world.map.facilities)if(fac.foundingPetitionId===petitionId)delete fac.foundingPetitionId;
   p.status='cancelled';p.resolvedTick=t;p.reason=reason;p.plan.refundedCost=refund;

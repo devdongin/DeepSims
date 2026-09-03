@@ -103,7 +103,7 @@ test('#32 migration from the released immunity schema preserves existing immunit
   w.sims[0].immuneUntil=12345;
   const rng=serialize(w.rngSim),immunity=w.sims.map(s=>s.immuneUntil);
   migrateWorld(w);
-  assert.equal(w.schemaVersion,68);assert.equal(w.logic.logicSchemaVersion,DEFAULT_LOGIC.logicSchemaVersion);
+  assert.equal(w.schemaVersion,SCHEMA_VERSION);assert.equal(w.logic.logicSchemaVersion,DEFAULT_LOGIC.logicSchemaVersion);
   assert.deepEqual(w.sims.map(s=>s.immuneUntil),immunity);
   assert.equal(serialize(w.rngSim),rng);assert.equal(w.founding.lastDay,-1);
   const saved=serialize(w);migrateWorld(w);assert.equal(serialize(w),saved);

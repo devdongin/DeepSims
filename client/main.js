@@ -3572,6 +3572,7 @@ function connect() {
         world.worldTick = msg.toTick;
         world.sims = msg.sims;
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
+        if (msg.publicTreasury !== undefined) world.publicTreasury = msg.publicTreasury;
         if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
         if (msg.projects !== undefined) world.projects = msg.projects; // §19.3
         if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
@@ -3601,7 +3602,10 @@ function connect() {
         }
         // §18.T1: 정책 변경 이벤트로 클라 상태 동기화 — 슬라이더가 낡은 값을 재전송하지 않도록 (Codex 46차)
         for (const e of msg.events) {
-          if (e.type === 'policy_changed') world.policy = { ...(world.policy ?? {}), ...e.payload.changes };
+          if (e.type === 'policy_changed') {
+            const villageId=e.payload.villageId;
+            if(!villageId||villageId==='village:0')world.policy = { ...(world.policy ?? {}), ...e.payload.changes };
+          }
         }
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);

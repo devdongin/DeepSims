@@ -19,6 +19,7 @@ import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
 import { syncResidenceVillage } from './villages.js';
+import { governmentFor, governmentViews, governmentEmitter } from './government.js';
 import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
   foundingSiteReserved, foundingWorkerAllowed, recordFoundingHome, cancelFoundingConstruction } from './founding.js';
 import { SETTLE_ACTION, isSettlementInTransit, settlementGatherTarget,
@@ -830,6 +831,7 @@ function applyZone(world, inp, t, emit) {
   const p = inp.payload ?? {};
   const L = world.logic;
   const plot = world.plots.find((pl) => pl.plotId === p.plotId);
+  const government=governmentFor(world,plot?.villageId);
   const cost = L.zone.costs[p.type];
   let reason = null;
   if (!plot) reason = 'no_plot';
@@ -846,7 +848,7 @@ function applyZone(world, inp, t, emit) {
     } return n; };
   const demolished = plot ? demolitionTiles() : 0;
   if (reason === null && !(() => { const fp = zoneFootprint(p.type, p.dir); return plotBuildable(world.map, plot, fp.w, fp.h) || demolished > 0; })()) reason = 'not_buildable';
-  else if (reason === null && world.treasury < cost + Math.max(0, demolished) * (L.zone.demolitionCostPerTile ?? 0)) reason = 'treasury_short';
+  else if (reason === null && government.treasury < cost + Math.max(0, demolished) * (L.zone.demolitionCostPerTile ?? 0)) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionCost = demolished * (L.zone.demolitionCostPerTile ?? 0);
   const tileChanges = [];
@@ -858,12 +860,12 @@ function applyZone(world, inp, t, emit) {
     }
     delete world.wear[y * world.map.w + x];
   }
-  world.treasury -= cost + demolitionCost;
+  government.treasury -= cost + demolitionCost;
   // §22.4 (93차 ②) 건설비는 마을 밖 시공사에게 나간다 — 경계 **유출**로 명시한다.
   // 안 세면 '내부에서 돈이 사라지는' 회계가 되어 G1 폐쇄 회계가 성립하지 않는다.
   world.externalOutflow = (world.externalOutflow ?? 0) + cost + demolitionCost;
   world.zoneOrders.push({ plotId: p.plotId, type: p.type, dir: p.dir });
-  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, tileChanges, treasury: world.treasury });
+  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, tileChanges, treasury: government.treasury });
 }
 
 // §18.T6: 플레이어가 지정한 계획 중심점 — 비용을 즉시 예약하고 자동 건설 점수에 반영한다.
@@ -908,8 +910,8 @@ export function maybePlanCenter(world, t, day, emit) {
 }
 
 // §18.T1: 유효 경제값 — 정책 오버라이드 우선 (읽기 단일 권위)
-function econ(world, key) {
-  return world.policy[key] ?? world.logic.economy[key];
+function econ(world, key, villageId) {
+  return governmentFor(world,villageId).policy[key] ?? world.logic.economy[key];
 }
 
 function applyAssign(world, inp, t, emit) {
@@ -1328,20 +1330,22 @@ export function tick(world, inputsForThisTick = []) {
         // 일을 했으면 받는다. 국고가 모자라면 음수(공채)로 내려가고, §22.22의
         // runway 반응이 부채에 작동한다 (Bohn 1998이 정확히 부채 반응 함수다).
         // §22.4 폐쇄 회계는 유지된다 — 국고가 합산 항이므로 총합 불변식은 음수여도 성립.
-        const before = world.treasury;
+        const workplace=world.map.facilities.find(f=>f.id===s.facilityId);
+        const government=governmentFor(world,workplace?.villageId??sim.villageId);
+        const before = government.treasury;
         const cap = -(L.economy.maxDebt ?? 0);
         if (before - wage < cap) {
           // maxDebt는 오버플로 가드다(1e12) — 여기 걸리는 건 사실상 버그 상황이고,
           // 그때만 부분 지급하며 관측 가능하게 알린다 (118차 C).
           const paid = Math.max(0, before - cap);
           emit('insolvent', sim.id, { asked: wage, paid, treasury: before });
-          world.treasury = before - paid;
+          government.treasury = before - paid;
           wage = paid;
         } else {
-          world.treasury = before - wage;
+          government.treasury = before - wage;
           // 0 하향 돌파 전이에만 알린다 — 매 지급마다가 아니라 빚이 시작될 때
-          if (before >= 0 && world.treasury < 0) {
-            emit('treasury_debt', sim.id, { treasury: world.treasury, firstWage: wage });
+          if (before >= 0 && government.treasury < 0) {
+            emit('treasury_debt', sim.id, { treasury: government.treasury, firstWage: wage });
           }
         }
       } else {
@@ -1349,10 +1353,10 @@ export function tick(world, inputsForThisTick = []) {
         world.externalInflow = (world.externalInflow ?? 0) + wage;
       }
       // §17.15 소득세 원천징수: 실수령 = wage×(100-taxPct)/100, 세금은 국고로
-      const net = floorDiv(wage * (100 - econ(world, 'taxPct')), 100);
+      const net = floorDiv(wage * (100 - econ(world, 'taxPct',sim.villageId)), 100);
       const tax = wage - net;
       sim.money += net;
-      world.treasury += tax;
+      governmentFor(world,sim.villageId).treasury += tax;
       emit('money_changed', sim.id, { delta: net, balance: sim.money, action: 'work', tax });
       applyMood(sim, L.mood.moneyGain);
       if (tax > 0) applyMood(sim, -floorDiv(tax * L.economy.taxMoodPer, 10)); // §18.T1 납세 불만 (그라데이션)
@@ -1526,9 +1530,13 @@ export function tick(world, inputsForThisTick = []) {
         dailyDiseaseDraws(world, t, emit, offerStory);
         dailyFireDraws(world, t, emit, offerStory); // 기존 질병 → 화재 드로우 수/순서 유지
         resolveStoryCandidates(world, t, storyCandidates, emit); // #89 후보 중 최대 1개, RNG 없음
-        updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
-        maybeElection(world, t, day, emit);
-        maybeFiscalReview(world, t, day, emit); // §22.22 선거 직후 고정 위치 — 그날 복지 정산부터 새 정책
+        for(const local of governmentViews(world)){
+          if(local.mayorId!==null&&!local.sims.some(s=>s.id===local.mayorId&&canWork(s)))local.mayorId=null;
+          const localEmit=governmentEmitter(local,emit);
+          updateCampaigners(local,day);
+          maybeElection(local,t,day,localEmit);
+          maybeFiscalReview(local,t,day,localEmit);
+        }
         maybePublicWorks(world, t, day, emit); // §22.26 순서 고정: 선거 → 재정 → 공공사업 (120차 ⑥)
         maybePlanCenter(world, t, day, emit);
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
@@ -1542,9 +1550,12 @@ export function tick(world, inputsForThisTick = []) {
           }
         }
         remitPublicRevenue(world, t, emit);
-        mayorStipend(world, t, emit);
-        applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
-        applyChildAllowance(world, t, emit); // #71 실제 부모 가구에 이전, RNG 없음
+        for(const local of governmentViews(world)){
+          const localEmit=governmentEmitter(local,emit);
+          mayorStipend(local,t,localEmit);
+          applyWelfare(local,t,localEmit);
+          applyChildAllowance(local,t,localEmit);
+        }
         settleHousing(world,t,day,emit); // #93 지원 뒤 임대 정산, 다음 tick 이사 의도
         evaluateHouseholds(world,t,day,emit); // #51 지원·현재 잔고 뒤, 다음 틱 분가 의도 생성
         evaluateFoundingPetitions(world,t,emit); // 실제 주거/공터 부족이 지속된 경우만 청원
@@ -1620,7 +1631,7 @@ export function tick(world, inputsForThisTick = []) {
       world.zoneOrders.shift();
       // §22.23 공기 차등 — 타입별 노동량. 시장 행정력 할인은 그대로 곱한다.
       const base4 = L.construct.requiredByType?.[order.type] ?? L.construct.laborRequired;
-      const required = world.mayorId !== null
+      const required = governmentFor(world,plot.villageId).mayorId !== null
         ? floorDiv(base4 * L.election.mayorLaborPct, 100)
         : base4;
       world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true,
@@ -1693,13 +1704,15 @@ export function tick(world, inputsForThisTick = []) {
           freePlot=candidates.find(p=>plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type));
           if(!freePlot) break;
           const cost=L.zone.costs[type];
-          world.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
-          if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:world.treasury});
+          const government=governmentFor(world,freePlot.villageId);
+          if(government.treasury<cost)break;
+          government.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
+          if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:government.treasury});
         }
         {
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
           const base5 = L.construct.requiredByType?.[type] ?? L.construct.laborRequired;
-          const required = world.mayorId !== null
+          const required = governmentFor(world,freePlot.villageId).mayorId !== null
             ? floorDiv(base5 * L.election.mayorLaborPct, 100)
             : base5;
           world.projects.push({ plotId: freePlot.plotId, type, progress: 0, required });

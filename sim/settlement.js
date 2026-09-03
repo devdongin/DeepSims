@@ -5,6 +5,7 @@ import { isWalkable } from './map.js';
 import { emptyState } from './simfactory.js';
 import { cancelFoundingConstruction } from './founding.js';
 import { settlementHouseholdsUnchanged } from './settlement-households.js';
+import { newGovernment } from './government.js';
 
 export const SETTLE_ACTION='settle_village';
 const pending=world=>(world.founding?.petitions??[]).filter(p=>p.status==='awaiting_settlement');
@@ -122,9 +123,7 @@ export function completeSettlementArrivals(world,t,emit){
     const homes=sims.map(s=>s&&homeFor(world,p,s.id));
     if(sims.some((s,i)=>!s||!homes[i]||!at(s,homes[i].door)))continue;
     const id=`village:${world.nextVillageId++}`;
-    // Government and treasury are still shared in this stage; don't duplicate
-    // balances or pretend an independent mayor/election already exists.
-    const village={id,name:plan.name,foundedTick:t,center:{...homes[0].door}};
+    const village={id,name:plan.name,foundedTick:t,center:{...homes[0].door},government:newGovernment()};
     world.villages.push(village);
     for(const f of new Set(homes)){f.villageId=id;delete f.foundingPetitionId;}
     for(const plot of world.plots)if(plot.foundingPetitionId===p.id){

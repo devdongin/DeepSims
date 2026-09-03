@@ -18,6 +18,7 @@ import { learnToken as learnTokenRef } from './planning.js';
 import { maybeRoadWorks } from './roads.js';
 import { applyBirthTalent } from './genius.js';
 import { updateEducation, canWork } from './education.js';
+import { governmentFor, PRIMARY_GOVERNMENT } from './government.js';
 
 // §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
 function pushRecentCouple(world, a, b, t, kind) {
@@ -152,22 +153,24 @@ export function retrospectiveScore(world, voter, candidateId, sinceTick, L, ctx 
 
 export function maybeElection(world, t, day, emit) {
   const E = world.logic.election;
-  if (day === 0 || day % E.intervalDays !== 0 || world.lastElectionDay === day) return;
+  const bootstrap=world.municipalityId&&world.municipalityId!==PRIMARY_GOVERNMENT&&world.lastElectionDay<0;
+  if ((!bootstrap&&(day === 0 || day % E.intervalDays !== 0)) || world.lastElectionDay === day) return;
   const prevElectionDay = world.lastElectionDay; // 회고 창의 시작 (첫 선거면 -1 → 세계 시작부터)
   const sinceTick = prevElectionDay < 0 ? 0 : prevElectionDay * 1440;
   world.lastElectionDay = day;
+  const electorate=world.sims.filter(s=>!world.municipalityId||s.traits.age>=19);
   // 인기 = 타 심들의 자신을 향한 양수 호감 합
-  const pops = world.sims.map((s) => ({
+  const pops = world.sims.filter(canWork).map((s) => ({
     id: s.id,
-    pop: world.sims.reduce((sum, o) => o.id === s.id ? sum : sum + Math.max(0, world.affinity[o.id][s.id]), 0),
-  })).filter((x) => x.pop > 0).sort((a, b) => (b.pop - a.pop) || (a.id - b.id));
+    pop: electorate.reduce((sum, o) => o.id === s.id ? sum : sum + Math.max(0, world.affinity[o.id][s.id]), 0),
+  })).filter((x) => x.pop > 0||bootstrap).sort((a, b) => (b.pop - a.pop) || (a.id - b.id));
   if (pops.length === 0) return; // 무산 — 현 시장 유지 (PLAN §17.8)
   const prevMayor = world.mayorId;
   // §22.20 **현직은 재선에 나선다.** 예전에는 후보가 인기 상위 2인뿐이라 재임자가
   // 후보에 못 드는 일이 잦았고(실측 3회 중 2회), 그러면 회고 투표가 아예 발동하지
   // 않는다 — 심판할 대상이 투표용지에 없기 때문이다. 현실의 선거도 현직이 나오고
   // 유권자가 그를 심판한다. 현직을 첫 자리에 두고 나머지를 인기순으로 채운다.
-  const incumbentAlive = prevMayor !== null && world.sims.some((s) => s.id === prevMayor);
+  const incumbentAlive = prevMayor !== null && world.sims.some((s) => s.id === prevMayor&&canWork(s));
   const ranked = pops.map((x) => x.id).filter((id) => id !== prevMayor);
   const candidates = incumbentAlive
     ? [prevMayor, ...ranked].slice(0, 2)
@@ -182,7 +185,7 @@ export function maybeElection(world, t, day, emit) {
     // responded === false 만 배수 대상 — null(기준선 없음)은 판정 불가라 배수 없음 (115차 ②)
     hoarding: world.treasury > floorDiv(cashTotal * E.hoardRatioPct, 100) && responded === false,
   };
-  for (const voter of world.sims) {
+  for (const voter of electorate) {
     let best = candidates[0];
     if (candidates.length > 1) {
       const r0 = retrospectiveScore(world, voter, candidates[0], sinceTick, world.logic, ctx);
@@ -219,7 +222,7 @@ export function maybeElection(world, t, day, emit) {
   }
   const mayor = world.sims.find((s) => s.id === winner);
   recordFact(mayor, t, world.logic, 'elected', { tags: ['politics'] });
-  for (const voter of world.sims) {
+  for (const voter of electorate) {
     if (voter.id !== winner) recordFact(voter, t, world.logic, 'voted', { subjectSimId: winner, tags: ['politics', `sim:${winner}`] });
   }
 }
@@ -231,7 +234,7 @@ export function updateCampaigners(world, day) {
   if (day % E.intervalDays === 0) { world.campaigners = []; return; } // 선거일: 클리어 (선거는 이후 실행)
   if (next - day <= E.campaignDays && next - day >= 1) {
     if (world.campaigners.length === 0) {
-      const pops = world.sims.map((s) => ({
+      const pops = world.sims.filter(canWork).map((s) => ({
         id: s.id,
         pop: world.sims.reduce((sum, o) => o.id === s.id ? sum : sum + Math.max(0, world.affinity[o.id][s.id]), 0),
       })).filter((x) => x.pop > 0).sort((a, b) => (b.pop - a.pop) || (a.id - b.id));
@@ -368,7 +371,7 @@ export function maybeFestival(world, t, day, emit) {
 export function mayorStipend(world, t, emit) {
   if (world.mayorId === null) return;
   const mayor = world.sims.find((s) => s.id === world.mayorId);
-  if (!mayor) return;
+  if (!mayor||!canWork(mayor)) return;
   // §17.15 수당은 국고 지출 — 잔고 내에서만 (재정난이면 미지급, 이벤트 없음)
   const pay = Math.min(world.logic.election.mayorStipend, world.treasury);
   if (pay <= 0) return;
@@ -766,7 +769,7 @@ export function maybeBuyCar(world, sim, t, emit) {
   sim.money -= T.carPrice;
   sim.hasCar = true;
   const acqTax = floorDiv(T.carPrice * world.logic.economy.taxPct, 100);
-  world.treasury += acqTax; // 취득세 — 국고 순환
+  governmentFor(world,sim.villageId).treasury += acqTax;
   // §22.4 (93차 ②) 차값에서 취득세를 뺀 나머지는 마을 밖 제조사에게 나간다 — 경계 유출.
   world.externalOutflow = (world.externalOutflow ?? 0) + (T.carPrice - acqTax);
   emit('car_bought', sim.id, { price: T.carPrice, longTrips: sim.longTrips, balance: sim.money });
@@ -1361,9 +1364,10 @@ export function remitPublicRevenue(world, t, emit) {
   for (const f of facs) {
     const amt = f.revenue;
     f.revenue = 0;
-    world.treasury += amt;
+    const government=governmentFor(world,f.villageId);
+    government.treasury += amt;
     total += amt;
-    emit('public_revenue_remitted', null, { facilityId: f.id, type: f.type, amount: amt, treasury: world.treasury });
+    emit('public_revenue_remitted', null, { facilityId: f.id, type: f.type, amount: amt, treasury: government.treasury });
   }
   return total;
 }

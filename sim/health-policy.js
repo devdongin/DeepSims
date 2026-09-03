@@ -1,11 +1,13 @@
 // #71: quote from current funds; settle only a completed, attended medical visit.
 // Public subsidy is a transfer to the hospital, not newly created money. Its later
 // public-revenue remittance must not be counted as an additional net fiscal cost.
+import { governmentFor } from './government.js';
 export function medicalQuote(world, patient) {
   const cost = world.logic.actions.see_doctor.cost;
-  const copayPct = world.policy.healthCopayPct ?? world.logic.economy.healthCopayPct;
+  const government=governmentFor(world,patient.villageId);
+  const copayPct = government.policy.healthCopayPct ?? world.logic.economy.healthCopayPct;
   const requestedSubsidy = cost - Math.floor(cost * copayPct / 100);
-  const subsidy = Math.min(requestedSubsidy, Math.max(0, world.treasury));
+  const subsidy = Math.min(requestedSubsidy, Math.max(0, government.treasury));
   const patientCost = cost - subsidy;
   const parents = new Set(world.parents[patient.id] ?? []);
   const dependent = patient.traits.age < 19 || patient.traits.occupation === 'student';
@@ -45,13 +47,14 @@ export function completeMedicalVisit(world, patient, emit) {
     emit('money_changed', payer.id, { delta: -payment.amount, balance: payer.money,
       action: 'see_doctor', patientId: patient.id });
   }
-  world.treasury -= quote.subsidy;
+  const government=governmentFor(world,patient.villageId);
+  government.treasury -= quote.subsidy;
   facility.revenue = (facility.revenue ?? 0) + quote.cost;
   patient.sick = null;
   patient.immuneUntil = world.worldTick + world.logic.disease.immuneTicks; // §23.24 앓고 난 몸
   emit('medical_visit_paid', patient.id, { facilityId: facility.id, cost: quote.cost,
     patientCost: quote.patientCost, subsidy: quote.subsidy, copayPct: quote.copayPct,
-    payments: quote.payments, treasury: world.treasury });
+    payments: quote.payments, treasury: government.treasury });
   emit('recovered', patient.id, { how: 'doctor' });
   return true;
 }

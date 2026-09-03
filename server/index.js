@@ -1,6 +1,7 @@
 // DeepSims 로컬 서버 (PLAN §5). 부팅: 락 → DB → 따라잡기 → 라이브.
 import express from 'express';
 import { villageSummary } from '../sim/villages.js';
+import { publicBalance } from '../sim/government.js';
 import { validateFoundingDecision } from '../sim/founding.js';
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
@@ -363,6 +364,7 @@ function sendSnapshot(ws) {
     partnerStage: engine.world.partnerStage,
     mayorId: engine.world.mayorId,
     treasury: engine.world.treasury,
+    publicTreasury: publicBalance(engine.world),
     incidents: engine.world.incidents,
     policy: engine.world.policy,
     zoneOrders: engine.world.zoneOrders,

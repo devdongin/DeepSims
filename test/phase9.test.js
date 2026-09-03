@@ -104,6 +104,7 @@ test('S-3. 전염: 페어링에서 감염이 옮는다 (결정적 드로우)', (
 
 test('S-4. 선거: 인기 기반 후보·투표·시장, 수당과 공사 가속', () => {
   const w = createWorld(SEED);
+  w.sims[3].traits.age=25;w.sims[3].traits.occupation='office_worker';w.sims[3].education.course=null;
   // 호감도 조작: 심 3을 모두가 좋아하고, 심 5를 절반이 좋아함
   for (const o of w.sims) {
     if (o.id !== 3) w.affinity[o.id][3] = 8000;
@@ -295,6 +296,7 @@ test('S-11. §17.9: 결혼식 잔치 토큰·유세·새해 (결정적)', () => 
 
   // 유세: D-3에 캐시, 선거일에 클리어 후 선거
   const w2 = createWorld(SEED);
+  w2.sims[3].traits.age=25;w2.sims[3].traits.occupation='office_worker';w2.sims[3].education.course=null;
   for (const o of w2.sims) if (o.id !== 3) w2.affinity[o.id][3] = 8000;
   idleAll(w2, []);
   w2.worldTick = 27 * 1440 - 1; // day 27 = D-3

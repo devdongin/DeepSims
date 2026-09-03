@@ -1,5 +1,6 @@
 // #93 Deterministic land value, closed-accounting rent, and durable cheaper-home moves.
 import { isResidence, isAvailableResidence } from './map.js';
+import { governmentFor } from './government.js';
 
 const cmp = (a,b) => a < b ? -1 : a > b ? 1 : 0;
 const at = f => f.door ?? { x:f.x, y:f.y };
@@ -52,7 +53,7 @@ export function settleHousing(world,t,day,emit){
       const owner=world.sims.find(s=>s.id===home.ownerSimId)??null;
       if(owner&&members.some(s=>s.id===owner.id)){world.rentPressure[pressureKey]=0;continue;}
       const got=take(members,share);charged+=share;paid+=got;shortfall+=share-got;
-      if(owner)owner.money+=got;else world.treasury+=got;
+      if(owner)owner.money+=got;else governmentFor(world,home.villageId).treasury+=got;
       emit('rent_paid',members[0].id,{householdId,homeId:home.id,charged:share,paid:got,
         shortfall:share-got,recipient:owner?`sim:${owner.id}`:'treasury'});
       if(got<share)emit('rent_shortfall',members[0].id,{householdId,homeId:home.id,shortfall:share-got});

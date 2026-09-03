@@ -7,6 +7,7 @@ import { evaluateFoundingPetitions, applyFoundingDecision } from '../sim/foundin
 import { canWork } from '../sim/education.js';
 import { TILE } from '../sim/map.js';
 import { findNonFinite, serialize, deserialize } from '../sim/serialize.js';
+import { publicBalance } from '../sim/government.js';
 
 const w=createWorld(Number(process.argv[2]??32));
 const settle=process.argv.includes('--settle');
@@ -71,6 +72,23 @@ if(settle){
   assert.equal(w.villages.length,1,'construction is not settlement establishment');
 }
 assert.deepEqual(findNonFinite(w),[]);
+let governmentCheck;
+if(process.argv.includes('--government')){
+  assert.ok(settle,'--government requires --settle');
+  const money=world=>publicBalance(world)+world.sims.reduce((n,s)=>n+s.money,0)
+    +world.map.facilities.reduce((n,f)=>n+(f.revenue??0),0)+(world.externalOutflow??0)-(world.externalInflow??0);
+  const before=money(w),saved=deserialize(serialize(w)),village=w.villages[1],events=[];
+  for(let i=0;i<2*1440;i++){
+    const current=tick(w);assert.deepEqual(current,tick(saved));events.push(...current);
+  }
+  assert.equal(money(w),before,'actual post-settlement economy must conserve currency across both treasuries');
+  assert.equal(hashWorld(w),hashWorld(saved));assert.deepEqual(findNonFinite(w),[]);
+  const residents=w.sims.filter(s=>s.villageId===village.id);
+  assert.ok(residents.length>0);assert.ok(residents.some(s=>s.id===village.government.mayorId&&canWork(s)));
+  assert.ok(events.some(e=>e.type==='election'&&e.payload.villageId===village.id));
+  governmentCheck={days:2,residents:residents.length,mayorId:village.government.mayorId,
+    treasury:village.government.treasury,totalPublicBalance:publicBalance(w),closedMoney:before};
+}
 console.log(JSON.stringify({fixture:'controlled capacity and terrain',seed:w.seed,startTick,endTick:w.worldTick,
   elapsedDays:(w.worldTick-startTick)/1440,status:w.founding.petitions[0].status,starts,built,founded,ineligibleWork,
-  population:w.sims.length,workers:w.founding.petitions[0].plan.settlerIds,hash:hashWorld(w)},null,2));
+  population:w.sims.length,workers:w.founding.petitions[0].plan.settlerIds,hash:hashWorld(w),governmentCheck},null,2));
