@@ -18,6 +18,7 @@ import { settleHousing } from './housing.js';
 import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
+import { syncResidenceVillage } from './villages.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -717,6 +718,7 @@ function applyCreatePlayer(world, inp, t, emit) {
       ? p.surname
       : surnameFor(world.seed, id), // 플레이어가 성을 안 고르면 분포에서 뽑아 준다
     homeId: home.id,
+    villageId: home.villageId,
     householdId: `household:${id}`,
     isPlayer: true,
     logic: world.logic,
@@ -1448,6 +1450,7 @@ export function tick(world, inputsForThisTick = []) {
         if (worst) {
           const mover = world.sims.filter((x) => x.homeId === worst.id).sort((a, b) => b.id - a.id)[0];
           mover.homeId = fac.id;
+          syncResidenceVillage(world, mover.id);
           emit('moved_home', mover.id, { from: worst.id, to: fac.id });
           recordFact(mover, t, L, 'built_bed', { placeId: fac.id, tags: ['home'] });
         }

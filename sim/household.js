@@ -1,5 +1,6 @@
 // #51 Explicit households and durable, next-tick revalidated separation intents.
 import { isResidence } from './map.js';
+import { syncResidenceVillage } from './villages.js';
 import { askingRent } from './housing.js';
 
 const employed = (world, sim) => sim.traits.occupation !== 'student'
@@ -37,7 +38,7 @@ export function applyHouseholdIntents(world, t, emit) {
       else if(askingRent(world,target)>=intent.maxRent)reason='not_cheaper';
       if(reason){world.householdDaily.failures[reason]=(world.householdDaily.failures[reason]??0)+1;
         emit('household_intent_failed',intent.simId,{intentId:intent.intentId,kind:intent.kind,reason});}
-      else {for(const member of members){member.homeId=target.id;emit('moved_home',member.id,{from:intent.fromHomeId,to:target.id,reason:'rent_pressure'});}
+      else {for(const member of members){member.homeId=target.id;syncResidenceVillage(world,member.id);emit('moved_home',member.id,{from:intent.fromHomeId,to:target.id,reason:'rent_pressure'});}
         world.rentPressure[intent.pressureKey??intent.fromHouseholdId]=0;
         emit('household_intent_applied',intent.simId,{intentId:intent.intentId,kind:intent.kind,from:intent.fromHomeId,to:target.id});}
       world.householdIntents.splice(world.householdIntents.indexOf(intent),1);continue;
@@ -56,6 +57,7 @@ export function applyHouseholdIntents(world, t, emit) {
     } else {
       const from = sim.homeId;
       sim.homeId = vacant.id;
+      syncResidenceVillage(world, sim.id);
       sim.householdId = `household:${sim.id}:${intent.intentId}`;
       sim.independenceDays = 0;
       emit('household_intent_applied', sim.id, { intentId:intent.intentId, from, to:vacant.id, householdId:sim.householdId });

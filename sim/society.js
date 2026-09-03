@@ -1,5 +1,6 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
+import { syncResidenceVillage } from './villages.js';
 import { publicPostAvailable, demotePublicIfOverQuota, fillPublicPosts, trimOverQuotaPosts } from './publicposts.js';
 import { recordFact } from './cognition.js';
 import { makeSim } from './simfactory.js';
@@ -313,6 +314,7 @@ export function maybeChildren(world, t, day, emit) {
       name,
       surname: nameParent.surname ?? surnameFor(world.seed, nameParent.id),
       homeId: pa.homeId,
+      villageId: home.villageId,
       householdId: pa.householdId,
       traits,
       seed: world.seed,
@@ -430,6 +432,7 @@ function immigrateOne(world, t, emit) {
     name,
     surname: surnameFor(world.seed, id),
     homeId: home.id,
+    villageId: home.villageId,
     householdId: `household:${id}`,
     traits,
     seed: world.seed,
@@ -489,6 +492,7 @@ export function applyRomance(world, sim, t, emit) {
       if (loHome.resources.length > residents) {
         const from = hi.homeId;
         hi.homeId = lo.homeId;
+        syncResidenceVillage(world, hi.id);
         emit('moved_home', hi.id, { from, to: lo.homeId });
       } else {
         // 신혼집: 두 자리 빈 집(facilityId asc)으로 부부가 함께 이사
@@ -498,6 +502,7 @@ export function applyRomance(world, sim, t, emit) {
           for (const mover of [lo, hi]) {
             const from = mover.homeId;
             mover.homeId = fresh.id;
+            syncResidenceVillage(world, mover.id);
             emit('moved_home', mover.id, { from, to: fresh.id });
           }
         }
@@ -544,6 +549,7 @@ export function applyRomance(world, sim, t, emit) {
       if (hi.homeId !== lo.homeId && loHome.resources.length > residents) {
         const from = hi.homeId;
         hi.homeId = lo.homeId;
+        syncResidenceVillage(world, hi.id);
         emit('moved_home', hi.id, { from, to: lo.homeId });
       }
       return;

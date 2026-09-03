@@ -17,6 +17,7 @@ import { makeAbilities, initializeDevelopment } from './abilities.js';
 import { DEFAULT_LOGIC } from './logic.js';
 import { newEducation, schoolFor } from './education.js';
 import { newNeedsTier } from './needs-tiers.js';
+import { PRIMARY_VILLAGE_ID } from './villages.js';
 
 // 행동 상태의 빈 값. undefined 필드는 직렬화가 삼켜 왕복이 고정점이 아니게 되므로
 // 전부 명시적인 값을 둔다 (§22.13).
@@ -40,6 +41,7 @@ export function emptyState() {
 // test/qa.test.js가 네 경로의 키 집합이 같은지 검사한다.
 export function makeSim({
   id, name, surname, homeId, householdId = `household:${homeId}`, traits, seed,
+  villageId = PRIMARY_VILLAGE_ID,
   x, y, needs, money,
   isPlayer = false,
   logic = DEFAULT_LOGIC,
@@ -50,6 +52,7 @@ export function makeSim({
     surname,              // §22.16 성 — 표시는 `${surname}${name}`
     homeId,
     householdId,
+    villageId,
     isPlayer,
     isGenius: false,
     geniusBirth: null,

@@ -11,6 +11,7 @@ import { makeTransportStats } from './transport-stats.js';
 import { makeStoryteller } from './storyteller.js';
 import { initializeFoodSupply } from './food-supply.js';
 import { seasonAt } from './seasons.js';
+import { initializeVillages } from './villages.js';
 import { newNeedsTier } from './needs-tiers.js';
 import { newEducation } from './education.js';
 import { surnameFor } from './surnames.js';
@@ -427,6 +428,7 @@ export function migrateWorld(world) {
   if (from < 63) initializeFoodSupply(world);
   if (from < 64) world.season = seasonAt(world, world.worldTick);
   if (from < 65) for (const sim of world.sims) sim.needsTier ??= newNeedsTier();
+  if (from < 66) initializeVillages(world);
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }
