@@ -162,3 +162,41 @@ test('P-12. 공공 임금 직군인데 정원표에 없으면 검증이 막는�
   assert.equal(res.ok, false, '정원 없는 공공직을 통과시켰다');
   assert.ok(res.errors.some((e) => e.includes('police')), `police 정원 누락을 안 짚었다: ${JSON.stringify(res.errors)}`);
 });
+
+// §23.24 회복 후 면역. 감염 모델에 '회복' 칸이 없으면(SIS) 유병률이 구조적으로 높은
+// 값에 고정된다 — 실측 46~47%, 90일에 1인당 19번. 이건 수치 문제가 아니라 모델 문제다.
+test('D-1. 앓고 나면 한동안 다시 걸리지 않는다', () => {
+  const w = createWorld(4242);
+  const s = w.sims[0];
+  s.sick = { kind: 'cold', untilTick: 10 };
+  advance(w, {}, 12);
+  assert.equal(s.sick, null, '기간이 지났는데 낫지 않았다');
+  assert.ok(s.immuneUntil > w.worldTick, '나은 뒤 면역이 안 생겼다');
+  // 면역 동안에는 감염 판정이 통과하지 않는다
+  s.needs.hunger = 0; s.needs.energy = 0; // 감염 확률을 최대로 올려도
+  const before = s.immuneUntil;
+  advance(w, {}, 1440);
+  assert.equal(s.sick, null, '면역 기간인데 다시 앓았다');
+  assert.equal(s.immuneUntil, before, '면역 기간이 임의로 늘었다');
+});
+
+test('D-2. 면역은 rng 소비 순서를 바꾸지 않는다', () => {
+  // 드로우는 면역 검사보다 **먼저** 소비한다 — 그래야 해시 계약이 유지된다.
+  const a = createWorld(777); const b = createWorld(777);
+  a.logic.disease.immuneTicks = 0;   // 면역 없음
+  b.logic.disease.immuneTicks = 2880;
+  advance(a, {}, 1440); advance(b, {}, 1440);
+  assert.equal(JSON.stringify(a.rngSim), JSON.stringify(b.rngSim),
+    '면역 유무로 rng 상태가 갈렸다 — 드로우 순서가 어긋났다');
+});
+
+test('D-3. 병이 사라지지도, 마을을 뒤덮지도 않는다', () => {
+  // 3일 이상 면역은 전염이 스스로 꺼져 병원·의사·see_doctor가 죽은 콘텐츠가 된다.
+  // 0일은 절반이 앓는다. 채택값(2일)이 그 사이에 있는지 본다.
+  const w = createWorld(9001);
+  const ev = advance(w, {}, 60 * 1440);
+  const fell = ev.filter((e) => e.type === 'fell_sick').length;
+  const sick = w.sims.filter((s) => s.sick).length;
+  assert.ok(fell > 0, '60일 동안 아무도 안 아팠다 — 병이 죽은 콘텐츠가 됐다');
+  assert.ok(sick * 3 < w.sims.length, `유병률이 3분의 1을 넘었다 (${sick}/${w.sims.length})`);
+});

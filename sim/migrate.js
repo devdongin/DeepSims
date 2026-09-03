@@ -430,7 +430,9 @@ export function migrateWorld(world) {
   if (from < 64) world.season = seasonAt(world, world.worldTick);
   if (from < 65) for (const sim of world.sims) sim.needsTier ??= newNeedsTier();
   if (from < 66) initializeVillages(world);
-  if (from < 67) world.founding ??= newFoundingState();
+  // §23.24 면역은 세이브에 없던 필드다. 0이면 '면역 없음'이라 옛 세계의 행동이 그대로 이어진다.
+  if (from < 67) for (const sim of world.sims) sim.immuneUntil ??= 0;
+  if (from < 68) world.founding ??= newFoundingState();
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }

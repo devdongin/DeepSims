@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import { createWorld } from '../sim/world.js';
 import { tick } from '../sim/tick.js';
@@ -81,7 +82,7 @@ test('#48 v60 migration starts at the current day without backfilling unknown tr
   const w = createWorld(48), rng = serialize(w.rngSim); w.worldTick = 5000; w.schemaVersion = 60;
   delete w.transportStats; migrateWorld(w);
   assert.deepEqual(w.transportStats, makeTransportStats(3)); assert.equal(serialize(w.rngSim), rng);
-  assert.equal(w.schemaVersion,67);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION);
 });
 
 test('#48 saving in flight and crossing a daily boundary preserves events, ledgers and world hash', () => {

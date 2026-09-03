@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import { createWorld } from '../sim/world.js';
 import { tick, collectCandidates, actionBlockReason } from '../sim/tick.js';
@@ -118,7 +120,7 @@ test('#76 v62 migration installs finite store stock, durable ledgers and action 
   w.logic.logicSchemaVersion = 59; delete w.logic.supply; delete w.logic.actions[SUPPLY_ACTION]; delete w.logic.actions[GROW_ACTION]; delete w.foodSupply;
   for (const f of w.map.facilities) delete f.groceryStock;
   migrateWorld(w);
-  assert.equal(w.schemaVersion,67); assert.equal(w.logic.logicSchemaVersion,63);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION); assert.equal(w.logic.logicSchemaVersion, DEFAULT_LOGIC.logicSchemaVersion);
   assert.equal(w.foodSupply.totals.openingUnits, 12); assert.equal(serialize(w.rngSim), rng);
   const state = serialize(w); migrateWorld(w); assert.equal(serialize(w), state);
 });

@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import { createWorld } from '../sim/world.js';
 import { tick, actionBlockReason, collectCandidates } from '../sim/tick.js';
@@ -48,7 +50,7 @@ test('#91 old saves receive no fabricated past fulfillment and preserve RNG', ()
   const w=createWorld(91);w.schemaVersion=64;w.logic.logicSchemaVersion=61;
   delete w.logic.needsTiers;delete w.logic.actions[CULTURE_ACTION];
   for(const s of w.sims)delete s.needsTier;const rng=serialize(w.rngSim);
-  migrateWorld(w);assert.equal(w.schemaVersion,67);assert.equal(w.logic.logicSchemaVersion,63);
+  migrateWorld(w);assert.equal(w.schemaVersion, SCHEMA_VERSION);assert.equal(w.logic.logicSchemaVersion, DEFAULT_LOGIC.logicSchemaVersion);
   assert.ok(w.sims.every(s=>s.needsTier.level===0&&s.needsTier.fulfilledTicks===0));
   assert.equal(serialize(w.rngSim),rng);const saved=serialize(w);migrateWorld(w);assert.equal(serialize(w),saved);
 });

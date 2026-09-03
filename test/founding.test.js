@@ -8,6 +8,8 @@ import { tick } from '../sim/tick.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { emptyState } from '../sim/simfactory.js';
 import { TILE } from '../sim/map.js';
+import { SCHEMA_VERSION } from '../sim/constants.js';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
 
 function constrainedWorld(){
   const w=createWorld(32);w.plots=[];w.projects=[];w.zoneOrders=[];
@@ -75,7 +77,7 @@ test('#32 petition persistence survives split execution without inventing past d
   assert.equal(hashWorld(a),hashWorld(b));
   const w=createWorld(32);w.schemaVersion=66;w.logic.logicSchemaVersion=62;
   delete w.founding;delete w.logic.founding;const rng=serialize(w.rngSim);
-  migrateWorld(w);assert.equal(w.schemaVersion,67);assert.equal(w.logic.logicSchemaVersion,63);
+  migrateWorld(w);assert.equal(w.schemaVersion,SCHEMA_VERSION);assert.equal(w.logic.logicSchemaVersion,DEFAULT_LOGIC.logicSchemaVersion);
   assert.equal(w.founding.lastDay,-1);assert.deepEqual(w.founding.petitions,[]);
   assert.equal(serialize(w.rngSim),rng);
 });
@@ -89,6 +91,18 @@ test('#32 the daily tick emits the petition and saving before the boundary repla
   for(let i=0;i<1440;i++){const ea=tick(a),eb=tick(b);assert.deepEqual(ea,eb);events.push(...ea);}
   assert.ok(events.some(e=>e.type==='founding_petition_created'));
   assert.equal(hashWorld(a),hashWorld(b));
+});
+
+test('#32 migration from the released immunity schema preserves existing immunity and adds only new founding state',()=>{
+  const w=createWorld(32);w.schemaVersion=67;w.logic.logicSchemaVersion=63;
+  delete w.founding;delete w.logic.founding;
+  w.sims[0].immuneUntil=12345;
+  const rng=serialize(w.rngSim),immunity=w.sims.map(s=>s.immuneUntil);
+  migrateWorld(w);
+  assert.equal(w.schemaVersion,68);assert.equal(w.logic.logicSchemaVersion,64);
+  assert.deepEqual(w.sims.map(s=>s.immuneUntil),immunity);
+  assert.equal(serialize(w.rngSim),rng);assert.equal(w.founding.lastDay,-1);
+  const saved=serialize(w);migrateWorld(w);assert.equal(serialize(w),saved);
 });
 
 function approvalWorld(){
