@@ -132,6 +132,14 @@ test('C4. 커서 경계 (cursor, upto] + 멱등', () => {
   st.close();
 });
 
+test('C4b. current bachelor/master/doctorate graduation events remain in the chronicle', () => {
+  const events=['university','masters','doctorate'].map((course,i)=>
+    ev(100+i,'education_decided',1,{choice:'degree',course}));
+  const st=storageWith(events);
+  assert.deepEqual(st.getReport(0,2000).chronicle.map(e=>e.payload.course),['university','masters','doctorate']);
+  st.close();
+});
+
 test('C5. 총계 한 줄: 심별 나열 대신 스칼라 + 최대 증감자 (동률은 sim_id 낮은 쪽)', () => {
   const events = [
     ev(10, 'action_completed', 1, { action: 'eat' }),

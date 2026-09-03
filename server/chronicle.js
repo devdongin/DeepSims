@@ -27,7 +27,7 @@ export const CHRONICLE_PRIORITY = [
   'heroic_save', 'fire_started', 'fire_out',
   'city_promoted', 'job_changed', 'policy_changed',
   'started_dating', 'broke_up', 'helped', 'money_shared',
-  'immigrated', 'grew_up', 'graduated', 'retired_now',
+  'immigrated', 'grew_up', 'graduated', 'education_decided', 'retired_now',
   'facility_built', 'festival', 'petition', 'car_bought', 'fell_sick',
 ];
 const PRIORITY_INDEX = new Map(CHRONICLE_PRIORITY.map((k, i) => [k, i]));

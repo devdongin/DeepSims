@@ -2783,6 +2783,7 @@ const CHRON_KO = {
   job_changed: '전직', policy_changed: '정책 변경', started_dating: '연애', broke_up: '이별',
   helped: '챙김', money_shared: '나눔', immigrated: '이민', grew_up: '성장', graduated: '졸업',
   retired_now: '은퇴', facility_built: '완공', festival: '축제', petition: '청원',
+  education_decided: '진학·졸업',
   car_bought: '차 구입', fell_sick: '병치레',
 };
 
@@ -2810,7 +2811,7 @@ function chronicleText(e, nameOf) {
       ? `💨 ${placeOfFac(p.facilityId)}의 불이 저절로 잦아들었습니다 (아무도 오지 않았습니다)`
       : `🚒 ${ga(nameOf(p.by))} ${placeOfFac(p.facilityId)} 화재를 진압했습니다`;
     case 'city_promoted': return `🏙️ ${ga('해솔')} ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
-    case 'job_changed': return `💼 ${ga(n)} ${OCC_KO[p.from] ?? p.from} 일을 접고 ${ro(OCC_KO[p.to] ?? p.to)} 전직했습니다`;
+    case 'job_changed': return `💼 ${ga(n)} ${occKo(p.from)} 일을 접고 ${ro(occKo(p.to))} 전직했습니다`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
       const parts = Object.entries(p.changes ?? {}).map(([k, v]) =>
@@ -2825,9 +2826,17 @@ function chronicleText(e, nameOf) {
       return `🤝 ${ga(n)} ${why} ${eul(nameOf(p.toSimId))} 챙겼습니다`;
     }
     case 'money_shared': return `💝 ${ga(n)} 곤경에 처한 ${nameOf(p.toSimId)}에게 ${p.amount}원을 건넸습니다`;
-    case 'immigrated': return `🚌 ${ga(nOr(p.name))} 마을로 이사 왔습니다 (${OCC_KO[p.occupation] ?? p.occupation})`;
+    case 'immigrated': return `🚌 ${ga(nOr(p.name))} 마을로 이사 왔습니다 (${occKo(p.occupation)})`;
     case 'grew_up': return `🎒 ${ga(n)} 자라서 학교에 다니기 시작했습니다 (${p.age}세)`;
-    case 'graduated': return `🎓 ${ga(n)} 학교를 졸업하고 ${ga(OCC_KO[p.to] ?? p.to)} 되었습니다`;
+    case 'graduated': return `🎓 ${ga(n)} 학교를 졸업하고 ${ga(occKo(p.to))} 되었습니다`;
+    case 'education_decided': {
+      const course = { university: '학부', masters: '석사', doctorate: '박사' }[p.course] ?? '학위';
+      if (p.choice === 'degree') return `🎓 ${ga(n)} ${course} 과정을 졸업했습니다`;
+      if (p.choice === 'postgraduate') return `🎓 ${ga(n)} ${course} 과정에 진학하기로 했습니다`;
+      if (p.choice === 'university') return `🎓 ${ga(n)} ${course} 과정에 등록했습니다`;
+      if (p.choice === 'deferred') return `🎓 ${ga(n)} 학업 등록을 보류했습니다`;
+      return `🎓 ${ga(n)} 대학 진학 대신 취업을 선택했습니다`;
+    }
     case 'retired_now': return `🌅 ${ga(n)} 일을 내려놓고 은퇴했습니다`;
     case 'facility_built': {
       const tp = p.type === 'house' ? '새 집' : (PLACE_KO[p.type] ?? p.type);
@@ -3222,7 +3231,8 @@ async function showReport() {
   if (ts && ts.delta < 0 && ts.simId !== te?.simId) lines.push(`🕳️ 주머니가 가장 가벼워진 사람: ${nameOf(ts.simId)} (${ts.delta}원)`);
   // ◇ 요약 통계 — 하단 한 줄. 식사·근무는 심별 나열 대신 총계다.
   const md = rep.totals?.moneyDelta ?? 0;
-  lines.push(`◇ 집계: 행동 ${count('action_completed')} · 식사 ${rep.totals?.meals ?? 0} · 근무 ${rep.totals?.works ?? 0}`
+  // §22.102 사용자가 요청한 식사 횟수 미표시를 연대기 통합에서도 유지한다.
+  lines.push(`◇ 집계: 행동 ${count('action_completed')} · 근무 ${rep.totals?.works ?? 0}`
     + ` · 말다툼 ${count('argument')} · 외로움 ${count('lonely')} · 굶주림 ${count('starving')}`
     + ` · 주민 잔액 ${md > 0 ? '+' : ''}${md}원`);
   if (rep.prunedAggregates?.length) {
