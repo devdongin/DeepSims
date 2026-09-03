@@ -739,7 +739,27 @@ class TownScene extends Phaser.Scene {
           if (tex && !body.anims.isPlaying && body.texture.key !== tex) body.setTexture(tex);
         }
       }
-      this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
+      // §22.100 **트윈이 쌓여 브라우저를 죽인다.** 심마다 매 tickBatch에 이동 트윈을
+      // 새로 만들면서 이전 트윈을 끊지 않았다 — 배속을 올리면 배치가 900ms보다 자주 와서
+      // 완료되지 못한 트윈이 계속 겹친다. 실측: 25초에 12,397 → 30,154개(초당 +710),
+      // 힙은 분당 29~52MB. 스프라이트 정리(§22.99)만으로는 안 잡혔던 진짜 누수다.
+      // 새 목적지를 주기 전에 그 스프라이트의 이전 트윈을 끊는다.
+      // §22.100 **탭이 숨으면 트윈이 쌓여 페이지가 죽는다.** 브라우저는 숨은 탭의
+      // requestAnimationFrame을 멈추므로 Phaser의 업데이트 루프가 서지만, 서버 tickBatch는
+      // 계속 들어온다 — 그래서 완료되지 못한 이동 트윈이 무한히 겹친다.
+      // 실측(숨긴 탭): 25초에 8,404 → 26,648개, 힙 분당 25~52MB. 탭 한도 4GB면 곧 죽는다.
+      //
+      // 안 보이는 동안은 **트윈 없이 즉시 배치**한다. 눈에 보이지 않는 보간에 메모리를
+      // 쓸 이유가 없고, 다시 보일 때는 어차피 최신 위치가 맞다.
+      // 그리고 어떤 이유로든 트윈이 넘치면(2,000개) 전부 끊고 스냅으로 돌린다 — 안전판이다.
+      const tweenCount = this.tweens.getTweens().length;
+      if (document.hidden || tweenCount > 2000) {
+        if (tweenCount > 2000) this.tweens.killAll();
+        sp.x = tx; sp.y = ty;
+      } else {
+        this.tweens.killTweensOf(sp);
+        this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
+      }
       sp.setDepth(1000 + sim.x + sim.y);
     }
     // §22.99 **떠난 심의 스프라이트를 지운다 — 브라우저 OOM의 실제 원인이었다.**
@@ -758,6 +778,33 @@ class TownScene extends Phaser.Scene {
     }
   }
 }
+
+// §22.99 진단 창구 — OOM을 쫓을 때 "무엇이 몇 개인가"를 콘솔에서 바로 본다.
+// 힙 수치만 보면 GC 타이밍에 속는다. 개수는 속지 않는다.
+window.__diag = () => ({
+  sims: world?.sims?.length ?? 0,
+  simSprites: simSprites.size,
+  bubbles: bubbles.size,
+  items: itemSprites.size,
+  props: scene?.propSprites?.length ?? 0,
+  roads: scene?.roadSprites?.length ?? 0,
+  gardens: scene?.gardenSprites?.length ?? 0,
+  tweens: scene?.tweens?.getTweens?.().length ?? 0,
+  // 트윈이 어디서 오는지 — 대상 종류별로 센다 (OOM 추적용)
+  tweensBy: (() => {
+    const t = scene?.tweens?.getTweens?.() ?? [];
+    const by = {};
+    for (const x of t) {
+      const g = x.targets?.[0];
+      const k = g?.type ?? g?.constructor?.name ?? 'unknown';
+      by[k] = (by[k] ?? 0) + 1;
+    }
+    return by;
+  })(),
+  displayList: scene?.children?.list?.length ?? 0,
+  feed: document.querySelectorAll('#feed > *').length,
+  heapMB: performance.memory ? +(performance.memory.usedJSHeapSize / 1048576).toFixed(1) : null,
+});
 
 const game = new Phaser.Game({
   type: Phaser.CANVAS, // 임베디드 브라우저의 WebGL 프레임버퍼 이슈 회피
@@ -2618,7 +2665,21 @@ function connect() {
         }
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
-        for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }
+        {
+          // §22.101 **고배속에서 할당이 GC를 앞지른다.** ×1에서는 힙이 평평한데(0.2MB/분)
+          // ×48에서는 분당 60MB 넘게 오른다 — 배치당 이벤트가 수백 개라 피드 DOM과
+          // 말풍선 객체가 쏟아진다. 탭이 숨으면 GC가 뒤로 밀려 그대로 쌓인다.
+          //
+          // 화면은 어차피 80줄만 보여준다. **한 배치에서 피드에 그리는 줄을 뒤에서 80개로
+          // 자르고**, 숨은 탭에서는 연출(말풍선·이모트)을 건너뛴다 — 안 보이는 것에
+          // 메모리를 쓰지 않는다. 상태 갱신은 그대로다.
+          const evs = msg.events;
+          const feedFrom = Math.max(0, evs.length - 80);
+          for (let i = 0; i < evs.length; i++) {
+            if (i >= feedFrom) pushFeed(evs[i]);
+            if (!document.hidden) handleVisualEvent(evs[i]);
+          }
+        }
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
         let mapDirty = false;
         for (const e of msg.events) {
