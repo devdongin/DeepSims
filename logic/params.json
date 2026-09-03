@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 65,
+  "logicSchemaVersion": 66,
   "needsTiers": {
     "fulfilledMin": 4000,
     "deprivedMax": 1000,
@@ -451,6 +451,10 @@
       "jobless": -500,
       "perHabit": 120,
       "habitCap": 480,
+      "dailyNeed": 600,
+      "broke": -600,
+      "secure": 300,
+      "unpaid": -400,
       "span": 2500
     }
   },

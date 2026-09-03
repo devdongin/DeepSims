@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 65, // §23.26 maxProjectSlots 3 → 6
+  logicSchemaVersion: 66, // §23.29 기분 바닥선에 돈(현금 여력·체납)
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
   seasons: { winterHarvestPct: 50, winterFishPct: 50, winterOutdoorEnergy: 1,
@@ -102,6 +102,13 @@ export const DEFAULT_LOGIC = {
       perFriend: 150, friendCap: 900, perRival: 200, rivalCap: 800,
       home: 300, sick: -700, jobless: -500,
       perHabit: 120, habitCap: 480,
+      // §23.29 돈 (Codex 지적: 기분 바닥선에 돈이 없어 저임금자와 여유 있는 사람이 같은
+      // 자리로 갔다). **잔액이 아니라 며칠 버티는가**를 본다 — 같은 1,000원도 하루치가
+      // 200원인 마을과 2,000원인 마을에서 뜻이 다르다.
+      dailyNeed: 600,      // 하루치 필수 지출 어림 (식사 세 번 남짓)
+      broke: -600,         // 이틀치도 없다
+      secure: 300,         // 열흘치 넘게 있다
+      unpaid: -400,        // 임금이 사흘 넘게 밀렸다
       span: 2500, // 바닥선 자체의 상한 — 사건이 주는 진폭(±10000)을 삼키지 않게
     },
   },
@@ -1032,7 +1039,9 @@ function checkRanges(p, errors) {
   // §23.25 바닥선 검증 — span이 사건 진폭(±10000)에 가까워지면 기분이 사건에 반응하지 않는다.
   for (const k of ['married', 'dating', 'perFriend', 'friendCap', 'perRival', 'rivalCap',
     'home', 'perHabit', 'habitCap']) inRange(`mood.baseline.${k}`, p.mood.baseline[k], 0, 5000);
-  for (const k of ['sick', 'jobless']) inRange(`mood.baseline.${k}`, p.mood.baseline[k], -5000, 0);
+  for (const k of ['sick', 'jobless', 'broke', 'unpaid']) inRange(`mood.baseline.${k}`, p.mood.baseline[k], -5000, 0);
+  inRange('mood.baseline.dailyNeed', p.mood.baseline.dailyNeed, 1, 1000000);
+  inRange('mood.baseline.secure', p.mood.baseline.secure, 0, 5000);
   inRange('mood.baseline.span', p.mood.baseline.span, 0, 5000);
   inRange('disease.decayFactorNum', p.disease.decayFactorNum, 0, 100);
   inRange('disease.decayFactorDen', p.disease.decayFactorDen, 1, 100);

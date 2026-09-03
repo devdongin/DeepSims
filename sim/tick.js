@@ -147,6 +147,12 @@ export function moodBaseline(sim, world, L) {
   if (sim.homeId) v += B.home;
   if (sim.sick) v += B.sick;              // 아프면 바닥이 내려간다
   if (sim.traits.occupation === 'jobless') v += B.jobless;
+  // §23.29 돈은 잔액이 아니라 **며칠 버티는가**로 읽는다. 쪼들림과 여유는 대칭이 아니다 —
+  // 없는 쪽이 훨씬 크게 느껴진다(broke 600 vs secure 300).
+  const daysCovered = floorDiv(Math.max(0, sim.money), B.dailyNeed);
+  if (daysCovered < 2) v += B.broke;
+  else if (daysCovered >= 10) v += B.secure;
+  if ((sim.unpaidDays ?? 0) >= 3) v += B.unpaid; // 일했는데 못 받은 날이 사흘 넘는다
   // 즐겨 하는 일이 있는 삶 — 습관이 붙은 여가 하나당 조금씩 (§17.6 클럽과 같은 신호)
   let habits = 0;
   for (const [k, n] of Object.entries(sim.habit ?? {})) {
