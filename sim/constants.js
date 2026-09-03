@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 61; // #48 관측 전용 일일 교통 통계
+export const SCHEMA_VERSION = 62; // #89 사건 후보·간격·회복 이력
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -87,6 +87,7 @@ export const EVENT_TYPES = [
   'public_posts_filled', // §23.13 인구에 맞춰 공공 자리를 채웠다
   'rent_paid',
   'rent_shortfall',
+  'storyteller_decision',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

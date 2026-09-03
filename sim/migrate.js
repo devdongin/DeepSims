@@ -8,6 +8,7 @@ import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivic
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 import { SCHEMA_VERSION } from './constants.js';
 import { makeTransportStats } from './transport-stats.js';
+import { makeStoryteller } from './storyteller.js';
 import { newEducation } from './education.js';
 import { surnameFor } from './surnames.js';
 import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단일 정의 공유
@@ -413,6 +414,7 @@ export function migrateWorld(world) {
     world.rentPressure??={};
   }
   if (from < 61) world.transportStats ??= makeTransportStats(Math.floor(world.worldTick / 1440));
+  if (from < 62) world.storyteller ??= makeStoryteller();
   // 구버전 logic에 새 섹션 기본값 병합 (D2 — pending 정합 이전, 로드 시점)
   if ((world.logic.logicSchemaVersion ?? 1) < DEFAULT_LOGIC.logicSchemaVersion) {
     world.logic = mergeLogicDefaults(world.logic);

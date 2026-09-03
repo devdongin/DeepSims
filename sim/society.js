@@ -33,7 +33,7 @@ function scaleDelta(delta, factor) {
 // ---- §17.3 질병 ----
 
 // 일일 위험 드로우 (심 id asc, 심당 정확히 1드로우 — 이미 감염자도 드로우는 소비, 무발병)
-export function dailyDiseaseDraws(world, t, emit) {
+export function dailyDiseaseDraws(world, t, emit, offer = null) {
   const D = world.logic.disease;
   for (const sim of world.sims) {
     const roll = rngInt(world.rngSim, 1000);
@@ -42,7 +42,10 @@ export function dailyDiseaseDraws(world, t, emit) {
     if (sim.needs.hunger === 0) p += D.starvingBonus;
     if (world.weather.kind === 'rain') p += D.rainBonus;
     if (sim.needs.energy < 2000) p += D.lowEnergyBonus;
-    if (roll < p) infect(world, sim, t, emit);
+    if (roll < p) {
+      if (offer) offer({ kind: 'illness', targetId: sim.id, apply: () => infect(world, sim, t, emit) });
+      else infect(world, sim, t, emit);
+    }
   }
 }
 
@@ -647,7 +650,7 @@ export function pairDeltaBonus(world, a, b) {
 
 // 일일 화재 드로우 (§17.8 ①.5 — 질병 다음): 시설 배열 순, 시설당 정확히 1드로우.
 // 이미 불타는 시설도 드로우는 소비(무발화) — 드로우 수 불변 계약.
-export function dailyFireDraws(world, t, emit) {
+export function dailyFireDraws(world, t, emit, offer = null) {
   const I = world.logic.incidents;
   for (const fac of world.map.facilities) {
     if (!fac.w || fac.type === 'park' || fac.type === 'pond') continue;
@@ -656,8 +659,12 @@ export function dailyFireDraws(world, t, emit) {
     let p = I.fireBasePermille;
     if (fac.type === 'restaurant' || fac.type === 'cafe') p += I.kitchenBonusPermille;
     if (roll < p) {
-      world.incidents.push({ type: 'fire', facilityId: fac.id, sinceTick: t });
-      emit('fire_started', null, { facilityId: fac.id });
+      const apply = () => {
+        world.incidents.push({ type: 'fire', facilityId: fac.id, sinceTick: t });
+        emit('fire_started', null, { facilityId: fac.id });
+      };
+      if (offer) offer({ kind: 'fire', targetId: fac.id, apply });
+      else apply();
     }
   }
 }

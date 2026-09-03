@@ -20,10 +20,11 @@ import { collectCandidates } from '../sim/tick.js';
 //   §23.13  (공공 정원)  : 월드젠 직업 구성이 바뀌므로 첫 후보부터 달라졌다.
 //   #93     (일일 임대 정산): 첫 tick 잔액과 이후 선택이 실제로 바뀌므로 다시 고정한다.
 //   §23.14  (Codex −1 반영) : 창세 충원 규칙이 바뀌어 월드젠 직업 구성이 또 달라졌다.
+//   #89     (사건 페이싱): 실제 발병/화재 배치 변경으로 이후 행동도 바뀐다. 새 전체 상태로 재고정.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', 'a3d7448a', 'af7a21ab', '54e4ffe4']],
-  [50, ['1dcfd840', '80dd5c7d', '9cfbaff6', '56137c99']],
-  [200, ['59e0f5f7', 'c7c545c6', '4458c285', 'f9f38cff']],
+  [10, ['0ab9198a', 'd722e921', 'e1d0affd', '2f21f171']],
+  [50, ['1dcfd840', '8c4f81f6', 'f2a084a8', '827cdf4a']],
+  [200, ['3d43662d', '0108290a', '7e9e984a', '1b8875f9']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

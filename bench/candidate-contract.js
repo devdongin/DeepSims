@@ -29,15 +29,10 @@ export function candidateContract(pop = 50) {
   w.reservations = {};
   let events = advance(w, {}, 240);
   sample();
-  // #48 adds observation only: remove precisely the new ledger fields to retain
-  // the pre-instrumentation behavior oracle (candidate/choice/event vectors unchanged).
-  const baseline = { ...w, schemaVersion: 60 };
-  delete baseline.transportStats;
-  baseline.statsHistory = w.statsHistory.map(({ transport, ...row }) => row);
   return {
     candidates: fnv1a(serialize(before)),
     choices: fnv1a(serialize(events.filter(e => e.type === 'action_started'))),
-    events: fnv1a(serialize(events)), world: hashWorld(baseline),
+    events: fnv1a(serialize(events)), world: hashWorld(w),
   };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -15,6 +15,7 @@ import { medicalBlockReason, completeMedicalVisit } from './health-policy.js';
 import { applyChildAllowance } from './family-policy.js';
 import { applyHouseholdIntents, evaluateHouseholds } from './household.js';
 import { settleHousing } from './housing.js';
+import { resolveStoryCandidates } from './storyteller.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
   recordTransportArrival, pruneTransportTrips, recordTransportEvent, transportSummary } from './transport-stats.js';
 import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
@@ -1405,8 +1406,11 @@ export function tick(world, inputsForThisTick = []) {
         world.lastDailyDay = day;
         // §22.2 사망 판정 — 선거·수당·이민보다 **먼저** (89차 ③). id asc, riskHash라 RNG 미소비.
         maybeDeaths(world, t, day, emit);
-        dailyDiseaseDraws(world, t, emit);
-        dailyFireDraws(world, t, emit); // §17.20 (①.5 — 질병 다음, 시설당 1드로우)
+        const storyCandidates = [];
+        const offerStory = candidate => storyCandidates.push(candidate);
+        dailyDiseaseDraws(world, t, emit, offerStory);
+        dailyFireDraws(world, t, emit, offerStory); // 기존 질병 → 화재 드로우 수/순서 유지
+        resolveStoryCandidates(world, t, storyCandidates, emit); // #89 후보 중 최대 1개, RNG 없음
         updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
         maybeElection(world, t, day, emit);
         maybeFiscalReview(world, t, day, emit); // §22.22 선거 직후 고정 위치 — 그날 복지 정산부터 새 정책
