@@ -2059,7 +2059,20 @@ const BLOCK_KO = {
   no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
   not_coping: '멀쩡함', not_needed: '불필요',
 };
-const OCC_KO = { office_worker: '회사원', barista: '바리스타', freelancer: '프리랜서', student: '학생', retired: '은퇴' };
+// #107 직업 라벨. sim/traits.js의 OCCUPATIONS **전 원소**가 여기 있어야 한다 —
+// 5종만 있던 동안 라이브 주민 173명 중 137명(79%)의 직업 칸이 'undefined'였다(child만 71명).
+// 직업을 늘리면 test/qa.test.js QA-19가 먼저 깨진다.
+const OCC_KO = {
+  office_worker: '회사원', barista: '바리스타', freelancer: '프리랜서', student: '학생', retired: '은퇴',
+  doctor: '의사', civil_servant: '공무원', teacher: '교사',
+  police: '경찰', firefighter: '소방관', nurse: '간호사', politician: '정치인',
+  worker: '공장 노동자',
+  chef: '요리사', clerk: '점원',
+  child: '아이',
+};
+// 라벨은 **한 곳에서만** 푼다. 표를 직접 인덱싱하면 미등록 키가 화면에
+// 'undefined'로(폴백 없는 자리) 또는 원시 영문 키로(폴백이 키인 자리) 새어 나간다.
+function occKo(id, fallback = '주민') { return OCC_KO[id] ?? fallback; }
 const NEED_KO = { hunger: '배고픔', energy: '수면 욕구', social: '외로움', fun: '심심함', money: '돈 걱정', mood: '울적함', space: '집이 좁음' };
 // §22.16 표시 이름은 성+이름. 성이 없는 오래된 세이브도 이름만으로 그대로 나온다.
 function simName(id) {
@@ -2183,7 +2196,7 @@ function eventText(e) {
     case 'lonely': return `${ga(n)} 혼자 시간을 보냈습니다…`;
     case 'argument': return `💢 ${wa(n)} ${ga(simName(e.payload.withSimId))} 말다툼했습니다`;
     case 'input_rejected': return `지시 거부됨 (${e.payload.reason})`;
-    case 'player_created': return `🏠 ${ga(e.payload.name)} 마을에 이사 왔습니다! (${OCC_KO[e.payload.occupation]})`;
+    case 'player_created': return `🏠 ${ga(e.payload.name)} 마을에 이사 왔습니다! (${occKo(e.payload.occupation)})`;
     case 'logic_changed': return `🔧 심들의 판단 로직이 갱신되었습니다 (${e.payload.hash})`;
     case 'token_created': {
       const place = e.payload.placeId === 'cafe' ? '카페' : '공원';
@@ -2211,7 +2224,7 @@ function eventText(e) {
     }
     case 'moved_home': return `📦 ${ga(n)} 새 집으로 이사했습니다`;
     case 'child_settled': return `👶 ${simName(e.payload.parentA)}·${simName(e.payload.parentB)} 부부의 자녀 ${ga(e.payload.name)} 마을에서 자립을 시작했습니다!`;
-    case 'immigrated': return `🚌 ${ga(e.payload.name)} 해솔마을로 이사 왔습니다! (${OCC_KO[e.payload.occupation] ?? e.payload.occupation})`;
+    case 'immigrated': return `🚌 ${ga(e.payload.name)} 해솔마을로 이사 왔습니다! (${occKo(e.payload.occupation)})`;
     case 'fell_sick': return `🤒 ${ga(n)} 감기에 걸렸습니다`;
     case 'recovered': return e.payload.how === 'doctor' ? `💊 ${ga(n)} 진료를 받고 나았습니다` : `🌤️ ${ga(n)} 감기에서 회복했습니다`;
     case 'election': return `🗳️ 선거 결과 — ${ga(n)} 해솔마을 시장이 되었습니다! (득표 ${e.payload.votes.join(':')})`;
@@ -2280,7 +2293,7 @@ function renderPanel() {
     if (pid !== undefined) extra += ` · ${world.partnerStage?.[sim.id] === 'married' ? '💍' : '💕'}${simName(pid)}`;
     if (world.mayorId === sim.id) extra += ' · 👑시장';
     if (sim.sick) extra += ' · 🤒';
-    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${OCC_KO[tr.occupation]}${sim.isPlayer ? ' · ⭐나' : ''}${extra}`;
+    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${sim.isPlayer ? ' · ⭐나' : ''}${extra}`;
   }
   $('money').textContent = `💰 ${sim.money}원`;
   $('action').textContent = `현재: ${ACTION_KO[sim.state.action] ?? '대기'} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
