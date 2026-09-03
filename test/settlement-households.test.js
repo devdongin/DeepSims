@@ -89,6 +89,27 @@ test('#32 an interrupted trip with no remaining route cancels without refunds or
   assert.equal(events[0][0],'founding_cancelled');
 });
 
+test('#32 a route lost during gathering cancels instead of reserving an unreachable home forever',()=>{
+  const {w,s,p,home}=travellingWorld();
+  p.plan.relocation={phase:'gathering',assembly:{x:s.x,y:s.y},routeVersion:-1,distances:{}};
+  s.needs.hunger=0;s.needs.energy=0;
+  const before={home:s.homeId,money:w.treasury,inflow:w.externalInflow};
+  advanceSettlementPlans(w,3000,()=>{},()=>{});
+  // Initialization finds a reachable route; insufficient needs keeps the family gathering.
+  assert.equal(p.status,'awaiting_settlement');
+  assert.equal(p.plan.relocation.phase,'gathering');
+  for(const [x,y] of [[79,80],[81,80],[80,79],[80,81]])w.map.tiles[y*w.map.w+x]=TILE.WALL;
+  w.map.reachVersion++;
+  const restored=deserialize(serialize(w)),events=[],replayed=[];
+  advanceSettlementPlans(w,3001,(...e)=>events.push(e),()=>assert.fail('blocked departure'));
+  advanceSettlementPlans(restored,3001,(...e)=>replayed.push(e),()=>assert.fail('blocked replay departure'));
+  assert.deepEqual(events,replayed);assert.equal(serialize(w),serialize(restored));
+  assert.equal(p.status,'cancelled');assert.equal(p.reason,'route_changed');
+  assert.equal(s.homeId,before.home);assert.equal(w.treasury,before.money);assert.equal(w.externalInflow,before.inflow);
+  assert.ok(w.map.facilities.includes(home));assert.equal(home.foundingPetitionId,undefined);
+  assert.equal(w.villages.length,1);
+});
+
 test('#32 settlement membership changes only at the destination and completion is exactly once',()=>{
   const {w,s,p,home}=travellingWorld(),oldHome=s.homeId,events=[];
   const emit=(...e)=>events.push(e);

@@ -84,6 +84,10 @@ export function advanceSettlementPlans(world,t,emit,start){
         const path=bfsPath(world.map,r.assembly.x,r.assembly.y,home.door.x,home.door.y);
         r.distances[home.id]=path===null?null:path.length;
       }
+      if(Object.values(r.distances).some(length=>length===null)){
+        for(const sim of sims)stop(world,sim);
+        cancelFoundingConstruction(world,p.id,'route_changed',t,emit);continue;
+      }
     }
     if(r.phase==='travelling'){
       // Lifecycle updates can end an action at a day boundary. Resume the
