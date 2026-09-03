@@ -51,6 +51,9 @@ export const EVENT_TYPES = [
   'project_started', 'facility_built', 'moved_home', 'center_planned',
   'immigrated', 'fell_sick', 'recovered', 'election', 'started_dating', 'married', 'broke_up',
   'joined_club', 'mayor_stipend', 'new_year', 'graduated', 'retired_now', 'festival', 'child_settled',
+  // §22.91 인도 형성 — 병합된 §117 인도 기능이 emit하는데 등록이 빠져 저장 계층이
+  // 거부했다(테스트 16c: 'unregistered event type'). append-only 규약대로 끝에 붙인다.
+  'sidewalk_formed',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];
