@@ -27,6 +27,7 @@ export function simView(sim) {
     sick: sim.sick,
     hasCar: sim.hasCar,
     isPlayer: sim.isPlayer,
+    isGenius: sim.isGenius,
     abilities: sim.abilities,
     potential: sim.potential,
     // traits 전체가 아니라 화면이 쓰는 것만 (mbti는 성향 표시에 쓰인다)

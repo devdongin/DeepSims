@@ -1,6 +1,7 @@
 {
-  "logicSchemaVersion": 48,
+  "logicSchemaVersion": 49,
   "development": {
+    "geniusMin": 120, "geniusMax": 150,
     "birthPct": 10, "adultPct": 70, "matureAge": 25, "ticksPerPoint": 7200,
     "physicalDeclineAge": 60, "mentalDeclineAge": 75, "declinePctPerYear": 1, "minAgePct": 40
   },
