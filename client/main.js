@@ -162,7 +162,7 @@ const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', '
   // 에셋 에이전트가 다섯 회차 연속 이 키를 요청했는데 **배선이 없어서** 만들어도 안 보였다.
   // 배선을 먼저 둔다: 파일이 아직 없으면 loadImagesNative가 null로 받고 exists()가 false라
   // 아래 drawGardens가 통째로 건너뛴다 — 즉 지금은 무해하고, PNG가 생기는 순간 살아난다.
-  'tile_garden', 'wall_stone', 'hedge_low', 'flower_row']
+  'tile_garden', 'wall_stone', 'hedge_low', 'flower_row', 'path_stone']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -530,6 +530,12 @@ class TownScene extends Phaser.Scene {
           this.gardenSprites.push(im);
           // §22.72 화단은 **경계가 아니라 잔디 안쪽**에 놓는다(Codex 배선 요청).
           // 길이 아닌 칸에만, 4칸마다 한 줄. 위치로 정해 같은 정원은 늘 같은 자리다.
+          // §22.73 디딤돌 — 잔디를 가로지르는 좁은 길. 도로 타일과 달리 잔디가 사이로 보인다
+          // (원화의 15%만 불투명). 화단과 겹치지 않게 다른 주기를 쓴다.
+          if (t !== 1 && t !== 2 && this.textures.exists('path_stone') && (x * 2 + y) % 5 === 0) {
+            const ps = this.add.image(isoX(x, y), isoY(x, y) - 2, 'path_stone').setDisplaySize(TW, 24).setDepth(-6);
+            this.gardenSprites.push(ps);
+          }
           if (t !== 1 && t !== 2 && this.textures.exists('flower_row') && (x + y * 2) % 7 === 0) {
             const fl = this.add.image(isoX(x, y), isoY(x, y) - 4, 'flower_row').setDisplaySize(TW, 24).setDepth(isoY(x, y));
             this.gardenSprites.push(fl);
