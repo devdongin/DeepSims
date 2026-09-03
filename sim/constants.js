@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 64; // #92 계절 달력과 실물 비축
+export const SCHEMA_VERSION = 65; // #91 욕구 충족 실적과 문화 수요
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -23,7 +23,7 @@ export const ACTIONS = ['eat', 'sleep', 'work', 'socialize', 'play', 'idle',
   'escort_child_doctor',
   // §23.8 여가 확대. 배열 순서는 pickBest의 동점 처리 순서라 **끝에만 붙인다**.
   // 마을에 할 일이 여덟 가지뿐이면 사람들은 여덟 가지 삶만 산다.
-  'stroll', 'garden', 'music', 'volunteer', 'board_game', 'supply_groceries', 'grow_groceries', 'stock_food'];
+  'stroll', 'garden', 'music', 'volunteer', 'board_game', 'supply_groceries', 'grow_groceries', 'stock_food', 'visit_culture'];
 export const COPING_ACTIONS = ['drink', 'binge_eat', 'hole_up', 'exercise'];
 export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat', 'garden', 'music', 'grow_groceries']; // 자기 집 시설만 후보
 
@@ -48,6 +48,7 @@ export const ACTION_FACILITY = {
   supply_groceries: ['market', 'mall'],
   grow_groceries: ['house', 'apartment'],
   stock_food: ['market', 'mall'],
+  visit_culture: ['library', 'cinema'],
 };
 export const NEED_OF_ACTION = { eat: 'hunger', sleep: 'energy', socialize: 'social', play: 'fun', read: 'fun', fish: 'fun', cook_eat: 'hunger', seek_food_aid: 'hunger',
   stroll: 'fun', garden: 'fun', music: 'fun', volunteer: 'social', board_game: 'fun' };
@@ -93,6 +94,7 @@ export const EVENT_TYPES = [
   'storyteller_decision',
   'supply_ordered', 'supply_delivered', 'supply_capitalized', 'goods_purchased', 'goods_produced',
   'season_changed',
+  'needs_tier_changed',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

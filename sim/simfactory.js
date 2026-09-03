@@ -16,6 +16,7 @@
 import { makeAbilities, initializeDevelopment } from './abilities.js';
 import { DEFAULT_LOGIC } from './logic.js';
 import { newEducation, schoolFor } from './education.js';
+import { newNeedsTier } from './needs-tiers.js';
 
 // 행동 상태의 빈 값. undefined 필드는 직렬화가 삼켜 왕복이 고정점이 아니게 되므로
 // 전부 명시적인 값을 둔다 (§22.13).
@@ -53,6 +54,7 @@ export function makeSim({
     isGenius: false,
     geniusBirth: null,
     education: newEducation(),
+    needsTier: newNeedsTier(),
     traits,
     abilities: makeAbilities(seed, id), // §21.1 드로우 없이 seed·id에서 유도
     mood: 0,
