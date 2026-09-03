@@ -17,13 +17,12 @@ import { collectCandidates } from '../sim/tick.js';
 // 바뀔 때뿐이고, 그때는 이유를 여기 남긴다.
 //   328458d (최적화 이전): 7e987d33 / 5c93dd7d / ce050617
 //   §23.8   (여가 5종)   : 8aa9fa43 / 23d3d592 / 6e5c98db
-//   §23.13  (공공 정원)  : 아래 값 — 월드젠 직업 구성이 바뀌므로 첫 후보부터 달라진다
-//     (#51 가구 분가 의도와 병합하면서 world 해시만 한 번 더 갱신됐다 — 후보·선택·
-//      이벤트 셋은 그대로이므로 세계 상태에 필드가 는 변화다)
+//   §23.13  (공공 정원)  : 월드젠 직업 구성이 바뀌므로 첫 후보부터 달라졌다.
+//   #93     (일일 임대 정산): 첫 tick 잔액과 이후 선택이 실제로 바뀌므로 다시 고정한다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '8022320f', 'd09a27d0', '9fbce287']],
-  [50, ['1dcfd840', 'de0b87c6', '42cbd285', 'fe5e8374']],
-  [200, ['59e0f5f7', 'e72f64a1', 'c2125e05', '577b3ed4']],
+  [10, ['8aa9fa43', '47097e5a', 'b05ecf41', 'c08f0174']],
+  [50, ['23d3d592', 'd8a501ad', '9e26d7bf', '73abc124']],
+  [200, ['6e5c98db', '392437b5', '089c375c', '5264724c']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

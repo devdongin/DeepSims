@@ -29,23 +29,10 @@ export function candidateContract(pop = 50) {
   w.reservations = {};
   let events = advance(w, {}, 240);
   sample();
-  let oracleWorld = w;
-  // #51 adds durable household metadata but does not reach a daily decision in this
-  // 240-tick oracle. Normalize only those fields back to the current §23.8 baseline;
-  // choices, events, balances and every other world field must remain bit-identical.
-  if (w.schemaVersion === 59 && w.logic.logicSchemaVersion === 55) {
-    assert.deepEqual(w.logic.household,{independenceAge:19,stableDays:7,reserveMoney:2400});
-    assert.deepEqual(w.householdIntents,[]);assert.equal(w.nextHouseholdIntentId,0);
-    oracleWorld = structuredClone(w);
-    oracleWorld.schemaVersion = 58; oracleWorld.logic.logicSchemaVersion = 54;
-    delete oracleWorld.logic.household;delete oracleWorld.householdIntents;
-    delete oracleWorld.nextHouseholdIntentId;delete oracleWorld.householdDaily;
-    for(const sim of oracleWorld.sims){delete sim.householdId;delete sim.independenceDays;}
-  }
   return {
     candidates: fnv1a(serialize(before)),
     choices: fnv1a(serialize(events.filter(e => e.type === 'action_started'))),
-    events: fnv1a(serialize(events)), world: hashWorld(oracleWorld),
+    events: fnv1a(serialize(events)), world: hashWorld(w),
   };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

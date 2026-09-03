@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 56, // #51 가구 분가 의도 + §23.13 공공 정원
+  logicSchemaVersion: 56, // #51 가구 분가 + §23.13 공공 정원 + #93 지가·임대료
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
@@ -113,6 +113,9 @@ export const DEFAULT_LOGIC = {
     mastersStudyTicks: 10000, doctorateStudyTicks: 20000, postgraduatePctFactor: 50,
     studyDeficit: 6500, dailyStudyTicks: 240, startMinute: 540, endMinute: 900 },
   household: { independenceAge: 19, stableDays: 7, reserveMoney: 2400 },
+  housing: { baseLandValue:10, proximityRadius:64, proximityPoint:2, useCap:20, usePoint:2,
+    baseRent:40, landRentPct:25, bedRent:10, maxIncomePct:40, moveAfterDays:3,
+    serviceTypes:['primary_school','middle_school','high_school','university','hospital','police_station','fire_station','park','library','market'] },
   // §21.2 나눔 (사용자 규칙 §0.1: 지표를 누르지 말고 행동을 준다).
   // 은퇴자는 소득이 0이라 저축을 쓰면 굶는다 — 복지 캡을 올리는 대신 '만나서 나눠주는' 행동을 준다.
   sharing: {
@@ -928,6 +931,17 @@ function checkRanges(p, errors) {
   inRange('household.independenceAge', p.household.independenceAge, 19, 100);
   inRange('household.stableDays', p.household.stableDays, 1, 3650);
   inRange('household.reserveMoney', p.household.reserveMoney, 0, 1000000000);
+  inRange('housing.baseLandValue',p.housing.baseLandValue,0,1000000);
+  inRange('housing.proximityRadius',p.housing.proximityRadius,1,10000);
+  inRange('housing.proximityPoint',p.housing.proximityPoint,0,10000);
+  inRange('housing.useCap',p.housing.useCap,0,1000000);
+  inRange('housing.usePoint',p.housing.usePoint,0,10000);
+  inRange('housing.baseRent',p.housing.baseRent,0,1000000);
+  inRange('housing.landRentPct',p.housing.landRentPct,0,1000);
+  inRange('housing.bedRent',p.housing.bedRent,0,1000000);
+  inRange('housing.maxIncomePct',p.housing.maxIncomePct,0,1000);
+  inRange('housing.moveAfterDays',p.housing.moveAfterDays,1,3650);
+  if(!Array.isArray(p.housing.serviceTypes)||p.housing.serviceTypes.some(x=>typeof x!=='string'))errors.push('housing.serviceTypes: 문자열 배열이어야 함');
   inRange('election.campaignPull', p.election.campaignPull, 100, 150);
   inRange('election.campaignDays', p.election.campaignDays, 0, 29);
   for (const k of ['judgeStarving', 'judgeNoMoney', 'judgeWelfare']) inRange(`election.${k}`, p.election[k], 0, 100);

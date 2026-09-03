@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 59; // #51 명시적 가구와 내구 분가 의도
+export const SCHEMA_VERSION = 60; // #93 지가·임대 폐쇄 회계와 내구 이사 압력
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -85,6 +85,8 @@ export const EVENT_TYPES = [
   'household_intent_applied',
   'household_intent_failed',
   'public_posts_filled', // §23.13 인구에 맞춰 공공 자리를 채웠다
+  'rent_paid',
+  'rent_shortfall',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

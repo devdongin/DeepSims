@@ -523,6 +523,7 @@ test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수�
 
 test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () => {
   const w = createWorld(SEED);
+  w.lastDailyDay = 0; // 임금/세금 계약만 격리한다.
   const t0 = w.treasury; // §22.78 초기 국고가 0이 아니므로 증분으로 본다
   const L = w.logic;
   // 근무 정산: 원천징수
@@ -542,6 +543,7 @@ test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () 
   assert.equal(s.money, before + net);
   // 복지: 가난한 심 id asc, 캡·국고 한도
   const w2 = createWorld(SEED);
+  Object.assign(w2.logic.housing, { baseRent: 0, landRentPct: 0, bedRent: 0 });
   w2.treasury = w2.logic.economy.welfareAmount * 2; // 2명분만
   for (const x of w2.sims) x.money = 0;
   idleAll(w2, []);
@@ -781,6 +783,7 @@ test('S-26. §18.T1 시정: policy 내구 입력 → 세율·복지 오버라이
 
 test('S-27. §18.T2 건설 지시: 차감·FIFO 우선 착공·재검증 폐기·회전 축조', () => {
   const w = createWorld(SEED);
+  w.lastDailyDay = 0; // 건설 주문 차감만 격리한다.
   w.treasury = 10000;
   // 주문: 국고 차감 + zoned
   const free = w.plots.find((p) => plotBuildableRef(w.map, p));
@@ -943,6 +946,7 @@ test('S-31. §17.24 순찰·정직: 경찰 순찰 정산·정직 신고·3일 �
   assert.ok(reported > 0, '일부는 신고 (의사확률)');
   // 귀속: dueDay 도래 시 finder에게
   const w3 = createWorld(SEED);
+  Object.assign(w3.logic.housing, { baseRent: 0, landRentPct: 0, bedRent: 0 });
   w3.lostAndFound.push({ itemId: 1, finderId: 0, amount: 500, dueDay: 1 });
   const m0 = w3.sims[0].money;
   idleAll(w3, []);
@@ -1184,6 +1188,7 @@ test('S-37. §19.7 재무장 누락 수리: 불만이 사라진 kind도 재무�
 
 test('S-38. §19.10 불만 원인 분화: 돈이 없어서 막힌 것은 시설 부재가 아니다 (이슈 #49)', () => {
   const w = createWorld(SEED);
+  w.lastDailyDay = 0; // 불만 원인 선택만 격리한다.
   w.treasury = 0; // §22.78 종잣돈이 있으면 복지가 끼어들어 '돈 없음' 전제가 깨진다
   // §22.78 종잣돈이 생기면서 복지가 끼어들어 전제가 깨진다 — 이 픽스처는 국고도 빈 마을이다
   const s = w.sims[0];
@@ -1204,6 +1209,7 @@ test('S-38. §19.10 불만 원인 분화: 돈이 없어서 막힌 것은 시설 
   assert.ok(!w.complaints.some((c) => c.kind === 'no_facility'), '시설 부재로 오진하지 않음');
   // 시설이 실제로 없으면 no_facility로 기록된다
   const w2 = createWorld(SEED);
+  w2.lastDailyDay = 0;
   const s2 = w2.sims[0];
   w2.map.facilities = w2.map.facilities.filter((f) => !['cafe', 'restaurant', 'mall', 'market'].includes(f.type));
   idleAll(w2, []);
@@ -1263,6 +1269,7 @@ test('S-57. §20.1 복지 동점은 id asc로 결정적으로 갈린다', () => 
 
 test('S-58. §20.2 소비금은 소멸하지 않고 그 시설 매출로 간다 (#43)', () => {
   const w = createWorld(SEED);
+  w.lastDailyDay = 0; // 단일 소비 거래의 보존만 격리한다.
   const L = w.logic;
   const cafe = w.map.facilities.find((f) => f.type === 'cafe');
   const sim = w.sims[0];

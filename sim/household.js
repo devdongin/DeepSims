@@ -1,5 +1,6 @@
 // #51 Explicit households and durable, next-tick revalidated separation intents.
 import { isResidence } from './map.js';
+import { askingRent } from './housing.js';
 
 const employed = (world, sim) => sim.traits.occupation !== 'student'
   && sim.traits.occupation !== 'child'
@@ -26,6 +27,21 @@ export function applyHouseholdIntents(world, t, emit) {
   for (const intent of due) {
     const sim = world.sims.find(s => s.id === intent.simId);
     let reason = null;
+    if(intent.kind==='rent_move'){
+      const members=(intent.memberIds??[]).map(id=>world.sims.find(s=>s.id===id));
+      const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isResidence(f));
+      if(members.some(s=>!s))reason='person_missing';
+      else if(members.some(s=>s.householdId!==intent.fromHouseholdId||s.homeId!==intent.fromHomeId))reason='household_changed';
+      else if(world.sims.some(s=>s.householdId===intent.fromHouseholdId&&s.homeId===intent.fromHomeId&&!intent.memberIds.includes(s.id)))reason='household_changed';
+      else if(!target||world.sims.some(s=>s.homeId===target.id)||target.resources.length<members.length)reason='target_unavailable';
+      else if(askingRent(world,target)>=intent.maxRent)reason='not_cheaper';
+      if(reason){world.householdDaily.failures[reason]=(world.householdDaily.failures[reason]??0)+1;
+        emit('household_intent_failed',intent.simId,{intentId:intent.intentId,kind:intent.kind,reason});}
+      else {for(const member of members){member.homeId=target.id;emit('moved_home',member.id,{from:intent.fromHomeId,to:target.id,reason:'rent_pressure'});}
+        world.rentPressure[intent.pressureKey??intent.fromHouseholdId]=0;
+        emit('household_intent_applied',intent.simId,{intentId:intent.intentId,kind:intent.kind,from:intent.fromHomeId,to:target.id});}
+      world.householdIntents.splice(world.householdIntents.indexOf(intent),1);continue;
+    }
     if (!sim) reason = 'person_missing';
     else if (sim.householdId !== intent.fromHouseholdId || sim.homeId !== intent.fromHomeId) reason = 'household_changed';
     else if (!liveParentAtHome(world, sim)) reason = 'parent_not_cohabiting';
@@ -57,7 +73,7 @@ export function evaluateHouseholds(world, t, day, emit) {
       && vacantResidences(world,sim.homeId).length > 0;
     sim.independenceDays = stable ? (sim.independenceDays ?? 0) + 1 : 0;
     if (!stable || sim.independenceDays < H.stableDays
-      || world.householdIntents.some(i=>i.simId===sim.id)) continue;
+      || world.householdIntents.some(i=>i.simId===sim.id||i.fromHouseholdId===sim.householdId)) continue;
     const intent = { intentId:world.nextHouseholdIntentId++, kind:'separate', simId:sim.id,
       fromHouseholdId:sim.householdId, fromHomeId:sim.homeId, createdTick:t, applyTick:t+1 };
     world.householdIntents.push(intent);

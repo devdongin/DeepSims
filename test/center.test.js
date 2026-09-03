@@ -9,6 +9,9 @@ test('#119 계획 중심점은 국고·이벤트·영속 상태를 결정적으�
   const b = createWorld(119);
   a.treasury = 10000;
   b.treasury = 10000;
+  // 이 검사는 입력의 원자 비용만 본다. 일일 임대 정산은 별도 #93 검사에서 다룬다.
+  a.lastDailyDay = 0;
+  b.lastDailyDay = 0;
   const hall = a.map.facilities.find((f) => f.type === 'city_hall');
   const point = { x: hall.door.x, y: hall.door.y + 1 };
   assert.equal(isWalkable(a.map, point.x, point.y), true);

@@ -2610,6 +2610,8 @@ function eventText(e) {
     case 'medical_visit_paid': return `🏥 ${n} 진료 완료: 환자 측 ${e.payload.patientCost}원 · 공공 부담 ${e.payload.subsidy}원`;
     case 'child_allowance_paid': return `🧒 ${n} 가구에 아이 #${e.payload.childId} 지원 ${e.payload.amount}원`;
     case 'child_escorted': return `🏥 ${n} 아이 #${e.payload.childId}와 병원으로 동행합니다`;
+    case 'rent_paid': return `🏠 ${n} 가구가 임대료 ${e.payload.paid}원을 냈습니다${e.payload.shortfall ? ` (부족 ${e.payload.shortfall}원)` : ''}`;
+    case 'rent_shortfall': return `⚠️ ${n} 가구의 임대료가 ${e.payload.shortfall}원 부족합니다`;
     case 'lonely': return `${ga(n)} 혼자 시간을 보냈습니다…`;
     case 'argument': return `💢 ${wa(n)} ${ga(simName(e.payload.withSimId))} 말다툼했습니다`;
     case 'center_planned': return `📍 (${e.payload.x}, ${e.payload.y})에 계획 중심지가 지정되었다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
@@ -3042,6 +3044,8 @@ function connect() {
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.transit) world.transit = msg.transit; // §19.12 역 수요 관측·언락 (zone 모달 게이트)
         if (msg.unlockedIndustries) world.unlockedIndustries = msg.unlockedIndustries;
+        if (msg.housingMarket) world.housingMarket = msg.housingMarket;
+        if (msg.householdDaily) world.householdDaily = msg.householdDaily;
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
         for (const e of msg.events ?? []) {
           if (e.type === 'center_planned') {
