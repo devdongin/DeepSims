@@ -30,6 +30,7 @@ export function simView(sim) {
     isGenius: sim.isGenius,
     homeId: sim.homeId, // #51 가구/거주 관측
     householdId: sim.householdId,
+    needsTier: sim.needsTier ? { ...sim.needsTier } : null,
     education: sim.education ? { universityEnrolled: sim.education.universityEnrolled,
       universityGraduated: sim.education.universityGraduated, stage: sim.education.lastStage,
       tuitionPaid: sim.education.tuitionPaid, course: sim.education.course,

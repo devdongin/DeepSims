@@ -2489,6 +2489,7 @@ const ACTION_KO = {
   supply_groceries: '식료품 공급',
   grow_groceries: '주문 식료품 재배',
   stock_food: '식료품 비축',
+  visit_culture: '문화 생활',
   // §23.8 여가 확대
   stroll: '산책', garden: '텃밭 가꾸기', music: '악기 연주', volunteer: '봉사 활동', board_game: '보드게임',
 };
@@ -2663,6 +2664,7 @@ function eventText(e) {
     case 'weather_changed': return { sunny: '☀️ 화창한 아침입니다', cloudy: '☁️ 날이 흐립니다', rain: '🌧️ 비가 내리기 시작했습니다' }[e.payload.kind];
     case 'item_spawned': return null; // 어디 떨어졌는지는 비밀 — 발견의 재미
     case 'season_changed': return `🍂 ${ {spring:'봄',summer:'여름',autumn:'가을',winter:'겨울'}[e.payload.to] }이 시작됐습니다`;
+    case 'needs_tier_changed': return `${simName(e.simId)}의 생활 단계가 ${e.payload.to === 1 ? '시민' : '정착민'}으로 바뀌었습니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
@@ -3130,6 +3132,7 @@ function renderPanel() {
     if (world.mayorId === sim.id) extra += ' · 👑시장';
     if (sim.sick) extra += ' · 🤒';
     if (sim.education?.stage) extra += ` · ${PLACE_KO[sim.education.stage]}`;
+    if (sim.needsTier) extra += ` · ${sim.needsTier.level === 1 ? '시민' : '정착민'}`;
     if (sim.education?.universityGraduated) extra += ' · 🎓대졸';
     if (sim.education?.course) extra += ` · ${{university:'학부',masters:'석사',doctorate:'박사'}[sim.education.course]} ${sim.education.universityEnrolled?'재학':'등록 보류'}`;
     if (sim.education?.highestDegree && sim.education.highestDegree !== 'bachelor') extra += ` · 🎓${{masters:'석사',doctorate:'박사'}[sim.education.highestDegree]}`;

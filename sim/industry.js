@@ -127,7 +127,7 @@ export const KSIC = [
   },
   {
     code: 'R', nameKo: '예술, 스포츠 및 여가관련 서비스업',
-    facilityTypes: ['park', 'gym', 'cinema'], occupations: [], actions: ['play', 'exercise'],
+    facilityTypes: ['park', 'gym', 'cinema'], occupations: [], actions: ['play', 'exercise', 'visit_culture'],
     note: '여가 시설은 있는데 그 시설에서 일하는 직업이 없다 — 손님만 있고 종사자가 없다.',
   },
   {
