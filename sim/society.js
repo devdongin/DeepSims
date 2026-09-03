@@ -9,7 +9,7 @@ import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
 import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 · §22.2 사망 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
-import { TILE } from './map.js';
+import { TILE, isRoadProtected } from './map.js';
 import { isResidence } from './map.js';
 import { learnToken as learnTokenRef } from './planning.js';
 
@@ -1072,6 +1072,7 @@ export function maybePublicWorks(world, t, day, emit) {
     // (121차 ②) — 비용 검사 뒤에 두면 국고가 마른 날의 stale 엔트리가 다음 리뷰까지
     // 남고, remainingCandidates가 실제 미처리 수와 어긋난다.
     if (world.map.tiles[idx] !== TILE.GRASS) { delete world.wear[idx]; stale++; continue; }
+    if (isRoadProtected(world.map, idx % world.map.w, Math.floor(idx / world.map.w))) continue;
     if (paved.length >= P.paveMaxPerDay) continue; // 포장은 상한까지, 정리는 끝까지
     if (world.treasury - P.paveCostPerTile <= 0) continue; // 공채로 포장하지 않는다
     world.treasury -= P.paveCostPerTile;

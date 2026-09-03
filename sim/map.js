@@ -17,6 +17,15 @@ export const TILE = { GRASS: 0, ROAD: 1, FLOOR: 2, WALL: 3, TREE: 4, WATER: 5,
 // 통행 가능 여부의 단일 권위 확장: 강·산은 막고, 다리·모래·언덕·강가는 통행 가능
 export const BLOCKING_TILES = new Set([TILE.WATER, TILE.WALL, TILE.RIVER, TILE.MOUNTAIN]);
 
+// 시설 대지·출입구는 공공 차도에서 보호한다. 보행 인도는 공원/연못의 열린 공간에 허용한다.
+export function isRoadProtected(map, x, y, includeOpenAreas = true) {
+  return map.facilities.some((f) => {
+    if (f.door && Math.abs(x - f.door.x) + Math.abs(y - f.door.y) <= 1) return true;
+    if (!includeOpenAreas && ['park', 'pond'].includes(f.type)) return false;
+    return x >= f.x && x < f.x + f.w && y >= f.y && y < f.y + f.h;
+  });
+}
+
 function rect(tiles, x, y, w, h, v) {
   for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) tiles[j * MAP_W + i] = v;
 }

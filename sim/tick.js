@@ -5,7 +5,7 @@ import {
   SCORE_SCALE, AFFINITY_MIN, AFFINITY_MAX,
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
-import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion} from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
@@ -775,9 +775,11 @@ export function tick(world, inputsForThisTick = []) {
     if (world.map.tiles[ti] === TILE.GRASS) {
       world.wear[ti] = (world.wear[ti] ?? 0) + 1; // 희소 객체 (§17.0)
       if (world.wear[ti] >= world.logic.build.wearThreshold) {
-        world.map.tiles[ti] = TILE.SIDEWALK;
         delete world.wear[ti]; // 0 엔트리 금지 규칙의 연장 — 도로화된 칸은 제거
-        emit('sidewalk_formed', sim.id, { x: sim.x, y: sim.y });
+        if (!isRoadProtected(world.map, sim.x, sim.y, false)) {
+          world.map.tiles[ti] = TILE.SIDEWALK;
+          emit('sidewalk_formed', sim.id, { x: sim.x, y: sim.y });
+        }
       }
     }
     // §16.C: 분실물 습득 — 현재 좌표의 아이템(itemId 오름차순 첫 번째). 틱당 1회.
