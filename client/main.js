@@ -644,12 +644,28 @@ class TownScene extends Phaser.Scene {
   }
 }
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.CANVAS, // 임베디드 브라우저의 WebGL 프레임버퍼 이슈 회피
   parent: 'game',
   scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
   scene: TownScene,
   banner: false,
+});
+
+// #106 창 크기가 바뀌어도 캔버스가 로드 시점 크기에 머무는 문제.
+// RESIZE 모드는 부모(#game)를 따라가지만 그리드 폭 변화를 놓치는 경우가 있어
+// window.resize에서 실제 부모 크기로 직접 맞춘다. 리사이즈 폭주를 막게 디바운스(120ms).
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const parent = document.getElementById('game');
+    if (!parent || !game.scale) return;
+    const w = Math.max(1, Math.floor(parent.clientWidth));  // 0은 캔버스를 지운다 — 최소 1
+    const h = Math.max(1, Math.floor(parent.clientHeight));
+    game.scale.resize(w, h);
+    if (scene) scene.drawWorld(); // 새 크기에 맞춰 아이소메트릭 배치 재계산
+  }, 120);
 });
 
 // ---- 동적 오브젝트: 분실 동전 (§16.C) ----
