@@ -2584,7 +2584,8 @@ study는 평일 education.startMinute(540)~endMinute(900), 하루 dailyStudyTick
 옛 school은 시설 id/좌표/자원 보존하며 primary_school로 이관, 로직의 옛 시설 참조도 번역한다.
 모든 주민의 education 원장은 0에서 출발한다. 옛19세 이상 student는 학부 재학을 보존하되
 과거 입학 시점/출석이 불명이므로 현재 나이부터 기록한다. 학위나 경력을 소급 생성하지 않는다.
-신규 학교4방향+내부 에셋은 미완료.
+신규 학교4방향+내부 에셋15종과 로더 연결 완료(2026-09-04). 실제 PNG 알파·중복·로더 검사와 독립 브라우저 투명 합성을 검증했다.
+학생/19세 미만은 work뿐 아니라 construct/build/respond_fire/patrol도 금지하며, 옛 수행은 진척·정산 전에 취소한다.
 
 고정 스냅샷 A/B는 docs/education-implementation.md 참조. 유급 학생 근무 제거 후 허기가
 악화한 실험을 확인했으므로 #57 식사 지원 연계·재검증 전 머지/이슈 종료 금지.

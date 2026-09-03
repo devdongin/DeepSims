@@ -144,6 +144,7 @@ function scoreCandidate(sim, action, res, L) {
 // 아이는 먹고 자고 놀고 어울리고 배운다.
 const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol',
   'drink', 'binge_eat', 'shop', 'see_doctor', 'fish']);
+const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol']);
 
 // §22.18 (Codex 110차 ①) **'갈 곳이 없다'와 '자리가 다 찼다'는 다르다.**
 // actionBlockReason이 null을 돌려줘도 그 안에는 시설 부재·만석·도달 불가가 섞여 있다.
@@ -194,7 +195,7 @@ export function facilityShortfallKind(world, sim, action, t) {
 
 export function actionBlockReason(world, sim, action, t) {
   const L = world.logic;
-  if (action === 'work' && !canWork(sim)) return sim.traits.occupation === 'child' ? 'too_young' : 'not_needed';
+  if (LABOR_ACTIONS.has(action) && !canWork(sim)) return sim.traits.occupation === 'child' ? 'too_young' : 'not_needed';
   if (action === 'study') {
     if (!schoolFor(sim) || sim.traits.occupation !== 'student') return 'not_needed';
     const day = Math.floor(t / 1440), tod = t % 1440;
@@ -912,8 +913,8 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'performing') continue;
-    // Old saves may resume a paid school shift before the next daily lifecycle pass.
-    if (s.action === 'work' && !canWork(sim)) {
+    // Old saves may resume a shift or construction before the next lifecycle pass.
+    if (LABOR_ACTIONS.has(s.action) && !canWork(sim)) {
       releaseReservation(world, sim); sim.state = emptyState(); continue;
     }
     s.ticksLeft--;

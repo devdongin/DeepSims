@@ -172,6 +172,23 @@ test('#96 non-college employment starts at 19, never during high school', () => 
   assert.notEqual(s.traits.occupation,'student');assert.equal(canWork(s),true);
 });
 
+test('#96 students cannot bypass the labor gate through construction or public duties', () => {
+  for (const age of [7, 18, 30]) for (const action of ['work', 'construct', 'build', 'respond_fire', 'patrol']) {
+    const w=createWorld(96),s=w.sims[0];
+    w.worldTick=600;w.lastDailyDay=0;w.lastPlanDay=0;
+    s.traits.age=age;s.traits.occupation='student';
+    if(age>=19){s.education.course='masters';s.education.courseStartAge=age;}
+    assert.equal(actionBlockReason(w,s,action,601),'not_needed');
+    s.state={...s.state,kind:'performing',action,ticksLeft:1,facilityId:'legacy',resourceId:'slot0'};
+    w.reservations['legacy:slot0']=s.id;
+    const money=s.money;
+    const events=tick(w);
+    assert.equal(s.money,money,`${age}/${action}: no settlement`);
+    assert.equal(w.reservations['legacy:slot0'],undefined);
+    assert.equal(events.some(e=>e.simId===s.id && e.type==='action_completed' && e.payload.action===action),false);
+  }
+});
+
 test('#96 age alone never graduates a university student or authorizes work during deferred tuition', () => {
   const w=createWorld(96),s=w.sims[0];
   s.traits.age=30;s.traits.occupation='student';s.education=newEducation();
