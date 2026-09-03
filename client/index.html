@@ -182,8 +182,12 @@
         <label>세율</label><input id="pol-tax" type="range" min="5" max="30" step="1"><span id="pol-tax-v"></span>
         <label>복지 지급액</label><input id="pol-amt" type="range" min="0" max="1000" step="50"><span id="pol-amt-v"></span>
         <label>복지 기준</label><input id="pol-thr" type="range" min="0" max="2000" step="100"><span id="pol-thr-v"></span>
+        <label for="pol-health">진료 자기부담</label><input id="pol-health" type="range" min="0" max="100" step="1"><span id="pol-health-v"></span>
+        <label for="pol-child">아이당 지원</label><input id="pol-child" type="range" min="0" max="1000" step="50"><span id="pol-child-v"></span>
       </div>
       <p style="font-size:11px;color:#9c8a6a;margin-top:10px">세율을 올리면 국고는 차지만 납세 때마다 주민 기분이 상합니다.</p>
+      <p style="font-size:11px;color:#9c8a6a;margin-top:6px">진료 자기부담을 낮추면 국고가 병원에 차액을 부담합니다. 국고가 부족한 부분은 환자 측 부담이며, 실제 진료 완료 때 정산합니다.</p>
+      <p style="font-size:11px;color:#9c8a6a;margin-top:6px">아이 지원은 19세 미만 자녀와 함께 사는 성인 부모에게 하루 한 번 지급합니다. 국고 범위에서 자금이 적은 가구부터 지원하며 임금은 아닙니다.</p>
       <div style="display:flex;gap:8px;margin-top:14px">
         <button id="pol-apply" style="padding:6px 14px;background:#ffcf6a;color:#171310;border:0;border-radius:6px;cursor:pointer;font-weight:bold">시행</button>
         <button id="pol-close" style="padding:6px 14px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer">닫기</button>

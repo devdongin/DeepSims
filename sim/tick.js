@@ -10,6 +10,8 @@ import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
 import { schoolFor, updateEducation, recordStudy, neededSchool, SCHOOL_TYPES, canWork } from './education.js';
 import { foodAidBlockReason, takePublicMeal } from './food-aid.js';
+import { medicalBlockReason, completeMedicalVisit } from './health-policy.js';
+import { applyChildAllowance } from './family-policy.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
@@ -209,6 +211,7 @@ export function actionBlockReason(world, sim, action, t) {
     if (sim.education.studyDay === day && sim.education.dailyTicks >= L.education.dailyStudyTicks) return 'not_needed';
   }
   if (sim.traits.occupation === 'child' && CHILD_BLOCKED.has(action)) return 'too_young';
+  if (action === 'see_doctor') return medicalBlockReason(world, sim);
   const cost = L.actions[action]?.cost ?? 0;
   if (cost > 0 && sim.money < cost) return 'no_money';
   if (action === 'work') {
@@ -226,7 +229,6 @@ export function actionBlockReason(world, sim, action, t) {
   }
   if (action === 'cook_eat' && sim.groceries < 1) return 'no_groceries';
   if (action === 'construct' && world.projects.length === 0) return 'no_project';
-  if (action === 'see_doctor' && !sim.sick) return 'healthy';
   if (action === 'build') {
     const home = world.map.facilities.find((f) => f.id === sim.homeId);
     const residents = world.sims.reduce((n, x) => n + (x.homeId === sim.homeId ? 1 : 0), 0);
@@ -1025,12 +1027,9 @@ export function tick(world, inputsForThisTick = []) {
     } else if (s.action === 'respond_fire') {
       resolveFire(world, sim, s.resourceId.slice(5), t, emit); // 'fire:<facId>' → facId (§17.20)
     } else if (s.action === 'see_doctor') {
-      sim.money -= L.actions.see_doctor.cost;
-      payToFacility(world, s.facilityId, L.actions.see_doctor.cost); // §20.2
-      emit('money_changed', sim.id, { delta: -L.actions.see_doctor.cost, balance: sim.money, action: 'see_doctor' });
-      if (sim.sick) {
-        sim.sick = null;
-        emit('recovered', sim.id, { how: 'doctor' });
+      if (!completeMedicalVisit(world, sim, emit)) {
+        emit('action_failed', sim.id, { action: s.action, reason: medicalBlockReason(world, sim) ?? 'invalid_site' });
+        releaseReservation(world, sim); sim.state = emptyState(); continue;
       }
     } else if (s.action === 'shop') {
       sim.money -= L.actions.shop.cost;
@@ -1297,6 +1296,7 @@ export function tick(world, inputsForThisTick = []) {
         remitPublicRevenue(world, t, emit);
         mayorStipend(world, t, emit);
         applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
+        applyChildAllowance(world, t, emit); // #71 실제 부모 가구에 이전, RNG 없음
         // §21.3 전직: 손님이 몰린 가게에 누군가 일하러 간다 (복지 다음 — 서브순서 고정).
         // 복지 뒤에 두는 이유: 오늘의 지원이 반영된 뒤에 진로를 정하는 게 순서상 자연스럽다.
         maybeJobSwitch(world, t, day, emit);

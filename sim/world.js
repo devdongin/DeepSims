@@ -88,6 +88,7 @@ export function createWorld(seed) {
     reputation: 0, // §17.21 마을 평판 — 행동 이벤트 누적, 이민 웨이브 규모 결정
     incidents: [], // §17.20 사건: { type:'fire', facilityId, sinceTick }
     policy: {},    // §18.T1 시장 정책 오버라이드 (화이트리스트: taxPct, welfareAmount, welfareThreshold)
+    childAllowanceDay: -1, // #71 마지막 가구 지원 심사일, 같은 아이 중복 지급 방지
     zoneOrders: [], // §18.T2 플레이어 건설 주문 FIFO: { plotId, type, dir }
     centers: [], // §18.T6 플레이어가 지정한 도시계획 중심점: { centerId, x, y, createdTick }
     terrainVersion: 1, // §19 R-A 지형 생성 버전 (신규·마이그레이션 동일 계약 — 63차 ②)
