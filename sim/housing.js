@@ -2,6 +2,8 @@
 import { isResidence, isAvailableResidence } from './map.js';
 import { governmentFor } from './government.js';
 import { canWork } from './education.js';
+import { planSettlementHouseholds } from './settlement-households.js';
+import { chooseMigrationHome } from './migration-choice.js';
 
 const cmp = (a,b) => a < b ? -1 : a > b ? 1 : 0;
 const at = f => f.door ?? { x:f.x, y:f.y };
@@ -64,13 +66,17 @@ export function settleHousing(world,t,day,emit){
       if(world.rentPressure[pressureKey]<world.logic.housing.moveAfterDays
         ||world.sims.some(s=>s.householdId===householdId&&s.homeId!==home.id)
         ||world.householdIntents.some(i=>i.fromHouseholdId===householdId))continue;
-      const target=homes.filter(h=>isAvailableResidence(h)&&h.id!==home.id&&!world.sims.some(s=>s.homeId===h.id)
-        &&!claimedTargets.has(h.id)&&h.resources.length>=members.length&&askingRent(world,h,uses)<share)
-        .sort((a,b)=>askingRent(world,a,uses)-askingRent(world,b,uses)||cmp(a.id,b.id))[0];
+      const family=world.villages.length>1?planSettlementHouseholds(world,[members[0].id],home.villageId):null;
+      const options=homes.filter(h=>isAvailableResidence(h)&&h.id!==home.id&&!world.sims.some(s=>s.homeId===h.id)
+        &&!claimedTargets.has(h.id)&&h.resources.length>=members.length
+        &&(h.villageId===home.villageId||!family||(family.ok&&h.resources.length>=family.residents.length)))
+        .map(h=>({home:h,rent:askingRent(world,h,uses)})).filter(o=>o.rent<share);
+      const choice=chooseMigrationHome(world,home,options),target=choice?.home;
       if(!target)continue;
       const intent={intentId:world.nextHouseholdIntentId++,kind:'rent_move',simId:members[0].id,
         memberIds:members.map(s=>s.id),fromHouseholdId:householdId,fromHomeId:home.id,
-        targetHomeId:target.id,maxRent:share,pressureKey,createdTick:t,applyTick:t+1};
+        targetHomeId:target.id,maxRent:share,pressureKey,createdTick:t,applyTick:t+1,
+        ...(choice.evidence?{migrationChoice:choice.evidence}:{})};
       world.householdIntents.push(intent);emit('household_intent_created',members[0].id,{...intent});
       claimedTargets.add(target.id);
     }
