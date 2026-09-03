@@ -252,7 +252,7 @@ function facilitiesByType(map) {
 }
 
 // ctx: { shortlist, prep, urgency } — Phase 3 인지 보정. urgency 시 습관 보정 배제 (PLAN §2.5.D).
-function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx = null) {
+export function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx = null) {
   const L = world.logic;
   const out = [];
   const byType = facilitiesByType(world.map);
