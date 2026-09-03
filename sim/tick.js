@@ -828,7 +828,7 @@ function applyZone(world, inp, t, emit) {
   let reason = null;
   if (!plot) reason = 'no_plot';
   else if (plot.used) reason = 'plot_used';
-  else if (!zoneAllowedTypes(world).includes(p.type)) reason = 'tier_locked'; // §18.T4 등급 게이트
+  else if (!zoneAllowedTypes(world,plot.villageId).includes(p.type)) reason = 'tier_locked'; // §18.T4 등급 게이트
   else if (!ZONEABLE.includes(p.type)) reason = 'bad_type'; // 언락됐지만 레시피 미구현(T3 대기)
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
   else if (foundingSiteReserved(world,plot,p.type,p.dir)) reason='site_reserved';
@@ -1589,7 +1589,7 @@ export function tick(world, inputsForThisTick = []) {
         }
         maybeImmigration(world, t, day, emit);
         maybeEmigration(world, t, day, emit);
-        maybePromotion(world, t, emit); // §18.T4 (이민 직후·새해 전 — 49차 합의)
+        for(const local of governmentViews(world))maybePromotion(local, t, governmentEmitter(local,emit)); // 이민 직후·새해 전
         const resetStudent = sim => { releaseReservation(world,sim); sim.state=emptyState(); };
         const aged = maybeNewYear(world, t, day, emit, resetStudent);
         if(!aged) updateEducation(world, t, emit, resetStudent);
@@ -1702,12 +1702,12 @@ export function tick(world, inputsForThisTick = []) {
         const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
           .reduce((n, f) => n + f.resources.length, 0);
         let type = neededSchool(world);
-        if (type === 'university' && !zoneAllowedTypes(world).includes(type)) type = null;
+        if (type === 'university' && !candidates.some(p => zoneAllowedTypes(world,p.villageId).includes(type))) type = null;
         if (!type) type = neededIndustryFacility(world);
         if (!type && pop + separated + observedHeadroom > beds) {
           // 읍 이상에서는 같은 공터로 더 많은 침대를 제공하는 아파트를 우선한다.
           // tier는 관측된 세계 상태이고, 타입 선택은 결정적이다.
-          type = world.cityTier >= 1 ? 'apartment' : 'house';
+          type = governmentFor(world,freePlot.villageId).cityTier >= 1 ? 'apartment' : 'house';
         } // 선제 주택 (§17.21)
         if (!type && officeWorkers > officeDesks) type = 'office';
         else if (!type && pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
@@ -1715,7 +1715,8 @@ export function tick(world, inputsForThisTick = []) {
         if (!type) break;
         if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
           const fp=zoneFootprint(type,0);
-          freePlot=candidates.find(p=>plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type));
+          freePlot=candidates.find(p=>zoneAllowedTypes(world,p.villageId).includes(type)
+            &&plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type));
           if(!freePlot) break;
           const cost=L.zone.costs[type];
           const government=governmentFor(world,freePlot.villageId);

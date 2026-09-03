@@ -11,7 +11,7 @@ import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
 import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 · §22.2 사망 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
-import { TILE, isRoadProtected } from './map.js';
+import { TILE, isRoadProtected, sameRegion } from './map.js';
 import { isResidence, isAvailableResidence } from './map.js';
 import { isSettlementInTransit } from './settlement.js';
 import { learnToken as learnTokenRef } from './planning.js';
@@ -417,18 +417,26 @@ export function maybeImmigration(world, t, day, emit) {
   const G = world.logic.growth;
   if (day === 0 || day % S.immigrationIntervalDays !== 0) return;
   // §17.21 평판 웨이브: 활기찬 마을일수록 여러 명이 온다 (각자 빈 침대 필요, 결정적)
-  const wave = Math.min(G.immigWaveMax + world.cityTier, 1 + Math.floor(world.reputation / G.immigPerExtra)); // §18.T4 등급 캡 확장
-  for (let wv = 0; wv < wave; wv++) immigrateOne(world, t, emit);
+  for (const village of world.villages) {
+    const government = governmentFor(world, village.id);
+    const wave = Math.min(G.immigWaveMax + government.cityTier,
+      1 + Math.floor(government.reputation / G.immigPerExtra));
+    const localEmit = village.id === PRIMARY_GOVERNMENT ? emit
+      : (type, id, payload) => emit(type, id, { ...payload, villageId: village.id });
+    for (let wv = 0; wv < wave; wv++) immigrateOne(world, t, localEmit, village.id);
+  }
 }
 
-function immigrateOne(world, t, emit) {
-  const beds = world.map.facilities.filter(isAvailableResidence)
+function immigrateOne(world, t, emit, villageId) {
+  const residents = world.sims.filter(s => (s.villageId ?? PRIMARY_GOVERNMENT) === villageId);
+  const homes = world.map.facilities.filter(f => (f.villageId ?? PRIMARY_GOVERNMENT) === villageId
+    && isAvailableResidence(f));
+  const beds = homes
     .reduce((n, f) => n + f.resources.length, 0);
-  if (beds <= world.sims.length) return; // 집 없으면 안 온다
+  if (beds <= residents.length) return; // 집 없으면 안 온다
   // 빈 침대 있는 주거 (배열 순 — §18.T3 아파트 포함)
-  const home = world.map.facilities
-    .filter(isAvailableResidence)
-    .find((f) => f.resources.length > world.sims.filter((s) => s.homeId === f.id).length);
+  const home = homes.find(f => f.resources.length > world.sims.filter(s => s.homeId === f.id).length
+    && ((world.villages.length === 1) || sameRegion(world.map, 2, 23, f.door.x, f.door.y)));
   if (!home) return;
   const traits = generateTraits(world.rngSim); // §12.1 순서, rngSim 소비
   const name = IMMIGRANT_NAMES[world.immigrantCounter % IMMIGRANT_NAMES.length];
@@ -458,7 +466,7 @@ function immigrateOne(world, t, emit) {
   // §23.14 돈은 makeSim이 **강등 전 직업** 기준으로 줬다 (Codex 지적). 정치인으로
   // 들어왔다가 사무직이 되면 정치인 초기 자금을 들고 사무직으로 사는 셈이다.
   // 강등이 실제로 일어났을 때만 새 직업 기준으로 다시 맞춘다 — 경계 유입 회계도 함께.
-  if (demotePublicIfOverQuota(world, sim, emit, 'immigration_quota')) {
+  if (demotePublicIfOverQuota({ ...world, sims: [...residents, sim] }, sim, emit, 'immigration_quota')) {
     sim.money = L.occupations[sim.traits.occupation].startMoney;
   }
   // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).
@@ -466,7 +474,8 @@ function immigrateOne(world, t, emit) {
   growIdMatrices(world); // §22.2 id 공간 기준 확장
   emit('immigrated', id, { name, occupation: sim.traits.occupation, homeId: home.id });
   for (const other of world.sims) {
-    if (other.id !== id) recordFact(other, t, L, 'new_neighbor', { subjectSimId: id, tags: [`sim:${id}`, 'town'] });
+    if (other.id !== id && (other.villageId ?? PRIMARY_GOVERNMENT) === villageId)
+      recordFact(other, t, L, 'new_neighbor', { subjectSimId: id, tags: [`sim:${id}`, 'town'] });
   }
 }
 
@@ -748,9 +757,9 @@ export function maybePromotion(world, t, emit) {
 }
 
 // §18.T4: 현재 등급에서 zone 허용 타입 (기본 + 누적 언락)
-export function zoneAllowedTypes(world) {
+export function zoneAllowedTypes(world, villageId) {
   const out = ['house', 'cafe', 'office', 'park', 'primary_school','middle_school','high_school'];
-  for (let i = 1; i <= world.cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
+  for (let i = 1; i <= governmentFor(world, villageId).cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**로 언락된다 (이슈 #52).
   // 건설 레시피(ZONEABLE·비용·footprint)는 후속 라운드 — 그 전까지 zone 주문은
   // 기존 'bad_type'(언락됐지만 레시피 미구현) 분기로 결정적으로 거부된다.

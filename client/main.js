@@ -2389,7 +2389,10 @@ function replyLine(e) {
 }
 
 function handleVisualEvent(e) {
-  if (e.type === 'city_promoted') { if (world) world.cityTier = e.payload.to; updateBadge(); fireworksBurst(); }
+  if (e.type === 'city_promoted') {
+    if (world && (!e.payload.villageId || e.payload.villageId === 'village:0')) world.cityTier = e.payload.to;
+    updateBadge(); fireworksBurst();
+  }
   const sp = (id) => simSprites.get(id);
   switch (e.type) {
     case 'conversation': {
@@ -2626,7 +2629,7 @@ function eventText(e) {
     case 'car_bought': return `🚗 ${ga(n)} 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
     case 'station_unlocked': return `🚉 장거리 이동 수요가 문턱을 넘었다 — 기차역 언락! (수요 ${e.payload.demand}/${e.payload.threshold} · 충족도 ${e.payload.fulfillmentPct}% · 장거리 ${e.payload.totalLongTrips}회 · 차 ${e.payload.carsOwned}대)`;
     case 'industry_unlocked': return `🏭 ${PLACE_KO[e.payload.facility]} 산업이 실제 수요로 열렸습니다 (${e.payload.evidence}/${e.payload.threshold})`;
-    case 'city_promoted': return `🏙️ 해솔${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
+    case 'city_promoted': return `🏙️ ${world?.villages?.find(v => v.id === e.payload.villageId)?.name ?? '해솔'}${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원${e.payload.demolished ? ` + 도로 ${e.payload.demolished}칸 철거 ${e.payload.demolitionCost}원` : ''}, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준', healthCopayPct: '진료 자기부담', childAllowance: '아이당 일일 지원' };
@@ -2834,7 +2837,7 @@ function chronicleText(e, nameOf) {
     case 'fire_out': return p.by === 'self'
       ? `💨 ${placeOfFac(p.facilityId)}의 불이 저절로 잦아들었습니다 (아무도 오지 않았습니다)`
       : `🚒 ${ga(nameOf(p.by))} ${placeOfFac(p.facilityId)} 화재를 진압했습니다`;
-    case 'city_promoted': return `🏙️ ${ga('해솔')} ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
+    case 'city_promoted': return `🏙️ ${ga(world?.villages?.find(v => v.id === p.villageId)?.name ?? '해솔')} ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
     case 'job_changed': return `💼 ${ga(n)} ${occKo(p.from)} 일을 접고 ${ro(occKo(p.to))} 전직했습니다`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };

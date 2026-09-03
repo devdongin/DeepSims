@@ -2,12 +2,15 @@
 // Additional villages own separate balances: never copies of the original treasury.
 export const PRIMARY_GOVERNMENT='village:0';
 export function newGovernment(){
-  return {treasury:0,reputation:0,mayorId:null,policy:{},lastElectionDay:-1,
+  return {treasury:0,reputation:0,cityTier:0,mayorId:null,policy:{},lastElectionDay:-1,
     termStartPolicy:null,lastFiscalDay:-1,playerPolicyDay:-1,campaigners:[],
     childAllowanceDay:-1,lastPublicWorksDay:-1,statsHistory:[],petitions:{}};
 }
 export function initializeMunicipalWorks(world){
   for(const v of world.villages??[])if(v.id!==PRIMARY_GOVERNMENT)v.government.lastPublicWorksDay??=-1;
+}
+export function initializeMunicipalGrowth(world){
+  for(const v of world.villages??[])if(v.id!==PRIMARY_GOVERNMENT)v.government.cityTier??=0;
 }
 export function initializeGovernments(world){
   for(const v of world.villages??[])if(v.id!==PRIMARY_GOVERNMENT)v.government??=newGovernment();

@@ -25,7 +25,7 @@ export function villageSummary(world) {
     const g=v.id===PRIMARY_VILLAGE_ID?world:v.government;
     return {...v,center:{...v.center},population:0,facilities:0,homes:0,beds:0,occupiedBeds:0,
       statsHistory:(v.id===PRIMARY_VILLAGE_ID?v.statsHistory??[]:g?.statsHistory??[]).map(row=>({...row})),
-      government:g?{treasury:g.treasury,mayorId:g.mayorId,reputation:g.reputation,
+      government:g?{treasury:g.treasury,mayorId:g.mayorId,reputation:g.reputation,cityTier:g.cityTier,
         policy:{...g.policy},lastElectionDay:g.lastElectionDay}:null};
   });
   const byId = new Map(result.map(v => [v.id, v]));

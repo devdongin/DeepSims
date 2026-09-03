@@ -59,6 +59,12 @@ for (const municipal of [false, true]) test(`#119/#32 HTTP input -> live event -
     assert.equal(response.status, 200);
     const batch = await received;
     const event = batch.events.find((e) => e.type === 'center_planned');
+    assert.equal(batch.policyDefaults.taxPct, initial.world.policyDefaults.taxPct);
+    if (municipal) {
+      assert.equal(batch.villages.find(v => v.id === 'village:1').government.treasury, 5000);
+      assert.equal(batch.villages.find(v => v.id === 'village:1').government.cityTier, 0);
+      assert.equal(batch.publicTreasury, batch.treasury + 5000);
+    }
     assert.equal(event.payload.cost, 5000);
     assert.equal(event.payload.treasury, (municipal ? 10000 : initial.world.treasury) - 5000);
     assert.equal(event.payload.villageId, municipal ? 'village:1' : undefined);

@@ -86,7 +86,9 @@ if(process.argv.includes('--government')){
   const residents=w.sims.filter(s=>s.villageId===village.id);
   assert.ok(residents.length>0);assert.ok(residents.some(s=>s.id===village.government.mayorId&&canWork(s)));
   assert.ok(events.some(e=>e.type==='election'&&e.payload.villageId===village.id));
-  governmentCheck={days:2,residents:residents.length,mayorId:village.government.mayorId,
+  governmentCheck={days:2,residents:residents.length,
+    immigrants:events.filter(e=>e.type==='immigrated'&&e.payload.villageId===village.id).map(e=>e.simId),
+    mayorId:village.government.mayorId,
     treasury:village.government.treasury,totalPublicBalance:publicBalance(w),closedMoney:before};
 }
 console.log(JSON.stringify({fixture:'controlled capacity and terrain',seed:w.seed,startTick,endTick:w.worldTick,

@@ -401,7 +401,7 @@ engine.onBatch((msg) => {
     // 그 클라이언트만 전송을 쉬고, 보일 때 최신 스냅샷 하나로 따라잡는다. 엔진과 다른
     // 클라이언트는 계속 진행하며 send를 안 했으므로 해당 소켓의 seq에도 틈이 생기지 않는다.
     if (ws.clientHidden) continue;
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost });
+    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, publicTreasury:msg.publicTreasury, villages:msg.villages, policyDefaults:msg.policyDefaults, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost });
     else send(ws, msg);
   }
 });
