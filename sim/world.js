@@ -2,6 +2,7 @@ import { makeAbilities } from './abilities.js'; // §21.1
 import { demotePublicIfOverQuota, fillPublicPosts } from './publicposts.js';
 import { SCHEMA_VERSION } from './constants.js';
 import { makeTransportStats } from './transport-stats.js';
+import { makeStoryteller } from './storyteller.js';
 // 월드 생성 — rngWorldgen만 사용, 이후 런타임은 rngSim (PLAN §2 네임드 스트림).
 // schemaVersion 2: traits(성별·나이·MBTI·직업)·mood·world.logic 포함 (PLAN §12.1).
 import { buildMap, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
@@ -116,6 +117,7 @@ export function createWorld(seed) {
     cityTier: 0,    // §18.T4 도시 등급 (0 마을 → 3 대도시, 비가역)
     statsHistory: [], // §18.T5 일일 통계 링 (캡 180): {day,pop,treasury,reputation,avgMood,employed,tier}
     transportStats: makeTransportStats(),
+    storyteller: makeStoryteller(),
     lostAndFound: [], // §17.24 분실물 보관: {itemId, finderId, amount, dueDay}
     seed,
     worldTick: 0,

@@ -40,6 +40,7 @@ fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
       .map((f) => ({ id: f.id, type: f.type, revenue: f.revenue })),
   },
   incidents: w.incidents.length,
+  storyteller: w.storyteller ?? null,
   // §19 R-B 교통 현황 — #48이 '지표가 없다'고 지적한 부분의 최소 계측
   transport: {
     carsOwned: w.sims.filter((s) => s.hasCar).length,

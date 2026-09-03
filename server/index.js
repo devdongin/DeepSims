@@ -365,6 +365,7 @@ function sendSnapshot(ws) {
     cityTier: engine.world.cityTier,
     statsHistory: engine.world.statsHistory,
     transportStats: { today: engine.world.transportStats.today, history: engine.world.transportStats.history },
+    storyteller: engine.world.storyteller,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,

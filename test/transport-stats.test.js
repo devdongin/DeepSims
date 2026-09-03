@@ -81,7 +81,7 @@ test('#48 v60 migration starts at the current day without backfilling unknown tr
   const w = createWorld(48), rng = serialize(w.rngSim); w.worldTick = 5000; w.schemaVersion = 60;
   delete w.transportStats; migrateWorld(w);
   assert.deepEqual(w.transportStats, makeTransportStats(3)); assert.equal(serialize(w.rngSim), rng);
-  assert.equal(w.schemaVersion, 61);
+  assert.equal(w.schemaVersion, 62);
 });
 
 test('#48 saving in flight and crossing a daily boundary preserves events, ledgers and world hash', () => {

@@ -4,7 +4,8 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 57, // #93 지가·임대료 (§23.13 공공 정원 v56 다음)
+  logicSchemaVersion: 58, // #89 사건 간격과 최근 밀도
+  storyteller: { minGapDays: 2, windowDays: 7, maxEventsPerWindow: 3 },
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
@@ -935,6 +936,9 @@ function checkRanges(p, errors) {
   inRange('family.familyBonus', p.family.familyBonus, 0, 1000);
   inRange('household.independenceAge', p.household.independenceAge, 19, 100);
   inRange('household.stableDays', p.household.stableDays, 1, 3650);
+  inRange('storyteller.minGapDays', p.storyteller.minGapDays, 1, 120);
+  inRange('storyteller.windowDays', p.storyteller.windowDays, 1, 120);
+  inRange('storyteller.maxEventsPerWindow', p.storyteller.maxEventsPerWindow, 1, 120);
   inRange('household.reserveMoney', p.household.reserveMoney, 0, 1000000000);
   inRange('housing.baseLandValue',p.housing.baseLandValue,0,1000000);
   inRange('housing.proximityRadius',p.housing.proximityRadius,1,10000);
