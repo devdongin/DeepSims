@@ -2262,6 +2262,7 @@ function eventText(e) {
     case 'starving': return `⚠️ ${ga(n)} 굶고 있습니다!`;
     case 'lonely': return `${ga(n)} 혼자 시간을 보냈습니다…`;
     case 'argument': return `💢 ${wa(n)} ${ga(simName(e.payload.withSimId))} 말다툼했습니다`;
+    case 'center_planned': return `📍 (${e.payload.x}, ${e.payload.y})에 계획 중심지가 지정되었다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
     case 'input_rejected': return `지시 거부됨 (${e.payload.reason})`;
     case 'player_created': return `🏠 ${ga(e.payload.name)} 마을에 이사 왔습니다! (${occKo(e.payload.occupation)})`;
     case 'logic_changed': return `🔧 심들의 판단 로직이 갱신되었습니다 (${e.payload.hash})`;
@@ -2518,6 +2519,13 @@ function connect() {
         if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.transit) world.transit = msg.transit; // §19.12 역 수요 관측·언락 (zone 모달 게이트)
+        if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
+        for (const e of msg.events ?? []) {
+          if (e.type === 'center_planned') {
+            world.centers ??= [];
+            if (!world.centers.some((c) => c.centerId === e.payload.centerId)) world.centers.push(e.payload);
+          }
+        }
         if (msg.statsToday) { // §18.T5 증분 upsert (54차: 동일 day는 교체)
           world.statsHistory ??= [];
           const last = world.statsHistory[world.statsHistory.length - 1];
@@ -2680,13 +2688,49 @@ setInterval(pushSpark, 5000);
       b.style.borderColor = zt === type ? '#ffcf6a' : '#6b5638';
     }
     const go = document.getElementById('zone-go');
+    const center = document.getElementById('zone-center');
+    const planned = world?.centers?.some((c) => c.x === cur.x && c.y === cur.y);
+    center.textContent = planned ? '이미 지정된 계획 중심지' : `이 공터를 계획 중심지로 지정 (−${world?.plannedCenterCost ?? 5000}원)`;
+    center.disabled = !!planned;
     go.disabled = isStation;
     go.style.opacity = isStation ? 0.4 : 1;
   };
-  window.openZoneModal = (plot) => { cur = plot; dir = 0; type = 'house'; modal.style.display = 'flex'; render(); };
+  const plotsAvailable = () => (world?.plots ?? []).filter((p) => !p.used && !world.projects?.some((pr) => pr.plotId === p.plotId));
+  window.openZoneModal = (plot) => {
+    cur = plot; dir = 0; type = 'house';
+    const select = document.getElementById('zone-plot');
+    select.replaceChildren();
+    for (const p of plotsAvailable()) {
+      const option = document.createElement('option');
+      option.value = String(p.plotId); option.textContent = `공터 ${p.plotId} (${p.x}, ${p.y})`;
+      select.appendChild(option);
+    }
+    select.value = String(plot.plotId);
+    document.getElementById('zone-msg').textContent = '';
+    modal.style.display = 'flex'; render();
+  };
+  document.getElementById('zone-plot').addEventListener('change', (e) => {
+    const plot = world?.plots.find((p) => p.plotId === Number(e.target.value));
+    if (plot) { cur = plot; document.getElementById('zone-msg').textContent = ''; render(); }
+  });
+  document.getElementById('planning-btn').addEventListener('click', () => {
+    const plot = plotsAvailable()[0];
+    if (plot) window.openZoneModal(plot);
+  });
   for (const b of modal.querySelectorAll('[data-zt]')) b.addEventListener('click', () => { type = b.dataset.zt; render(); });
   document.getElementById('zone-rot').addEventListener('click', () => { dir = (dir + 1) % 4; render(); });
   document.getElementById('zone-close').addEventListener('click', () => { modal.style.display = 'none'; });
+  document.getElementById('zone-center').addEventListener('click', async () => {
+    const msg = document.getElementById('zone-msg');
+    try {
+      const res = await fetch('/api/input', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientInputId: `center:${crypto.randomUUID()}`, command: 'plan_center', payload: { x: cur.x, y: cur.y } }),
+      });
+      const j = await res.json();
+      msg.textContent = res.ok ? '지정 요청을 보냈습니다. 적용 결과는 사건 기록에 표시됩니다.' : `거부: ${j.error}`;
+    } catch { msg.textContent = '요청을 보내지 못했습니다. 연결을 확인하세요.'; }
+  });
   document.getElementById('zone-go').addEventListener('click', async () => {
     const res = await fetch('/api/input', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

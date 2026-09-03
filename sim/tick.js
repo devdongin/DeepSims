@@ -648,6 +648,7 @@ function applyZone(world, inp, t, emit) {
   else if (!zoneAllowedTypes(world).includes(p.type)) reason = 'tier_locked'; // §18.T4 등급 게이트
   else if (!ZONEABLE.includes(p.type)) reason = 'bad_type'; // 언락됐지만 레시피 미구현(T3 대기)
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
+  if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionTiles = () => { const fp = zoneFootprint(p.type, p.dir); let n = 0;
     for (let y = plot.y; y < plot.y + fp.h; y++) for (let x = plot.x; x < plot.x + fp.w; x++) {
       const tile = world.map.tiles[y * world.map.w + x];
@@ -671,7 +672,7 @@ function applyZone(world, inp, t, emit) {
 }
 
 // §18.T6: 플레이어가 지정한 계획 중심점 — 비용을 즉시 예약하고 자동 건설 점수에 반영한다.
-function applyPlanCenter(world, inp, t, emit) {
+function applyPlanCenter(world, inp, t, emit, source = 'player') {
   const p = inp.payload ?? {};
   const cost = world.logic.zone.plannedCenterCost;
   const validCoord = Number.isSafeInteger(p.x) && Number.isSafeInteger(p.y)
@@ -687,7 +688,28 @@ function applyPlanCenter(world, inp, t, emit) {
   world.centers ??= [];
   const centerId = `center${world.centers.length}`;
   world.centers.push({ centerId, x: p.x, y: p.y, createdTick: t });
-  emit('center_planned', null, { centerId, x: p.x, y: p.y, cost, treasury: world.treasury });
+  emit('center_planned', source === 'mayor' ? world.mayorId : null, { centerId, x: p.x, y: p.y, cost, treasury: world.treasury, source });
+}
+
+// 재정 리뷰일에 관측된 외곽 거주 수요를 본다. 기존 중심지 반경 안에는 중복 투자하지 않는다.
+export function maybePlanCenter(world, t, day, emit) {
+  const mayor = world.sims.find((s) => s.id === world.mayorId);
+  if (!mayor || mayor.isPlayer || day % world.logic.fiscal.reviewIntervalDays !== 0) return;
+  const Z = world.logic.zone;
+  const cash = world.sims.reduce((n, s) => n + s.money, 0);
+  const reserve = Math.max(0, floorDiv(cash * world.logic.election.hoardRatioPct, 100));
+  if (world.treasury - Z.plannedCenterCost <= reserve) return;
+  const centers = [...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)), ...world.centers];
+  const homes = new Map(world.map.facilities.filter(isResidence).map((f) => [f.id, f]));
+  const residents = world.sims.map((s) => homes.get(s.homeId)).filter(Boolean);
+  const busy = new Set(world.projects.map((p) => p.plotId));
+  const choices = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)
+    && centers.every((c) => manhattan(p.x, p.y, c.x, c.y) >= Z.centerRadius))
+    .map((p) => ({ p, residents: residents.filter((h) => manhattan(p.x, p.y, h.door.x, h.door.y) < Z.centerRadius
+      && sameRegion(world.map, p.x, p.y, h.door.x, h.door.y)).length }))
+    .filter((c) => c.residents >= Z.centerMinResidents)
+    .sort((a, b) => b.residents - a.residents || a.p.plotId - b.p.plotId);
+  if (choices.length) applyPlanCenter(world, { payload: choices[0].p }, t, emit, 'mayor');
 }
 
 // §18.T1: 유효 경제값 — 정책 오버라이드 우선 (읽기 단일 권위)
@@ -1193,6 +1215,7 @@ export function tick(world, inputsForThisTick = []) {
         maybeElection(world, t, day, emit);
         maybeFiscalReview(world, t, day, emit); // §22.22 선거 직후 고정 위치 — 그날 복지 정산부터 새 정책
         maybePublicWorks(world, t, day, emit); // §22.26 순서 고정: 선거 → 재정 → 공공사업 (120차 ⑥)
+        maybePlanCenter(world, t, day, emit);
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
         // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야
