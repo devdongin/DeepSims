@@ -38,10 +38,13 @@ const CHRONICLE_PERSONAL = new Set([
   'broke_up', 'child_settled', 'moved_home', 'retired_now', 'bereaved', 'car_bought',
   'joined_club', 'heroic_save', 'genius_born', 'died', 'emigrated', 'ability_changed',
 ]);
+// §23.11 마을 연대기에 무엇을 남길지는 **빈도**로 정한다. 화재는 이틀에 한 번 나는
+// 일상이라 넣었더니 60줄 중 30줄이 "불이 났다"였고, 축제도 선거도 그 사이에 묻혔다.
+// 연대기는 사건 목록이 아니라 이야기다 — 매일 있는 일은 이야기가 되지 않는다.
+// (영웅적 구조 heroic_save는 개인 일대기에 남으므로 불이 사라지는 것이 아니다.)
 const CHRONICLE_CITY = new Set([
   'festival', 'new_year', 'city_promoted', 'station_unlocked', 'election',
-  'policy_changed', 'public_works', 'center_planned', 'insolvent', 'facility_built',
-  'fire_started',
+  'policy_changed', 'center_planned', 'insolvent', 'facility_built',
 ]);
 const CHRONICLE_KEEP_PER_SIM = 120; // 한 사람당 남길 줄 수 — 넘치면 오래된 것부터 접는다
 const CHRONICLE_KEEP_CITY = 600;
@@ -328,7 +331,11 @@ export class Storage {
 
   // 사람마다 상한을 둔다. 90년을 살아도 줄 수는 유한하다.
   pruneChronicle() {
+    const keep = [...CHRONICLE_PERSONAL, ...CHRONICLE_CITY].map((t) => `'${t}'`).join(',');
     const tx = this.db.transaction(() => {
+      // 무엇을 연대기로 볼지는 바뀐다 (화재를 뺐듯이). 정의가 바뀌면 이미 쌓인 줄도
+      // 따라와야 한다 — 안 그러면 새 규칙과 옛 기록이 한 화면에서 섞인다.
+      this.db.prepare(`DELETE FROM chronicle WHERE type NOT IN (${keep})`).run();
       this.db.prepare(
         `DELETE FROM chronicle WHERE rowid IN (
            SELECT rowid FROM (

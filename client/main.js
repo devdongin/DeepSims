@@ -2692,6 +2692,48 @@ function lifeLine(r, ctx) {
 const CLUB_KO = { book_club: '독서회', fishing_club: '낚시회', fitness_club: '운동회', drinking_pals: '술벗' };
 const ABIL_KO = { stamina: '체력', dexterity: '손재주', intellect: '지능', charisma: '사교성' };
 
+// §23.11 마을 연대기 문장. 개인 일대기와 어휘가 다르다 — 여기서는 마을이 주어다.
+function cityLine(r) {
+  const p = r.payload ?? {};
+  switch (r.type) {
+    case 'festival': return '마을에 축제가 열렸다';
+    case 'new_year': return '새해가 밝았다';
+    case 'city_promoted': return `마을이 ${p.tier ?? ''}단계로 올라섰다`;
+    case 'station_unlocked': return '역이 들어섰다';
+    case 'election': {
+      // 당선자는 표가 가장 많은 후보다 — payload에 winner가 따로 없다.
+      const c = p.candidates ?? [], v = p.votes ?? [];
+      if (c.length === 0 || c.length !== v.length) return '시장 선거가 있었다';
+      let bi = 0; for (let i = 1; i < v.length; i++) if (v[i] > v[bi]) bi = i;
+      const kept = p.incumbent === c[bi] ? '시장 자리를 지켰다' : '새 시장이 되었다';
+      return `${ga(simName(c[bi]))} ${kept} (${v[bi]}표)`;
+    }
+    case 'policy_changed': return '시정이 바뀌었다';
+    case 'center_planned': return '새 중심지가 계획됐다';
+    case 'insolvent': return '국고가 바닥났다';
+    case 'facility_built': return `${ga(PLACE_FALLBACK[p.type] ?? p.type ?? '새 건물')} 새로 문을 열었다`;
+    case 'fire_started': return '불이 났다';
+    default: return null;
+  }
+}
+async function renderCityChronicle() {
+  const box = $('dash-chron');
+  if (!box) return;
+  box.textContent = '불러오는 중…';
+  try {
+    const d = await fetch('/api/chronicle?sim=-1').then((r) => r.json());
+    const rows = (d.rows ?? []).map((r) => ({ r, text: cityLine(r) })).filter((x) => x.text).slice(-60);
+    if (rows.length === 0) { box.innerHTML = '<div class="ln">아직 기록된 일이 없다.</div>'; return; }
+    let html = ''; let lastDay = null;
+    for (const { r, text } of rows) {
+      const day = Math.floor(r.tick / 1440);
+      if (day !== lastDay) { html += `<div style="color:#ffcf6a;margin-top:5px">${day}일</div>`; lastDay = day; }
+      html += `<div style="margin:2px 0;line-height:1.45">${text}</div>`;
+    }
+    box.innerHTML = html;
+  } catch { box.innerHTML = '<div>연대기를 못 읽었다.</div>'; }
+}
+
 let lifeOpenFor = null;
 async function renderLifeLog(simId) {
   const box = $('lifelog');
@@ -3282,7 +3324,7 @@ setInterval(pushSpark, 5000);
       return d;
     }));
   }
-  btn.addEventListener('click', () => { modal.style.display = 'flex'; drawDash(); });
+  btn.addEventListener('click', () => { modal.style.display = 'flex'; drawDash(); renderCityChronicle(); });
   document.getElementById('dash-close').addEventListener('click', () => { modal.style.display = 'none'; });
 })();
 
