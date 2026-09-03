@@ -141,6 +141,9 @@ export function migrateWorld(world) {
   if (from < 21) {
     world.zoneOrders ??= []; // §18.T2
   }
+  if (from < 51) {
+    world.centers ??= []; // §18.T6
+  }
   if (from < 22) {
     world.cityTier ??= 0; // §18.T4 — 기존 세이브는 다음 일일 평가에서 자연 승급 (축하 이벤트 라이브)
   }

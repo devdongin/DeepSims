@@ -345,6 +345,7 @@ export const DEFAULT_LOGIC = {
   zone: {
     costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000 },
     demolitionCostPerTile: 200,
+    plannedCenterCost: 5000,
   },
   // §17.21 도시 성장 드라이브: 행동 이벤트 → 평판 → 이민 웨이브 + 선제·일자리 건설
   growth: {
@@ -703,6 +704,7 @@ function checkRanges(p, errors) {
   inRange('items.expireTicks', p.items.expireTicks, 1, 1000000);
   inRange('items.pickupMood', p.items.pickupMood, 0, 10000);
   inRange('market.maxGroceries', p.market.maxGroceries, 1, 100);
+  inRange('zone.plannedCenterCost', p.zone.plannedCenterCost, 0, 100000000);
   inRange('actions.construct.duration', p.actions.construct.duration, 1, 10000);
   // 119차 후속: MAX_SAFE_INTEGER까지 열면 차감 연산이 안전 정수를 벗어날 수 있다
   inRange('economy.maxDebt', p.economy.maxDebt, 0, 1e15);
