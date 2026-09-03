@@ -64,10 +64,20 @@ export function demotePublicIfOverQuota(world, sim, emit = null, reason = 'over_
 // 실제로 정원제를 넣자마자 공공직이 0명인 세계가 나왔고(S-60), 그건 경찰도 의사도
 // 없는 마을이다. 그래서 빈 자리는 채운다. 적성이 가장 높은 사람을 쓰고, 같으면 id로
 // 끊는다. rng를 쓰지 않는다.
-// genesis = 세계를 만드는 중인가. 창세 때는 **누구를 뽑아도 된다** — 아직 아무의 생계도
-// 시작되지 않았고, 우리는 이 열 사람이 누구인지를 고르는 중이다. 반면 굴러가는 마을에서
-// 남의 직업을 바꾸는 것은 그 사람의 삶을 바꾸는 일이라 무직자만 뽑는다.
-export function fillPublicPosts(world, emit = null, genesis = false) {
+// §23.20 창세는 **인자가 아니라 다른 함수**다 (Codex: boolean 우회 인자는 호출자가 언제든
+// 규칙을 건너뛰게 한다). 굴러가는 마을에서 부르는 이 함수는 언제나 무직자만 뽑는다 —
+// 남의 직업을 바꾸는 것은 그 사람의 삶을 바꾸는 일이다.
+export function fillPublicPosts(world, emit = null) {
+  return fillPosts(world, emit, false);
+}
+
+// 세계를 만드는 그 순간에만 부른다. 아직 아무의 생계도 시작되지 않았고, 우리는 이 열
+// 사람이 누구인지를 고르는 중이다 — 그래서 누구를 뽑아도 된다. createWorld 전용이다.
+export function seedPublicPosts(world) {
+  return fillPosts(world, null, true);
+}
+
+function fillPosts(world, emit, genesis) {
   let hired = 0;
   for (const occ of Object.keys(world.logic.economy.publicPosts ?? {})) {
     const quota = publicQuota(world, occ);

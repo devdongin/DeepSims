@@ -116,7 +116,9 @@ test('P-10. 초과 공공직은 해마다 비율로 줄어든다 (기존 세이�
   let years = 1;
   while (publicHeadcount(w, 'police') > 0 && years < 40) { trimOverQuotaPosts(w); years++; }
   assert.equal(publicHeadcount(w, 'police'), 0, '초과 인원이 끝내 정리되지 않았다');
-  assert.ok(years <= 12, `정리에 ${years}년이 걸렸다 — 너무 느리다`);
+  // 25%면 8 → 6 → 4 → 3 → 2 → 1 → 0, 정확히 6번이다 (Codex: 상한만 보면 느려져도 모른다).
+  const expectedYears = (() => { let n = before, y = 0; while (n > 0) { n -= Math.min(n, Math.max(1, Math.ceil(n * rate / 100))); y++; } return y; })();
+  assert.equal(years, expectedYears, `정리에 ${years}년이 걸렸다 (식대로면 ${expectedYears}년)`);
 });
 
 test('P-11. 플레이어도 정원을 지키고, 들고 온 돈은 경계 유입으로 잡힌다', () => {
@@ -137,8 +139,18 @@ test('P-11. 플레이어도 정원을 지키고, 들고 온 돈은 경계 유입
   }
   // G1 폐쇄 회계: 플레이어가 들고 온 돈은 마을 밖에서 들어온 돈이다. 예전에는 이민자
   // 경로에만 있어서 플레이어를 만들 때마다 장부에 구멍이 났다.
+  // 생성 순간의 유입액을 정확히 고정한다 (Codex: >= 비교는 10틱 뒤 다른 유입과 섞인다).
+  // player_created 시점까지의 이민 유입을 빼면 남는 것이 플레이어 몫이어야 한다.
+  const createdTick = ev.find((e) => e.type === 'player_created').tick;
+  const immigrantMoney = w.sims.filter((s) => !s.isPlayer && ev.some(
+    (e) => e.type === 'immigrated' && e.simId === s.id && e.tick <= createdTick)).length;
   assert.ok((w.externalInflow ?? 0) >= inflowBefore + player.money,
     `플레이어 초기 자금이 경계 유입에 안 잡혔다 (${inflowBefore} → ${w.externalInflow})`);
+  // 같은 세계를 플레이어 없이 굴린 대조군과의 차이가 정확히 플레이어의 초기 자금이어야 한다.
+  const ctrl = createWorld(1);
+  advance(ctrl, {}, 10);
+  assert.equal((w.externalInflow ?? 0) - (ctrl.externalInflow ?? 0), player.money,
+    `플레이어가 들여온 금액이 장부와 다르다 (이민자 ${immigrantMoney}명 포함 비교)`);
   const created = ev.find((e) => e.type === 'player_created');
   assert.equal(created.payload.occupation, player.traits.occupation, '이벤트의 직업이 실제와 다르다');
 });
