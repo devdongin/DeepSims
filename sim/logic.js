@@ -4,7 +4,9 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 60, // #76 공급 거래 (§23.17 publicTrimRatePct v59 다음)
+  logicSchemaVersion: 61, // #92 계절과 비축 (#76 v60 다음)
+  seasons: { winterHarvestPct: 50, winterFishPct: 50, winterOutdoorEnergy: 1,
+    stockLeadDays: 10, stockTarget: 6, stockDeficit: 5000 },
   supply: { openingStock: 12, targetStock: 12, reorderAt: 6, keepReserve: 3, maxDelivery: 3, unitPrice: 40 },
   storyteller: { minGapDays: 2, windowDays: 7, maxEventsPerWindow: 3 },
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
@@ -43,6 +45,7 @@ export const DEFAULT_LOGIC = {
     board_game: { duration: 40, recoverPerTick: 110, moodPerTick: 6, socialPerTick: 40, cost: 100 },
     supply_groceries: { duration: 30, cost: 0 },
     grow_groceries: { duration: 120, cost: 0, groceriesGain: 3 },
+    stock_food: { duration: 15, cost: 600, groceriesGain: 3 },
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
@@ -952,6 +955,13 @@ function checkRanges(p, errors) {
   inRange('supply.keepReserve', p.supply.keepReserve, 0, 100);
   inRange('supply.maxDelivery', p.supply.maxDelivery, 1, 100);
   inRange('supply.unitPrice', p.supply.unitPrice, 1, 1000000);
+  inRange('seasons.winterHarvestPct', p.seasons.winterHarvestPct, 0, 100);
+  inRange('seasons.winterFishPct', p.seasons.winterFishPct, 0, 100);
+  inRange('seasons.winterOutdoorEnergy', p.seasons.winterOutdoorEnergy, 0, 100);
+  inRange('seasons.stockLeadDays', p.seasons.stockLeadDays, 0, 120);
+  inRange('seasons.stockTarget', p.seasons.stockTarget, 1, 100);
+  inRange('seasons.stockDeficit', p.seasons.stockDeficit, 0, 10000);
+  inRange('actions.stock_food.groceriesGain', p.actions.stock_food.groceriesGain, 1, 100);
   inRange('actions.grow_groceries.groceriesGain', p.actions.grow_groceries.groceriesGain, 1, 100);
   inRange('household.reserveMoney', p.household.reserveMoney, 0, 1000000000);
   inRange('housing.baseLandValue',p.housing.baseLandValue,0,1000000);

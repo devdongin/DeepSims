@@ -1,5 +1,6 @@
 {
-  "logicSchemaVersion": 60,
+  "logicSchemaVersion": 61,
+  "seasons": { "winterHarvestPct": 50, "winterFishPct": 50, "winterOutdoorEnergy": 1, "stockLeadDays": 10, "stockTarget": 6, "stockDeficit": 5000 },
   "supply": { "openingStock": 12, "targetStock": 12, "reorderAt": 6, "keepReserve": 3, "maxDelivery": 3, "unitPrice": 40 },
   "storyteller": { "minGapDays": 2, "windowDays": 7, "maxEventsPerWindow": 3 },
   "industryDevelopment": { "workshop": 20, "lab": 3000, "warehouse": 300 },
@@ -30,6 +31,7 @@
   "actions": {
     "supply_groceries": { "duration": 30, "cost": 0 },
     "grow_groceries": { "duration": 120, "cost": 0, "groceriesGain": 3 },
+    "stock_food": { "duration": 15, "cost": 600, "groceriesGain": 3 },
     "escort_child_doctor": { "duration": 1 },
     "stroll": { "duration": 30, "recoverPerTick": 70, "moodPerTick": 6 },
     "garden": { "duration": 45, "recoverPerTick": 55, "moodPerTick": 7, "groceriesGain": 1 },

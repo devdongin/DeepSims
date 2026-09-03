@@ -2485,6 +2485,7 @@ const ACTION_KO = {
   escort_child_doctor: '아이 병원 동행',
   supply_groceries: '식료품 공급',
   grow_groceries: '주문 식료품 재배',
+  stock_food: '식료품 비축',
   // §23.8 여가 확대
   stroll: '산책', garden: '텃밭 가꾸기', music: '악기 연주', volunteer: '봉사 활동', board_game: '보드게임',
 };
@@ -2658,6 +2659,7 @@ function eventText(e) {
     case 'hangover': return `🥴 ${ga(n)} 과음했습니다… 내일이 걱정입니다`;
     case 'weather_changed': return { sunny: '☀️ 화창한 아침입니다', cloudy: '☁️ 날이 흐립니다', rain: '🌧️ 비가 내리기 시작했습니다' }[e.payload.kind];
     case 'item_spawned': return null; // 어디 떨어졌는지는 비밀 — 발견의 재미
+    case 'season_changed': return `🍂 ${ {spring:'봄',summer:'여름',autumn:'가을',winter:'겨울'}[e.payload.to] }이 시작됐습니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;

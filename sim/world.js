@@ -4,6 +4,7 @@ import { SCHEMA_VERSION } from './constants.js';
 import { makeTransportStats } from './transport-stats.js';
 import { makeStoryteller } from './storyteller.js';
 import { initializeFoodSupply } from './food-supply.js';
+import { seasonAt } from './seasons.js';
 // 월드 생성 — rngWorldgen만 사용, 이후 런타임은 rngSim (PLAN §2 네임드 스트림).
 // schemaVersion 2: traits(성별·나이·MBTI·직업)·mood·world.logic 포함 (PLAN §12.1).
 import { buildMap, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
@@ -169,5 +170,6 @@ export function createWorld(seed) {
   for (const sim of world.sims) demotePublicIfOverQuota(world, sim);
   fillPublicPosts(world, null, true); // 창세: 빈 자리는 채운다 — 경찰도 의사도 없는 마을을 만들지 않는다
   initializeFoodSupply(world);
+  world.season = seasonAt(world, 0);
   return world;
 }

@@ -5,7 +5,7 @@ const cell = (x, y) => `${Math.floor(x / 32)},${Math.floor(y / 32)}`;
 const purposeOf = action => action === 'work' ? 'work'
   : action === 'supply_groceries' ? 'freight'
   : action === 'study' ? 'education'
-  : ['eat', 'shop'].includes(action) ? 'shopping'
+  : ['eat', 'shop', 'stock_food'].includes(action) ? 'shopping'
   : ['see_doctor', 'escort_child_doctor'].includes(action) ? 'health'
   : ['socialize'].includes(action) ? 'social'
   : ['sleep', 'cook_eat', 'hole_up', 'build'].includes(action) ? 'home'
