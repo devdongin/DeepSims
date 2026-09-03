@@ -17,6 +17,7 @@ import { applyHouseholdIntents, evaluateHouseholds } from './household.js';
 import { settleHousing } from './housing.js';
 import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
+import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -109,6 +110,7 @@ export function socialPullPct(world, fac, presence, L, sim = null) {
 
 
 function needValueFor(sim, action, L) {
+  if (action === CULTURE_ACTION) return sim.needsTier.culture;
   if (action === 'study') return NEED_MAX - L.education.studyDeficit;
   if (action === 'work') return Math.min(sim.money, NEED_MAX); // 돈 0 → deficit 최대
   if (action === SUPPLY_ACTION) return Math.min(sim.money, NEED_MAX);
@@ -267,6 +269,7 @@ export function actionBlockReason(world, sim, action, t) {
   }
   if (sim.traits.occupation === 'child' && CHILD_BLOCKED.has(action)) return 'too_young';
   if (action === STOCK_ACTION && !shouldStockFood(world, sim, t)) return 'not_needed';
+  if (action === CULTURE_ACTION) return cultureBlockReason(world, sim);
   if (action === 'see_doctor') return medicalBlockReason(world, sim);
   const cost = action === 'shop' || action === STOCK_ACTION ? purchaseCost(world, sim, action) : (L.actions[action]?.cost ?? 0);
   if (cost > 0 && sim.money < cost) return 'no_money';
@@ -1155,6 +1158,12 @@ export function tick(world, inputsForThisTick = []) {
         emit('hangover', sim.id, { untilTick: sim.hangoverUntil });
       }
       if (s.action === 'binge_eat') applyMood(sim, -L.actions.binge_eat.regretMood); // 후회
+    } else if (s.action === CULTURE_ACTION) {
+      const result = completeCultureVisit(world, sim, s.facilityId, emit);
+      if (!result.ok) {
+        emit('action_failed', sim.id, { action: s.action, reason: result.reason });
+        releaseReservation(world, sim); sim.state = emptyState(); continue;
+      }
     } else if (s.action === 'garden') {
       // §23.8 텃밭은 **먹거리를 만든다** — 여가가 살림에 닿는 유일한 통로다.
       // 바깥에서 들어온 것이 아니라 땅에서 난 것이므로 돈이 아니라 식재료로 센다.
@@ -1365,6 +1374,7 @@ export function tick(world, inputsForThisTick = []) {
         recordFact(sim, t, L, 'starving', { tags: ['eat'] });
       }
     }
+    updateNeedsTier(sim, L, emit); // #91 감쇠 뒤 실제 충족 시간만 누적한다.
     naturalRecovery(world, sim, t, emit); // §17.3 자연 치유 (무드로우)
     // 기분 감쇠: 0 방향으로 decayPerTick 수렴 — 5단계는 감쇠 후 기분을 읽는다
     const dm = L.mood.decayPerTick;
@@ -1715,7 +1725,7 @@ export function tick(world, inputsForThisTick = []) {
       // 욕구가 없는 행동(진료 등)은 자격이 곧 의사다 — 아픈데 갈 병원이 없으면 그게 수요다.
       // 이 구분이 없으면 #87이 지목한 바로 그 구멍이 남는다: 병원 자리를 전부 없애도
       // 보건업 수요가 0건이었다.
-      if (NEED_OF_ACTION[action] !== undefined
+      if ((NEED_OF_ACTION[action] !== undefined || action === CULTURE_ACTION)
         && NEED_MAX - needValueFor(sim, action, L) <= bestDeficit) continue;
       const kind19 = facilityShortfallKind(world, sim, action, t);
       if (kind19 !== 'no_facility' && kind19 !== 'capacity_full') continue;

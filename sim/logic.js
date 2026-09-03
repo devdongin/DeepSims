@@ -4,7 +4,9 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 61, // #92 계절과 비축 (#76 v60 다음)
+  logicSchemaVersion: 62, // #91 욕구 충족 실적 계층
+  needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
+    demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
   seasons: { winterHarvestPct: 50, winterFishPct: 50, winterOutdoorEnergy: 1,
     stockLeadDays: 10, stockTarget: 6, stockDeficit: 5000 },
   supply: { openingStock: 12, targetStock: 12, reorderAt: 6, keepReserve: 3, maxDelivery: 3, unitPrice: 40 },
@@ -46,6 +48,7 @@ export const DEFAULT_LOGIC = {
     supply_groceries: { duration: 30, cost: 0 },
     grow_groceries: { duration: 120, cost: 0, groceriesGain: 3 },
     stock_food: { duration: 15, cost: 600, groceriesGain: 3 },
+    visit_culture: { duration: 40, cost: 100 },
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
@@ -956,6 +959,12 @@ function checkRanges(p, errors) {
   inRange('supply.maxDelivery', p.supply.maxDelivery, 1, 100);
   inRange('supply.unitPrice', p.supply.unitPrice, 1, 1000000);
   inRange('seasons.winterHarvestPct', p.seasons.winterHarvestPct, 0, 100);
+  inRange('needsTiers.fulfilledMin', p.needsTiers.fulfilledMin, 1, 10000);
+  inRange('needsTiers.deprivedMax', p.needsTiers.deprivedMax, 0, p.needsTiers.fulfilledMin);
+  inRange('needsTiers.promoteTicks', p.needsTiers.promoteTicks, 1, 10000000);
+  inRange('needsTiers.demoteTicks', p.needsTiers.demoteTicks, 1, 10000000);
+  inRange('needsTiers.cultureDecay', p.needsTiers.cultureDecay, 0, 10000);
+  inRange('needsTiers.cultureFun', p.needsTiers.cultureFun, 0, 10000);
   inRange('seasons.winterFishPct', p.seasons.winterFishPct, 0, 100);
   inRange('seasons.winterOutdoorEnergy', p.seasons.winterOutdoorEnergy, 0, 100);
   inRange('seasons.stockLeadDays', p.seasons.stockLeadDays, 0, 120);
