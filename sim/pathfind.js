@@ -1,7 +1,7 @@
 // BFS — 이웃 방문 순서 고정 북→동→남→서, 대각선 없음, 심은 타일을 막지 않음 (PLAN §2).
 import { isWalkable } from './map.js';
 
-const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N, E, S, W
+const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0]; // N, E, S, W
 
 // 경로: 시작 제외, 목적지 포함한 [{x,y}] 배열. 도달 불가면 null.
 let scratch = new Int32Array(0);
@@ -34,18 +34,24 @@ function bfsPathInner(map, sx, sy, tx, ty) {
   visited[start] = generation;
   queue[0] = start;
   let length = 1;
-  for (let qi = 0; qi < length; qi++) {
+  search: for (let qi = 0; qi < length; qi++) {
     const cur = queue[qi];
-    if (cur === goal) break;
     const cx = cur % map.w, cy = (cur - cx) / map.w;
-    for (const [dx, dy] of DIRS) {
-      const nx = cx + dx, ny = cy + dy;
-      if (!isWalkable(map, nx, ny)) continue;
+    for (let dir = 0; dir < 4; dir++) {
+      const nx = cx + DX[dir], ny = cy + DY[dir];
+      // Bounds must precede the visited lookup: an off-map x can alias another row.
+      if (nx < 0 || ny < 0 || nx >= map.w || ny >= map.h) continue;
       const ni = ny * map.w + nx;
       if (visited[ni] === generation) continue;
+      // No map edits occur during this synchronous search. A visited cell is already
+      // known walkable (except the deliberately allowed start), so do not test it again.
+      if (!isWalkable(map, nx, ny)) continue;
       visited[ni] = generation;
       prev[ni] = cur;
       queue[length++] = ni;
+      // First discovery fixes this predecessor forever in FIFO BFS. Later frontier
+      // work cannot change the N/E/S/W tie-break path; do not flood the rest of its ring.
+      if (ni === goal) break search;
     }
   }
   pfStats.cells += length;
