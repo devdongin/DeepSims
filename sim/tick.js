@@ -14,6 +14,8 @@ import { medicalBlockReason, completeMedicalVisit } from './health-policy.js';
 import { applyChildAllowance } from './family-policy.js';
 import { applyHouseholdIntents, evaluateHouseholds } from './household.js';
 import { settleHousing } from './housing.js';
+import { rollTransportDay, recordTransportDeparture, recordTransportStep,
+  recordTransportArrival, pruneTransportTrips, recordTransportEvent, transportSummary } from './transport-stats.js';
 import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
@@ -584,6 +586,7 @@ function startAction(world, sim, cand, t, emit, reason) {
     journey: path.length ? { x: sim.x, y: sim.y, walked: 0 } : null,
     ticksLeft: actionDuration(cand.action, world.logic),
   };
+  recordTransportDeparture(world, sim, path, t);
   emit('action_started', sim.id, {
     action: cand.action, facilityId: cand.facilityId, resourceId: cand.resourceId, reason,
   });
@@ -853,7 +856,11 @@ function applyAssign(world, inp, t, emit) {
 export function tick(world, inputsForThisTick = []) {
   const t = world.worldTick + 1;
   const events = [];
-  const emit = (type, simId, payload) => events.push({ tick: t, type, simId, payload });
+  rollTransportDay(world, t);
+  const emit = (type, simId, payload) => {
+    recordTransportEvent(world, type);
+    events.push({ tick: t, type, simId, payload });
+  };
 
   // 1) 입력 적용 — logic_update 먼저(sequence 순), 그 다음 나머지(sequence 순) (PLAN §14.1)
   const sorted = [...inputsForThisTick].sort((a, b) => a.sequence - b.sequence);
@@ -889,6 +896,7 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'walking') continue;
+    if (!world.transportStats.pending[sim.id]) recordTransportDeparture(world, sim, s.path, t, false);
     if(s.action===ESCORT_ACTION&&s.escortPhase==='travel'&&!syncEscortStep(world,sim)){
       cancelEscort(world,sim);emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'child_unavailable'});continue;
     }
@@ -897,6 +905,7 @@ export function tick(world, inputsForThisTick = []) {
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
     sim.x = next.x; sim.y = next.y;
+    recordTransportStep(world, sim, t, world.map.tiles[sim.y * world.map.w + sim.x]);
     if(s.action===ESCORT_ACTION&&s.escortPhase==='travel'&&!syncEscortStep(world,sim)){
       cancelEscort(world,sim);emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'child_unavailable'});break;
     }
@@ -941,11 +950,12 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
     if (s.path.length === 0) {
+      recordTransportArrival(world, sim);
       recordRoadTrip(world, sim, s.journey, t, emit);
       s.journey = null;
       s.kind = 'performing';
       if(s.action===ESCORT_ACTION&&s.escortPhase===null){
-        if(beginHospitalEscort(world,sim)){emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
+        if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
         else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
         continue;
       }
@@ -1087,7 +1097,7 @@ export function tick(world, inputsForThisTick = []) {
     const s = sim.state;
     if (s.kind !== 'performing' || s.ticksLeft > 0) continue;
     if(s.action===ESCORT_ACTION&&s.escortPhase===null){
-      if(beginHospitalEscort(world,sim)){emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
+      if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
       else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
       continue;
     }
@@ -1449,7 +1459,8 @@ export function tick(world, inputsForThisTick = []) {
             && s2.traits.occupation !== 'student').length;
           world.statsHistory.push({ day, pop, treasury: world.treasury, reputation: world.reputation,
             avgMood: pop > 0 ? floorDiv(sumMood, pop) : 0, employed, tier: world.cityTier,
-            incidents: world.incidents.length }); // 오늘의 사건 수 (55차)
+            incidents: world.incidents.length,
+            transport: world.transportStats.history.length ? transportSummary(world.transportStats.history.at(-1)) : null });
           while (world.statsHistory.length > 180) world.statsHistory.shift();
         }
         // §19.12 역 수요 판정 (일일 통계 다음 — 서브순서 고정). RNG 미소비라 드로우
@@ -1698,6 +1709,7 @@ export function tick(world, inputsForThisTick = []) {
   }
 
   // 6) ordinal 부여 — 단계 순 + 단계 내 적용 순서 (1단계는 sequence 순)
+  pruneTransportTrips(world);
   events.forEach((e, i) => { e.ordinal = i; });
 
   // 7) 틱 갱신

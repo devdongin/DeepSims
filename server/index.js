@@ -284,6 +284,7 @@ function sendSnapshot(ws) {
     plannedCenterCost: engine.world.logic.zone.plannedCenterCost,
     cityTier: engine.world.cityTier,
     statsHistory: engine.world.statsHistory,
+    transportStats: { today: engine.world.transportStats.today, history: engine.world.transportStats.history },
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,
