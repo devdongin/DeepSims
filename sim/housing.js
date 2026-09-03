@@ -1,5 +1,5 @@
 // #93 Deterministic land value, closed-accounting rent, and durable cheaper-home moves.
-import { isResidence } from './map.js';
+import { isResidence, isAvailableResidence } from './map.js';
 
 const cmp = (a,b) => a < b ? -1 : a > b ? 1 : 0;
 const at = f => f.door ?? { x:f.x, y:f.y };
@@ -62,7 +62,7 @@ export function settleHousing(world,t,day,emit){
       if(world.rentPressure[pressureKey]<world.logic.housing.moveAfterDays
         ||world.sims.some(s=>s.householdId===householdId&&s.homeId!==home.id)
         ||world.householdIntents.some(i=>i.fromHouseholdId===householdId))continue;
-      const target=homes.filter(h=>h.id!==home.id&&!world.sims.some(s=>s.homeId===h.id)
+      const target=homes.filter(h=>isAvailableResidence(h)&&h.id!==home.id&&!world.sims.some(s=>s.homeId===h.id)
         &&!claimedTargets.has(h.id)&&h.resources.length>=members.length&&askingRent(world,h,uses)<share)
         .sort((a,b)=>askingRent(world,a,uses)-askingRent(world,b,uses)||cmp(a.id,b.id))[0];
       if(!target)continue;

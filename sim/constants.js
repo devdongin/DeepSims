@@ -97,6 +97,7 @@ export const EVENT_TYPES = [
   'needs_tier_changed',
   'founding_petition_created', 'founding_petition_withdrawn',
   'founding_approved', 'founding_rejected',
+  'founding_funded', 'founding_cancelled', 'founding_homes_built',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

@@ -2669,6 +2669,9 @@ function eventText(e) {
     case 'founding_petition_withdrawn': return `🏘️ 개척 청원 조건이 달라져 청원이 철회됐습니다`;
     case 'founding_approved': return `🏘️ 개척 청원이 승인됐습니다. 파견 준비가 필요합니다`;
     case 'founding_rejected': return `🏘️ 개척 청원이 거부됐습니다`;
+    case 'founding_funded': return `🏘️ 개척 주택의 건설비가 지급되고 부지가 예약됐습니다`;
+    case 'founding_cancelled': return `🏘️ 개척 계획의 조건이 달라져 취소됐습니다`;
+    case 'founding_homes_built': return `🏘️ 개척 주택이 완공되어 정착을 기다립니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
@@ -2769,6 +2772,7 @@ const FEED_STORY = new Set([
   'public_posts_filled', 'job_changed',
   'founding_petition_created', 'founding_petition_withdrawn',
   'founding_approved', 'founding_rejected',
+  'founding_funded', 'founding_cancelled', 'founding_homes_built',
 ]);
 // conversation·greeting·gathering·invited는 뺐다. 실측에서 '이야기' 80줄이 전부 잡담(💬)이라
 // 결혼도 출생도 그 사이에 묻혔다 — 수다는 이 마을의 **바탕음**이지 사건이 아니다.

@@ -4,11 +4,14 @@ import { createWorld } from '../sim/world.js';
 import { serialize } from '../sim/serialize.js';
 import { foundingEvidence, evaluateFoundingPetitions, quoteFoundingSites,
   validateFoundingDecision, applyFoundingDecision } from '../sim/founding.js';
-import { deserialize, hashWorld } from '../sim/serialize.js';
+import { fundFoundingPlans, foundingSiteReserved, foundingWorkerAllowed,
+  cancelFoundingConstruction } from '../sim/founding.js';
+import { deserialize, hashWorld, findNonFinite } from '../sim/serialize.js';
 import { tick } from '../sim/tick.js';
 import { migrateWorld } from '../sim/migrate.js';
 import { emptyState } from '../sim/simfactory.js';
-import { TILE } from '../sim/map.js';
+import { TILE, isAvailableResidence } from '../sim/map.js';
+import { maybeImmigration } from '../sim/society.js';
 import { SCHEMA_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC } from '../sim/logic.js';
 
@@ -109,7 +112,7 @@ test('#32 migration from the released immunity schema preserves existing immunit
 function approvalWorld(){
   const w=constrainedWorld();for(const t of [0,1440,2880])evaluateFoundingPetitions(w,t,()=>{});
   // Controlled topology isolates quote validation from generated terrain.
-  w.map.tiles.fill(TILE.GRASS);w.map.reachVersion++;w.treasury=100000;
+  w.map.tiles.fill(TILE.GRASS);w.map.reachVersion=(w.map.reachVersion??0)+1;w.treasury=100000;
   w.villages[0].center={x:20,y:20};
   w.plots=[{plotId:1,x:400,y:400,used:false},{plotId:2,x:410,y:400,used:false}];
   return w;
@@ -222,4 +225,124 @@ test('#32 found_village is applied from the durable input queue and survives eng
     assert.equal(hashWorld(after.world),hashWorld(expected));
     assert.ok(!after.runLive(1).events.some(e=>e.type==='founding_approved'));
   }finally{st.close();}
+});
+
+function fundedFixture(){
+  const w=approvalWorld();w.worldTick=3000;w.lastDailyDay=2;w.lastPlanDay=2;w.mayorId=null;
+  for(const s of w.sims){s.state={...emptyState(),kind:'performing',action:'idle',ticksLeft:100000};s.hasCar=false;}
+  applyFoundingDecision(w,approval(),3000,()=>{});return w;
+}
+
+test('#32 funding waits until the next tick, pays once, and reserves sites without inventing houses or moving anyone',()=>{
+  const w=fundedFixture(),before={money:w.treasury,out:w.externalOutflow,map:serialize(w.map),sims:serialize(w.sims),rng:serialize(w.rngSim)};
+  fundFoundingPlans(w,3000,()=>{});assert.equal(w.zoneOrders.length,0);
+  fundFoundingPlans(w,3001,()=>{});
+  assert.equal(w.founding.petitions[0].status,'building');
+  assert.equal(w.treasury+worldCost(w),before.money);assert.equal(w.externalOutflow-before.out,worldCost(w));
+  assert.equal(w.zoneOrders.length,1);assert.equal(w.zoneOrders[0].foundingPetitionId,0);
+  assert.equal(w.plots[0].foundingPetitionId,0);assert.equal(serialize(w.map),before.map);
+  assert.equal(serialize(w.sims),before.sims);assert.equal(serialize(w.rngSim),before.rng);
+  const saved=serialize(w);fundFoundingPlans(w,3002,()=>{});assert.equal(serialize(w),saved);
+  assert.equal(serialize(deserialize(saved)),saved);
+  assert.equal(foundingSiteReserved(w,{x:401,y:400},'office'),true);
+  assert.equal(foundingSiteReserved(w,{x:400,y:405},'house'),true,'protect the outside door approach too');
+  assert.equal(foundingSiteReserved(w,w.plots[0],'house',0,0),false);
+});
+const worldCost=w=>w.logic.zone.costs.house;
+
+test('#32 changed approval conditions cancel before charging and never substitute another resident silently',()=>{
+  for(const setup of [w=>{w.treasury=0;},w=>{w.logic.zone.costs.house++;},
+    w=>{w.sims[0].education.course='masters';w.sims[0].education.completed=false;},
+    w=>{w.plots[0].used=true;}]){
+    const w=fundedFixture();setup(w);const other=serialize({...w,founding:null}),events=[];
+    fundFoundingPlans(w,3001,(...e)=>events.push(e));
+    assert.equal(w.founding.petitions[0].status,'cancelled');assert.equal(events[0][0],'founding_cancelled');
+    assert.equal(serialize({...w,founding:null}),other);
+  }
+});
+
+test('#32 a funded project advances only for selected adult workers physically at the site',()=>{
+  const w=fundedFixture();tick(w);const project=w.projects.find(p=>p.foundingPetitionId===0);
+  assert.ok(project);const plot=w.plots.find(p=>p.plotId===project.plotId),worker=w.sims[0],outsider=w.sims[2];
+  assert.equal(foundingWorkerAllowed(w,outsider,project),false);
+  for(const sim of [worker,outsider])sim.state={...emptyState(),kind:'performing',action:'construct',
+    ticksLeft:100,facilityId:'site',resourceId:`p${plot.plotId}:spot0`};
+  outsider.x=plot.x+1;outsider.y=plot.y+1;worker.x=plot.x-2;worker.y=plot.y;
+  tick(w);assert.equal(project.progress,0,'neither outsiders on site nor remote selected workers provide labor');
+  worker.x=plot.x+1;worker.y=plot.y+1;tick(w);assert.equal(project.progress,1);
+  worker.education.course='doctorate';worker.education.completed=false;
+  tick(w);assert.equal(project.progress,1,'entering an unfinished degree stops labor immediately');
+  assert.equal(w.founding.petitions[0].status,'cancelled');
+  assert.equal(w.projects.some(p=>p.foundingPetitionId===0),false);
+});
+
+test('#32 real walking and construction produce a reserved home, not a teleported settler or new population',()=>{
+  const w=fundedFixture();w.logic.construct.requiredByType.house=3;
+  const worker=w.sims[0];worker.x=397;worker.y=400;
+  const homeIds=w.sims.map(s=>s.homeId),pop=w.sims.length,facCount=w.map.facilities.length;
+  tick(w);assert.equal(w.map.facilities.length,facCount);
+  const events=[],assignment={sequence:0,command:'assign',payload:{simId:worker.id,actionType:'construct'}};
+  let previous={x:worker.x,y:worker.y},walked=0;
+  for(let i=0;i<40&&w.founding.petitions[0].status!=='awaiting_settlement';i++){
+    events.push(...tick(w,i===0?[assignment]:[]));
+    const step=Math.abs(worker.x-previous.x)+Math.abs(worker.y-previous.y);
+    assert.ok(step<=1,'ordinary one-tile movement, no teleport');walked+=step;previous={x:worker.x,y:worker.y};
+  }
+  assert.ok(walked>0);assert.equal(w.founding.petitions[0].status,'awaiting_settlement');
+  assert.ok(events.some(e=>e.type==='founding_homes_built'));
+  assert.equal(w.sims.length,pop);assert.deepEqual(w.sims.map(s=>s.homeId),homeIds);assert.equal(w.villages.length,1);
+  const home=w.map.facilities.find(f=>f.foundingPetitionId===0);
+  assert.equal(home.resources.length,2);assert.equal(isAvailableResidence(home),false);
+  maybeImmigration(w,1440*w.logic.society.immigrationIntervalDays,w.logic.society.immigrationIntervalDays,()=>{});
+  assert.equal(w.sims.length,pop,'reserved beds cannot draw immigrants');
+});
+
+test('#32 stale paid construction refunds only undelivered homes and releases reservations exactly once',()=>{
+  const w=fundedFixture(),treasury=w.treasury,out=w.externalOutflow,inflow=w.externalInflow;
+  fundFoundingPlans(w,3001,()=>{});w.map.tiles[400*w.map.w+400]=TILE.WALL;
+  const events=tick(w);
+  assert.equal(w.founding.petitions[0].status,'cancelled');assert.equal(w.treasury,treasury);
+  assert.equal(w.externalOutflow-out,worldCost(w));assert.equal(w.externalInflow-inflow,worldCost(w));
+  assert.equal(w.zoneOrders.length,0);assert.equal(w.projects.length,0);assert.equal(w.plots[0].foundingPetitionId,undefined);
+  assert.ok(events.some(e=>e.type==='founding_cancelled'&&e.payload.refund===worldCost(w)));
+  const before=serialize(w);cancelFoundingConstruction(w,0,'stale_order',3002,()=>{});assert.equal(serialize(w),before);
+});
+
+test('#32 other zone orders cannot steal an overlapping founding site',()=>{
+  const w=fundedFixture();fundFoundingPlans(w,3001,()=>{});w.plots[1].x=401;
+  const events=tick(w,[{sequence:0,command:'zone',payload:{plotId:2,type:'house',dir:0}}]);
+  assert.ok(events.some(e=>e.type==='input_rejected'&&e.payload.reason==='site_reserved'));
+  assert.ok(w.projects.some(p=>p.foundingPetitionId===0));
+  assert.ok(!w.projects.some(p=>p.plotId===2));
+});
+
+test('#32 partial cancellation retains completed buildings and refunds only unfinished work',()=>{
+  const w=approvalWorld();w.worldTick=3000;w.lastDailyDay=2;w.lastPlanDay=2;w.mayorId=null;
+  for(const s of w.sims)s.state={...emptyState(),kind:'performing',action:'idle',ticksLeft:100000};
+  w.logic.founding.minSettlers=3;
+  applyFoundingDecision(w,{...approval(),homePlotIds:[1,2]},3000,()=>{});
+  const treasury=w.treasury,pop=w.sims.length,homeIds=w.sims.map(s=>s.homeId),inflow=w.externalInflow;
+  tick(w);assert.equal(w.projects.length,1);assert.equal(w.zoneOrders.length,1);
+  w.projects[0].progress=w.projects[0].required;
+  tick(w);const completed=w.map.facilities.find(f=>f.foundingPetitionId===0);
+  assert.ok(completed);assert.equal(w.projects.length,1);
+  cancelFoundingConstruction(w,0,'stale_order',w.worldTick,()=>{});
+  assert.ok(w.map.facilities.includes(completed));assert.equal(isAvailableResidence(completed),true);
+  assert.equal(w.treasury,treasury-worldCost(w));assert.equal(w.externalInflow-inflow,worldCost(w));
+  assert.equal(w.projects.length,0);assert.equal(w.zoneOrders.length,0);
+  assert.equal(w.sims.length,pop);assert.deepEqual(w.sims.map(s=>s.homeId),homeIds);
+});
+
+test('#32 saving a funded walking worker and resuming preserves construction, payments and completion events',()=>{
+  const a=fundedFixture();a.logic.construct.requiredByType.house=6;
+  a.sims[0].x=397;a.sims[0].y=400;
+  tick(a);tick(a,[{sequence:0,command:'assign',payload:{simId:a.sims[0].id,actionType:'construct'}}]);
+  assert.equal(a.sims[0].state.kind,'walking');
+  assert.deepEqual(findNonFinite(a),[]);
+  const b=deserialize(serialize(a)),events=[];
+  for(let i=0;i<20;i++){const ea=tick(a),eb=tick(b);assert.deepEqual(ea,eb);events.push(...ea);}
+  assert.deepEqual(findNonFinite(a),[]);assert.deepEqual(findNonFinite(b),[]);
+  assert.equal(hashWorld(a),hashWorld(b));assert.equal(a.founding.petitions[0].status,'awaiting_settlement');
+  assert.equal(events.filter(e=>e.type==='founding_homes_built').length,1);
+  assert.ok(!events.some(e=>e.type==='founding_funded'),'resume cannot pay again');
 });

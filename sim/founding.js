@@ -3,6 +3,9 @@
 import { canWork } from './education.js';
 import { isResidence, plotBuildable, zoneFootprint, sameRegion, addBuilding } from './map.js';
 import { PRIMARY_VILLAGE_ID } from './villages.js';
+import { emptyState } from './simfactory.js';
+
+const active=p=>['pending','approved','building','awaiting_settlement'].includes(p.status);
 
 export function newFoundingState() {
   return { nextPetitionId: 0, lastDay: -1, pressure: {}, petitions: [] };
@@ -43,7 +46,7 @@ export function applyFoundingDecision(world, payload, t, emit) {
     return;
   }
   if(world.villages.some(v=>v.name===payload.name)
-    ||world.founding.petitions.some(p=>p.status==='approved'&&p.plan.name===payload.name)){
+    ||world.founding.petitions.some(p=>active(p)&&p.plan?.name===payload.name)){
     reject('duplicate_name');return;
   }
   const quote=quoteFoundingSites(world,petition.id,payload.homePlotIds);
@@ -60,9 +63,9 @@ export function applyFoundingDecision(world, payload, t, emit) {
 // Approval must validate all homes and the full price before any mutation.
 // “자체 시장” in #32 means an independent mayor, not a retail market.
 // The caller will consume this quote in the durable approval path.
-export function quoteFoundingSites(world, petitionId, homePlotIds) {
+export function quoteFoundingSites(world, petitionId, homePlotIds, status='pending') {
   const fail=reason=>({ok:false,reason});
-  const petition=world.founding.petitions.find(p=>p.id===petitionId&&p.status==='pending');
+  const petition=world.founding.petitions.find(p=>p.id===petitionId&&p.status===status);
   if(!petition)return fail('no_pending_petition');
   const source=world.villages.find(v=>v.id===petition.villageId);
   if(!source)return fail('no_source_village');
@@ -74,6 +77,7 @@ export function quoteFoundingSites(world, petitionId, homePlotIds) {
   if(plots.some(p=>!p||p.used))return fail('site_unavailable');
   const busy=new Set([...world.projects,...world.zoneOrders].map(p=>p.plotId));
   if(plots.some(p=>busy.has(p.plotId)))return fail('site_reserved');
+  if(plots.some(p=>foundingSiteReserved(world,p)))return fail('site_reserved');
   const shape=zoneFootprint('house',0);
   if(plots.some(p=>!plotBuildable(world.map,p,shape.w,shape.h)))return fail('not_buildable');
   const overlaps=(a,sa,b,sb)=>a.x<b.x+sb.w&&b.x<a.x+sa.w&&a.y<b.y+sb.h&&b.y<a.y+sa.h;
@@ -107,6 +111,104 @@ export function quoteFoundingSites(world, petitionId, homePlotIds) {
     settlerIds:eligible.slice(0,count)};
 }
 
+// A paid founding site cannot be stolen by a later zone order or by an
+// overlapping plot with a different id. Ordinary paths use this same guard.
+export function foundingSiteReserved(world, plot, type='house', dir=0, ownPetitionId=null) {
+  const shape=zoneFootprint(type,dir);
+  return world.plots.some(p=>p.foundingPetitionId!==undefined&&p.foundingPetitionId!==null
+    &&p.foundingPetitionId!==ownPetitionId
+    &&((plot.x<p.x+6&&p.x<plot.x+shape.w&&plot.y<p.y+5&&p.y<plot.y+shape.h)
+      ||(p.x+2>=plot.x&&p.x+2<plot.x+shape.w&&p.y+5>=plot.y&&p.y+5<plot.y+shape.h)));
+}
+
+export function fundFoundingPlans(world,t,emit){
+  for(const p of world.founding.petitions.filter(p=>p.status==='building')){
+    if(p.plan.settlerIds.some(id=>{
+      const s=world.sims.find(s=>s.id===id);
+      return !s||!canWork(s)||s.villageId!==p.villageId;
+    }))cancelFoundingConstruction(world,p.id,'settlers_changed',t,emit);
+  }
+  for(const petition of world.founding.petitions.filter(p=>p.status==='approved'&&p.approvedTick<t)
+    .sort((a,b)=>a.id-b.id)){
+    const plan=petition.plan;
+    const quote=quoteFoundingSites(world,petition.id,plan.homePlotIds,'approved');
+    let reason=quote.ok?null:quote.reason;
+    if(!reason&&quote.cost>plan.quotedCost)reason='quote_expired';
+    if(!reason&&plan.homePlotIds.some(id=>foundingSiteReserved(world,world.plots.find(p=>p.plotId===id))))reason='site_reserved';
+    const target=world.plots.find(p=>p.plotId===plan.homePlotIds[0]);
+    if(!reason&&(plan.settlerIds.length!==world.logic.founding.minSettlers||plan.settlerIds.some(id=>{
+      const sim=world.sims.find(s=>s.id===id);
+      return !sim||sim.villageId!==petition.villageId||!canWork(sim)
+        ||!sameRegion(world.map,sim.x,sim.y,target.x,target.y);
+    })))reason='settlers_changed';
+    if(reason){
+      petition.status='cancelled';petition.resolvedTick=t;petition.reason=reason;
+      const pressure=world.founding.pressure[petition.villageId];if(pressure)pressure.days=0;
+      emit('founding_cancelled',petition.petitionerId,{petitionId:petition.id,reason});continue;
+    }
+    // All checks precede the single payment; construction costs use the same
+    // external-contractor accounting as normal paid zoning. No new wallet.
+    world.treasury-=quote.cost;world.externalOutflow=(world.externalOutflow??0)+quote.cost;
+    petition.status='building';plan.fundedTick=t;plan.fundedCost=quote.cost;plan.completedHomeIds=[];
+    for(const plotId of plan.homePlotIds){
+      world.plots.find(p=>p.plotId===plotId).foundingPetitionId=petition.id;
+      world.zoneOrders.push({plotId,type:'house',dir:0,foundingPetitionId:petition.id,
+        fundedCost:world.logic.zone.costs.house});
+    }
+    emit('founding_funded',petition.petitionerId,{petitionId:petition.id,cost:quote.cost,
+      plotIds:[...plan.homePlotIds],settlerIds:[...plan.settlerIds]});
+  }
+}
+
+export function foundingWorkerAllowed(world,sim,project){
+  if(project.foundingPetitionId===undefined)return true;
+  const p=world.founding.petitions.find(p=>p.id===project.foundingPetitionId);
+  return p?.status==='building'&&canWork(sim)&&p.plan.settlerIds.includes(sim.id);
+}
+
+export function recordFoundingHome(world,project,fac,t,emit){
+  if(project.foundingPetitionId===undefined)return;
+  const p=world.founding.petitions.find(p=>p.id===project.foundingPetitionId);
+  fac.foundingPetitionId=project.foundingPetitionId; // unavailable until actual settlement
+  if(!p||p.status!=='building')return;
+  endFoundingWorkAt(world,new Set([project.plotId]));
+  p.plan.completedHomeIds.push(fac.id);
+  if(p.plan.completedHomeIds.length===p.plan.homePlotIds.length){
+    p.status='awaiting_settlement';p.plan.builtTick=t;
+    emit('founding_homes_built',p.petitionerId,{petitionId:p.id,homeIds:[...p.plan.completedHomeIds]});
+  }
+}
+
+function endFoundingWorkAt(world,plotIds){
+  for(const sim of world.sims){
+    const state=sim.state,match=/^p(\d+):spot[0-3]$/.exec(state.resourceId??'');
+    if(state.facilityId!=='site'||!match||!plotIds.has(Number(match[1])))continue;
+    const key=`site:${state.resourceId}`;
+    if(world.reservations[key]===sim.id)delete world.reservations[key];
+    sim.state=emptyState();
+  }
+}
+
+// Only undelivered construction is refunded. Already completed houses remain
+// real public housing; neither residents nor finished buildings are erased.
+export function cancelFoundingConstruction(world,petitionId,reason,t,emit){
+  const p=world.founding.petitions.find(p=>p.id===petitionId&&p.status==='building');
+  if(!p)return;
+  const unbuilt=new Map([...world.zoneOrders,...world.projects]
+    .filter(q=>q.foundingPetitionId===petitionId).map(q=>[q.plotId,q.fundedCost]));
+  const refund=[...unbuilt.values()].reduce((n,c)=>n+c,0);
+  endFoundingWorkAt(world,new Set(unbuilt.keys()));
+  world.zoneOrders=world.zoneOrders.filter(q=>q.foundingPetitionId!==petitionId);
+  world.projects=world.projects.filter(q=>q.foundingPetitionId!==petitionId);
+  world.treasury+=refund;world.externalInflow=(world.externalInflow??0)+refund;
+  for(const plot of world.plots)if(plot.foundingPetitionId===petitionId)delete plot.foundingPetitionId;
+  for(const fac of world.map.facilities)if(fac.foundingPetitionId===petitionId)delete fac.foundingPetitionId;
+  p.status='cancelled';p.resolvedTick=t;p.reason=reason;p.plan.refundedCost=refund;
+  const pressure=world.founding.pressure[p.villageId];if(pressure)pressure.days=0;
+  emit('founding_cancelled',p.petitionerId,{petitionId,reason,refund});
+  return true;
+}
+
 export function evaluateFoundingPetitions(world, t, emit) {
   const state=world.founding, day=Math.floor(t/1440), F=world.logic.founding;
   if (day===state.lastDay) return;
@@ -120,7 +222,7 @@ export function evaluateFoundingPetitions(world, t, emit) {
     const previous=state.pressure[village.id];
     const days=constrained ? Math.min(F.petitionDays,(consecutive ? previous?.days??0 : 0)+1) : 0;
     state.pressure[village.id]={ day, days, evidence };
-    const existing=state.petitions.find(p=>p.villageId===village.id&&['pending','approved'].includes(p.status));
+    const existing=state.petitions.find(p=>p.villageId===village.id&&active(p));
     if (existing?.status==='pending' && !constrained) {
       existing.status='withdrawn';existing.resolvedTick=t;existing.reason='conditions_changed';
       emit('founding_petition_withdrawn',existing.petitionerId,{petitionId:existing.id,villageId:village.id});

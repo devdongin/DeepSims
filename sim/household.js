@@ -1,5 +1,5 @@
 // #51 Explicit households and durable, next-tick revalidated separation intents.
-import { isResidence } from './map.js';
+import { isResidence, isAvailableResidence } from './map.js';
 import { syncResidenceVillage } from './villages.js';
 import { askingRent } from './housing.js';
 
@@ -7,7 +7,7 @@ const employed = (world, sim) => sim.traits.occupation !== 'student'
   && sim.traits.occupation !== 'child'
   && (world.logic.occupations[sim.traits.occupation]?.wagePct ?? 0) > 0;
 
-const vacantResidences = (world, fromHomeId) => world.map.facilities.filter(isResidence)
+const vacantResidences = (world, fromHomeId) => world.map.facilities.filter(isAvailableResidence)
   .filter(h => h.id !== fromHomeId && !world.sims.some(s => s.homeId === h.id) && h.resources.length > 0)
   .sort((a,b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
@@ -30,7 +30,7 @@ export function applyHouseholdIntents(world, t, emit) {
     let reason = null;
     if(intent.kind==='rent_move'){
       const members=(intent.memberIds??[]).map(id=>world.sims.find(s=>s.id===id));
-      const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isResidence(f));
+      const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isAvailableResidence(f));
       if(members.some(s=>!s))reason='person_missing';
       else if(members.some(s=>s.householdId!==intent.fromHouseholdId||s.homeId!==intent.fromHomeId))reason='household_changed';
       else if(world.sims.some(s=>s.householdId===intent.fromHouseholdId&&s.homeId===intent.fromHomeId&&!intent.memberIds.includes(s.id)))reason='household_changed';

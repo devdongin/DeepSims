@@ -387,6 +387,9 @@ export const ZONE_DIMS = { house: [6, 5], cafe: [7, 5], office: [7, 5], park: [7
   apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [8, 6], workshop:[8,6],lab:[8,6],warehouse:[8,6] };
 // §18.T3: 주거 시설 판정 단일 권위 — 이민·합가·자녀·완공 이사·수면(HOME_ONLY는 homeId 기준이라 무관)
 export function isResidence(f) { return f.type === 'house' || f.type === 'apartment'; }
+// Founding houses are real buildings, but their beds are held for the arriving
+// existing residents; immigration/instant household moves cannot claim them.
+export function isAvailableResidence(f) { return isResidence(f)&&f.foundingPetitionId==null; }
 
 export function zoneFootprint(type, dir) {
   const [w0, h0] = ZONE_DIMS[type];

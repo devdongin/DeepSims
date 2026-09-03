@@ -12,7 +12,7 @@ import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · �
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
 import { TILE, isRoadProtected } from './map.js';
-import { isResidence } from './map.js';
+import { isResidence, isAvailableResidence } from './map.js';
 import { learnToken as learnTokenRef } from './planning.js';
 import { maybeRoadWorks } from './roads.js';
 import { applyBirthTalent } from './genius.js';
@@ -418,12 +418,12 @@ export function maybeImmigration(world, t, day, emit) {
 }
 
 function immigrateOne(world, t, emit) {
-  const beds = world.map.facilities.filter(isResidence)
+  const beds = world.map.facilities.filter(isAvailableResidence)
     .reduce((n, f) => n + f.resources.length, 0);
   if (beds <= world.sims.length) return; // 집 없으면 안 온다
   // 빈 침대 있는 주거 (배열 순 — §18.T3 아파트 포함)
   const home = world.map.facilities
-    .filter(isResidence)
+    .filter(isAvailableResidence)
     .find((f) => f.resources.length > world.sims.filter((s) => s.homeId === f.id).length);
   if (!home) return;
   const traits = generateTraits(world.rngSim); // §12.1 순서, rngSim 소비
@@ -502,7 +502,7 @@ export function applyRomance(world, sim, t, emit) {
         emit('moved_home', hi.id, { from, to: lo.homeId });
       } else {
         // 신혼집: 두 자리 빈 집(facilityId asc)으로 부부가 함께 이사
-        const fresh = world.map.facilities.find((f) => isResidence(f)
+        const fresh = world.map.facilities.find((f) => isAvailableResidence(f)
           && f.resources.length - world.sims.filter((s2) => s2.homeId === f.id).length >= 2);
         if (fresh) {
           for (const mover of [lo, hi]) {

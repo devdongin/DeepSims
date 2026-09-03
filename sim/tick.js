@@ -6,7 +6,7 @@ import {
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
-import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isAvailableResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
 import { schoolFor, updateEducation, recordStudy, neededSchool, SCHOOL_TYPES, canWork } from './education.js';
@@ -19,7 +19,8 @@ import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
 import { syncResidenceVillage } from './villages.js';
-import { evaluateFoundingPetitions, applyFoundingDecision } from './founding.js';
+import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
+  foundingSiteReserved, foundingWorkerAllowed, recordFoundingHome, cancelFoundingConstruction } from './founding.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -359,17 +360,19 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
       // §19.3: 다중 프로젝트 중 맨해튼 최근접 현장으로 (동률 plotId asc — 결정적)
       let pr = null; let best = Infinity;
       for (const cand2 of [...world.projects].sort((a, b) => a.plotId - b.plotId)) {
+        if(!foundingWorkerAllowed(world,sim,cand2))continue;
         const pl = world.plots.find((p) => p.plotId === cand2.plotId);
         const d = Math.abs(pl.x + 3 - sim.x) + Math.abs(pl.y + 2 - sim.y);
         if (d < best) { best = d; pr = cand2; }
       }
       if (!pr) continue;
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
+      const right=pr.foundingPetitionId===undefined?5:4; // 개척 집 완공 후에도 내부 바닥인 작업점
       const spots = [
         { id: `p${pr.plotId}:spot0`, x: plot.x + 1, y: plot.y + 1 },
-        { id: `p${pr.plotId}:spot1`, x: plot.x + 5, y: plot.y + 1 },
+        { id: `p${pr.plotId}:spot1`, x: plot.x + right, y: plot.y + 1 },
         { id: `p${pr.plotId}:spot2`, x: plot.x + 1, y: plot.y + 3 },
-        { id: `p${pr.plotId}:spot3`, x: plot.x + 5, y: plot.y + 3 },
+        { id: `p${pr.plotId}:spot3`, x: plot.x + right, y: plot.y + 3 },
       ];
       for (const res of spots) {
         const holder = world.reservations[resKey('site', res.id)];
@@ -703,7 +706,7 @@ function applyCreatePlayer(world, inp, t, emit) {
   if (traitErr) return reject(`invalid_traits: ${traitErr}`);
 
   // 홈: 거주자 최소 집, 동수면 facilityId 오름차순 (결정적)
-  const houses = world.map.facilities.filter(isResidence); // §18.T3 아파트 포함
+  const houses = world.map.facilities.filter(isAvailableResidence); // 개척 예약 주택 제외
   const counts = new Map(houses.map((h) => [h.id, 0]));
   for (const s of world.sims) if (counts.has(s.homeId)) counts.set(s.homeId, counts.get(s.homeId) + 1);
   const home = [...houses].sort((a, b) => (counts.get(a.id) - counts.get(b.id)) || (a.id < b.id ? -1 : 1))[0];
@@ -799,6 +802,7 @@ function applyZone(world, inp, t, emit) {
   else if (!zoneAllowedTypes(world).includes(p.type)) reason = 'tier_locked'; // §18.T4 등급 게이트
   else if (!ZONEABLE.includes(p.type)) reason = 'bad_type'; // 언락됐지만 레시피 미구현(T3 대기)
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
+  else if (foundingSiteReserved(world,plot,p.type,p.dir)) reason='site_reserved';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionTiles = () => { const fp = zoneFootprint(p.type, p.dir); let n = 0;
     for (let y = plot.y; y < plot.y + fp.h; y++) for (let x = plot.x; x < plot.x + fp.w; x++) {
@@ -920,6 +924,7 @@ export function tick(world, inputsForThisTick = []) {
 
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
+  fundFoundingPlans(world,t,emit);
   updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
 
@@ -1122,7 +1127,11 @@ export function tick(world, inputsForThisTick = []) {
       if (m2) {
         const pid = Number(m2[1]);
         const prj = Number.isSafeInteger(pid) ? world.projects.find((p) => p.plotId === pid) : null;
-        if (prj) prj.progress++;
+        if (prj&&foundingWorkerAllowed(world,sim,prj)) {
+          const plot=world.plots.find(p=>p.plotId===pid);
+          const onSite=plot&&[plot.x+1,plot.x+4].includes(sim.x)&&[plot.y+1,plot.y+3].includes(sim.y);
+          if(prj.foundingPetitionId===undefined||onSite)prj.progress++;
+        }
       }
     }
     // 대처 행동의 틱당 효과 (§15.1.A): 기분 직접 회복 + 부수 욕구
@@ -1434,11 +1443,12 @@ export function tick(world, inputsForThisTick = []) {
     if (pr.progress >= pr.required) {
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
       const fac = addBuilding(world.map, pr.type, plot, pr.dir ?? 0); // §18.T2 회전
+      recordFoundingHome(world,pr,fac,t,emit);
       openSupplyMarket(world, fac, emit);
       plot.used = true;
       world.projects.splice(world.projects.indexOf(pr), 1);
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
-      if (isResidence(fac)) { // §18.T3: 아파트 완공도 과밀 이사 대상
+      if (isAvailableResidence(fac)) { // 개척 주택은 실제 도착 전 자동 이사하지 않는다
         // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
         let worst = null, worstOver = 0;
         for (const h of world.map.facilities) {
@@ -1550,19 +1560,26 @@ export function tick(world, inputsForThisTick = []) {
     const maxProjects = Math.max(1, Math.min(L.growth.maxProjectSlots,
       1 + floorDiv(world.treasury, L.growth.slotPerTreasury)));
     while (world.projects.length < maxProjects && world.zoneOrders.length > 0) {
-      const order = world.zoneOrders.shift();
+      const order = world.zoneOrders[0];
       const plot = world.plots.find((p) => p.plotId === order.plotId);
       const fp2 = plot ? zoneFootprint(order.type, order.dir) : null;
-      if (!plot || plot.used || !plotBuildable(world.map, plot, fp2.w, fp2.h)) { // 착공 재검증 — 회전 치수 (Codex 48차)
+      if (!plot || plot.used || !plotBuildable(world.map, plot, fp2.w, fp2.h)
+        ||foundingSiteReserved(world,plot,order.type,order.dir,order.foundingPetitionId??null)) { // 착공 재검증
+        if(order.foundingPetitionId!==undefined){
+          if(cancelFoundingConstruction(world,order.foundingPetitionId,'stale_order',t,emit))continue;
+        }
+        world.zoneOrders.shift();
         emit('input_rejected', null, { command: 'zone', reason: 'stale_order', plotId: order.plotId });
         continue;
       }
+      world.zoneOrders.shift();
       // §22.23 공기 차등 — 타입별 노동량. 시장 행정력 할인은 그대로 곱한다.
       const base4 = L.construct.requiredByType?.[order.type] ?? L.construct.laborRequired;
       const required = world.mayorId !== null
         ? floorDiv(base4 * L.election.mayorLaborPct, 100)
         : base4;
-      world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true });
+      world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true,
+        ...(order.foundingPetitionId===undefined?{}:{foundingPetitionId:order.foundingPetitionId,fundedCost:order.fundedCost}) });
       emit('project_started', null, { plotId: order.plotId, type: order.type, dir: order.dir, x: plot.x, y: plot.y, required, zoned: true });
     }
     if (world.lastPlanDay !== day) {
@@ -1571,7 +1588,8 @@ export function tick(world, inputsForThisTick = []) {
       while (world.projects.length < maxProjects) {
       // §19.3: 이미 착공 중인 공터는 제외 (중복 배정 금지)
       const busy = new Set(world.projects.map((p) => p.plotId));
-      const candidates = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)); // §17.23 침범 방지
+      const candidates = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)
+        &&!foundingSiteReserved(world,p,'office')); // 기본 후보 footprint 7×5
       const centers = [
         ...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)),
         ...(world.centers ?? []),
@@ -1583,7 +1601,7 @@ export function tick(world, inputsForThisTick = []) {
       })[0];
       if (!freePlot) break;
       {
-        const beds = world.map.facilities.filter(isResidence)
+        const beds = world.map.facilities.filter(isAvailableResidence)
           .reduce((n, f) => n + f.resources.length, 0);
         const cafeSeats = world.map.facilities.filter((f) => f.type === 'cafe')
           .reduce((n, f) => n + f.resources.length, 0);
@@ -1627,7 +1645,7 @@ export function tick(world, inputsForThisTick = []) {
         if (!type) break;
         if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
           const fp=zoneFootprint(type,0);
-          freePlot=candidates.find(p=>plotBuildable(world.map,p,fp.w,fp.h));
+          freePlot=candidates.find(p=>plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type));
           if(!freePlot) break;
           const cost=L.zone.costs[type];
           world.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
