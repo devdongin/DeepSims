@@ -19,6 +19,7 @@ import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
 import { syncResidenceVillage } from './villages.js';
+import { allocateMunicipalLand } from './municipal-land.js';
 import { governmentFor, governmentViews, governmentEmitter, changeReputation,
   reputationVillage, recordMunicipalStats, publicBalance } from './government.js';
 import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
@@ -1531,6 +1532,7 @@ export function tick(world, inputsForThisTick = []) {
         world.lastDailyDay = day;
         // §22.2 사망 판정 — 선거·수당·이민보다 **먼저** (89차 ③). id asc, riskHash라 RNG 미소비.
         maybeDeaths(world, t, day, emit);
+        allocateMunicipalLand(world,t,emit);
         const storyCandidates = [];
         const offerStory = candidate => storyCandidates.push(candidate);
         dailyDiseaseDraws(world, t, emit, offerStory);

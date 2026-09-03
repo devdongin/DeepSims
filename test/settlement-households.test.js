@@ -112,15 +112,20 @@ test('#32 a route lost during gathering cancels instead of reserving an unreacha
 
 test('#32 settlement membership changes only at the destination and completion is exactly once',()=>{
   const {w,s,p,home}=travellingWorld(),oldHome=s.homeId,events=[];
+  w.villages[0].center={x:10,y:10};
+  const futurePlot={plotId:9999,x:90,y:85,used:false};w.plots.push(futurePlot);
   const emit=(...e)=>events.push(e);
   completeSettlementArrivals(w,3000,emit);
   assert.equal(w.villages.length,1);assert.equal(s.homeId,oldHome);assert.equal(events.length,0);
+  assert.equal(futurePlot.villageId,undefined,'no territory before actual arrival');
   // Unit fixture supplies an arrival; real one-tile movement is covered by the benchmark.
   s.x=home.door.x;s.y=home.door.y;
   completeSettlementArrivals(w,3001,emit);completeSettlementArrivals(w,3002,emit);
   assert.equal(p.status,'completed');assert.equal(w.villages.length,2);
   assert.equal(s.homeId,home.id);assert.equal(s.villageId,w.villages[1].id);
   assert.equal(events.filter(e=>e[0]==='village_founded').length,1);
+  assert.equal(futurePlot.villageId,w.villages[1].id);
+  assert.ok(events.some(e=>e[0]==='village_land_assigned'&&e[2].plotIds.includes(futurePlot.plotId)));
 });
 
 for(const family of [false,true])test(`#32 autonomous ${family?'family apartment':'house'} construction and settlement replay through both saved phases`,()=>{

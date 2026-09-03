@@ -6,6 +6,7 @@ import { emptyState } from './simfactory.js';
 import { cancelFoundingConstruction } from './founding.js';
 import { settlementHouseholdsUnchanged } from './settlement-households.js';
 import { newGovernment, initializeMunicipalHistory } from './government.js';
+import { allocateMunicipalLand } from './municipal-land.js';
 
 export const SETTLE_ACTION='settle_village';
 const pending=world=>(world.founding?.petitions??[]).filter(p=>p.status==='awaiting_settlement');
@@ -136,5 +137,6 @@ export function completeSettlementArrivals(world,t,emit){
     }
     p.status='completed';p.resolvedTick=t;plan.relocation.phase='settled';plan.villageId=id;
     emit('village_founded',p.petitionerId,{...village,homeIds:[...new Set(homes.map(f=>f.id))],residentIds:sims.map(s=>s.id)});
+    allocateMunicipalLand(world,t,emit);
   }
 }

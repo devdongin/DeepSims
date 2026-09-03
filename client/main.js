@@ -3593,6 +3593,10 @@ function connect() {
         updatePolicySummary();
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
         for (const e of msg.events ?? []) {
+          if (e.type === 'village_land_assigned') {
+            const ids = new Set(e.payload.plotIds);
+            for (const p of world.plots ?? []) if (ids.has(p.plotId)) p.villageId=e.payload.villageId;
+          }
           if(e.type==='village_founded'){
             for(const f of world.map.facilities)if(e.payload.homeIds.includes(f.id)){
               f.villageId=e.payload.id;delete f.foundingPetitionId;
