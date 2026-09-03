@@ -2873,6 +2873,47 @@ async function renderCityChronicle() {
 
 // §23.15 관계. 패널의 #relations는 처음부터 있었지만 아무도 쓰지 않았다.
 // 이 마을에서 사람들이 하는 일의 대부분이 관계인데 화면에는 그게 없었다.
+// §23.22 "어제 하루". 사람을 따라다닐 수 있게 됐지만(§23.18) **잠깐 눈을 떼면 그 사이에
+// 무슨 일이 있었는지 알 수 없다.** 고배속에서는 30초에 하루가 지나간다.
+// 그래서 고른 사람의 하루가 끝나면 저절로 한 문단으로 접힌다 — 사건 목록이 아니라 하루로.
+let dayLog = { simId: null, day: -1, acts: {}, money: 0, notes: [] };
+function noteForDay(e) {
+  if (selectedSimId === null || e.simId !== selectedSimId) return;
+  const day = Math.floor(e.tick / 1440);
+  if (dayLog.simId !== selectedSimId || dayLog.day !== day) {
+    if (dayLog.simId === selectedSimId && dayLog.day >= 0) renderDayCard();
+    dayLog = { simId: selectedSimId, day, acts: {}, money: 0, notes: [] };
+  }
+  if (e.type === 'action_completed') {
+    const a = e.payload.action;
+    if (a !== 'idle') dayLog.acts[a] = (dayLog.acts[a] ?? 0) + 1;
+  } else if (e.type === 'money_changed') {
+    dayLog.money += e.payload.delta ?? 0;
+  } else if (FEED_STORY.has(e.type)) {
+    const t = eventText(e);
+    if (t && dayLog.notes.length < 4) dayLog.notes.push(t.replace(/^[^\s]+\s/, '')); // 이모지 앞머리 제거
+  }
+}
+function renderDayCard() {
+  const box = $('daycard');
+  if (!box) return;
+  const acts = Object.entries(dayLog.acts).sort((a, b) => b[1] - a[1]);
+  if (acts.length === 0 && dayLog.notes.length === 0) { box.style.display = 'none'; return; }
+  const top = acts.slice(0, 4).map(([a, n]) => `${actionKo(a)}${n > 1 ? ` ${n}번` : ''}`).join(' · ');
+  const money = dayLog.money === 0 ? '' :
+    ` · 살림 ${dayLog.money > 0 ? '+' : ''}${dayLog.money.toLocaleString()}원`;
+  box.replaceChildren();
+  const head = document.createElement('b');
+  head.textContent = `${dayLog.day}일의 하루`;
+  box.append(head, document.createTextNode(` — ${top || '별일 없었다'}${money}`));
+  for (const n of dayLog.notes) {
+    const d = document.createElement('div');
+    d.textContent = `· ${n}`;
+    box.append(d);
+  }
+  box.style.display = 'block';
+}
+
 // §23.21 미니맵. 맵은 512×512이고 화면에는 그중 30칸 남짓이 보인다 — 카메라를 끌다 보면
 // **내가 어디 있는지, 마을이 어디였는지** 알 방법이 없었다. 따라가기를 넣고 나니 더 그랬다.
 //
@@ -2986,6 +3027,13 @@ function renderPeople() {
 }
 
 let relFor = null;
+let simTitle = null;
+function applyTitle() {
+  const el = $('simname');
+  if (!el || !simTitle) return;
+  const sim = world?.sims?.find((s) => s.id === selectedSimId);
+  if (sim) el.textContent = `${sim.name} · ${simTitle}`;
+}
 async function renderRelations(simId) {
   const box = $('relations');
   if (!box) return;
@@ -3004,11 +3052,10 @@ async function renderRelations(simId) {
     if (d.acquaintances) parts.push(`🙂 아는 사이 ${d.acquaintances}명`);
     box.textContent = parts.length ? parts.join(' · ') : '아직 가까운 사람이 없다';
     // §23.16 칭호는 이름 옆에 — 이 사람이 가장 자주 한 일이 곧 이 사람이다.
-    const nameEl = $('simname');
-    if (d.title && nameEl && !nameEl.dataset.titled) {
-      nameEl.textContent = `${nameEl.textContent} · ${d.title}`;
-      nameEl.dataset.titled = '1';
-    }
+    // 이름표는 배치마다 다시 그려지므로(renderPanel) 여기서 DOM을 건드리면 한 번 쓰고
+    // 지워진다. 값만 남겨 두고 붙이는 일은 renderPanel이 한다.
+    simTitle = d.title ?? null;
+    if (relFor === simId) applyTitle();
     // 최근 기억 — "요즘 무엇을 겪었나". 있으면 관계 아래 한 줄.
     if (d.memories?.length) {
       box.textContent += `\n📌 ${d.memories.map((m) => m.who ? `${m.text} (${m.who})` : m.text).join(' · ')}`;
@@ -3048,6 +3095,9 @@ function selectSim(id) {
   selectedSimId = id;
   lifeOpenFor = null;
   relFor = null;
+  simTitle = null;
+  dayLog = { simId: id, day: -1, acts: {}, money: 0, notes: [] };
+  const dc = $('daycard'); if (dc) dc.style.display = 'none';
   const fb = $('followbtn');
   if (fb) fb.classList.toggle('on', followSimId === id);
   const box = $('lifelog'); if (box) box.style.display = 'none';
@@ -3063,7 +3113,7 @@ function renderPanel() {
   if (!sim) { $('simname').textContent = '(마을을 떠났습니다)'; return; }
   panel.style.display = 'block';
   $('simname').textContent = sim.name;
-  $('simname').dataset.titled = '';
+  applyTitle(); // §23.16 칭호는 이름과 함께 다시 붙는다
   $('portrait').src = `./sprites/walk${archOf(sim)}_0.png`; // 도트 초상화 — 직업 제복 반영 (§17.14)
   for (const k of ['hunger', 'energy', 'social', 'fun']) {
     $(`b-${k}`).style.width = `${sim.needs[k] / 100}%`;
@@ -3358,6 +3408,7 @@ function connect() {
           const shown = [];
           for (let i = 0; i < evs.length; i++) {
             if (feedPasses(evs[i])) shown.push(evs[i]);
+            noteForDay(evs[i]); // §23.22 고른 사람의 하루를 모은다 (필터와 무관하게)
             if (!document.hidden) handleVisualEvent(evs[i]);
           }
           for (let i = Math.max(0, shown.length - 80); i < shown.length; i++) pushFeed(shown[i]);

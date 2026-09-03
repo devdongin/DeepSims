@@ -61,6 +61,9 @@
     #people-list .nm { color: #ffcf6a; min-width: 78px; }
     #people-list .sub { color: #9c8a6a; font-size: 11px; }
     #lifebtn:hover, #followbtn:hover { background: #4a3a26; border-color: #c9a86a; }
+    #daycard { margin-top: 8px; font-size: 10.5px; color: #cdc4d6; background: #1d1810;
+      border: 1px solid #4a3a26; border-radius: 8px; padding: 7px 9px; line-height: 1.55; }
+    #daycard b { color: #ffcf6a; font-weight: normal; }
     #minimap-box { position: absolute; right: 12px; bottom: 12px; z-index: 6;
       background: #1a1610e6; border: 2px solid #6b5638; border-radius: 10px; padding: 5px;
       box-shadow: 0 4px 14px rgba(0,0,0,.5); }
@@ -157,6 +160,8 @@
         <!-- §23.1 일대기 — 이 사람이 어떻게 살아왔는가 -->
         <div id="lifebar" style="display:flex;gap:4px"><button id="lifebtn" type="button">📖 일대기</button><button id="followbtn" type="button">👁️ 따라가기</button></div>
         <div id="lifelog" style="display:none"></div>
+        <!-- §23.22 어제 하루 — 따라가는 사람의 하루가 저절로 요약된다 -->
+        <div id="daycard" style="display:none"></div>
       </div>
     </div>
     <div id="sidebar">
