@@ -61,6 +61,15 @@
     #people-list .nm { color: #ffcf6a; min-width: 78px; }
     #people-list .sub { color: #9c8a6a; font-size: 11px; }
     #lifebtn:hover, #followbtn:hover { background: #4a3a26; border-color: #c9a86a; }
+    #goals-list .g { margin: 7px 0; }
+    #goals-list .gh { display: flex; justify-content: space-between; font-size: 12px; color: #ead9b0; }
+    #goals-list .gh .v { color: #9c8a6a; font-size: 11px; }
+    #goals-list .gd { font-size: 10.5px; color: #8f88a0; margin: 1px 0 3px; }
+    #goals-list .gt { height: 6px; background: #171310; border-radius: 4px; overflow: hidden; }
+    #goals-list .gf { height: 100%; background: #8fd48a; }
+    #goals-list .done .gh { color: #ffcf6a; }
+    #goals-list .done .gf { background: #ffcf6a; }
+    #goals-list h3 { font-size: 11px; color: #9c8a6a; margin: 12px 0 2px; }
     #daycard { margin-top: 8px; font-size: 10.5px; color: #cdc4d6; background: #1d1810;
       border: 1px solid #4a3a26; border-radius: 8px; padding: 7px 9px; line-height: 1.55; }
     #daycard b { color: #ffcf6a; font-weight: normal; }
@@ -116,6 +125,7 @@
       </div>
       <button id="dash-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">📊 지표</button>
       <button id="people-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🔍 사람</button>
+      <button id="goals-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🏆 목표</button>
       <button id="policy-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🏛️ 시정</button>
       <button id="planning-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">📍 도시계획</button>
       <canvas id="spark" width="120" height="30" title="인구(초록)·국고(금색) 추이" style="border:1px solid #3a2e1d;border-radius:4px;background:#14100b"></canvas>
@@ -174,6 +184,13 @@
         <button data-f="mine">이 사람</button>
       </div>
       <div id="feed"></div>
+    </div>
+  </div>
+  <div id="goals-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">
+    <div class="box" style="width:500px;max-height:76vh;background:#241d14;border:2px solid #c9a86a;border-radius:12px;padding:20px;display:flex;flex-direction:column">
+      <h2 style="color:#ffcf6a;font-size:16px;margin-bottom:4px">🏆 마을의 목표 <span id="goals-count" style="font-size:11px;color:#9c8a6a"></span></h2>
+      <div id="goals-list" style="overflow-y:auto;flex:1;margin-top:8px"></div>
+      <button id="goals-close" style="margin-top:12px;padding:6px 14px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer">닫기</button>
     </div>
   </div>
   <div id="people-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">

@@ -2781,6 +2781,85 @@ function feedPasses(e) {
   return true;
 }
 
+// ---- §22.24 부재중 연대기 (이슈 #90, DF 레전드 방식) ----
+// 서버(server/chronicle.js)가 우선순위·상한으로 고른 사건을 시간순 이야기로 그린다.
+// 이벤트 로그에 있는 사실만 문장 틀에 끼운다 — 지어내지 않는다.
+const CHRON_KO = {
+  died: '사망', bereaved: '사별', child_settled: '자립', married: '결혼', election: '선거',
+  heroic_save: '구조', fire_started: '화재', fire_out: '진화', city_promoted: '승격',
+  job_changed: '전직', policy_changed: '정책 변경', started_dating: '연애', broke_up: '이별',
+  helped: '챙김', money_shared: '나눔', immigrated: '이민', grew_up: '성장', graduated: '졸업',
+  retired_now: '은퇴', facility_built: '완공', festival: '축제', petition: '청원',
+  education_decided: '진학·졸업',
+  car_bought: '차 구입', fell_sick: '병치레',
+};
+
+function chronicleText(e, nameOf) {
+  const n = nameOf(e.simId);
+  const p = e.payload;
+  const placeOfFac = (fid) => PLACE_KO[facTypeOf(fid)] ?? placeKo(fid);
+  // 살아 있으면 성+이름(§22.16), 죽었거나 못 찾으면 payload의 이름으로
+  const nOr = (fallback) => (fallback && n === `심${e.simId}` ? fallback : n);
+  switch (e.type) {
+    case 'died': {
+      const cause = { illness: '병으로', starvation: '굶주림 끝에', age: '노환으로' }[p.cause] ?? '';
+      return `🕯️ ${ga(nOr(p.name))} ${cause} 세상을 떠났습니다 (${p.age}세)`;
+    }
+    case 'bereaved': return `🖤 ${ga(n)} 배우자 ${eul(nameOf(p.lostSimId))} 잃었습니다`;
+    case 'child_settled': return `👶 ${wa(nameOf(p.parentA))} ${nameOf(p.parentB)} 부부의 자녀 ${ga(nOr(p.name))} 자립을 시작했습니다`;
+    case 'married': return `💒 ${wa(n)} ${ga(nameOf(p.withSimId))} 결혼했습니다`;
+    case 'election': {
+      const how = p.incumbent === e.simId ? '재선에 성공했습니다' : '새 시장이 되었습니다';
+      return `🗳️ 선거에서 ${ga(n)} ${how} (득표 ${(p.votes ?? []).join(':')})`;
+    }
+    case 'heroic_save': return `🎖️ ${ga(n)} ${placeOfFac(p.facilityId)} 화재에서 사람들을 구해 영웅이 되었습니다`;
+    case 'fire_started': return `🔥 ${placeOfFac(p.facilityId)}에 불이 났습니다`;
+    case 'fire_out': return p.by === 'self'
+      ? `💨 ${placeOfFac(p.facilityId)}의 불이 저절로 잦아들었습니다 (아무도 오지 않았습니다)`
+      : `🚒 ${ga(nameOf(p.by))} ${placeOfFac(p.facilityId)} 화재를 진압했습니다`;
+    case 'city_promoted': return `🏙️ ${ga('해솔')} ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
+    case 'job_changed': return `💼 ${ga(n)} ${occKo(p.from)} 일을 접고 ${ro(occKo(p.to))} 전직했습니다`;
+    case 'policy_changed': {
+      const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
+      const parts = Object.entries(p.changes ?? {}).map(([k, v]) =>
+        `${ko[k] ?? k} ${p.before?.[k] !== undefined ? `${p.before[k]}→` : ''}${v}${k === 'taxPct' ? '%' : '원'}`);
+      const who = p.source === 'mayor' ? `시장 ${ga(n)} ` : '';
+      return `🏛️ ${who}정책을 바꿨습니다: ${parts.join(', ')}`;
+    }
+    case 'started_dating': return `💕 ${wa(n)} ${ga(nameOf(p.withSimId))} 사귀기 시작했습니다`;
+    case 'broke_up': return `💔 ${wa(n)} ${ga(nameOf(p.withSimId))} 헤어졌습니다`;
+    case 'helped': {
+      const why = { sick: '앓아누운', hungry: '굶주린', broke: '주머니가 빈' }[p.why] ?? '어려운';
+      return `🤝 ${ga(n)} ${why} ${eul(nameOf(p.toSimId))} 챙겼습니다`;
+    }
+    case 'money_shared': return `💝 ${ga(n)} 곤경에 처한 ${nameOf(p.toSimId)}에게 ${p.amount}원을 건넸습니다`;
+    case 'immigrated': return `🚌 ${ga(nOr(p.name))} 마을로 이사 왔습니다 (${occKo(p.occupation)})`;
+    case 'grew_up': return `🎒 ${ga(n)} 자라서 학교에 다니기 시작했습니다 (${p.age}세)`;
+    case 'graduated': return `🎓 ${ga(n)} 학교를 졸업하고 ${ga(occKo(p.to))} 되었습니다`;
+    case 'education_decided': {
+      const course = { university: '학부', masters: '석사', doctorate: '박사' }[p.course] ?? '학위';
+      if (p.choice === 'degree') return `🎓 ${ga(n)} ${course} 과정을 졸업했습니다`;
+      if (p.choice === 'postgraduate') return `🎓 ${ga(n)} ${course} 과정에 진학하기로 했습니다`;
+      if (p.choice === 'university') return `🎓 ${ga(n)} ${course} 과정에 등록했습니다`;
+      if (p.choice === 'deferred') return `🎓 ${ga(n)} 학업 등록을 보류했습니다`;
+      return `🎓 ${ga(n)} 대학 진학 대신 취업을 선택했습니다`;
+    }
+    case 'retired_now': return `🌅 ${ga(n)} 일을 내려놓고 은퇴했습니다`;
+    case 'facility_built': {
+      const tp = p.type === 'house' ? '새 집' : (PLACE_KO[p.type] ?? p.type);
+      return `🎊 ${ga(tp)} 완공되어 마을이 넓어졌습니다`;
+    }
+    case 'festival': return `🏮 마을 축제가 공원에서 열렸습니다`;
+    case 'petition': {
+      const ko = { lonely: '외롭다', hungry: '배고프다' };
+      return `📢 주민들이 "${ko[p.kind] ?? p.kind}" 청원을 올렸습니다 (${p.total}건)`;
+    }
+    case 'car_bought': return `🚗 ${ga(n)} 차를 샀습니다`;
+    case 'fell_sick': return `🤒 ${ga(n)} 감기로 앓아누웠습니다`;
+    default: return eventText(e); // 테이블 밖 종류가 와도 피드 문장으로는 보여준다
+  }
+}
+
 function pushFeed(e) {
   const text = eventText(e); // 필터는 호출부에서 이미 걸렀다 (§23.19)
   if (!text) return;
@@ -2914,6 +2993,88 @@ function renderDayCard() {
     box.append(d);
   }
   box.style.display = 'block';
+}
+
+// §23.23 마을의 목표. 이 게임에는 **방향이 없었다** — 잘 굴러가는지, 무엇을 더 해야
+// 하는지 화면이 말해 주지 않으니 오래 볼 이유가 생기지 않는다. 목표는 규칙이 아니라
+// **읽는 방법**이다: 세계에 아무것도 강제하지 않고, 이미 일어난 일을 척도로 접는다.
+// 그래서 전부 world 하나에서 계산된다 — 서버도, 저장도, 시뮬레이션 변경도 없다.
+const GOALS = [
+  { g: '사람', k: 'pop50', t: '마을이 되다', d: '주민 50명', max: 50, v: (w) => w.sims.length },
+  { g: '사람', k: 'pop100', t: '읍이 되다', d: '주민 100명', max: 100, v: (w) => w.sims.length },
+  { g: '사람', k: 'pop200', t: '도시가 되다', d: '주민 200명', max: 200, v: (w) => w.sims.length },
+  { g: '사람', k: 'couples', t: '짝을 찾다', d: '커플 20쌍', max: 20,
+    v: (w) => Object.keys(w.partners ?? {}).length / 2 },
+  { g: '사람', k: 'genius', t: '남다른 아이', d: '천재가 태어난다', max: 1,
+    v: (w) => w.sims.some((s) => s.isGenius) ? 1 : 0 },
+  { g: '사람', k: 'elder', t: '오래 살다', d: '여든을 넘긴 주민', max: 1,
+    v: (w) => w.sims.some((s) => (s.traits?.age ?? 0) >= 80) ? 1 : 0 },
+
+  { g: '살림', k: 'treasury', t: '곳간을 채우다', d: '국고 100만 원', max: 1000000, v: (w) => w.treasury },
+  { g: '살림', k: 'solvent', t: '빚 없는 마을', d: '국고가 흑자다', max: 1, v: (w) => w.treasury > 0 ? 1 : 0 },
+  { g: '살림', k: 'rich', t: '넉넉한 살림', d: '평균 소지금 3,000원', max: 3000,
+    v: (w) => w.sims.length ? Math.round(w.sims.reduce((a, s) => a + (s.money ?? 0), 0) / w.sims.length) : 0 },
+  { g: '살림', k: 'employed', t: '일자리가 있다', d: '고용률 70%', max: 70,
+    v: (w) => { const adults = w.sims.filter((s) => !['child', 'student', 'retired'].includes(s.traits?.occupation)); 
+      return adults.length ? Math.round(100 * adults.filter((s) => s.traits.occupation !== 'jobless').length / adults.length) : 0; } },
+
+  { g: '도시', k: 'facTypes', t: '없는 게 없다', d: '시설 종류 12가지', max: 12,
+    v: (w) => new Set(w.map.facilities.map((f) => f.type)).size },
+  { g: '도시', k: 'beds', t: '누울 자리', d: '침대가 인구보다 많다', max: 1,
+    v: (w) => { const beds = w.map.facilities.filter((f) => f.type === 'house' || f.type === 'apartment')
+      .reduce((n, f) => n + f.resources.length, 0); return beds > w.sims.length ? 1 : 0; } },
+  { g: '도시', k: 'rep', t: '소문난 마을', d: '평판 500', max: 500, v: (w) => w.reputation ?? 0 },
+  { g: '도시', k: 'tier', t: '승격', d: '도시 등급 3', max: 3, v: (w) => w.cityTier ?? 0 },
+  { g: '도시', k: 'industry', t: '산업이 서다', d: '산업 3종 해금', max: 3,
+    v: (w) => (w.unlockedIndustries ?? []).length },
+
+  { g: '삶', k: 'healthy', t: '건강한 마을', d: '아픈 사람이 열 명 미만', max: 1,
+    v: (w) => w.sims.filter((s) => s.sick).length < 10 ? 1 : 0 },
+  { g: '삶', k: 'happy', t: '살 만하다', d: '평균 기분이 양수인 주민 70%', max: 70,
+    v: (w) => w.sims.length ? Math.round(100 * w.sims.filter((s) => (s.mood ?? 0) > 0).length / w.sims.length) : 0 },
+  { g: '삶', k: 'cars', t: '길이 붐빈다', d: '자가용 20대', max: 20, v: (w) => w.sims.filter((s) => s.hasCar).length },
+];
+
+function renderGoals() {
+  const box = $('goals-list');
+  if (!box || !world) return;
+  box.replaceChildren();
+  let done = 0;
+  let lastGroup = null;
+  for (const g of GOALS) {
+    let v = 0;
+    try { v = g.v(world) ?? 0; } catch { v = 0; }
+    const pct = Math.max(0, Math.min(100, Math.round(100 * v / g.max)));
+    if (pct >= 100) done++;
+    if (g.g !== lastGroup) {
+      const h = document.createElement('h3');
+      h.textContent = g.g;
+      box.append(h); lastGroup = g.g;
+    }
+    const row = document.createElement('div');
+    row.className = 'g' + (pct >= 100 ? ' done' : '');
+    const head = document.createElement('div');
+    head.className = 'gh';
+    const nm = document.createElement('span');
+    nm.textContent = (pct >= 100 ? '✅ ' : '') + g.t;
+    const val = document.createElement('span');
+    val.className = 'v';
+    val.textContent = g.max === 1 ? (pct >= 100 ? '달성' : '아직')
+      : `${Math.round(v).toLocaleString()} / ${g.max.toLocaleString()}`;
+    head.append(nm, val);
+    const desc = document.createElement('div');
+    desc.className = 'gd';
+    desc.textContent = g.d;
+    const track = document.createElement('div');
+    track.className = 'gt';
+    const fill = document.createElement('div');
+    fill.className = 'gf';
+    fill.style.width = `${pct}%`;
+    track.append(fill);
+    row.append(head, desc, track);
+    box.append(row);
+  }
+  $('goals-count').textContent = `— ${done} / ${GOALS.length} 달성`;
 }
 
 // §23.21 미니맵. 맵은 512×512이고 화면에는 그중 30칸 남짓이 보인다 — 카메라를 끌다 보면
@@ -3159,6 +3320,10 @@ for (const b of document.querySelectorAll('#feed-filter button')) {
   });
 }
 
+// §23.23 목표 배선
+$('goals-btn').addEventListener('click', () => { $('goals-modal').style.display = 'flex'; renderGoals(); });
+$('goals-close').addEventListener('click', () => { $('goals-modal').style.display = 'none'; });
+
 // §23.21 미니맵 클릭 = 그 자리로 간다. 따라가는 중이었다면 손이 이겼으니 따라가기는 끈다.
 $('minimap').addEventListener('click', (ev) => {
   if (!world || !scene) return;
@@ -3260,38 +3425,61 @@ async function showReport() {
   const rep = await fetch(`/api/report?cursor=${cursor}`).then((r) => r.json());
   lsSet('deepsims.lastSeenTick', String(rep.nextCursor));
   if (rep.toTick - rep.fromTick < 60) return; // 1게임시간 미만 공백은 생략
+  // §22.24: 죽은 사람은 world.sims에 없다 — 서버가 died payload에서 모아준 이름으로 푼다
+  const nameOf = (id) => (id === null || id === undefined) ? '누군가'
+    : (world?.sims.some((x) => x.id === id) ? simName(id) : (rep.deadNames?.[id] ?? `심${id}`));
   const lines = []; // 문자열은 전부 textContent로 렌더 (이름 유래 XSS 방지)
   const hours = Math.floor((rep.toTick - rep.fromTick) / 60);
   lines.push(`당신이 없는 동안 게임 시간 ${Math.floor(hours / 24)}일 ${hours % 24}시간이 흘렀습니다.`);
   const count = (t) => rep.counts.find((c) => c.type === t)?.n ?? 0;
-  lines.push(`완료된 행동 ${count('action_completed')}건, 말다툼 ${count('argument')}건, 굶주림 ${count('starving')}건.`);
-  // §22.102 식사 횟수는 뺀다 (사용자 지적: "요약에 식사 몇회 했는지 적는건 별로인 것 같다").
-  // 심마다 '몇 회 먹었다'는 이야기가 아니라 계기판이다 — 요약은 무슨 일이 있었는지를 말해야 한다.
-  for (const w of rep.works) lines.push(`· ${simName(w.sim_id)}: 근무 ${w.n}회`);
-  for (const mo of rep.moneyBySim) lines.push(`· ${simName(mo.sim_id)}: 잔액 ${mo.delta > 0 ? '+' : ''}${mo.delta}원 변동`);
-  if (rep.highlights.length) {
-    lines.push('◆ 주요 사건');
-    for (const h of rep.highlights.slice(0, 10)) {
-      const t = eventText({ ...h, simId: h.sim_id });
+  // ◆ 연대기 — 굵직한 사건을 시간순 이야기로 (이슈 #90, DF 레전드 방식).
+  // 예전 리포트는 74줄 중 61줄이 심별 식사 횟수였고 highlights 50칸 중 48칸을
+  // lonely가 먹었다 (§22.11 지적 5) — 이제 고빈도 지표는 아래 ◇ 집계 한 줄로 접힌다.
+  if (rep.chronicle?.length) {
+    lines.push('◆ 그동안 마을에서는');
+    const shown = {};
+    for (const h of rep.chronicle) {
+      shown[h.type] = (shown[h.type] ?? 0) + 1;
+      const t = chronicleText({ ...h, simId: h.sim_id }, nameOf);
       if (t) lines.push(`· ${fmtClock(h.tick)} ${t}`);
     }
+    // 종류별 상한으로 접힌 것 — 수치는 숨기지 않는다 (§0.1)
+    const folded = rep.counts
+      .filter((c) => CHRON_KO[c.type] && c.n > (shown[c.type] ?? 0))
+      .map((c) => `${CHRON_KO[c.type]} +${c.n - (shown[c.type] ?? 0)}`);
+    if (folded.length) lines.push(`(지면상 접힌 사건: ${folded.join(' · ')})`);
+  } else {
+    lines.push('큰 사건 없이 잔잔하게 흘러간 시간이었습니다.');
   }
+  // 인물 한 줄 — 이 공백 기간의 살림 승자와 곤경
+  const te = rep.totals?.topEarner, ts = rep.totals?.topSpender;
+  if (te && te.delta > 0) lines.push(`💰 벌이가 가장 좋았던 사람: ${nameOf(te.simId)} (+${te.delta}원)`);
+  if (ts && ts.delta < 0 && ts.simId !== te?.simId) lines.push(`🕳️ 주머니가 가장 가벼워진 사람: ${nameOf(ts.simId)} (${ts.delta}원)`);
+  // ◇ 요약 통계 — 하단 한 줄. 식사·근무는 심별 나열 대신 총계다.
+  const md = rep.totals?.moneyDelta ?? 0;
+  // §22.102 사용자가 요청한 식사 횟수 미표시를 연대기 통합에서도 유지한다.
+  lines.push(`◇ 집계: 행동 ${count('action_completed')} · 근무 ${rep.totals?.works ?? 0}`
+    + ` · 말다툼 ${count('argument')} · 외로움 ${count('lonely')} · 굶주림 ${count('starving')}`
+    + ` · 주민 잔액 ${md > 0 ? '+' : ''}${md}원`);
   if (rep.prunedAggregates?.length) {
-    lines.push('◆ 오래된 기간 요약 (일 단위 집계)');
-    const byDay = new Map();
+    // 30일 넘게 비우면 원본 이벤트는 일 집계로 접혀 있다 — 날짜별 나열 대신 종류별로 뭉친다
+    const byCat = new Map(); let total = 0; let dmin = Infinity, dmax = -Infinity;
     for (const a of rep.prunedAggregates) {
       const day = Math.floor(a.day_start_tick / 1440);
-      byDay.set(day, (byDay.get(day) ?? 0) + a.count);
+      dmin = Math.min(dmin, day); dmax = Math.max(dmax, day);
+      total += a.count;
+      if (CHRON_KO[a.category]) byCat.set(a.category, (byCat.get(a.category) ?? 0) + a.count);
     }
-    for (const [day, n] of [...byDay.entries()].sort((x, y) => x[0] - y[0])) {
-      lines.push(`· Day ${day}: 사건 ${n}건`);
-    }
+    const cats = [...byCat.entries()].sort((x, y) => (y[1] - x[1]) || (x[0] < y[0] ? -1 : 1))
+      .map(([c, cnt]) => `${CHRON_KO[c]} ${cnt}`).join(' · ');
+    lines.push(`◆ 더 오래된 나날 (Day ${dmin}~${dmax}, 일 집계)`);
+    lines.push(`· ${cats || '굵직한 사건 없음'} — 그 밖의 것까지 사건 ${total}건`);
   }
   const rc = $('report');
   rc.replaceChildren(...lines.map((l) => {
     const div = document.createElement('div');
     div.textContent = l;
-    if (l.startsWith('◆')) div.style.fontWeight = 'bold';
+    if (l.startsWith('◆') || l.startsWith('◇')) div.style.fontWeight = 'bold';
     return div;
   }));
   $('modal').style.display = 'flex';
