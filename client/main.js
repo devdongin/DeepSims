@@ -239,9 +239,10 @@ class TownScene extends Phaser.Scene {
     };
     const { map } = world;
     // 나무 타일 → 나무 스프라이트
-    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
-      if (map.tiles[y * map.w + x] === 4) put('tree', x, y, 42, 4);
-    }
+    // §22.104 나무도 보이는 범위만 — 맵 전체를 훑으면 변두리 숲까지 스프라이트가 된다
+    this.forEachVisibleTile(this.visibleUV(48), (x, y, i) => {
+      if (map.tiles[i] === 4) put('tree', x, y, 42, 4);
+    });
     for (const fac of map.facilities) {
       if (fac.type === 'house') {
         for (const r of fac.resources) put('bed', r.x, r.y, 24);
@@ -386,6 +387,7 @@ class TownScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#14121a');
     this.ensureTerrain();
     this.mapLayer = this.add.graphics();
+    this.tileLayer = this.add.graphics(); // §22.104 컬링되는 바닥 타일 전용 (시설 폴백과 분리)
     const center = () => this.cameras.main.centerOn(isoX(32, 32), isoY(32, 32)); // 구시가 중심 (128맵)
     this.cameras.main.setZoom(0.65);
     center();
@@ -484,6 +486,73 @@ class TownScene extends Phaser.Scene {
   //   tileScale = zoom → 무늬 한 칸이 화면에서 32*zoom px, 즉 월드 스케일이 유지된다.
   //   tilePosition = 월드뷰 좌상단 + 원래 위상(16, 8) → 예전과 같은 자리에 같은 무늬가 온다.
   // 값이 바뀔 때만 대입한다 — TileSprite 세터는 무조건 dirty를 세워 캔버스를 다시 채우기 때문.
+  // §22.104 타일 컬링. 맵은 512×512 = 26만 칸이고 그중 비-잔디가 37,594칸이다.
+  // 지금까지는 화면 밖 · 접근조차 못 하는 변두리까지 전부 폴리곤으로 채웠다. 아이소 좌표는
+  // u = x-y (가로), v = x+y (세로)로 분리되므로 카메라 사각형을 u·v 구간으로 뒤집으면
+  // 보이는 칸만 정확히 훑을 수 있다. margin은 카메라가 조금 움직여도 다시 안 그리게 하는 여유.
+  visibleUV(marginTiles = 16) {
+    const cam = this.cameras.main;
+    const zoom = cam.zoom > 0 ? cam.zoom : 1;
+    const hw = cam.width / (2 * zoom), hh = cam.height / (2 * zoom);
+    const cx = cam.scrollX + cam.width / 2, cy = cam.scrollY + cam.height / 2;
+    const u0 = (cx - hw) / (TW / 2), u1 = (cx + hw) / (TW / 2);
+    const v0 = (cy - hh) / (TH / 2), v1 = (cy + hh) / (TH / 2);
+    return {
+      minU: Math.floor(u0) - marginTiles, maxU: Math.ceil(u1) + marginTiles,
+      minV: Math.floor(v0) - marginTiles, maxV: Math.ceil(v1) + marginTiles,
+    };
+  }
+
+  // 보이는 칸을 (x, y)로 넘겨준다. v = x+y를 훑고 u는 같은 홀짝만 유효하다.
+  forEachVisibleTile(uv, fn) {
+    const map = world.map;
+    const vLo = Math.max(0, uv.minV), vHi = Math.min(map.w + map.h - 2, uv.maxV);
+    for (let v = vLo; v <= vHi; v++) {
+      // x = (u+v)/2, y = (v-u)/2 → u는 v와 같은 홀짝
+      let uLo = Math.max(uv.minU, v - 2 * (map.h - 1), -v);
+      let uHi = Math.min(uv.maxU, v, 2 * (map.w - 1) - v);
+      if ((uLo + v) % 2 !== 0) uLo++;
+      for (let u = uLo; u <= uHi; u += 2) {
+        const x = (u + v) >> 1, y = (v - u) >> 1;
+        if (x < 0 || y < 0 || x >= map.w || y >= map.h) continue;
+        fn(x, y, y * map.w + x);
+      }
+    }
+  }
+
+  // 카메라가 여유분(margin)을 넘게 움직였을 때만 바닥을 다시 칠한다. 시설·심은 건드리지 않는다.
+  syncTileCulling() {
+    if (!world || !this.tileLayer) return;
+    const cam = this.cameras.main;
+    const d = this.__cullAt;
+    if (d) {
+      const dx = Math.abs(cam.scrollX - d.sx), dy = Math.abs(cam.scrollY - d.sy);
+      const slack = 12 * TW / (cam.zoom > 0 ? cam.zoom : 1);
+      if (cam.zoom === d.zoom && dx < slack && dy < slack) return;
+    }
+    this.redrawTiles();
+  }
+
+  redrawTiles() {
+    if (!world || !this.tileLayer) return;
+    const cam = this.cameras.main;
+    this.__cullAt = { sx: cam.scrollX, sy: cam.scrollY, zoom: cam.zoom };
+    const uv = this.visibleUV();
+    this.bakeGround(uv);
+    this.drawGardens(uv);
+    const g = this.tileLayer; g.clear();
+    const map = world.map;
+    const hasTreeSprite = this.textures.exists('tree');
+    this.forEachVisibleTile(uv, (x, y, i) => {
+      const t = map.tiles[i];
+      if (t === 0) return;
+      if (t === 4 && hasTreeSprite) return;
+      if (this.stamped && this.stamped.has(i)) return;
+      const lift = (t === 3 || t === 4) ? 10 : 0;
+      this.drawTile(g, x, y, TILE_COLORS[t], lift);
+    });
+  }
+
   syncGrassBg() {
     const bg = this.grassBg;
     if (!bg) return;
@@ -512,43 +581,48 @@ class TownScene extends Phaser.Scene {
 
   update() {
     this.syncGrassBg();
+    this.syncTileCulling();
   }
 
   // §UI 도로·바닥 레이어(59차 ③ 재검토): 구시가 한정(0..132) 개별 스탬프 — 실측 1,419개.
   // RenderTexture·캔버스 베이크가 본 임베디드 CANVAS 환경에서 무출력이라(2회 검증) 실측상
   // 원활한 스탬프 방식을 채택, 영역 캡으로 오브젝트 수를 고정한다. 밖은 그래픽 폴백.
-  bakeGround() {
+  bakeGround(uv = null) {
     this.stamped = new Set(); // 타일 루프와 공유 — 셋에 없으면 그래픽 폴백 (60차)
     if (!world || !this.textures.exists('tile_road')) return;
     if (this.roadSprites) for (const r of this.roadSprites) r.destroy();
     this.roadSprites = [];
-    const N = 132;
-    const STAMP_MAX = 2500; // 명시적 오브젝트 상한 (60차) — 초과분은 그래픽 폴백
+    // §22.104 예전엔 "구시가 0..132"로 잘랐다. 도시가 466칸까지 뻗은 지금 그 경계는
+    // 화면과 아무 상관이 없다 — 변두리를 보면 도로가 텍스처 없는 단색으로 나왔다.
+    // 이제 자르는 기준은 **보이는가**뿐이라, 상한 2,500장이 화면 어디서나 텍스처를 덮는다.
+    const STAMP_MAX = 2500; // 명시적 오브젝트 상한 (60차)
     const map = world.map;
-    const lim = Math.min(N, map.w);
-    const hasPave = this.textures.exists('tile_pavement');
-    for (let y = 0; y < lim && this.roadSprites.length < STAMP_MAX; y++) {
-      for (let x = 0; x < lim && this.roadSprites.length < STAMP_MAX; x++) {
-        const t2 = map.tiles[y * map.w + x];
-        const key = TILE_TEX[t2];
-        if (!key || !this.textures.exists(key)) continue;
-        const im = this.add.image(isoX(x, y), isoY(x, y), key).setDisplaySize(TW, TH).setDepth(-5);
-        this.roadSprites.push(im);
-        this.stamped.add(y * map.w + x);
-      }
-    }
+    const bounds = uv ?? this.visibleUV();
+    this.forEachVisibleTile(bounds, (x, y, i) => {
+      if (this.roadSprites.length >= STAMP_MAX) return;
+      const key = TILE_TEX[map.tiles[i]];
+      if (!key || !this.textures.exists(key)) return;
+      const im = this.add.image(isoX(x, y), isoY(x, y), key).setDisplaySize(TW, TH).setDepth(-5);
+      this.roadSprites.push(im);
+      this.stamped.add(i);
+    });
   }
 
   // §22.63 정원 잔디. 목업에서 잔디는 **구획 안에만** 있다 — 공원 발자국이 그 구획이다.
   // 스탬프(-5)·바탕(-10) 사이(-7)에 깔아 도로 타일을 덮지 않는다. 도로·물·벽 타일이 지나가는
   // 칸은 건너뛴다 — 길이 잔디에 잘리면 목업의 "길은 이어진다"가 깨진다.
-  drawGardens() {
+  drawGardens(uv = null) {
     for (const im of this.gardenSprites ?? []) im.destroy();
     this.gardenSprites = [];
     if (!this.textures.exists('tile_garden')) return; // 에셋이 아직 없다 (무해)
     const map = world.map;
+    const b = uv ?? this.visibleUV();
     for (const fac of map.facilities) {
       if (fac.type !== 'park') continue;
+      // §22.104 공원 하나가 잔디·디딤돌·화단으로 수백 장을 만든다. 화면 밖 공원은 아예 건넌다.
+      const u0 = fac.x - (fac.y + fac.h), u1 = (fac.x + fac.w) - fac.y;
+      const v0 = fac.x + fac.y, v1 = fac.x + fac.w + fac.y + fac.h;
+      if (u1 < b.minU || u0 > b.maxU || v1 < b.minV || v0 > b.maxV) continue;
       for (let y = fac.y; y < fac.y + fac.h; y++) {
         for (let x = fac.x; x < fac.x + fac.w; x++) {
           if (x < 0 || y < 0 || x >= map.w || y >= map.h) continue;
@@ -605,17 +679,8 @@ class TownScene extends Phaser.Scene {
       g.lineTo(isoX(0, map.h), isoY(0, map.h));
       g.closePath(); g.fillPath();
     }
-    this.bakeGround(); // 스탬프 셋을 타일 루프 전에 확정 (60차)
-    this.drawGardens(); // §22.63 공원 발자국 = 잔디 구획 (텍스처 없으면 무동작)
-    // 비-GRASS 타일만 개별 렌더
-    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
-      const t = map.tiles[y * map.w + x];
-      if (t === 0) continue;
-      if (t === 4 && hasTreeSprite) continue; // 나무는 스프라이트로
-      if (this.stamped && this.stamped.has(y * map.w + x)) continue; // §UI 스탬프 레이어 담당 (60차: 셋 기반 — 캡·pavement 부재 자동 폴백)
-      const lift = (t === 3 || t === 4) ? 10 : 0; // 벽·나무는 살짝 올림
-      this.drawTile(g, x, y, TILE_COLORS[t], lift);
-    }
+    this.__cullAt = null; // 지형이 바뀌었을 수 있다 — 카메라가 그대로여도 다시 칠한다
+    this.redrawTiles(); // §22.104 바닥·스탬프·정원은 보이는 칸만
     this.computeFacModes();
     this.drawProps();
     let houseIdx = 0;
@@ -785,6 +850,7 @@ class TownScene extends Phaser.Scene {
 // §22.99 진단 창구 — OOM을 쫓을 때 "무엇이 몇 개인가"를 콘솔에서 바로 본다.
 // 힙 수치만 보면 GC 타이밍에 속는다. 개수는 속지 않는다.
 window.__diag = () => ({
+  tileCmds: window.__game?.scene?.scenes?.[0]?.tileLayer?.commandBuffer?.length ?? 0, // §22.104 바닥 그리기 명령 수
   sims: world?.sims?.length ?? 0,
   simSprites: simSprites.size,
   bubbles: bubbles.size,
@@ -816,6 +882,8 @@ const game = new Phaser.Game({
   scene: TownScene,
   banner: false,
 });
+
+window.__game = game; // §22.104 컬링 실측 창구 (씬·카메라·커맨드 버퍼)
 
 // #106 창 크기가 바뀌어도 캔버스가 로드 시점 크기에 머무는 문제.
 // RESIZE 모드는 부모(#game)를 따라가지만 그리드 폭 변화를 놓치는 경우가 있어
@@ -2568,7 +2636,15 @@ $('ob-submit').addEventListener('click', async () => {
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
 
+// §22.102 요약은 **세션에 한 번**만 띄운다 (사용자 지적: "48배속으로 돌리다보면 게임이
+// 잠깐 멈췄다가 요약으로 보여주는데 문제가 있는 것 같다"). 고배속에서는 리싱크 스냅샷이
+// 주기적으로 오는데, 스냅샷 처리에서 showReport를 부르고 있었다 — 그래서 플레이 도중
+// "부재중 리포트"가 반복해서 튀어나왔다. 부재중 요약은 **돌아왔을 때 한 번** 보는 것이다.
+let reportShown = false;
+let lastWorldKey = null; // §22.102 전면 재빌드가 필요한지 판단하는 지도 서명
 async function showReport() {
+  if (reportShown) return;
+  reportShown = true;
   const cursor = Number(lsGet('deepsims.lastSeenTick') || 0);
   const rep = await fetch(`/api/report?cursor=${cursor}`).then((r) => r.json());
   lsSet('deepsims.lastSeenTick', String(rep.nextCursor));
@@ -2578,7 +2654,8 @@ async function showReport() {
   lines.push(`당신이 없는 동안 게임 시간 ${Math.floor(hours / 24)}일 ${hours % 24}시간이 흘렀습니다.`);
   const count = (t) => rep.counts.find((c) => c.type === t)?.n ?? 0;
   lines.push(`완료된 행동 ${count('action_completed')}건, 말다툼 ${count('argument')}건, 굶주림 ${count('starving')}건.`);
-  for (const m of rep.meals) lines.push(`· ${simName(m.sim_id)}: 식사 ${m.n}회`);
+  // §22.102 식사 횟수는 뺀다 (사용자 지적: "요약에 식사 몇회 했는지 적는건 별로인 것 같다").
+  // 심마다 '몇 회 먹었다'는 이야기가 아니라 계기판이다 — 요약은 무슨 일이 있었는지를 말해야 한다.
   for (const w of rep.works) lines.push(`· ${simName(w.sim_id)}: 근무 ${w.n}회`);
   for (const mo of rep.moneyBySim) lines.push(`· ${simName(mo.sim_id)}: 잔액 ${mo.delta > 0 ? '+' : ''}${mo.delta}원 변동`);
   if (rep.highlights.length) {
@@ -2641,7 +2718,17 @@ function connect() {
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
-        if (scene) { destroySimSprites(); scene.drawWorld(); }
+        {
+          // §22.102 **스냅샷마다 지도를 통째로 다시 그려서 화면이 멈췄다.** 리싱크는 고배속에서
+          // 주기적으로 오는데 그때마다 스프라이트 수천 개를 부수고 다시 만들었다.
+          // 시설 수·타일 버전이 그대로면 다시 그릴 이유가 없다 — 심 위치는 tickBatch가 옮긴다.
+          const key = `${world.map.facilities.length}:${world.map.tiles.length}:${world.terrainVersion ?? 0}`;
+          if (scene && key !== lastWorldKey) {
+            lastWorldKey = key;
+            destroySimSprites();
+            scene.drawWorld();
+          }
+        }
         showReport();
         maybeShowOnboarding();
         renderPanel();
@@ -2940,8 +3027,59 @@ setInterval(pushSpark, 5000);
     const last = hist[hist.length - 1];
     const happiness = Math.round(((last.avgMood + 10000) / 200)); // mood -10000..10000 → 0..100%
     const emp = last.pop > 0 ? Math.round(last.employed * 100 / last.pop) : 0;
-    document.getElementById('dash-cards').textContent =
-      `😊 행복도 ${happiness}% · 💼 고용률 ${emp}% · 👥 ${last.pop}명 · 🏛️ ${last.treasury.toLocaleString()}원 · ⭐ 평판 ${last.reputation} · ${['🏡 마을','🏘️ 읍','🏙️ 시','🌆 대도시'][last.tier]}`;
+    // §22.103 **세계 상태를 한 화면에서 본다** (사용자 요청). 한 줄 카드로는 무엇이 막혀
+    // 있는지 안 보인다. 화면이 이미 들고 있는 world에서 계산한다 — 서버 왕복 없음.
+    // 고르는 기준: **막힌 곳이 보이는 수치**만 넣는다. 침대 여유는 인구 상한(#122),
+    // 공공직 비율은 재정 적자의 원인(#113), 배고픔·외로움은 G5(고통이 보인다)다.
+    const simsAll = world?.sims ?? [];
+    // 스냅샷에는 logic이 오지 않는다(§22.8 투영은 화면이 쓰는 필드만 보낸다). 임금 재원
+    // 구분은 sim/logic.js의 화이트리스트와 같은 값을 여기 둔다 — 바뀌면 QA-19가 직업
+    // 커버리지에서 먼저 잡는다.
+    const pubSet = new Set(['doctor', 'nurse', 'teacher', 'civil_servant', 'politician', 'police', 'firefighter']);
+    const privSet = new Set(['barista', 'chef', 'clerk']);
+    const beds = (world?.map?.facilities ?? [])
+      .filter((f) => f.type === 'house' || f.type === 'apartment')
+      .reduce((n, f) => n + (f.resources?.length ?? 0), 0);
+    const workers = simsAll.filter((x) => !['child', 'retired', 'student', 'jobless'].includes(x.traits?.occupation));
+    const pubN = workers.filter((x) => pubSet.has(x.traits?.occupation)).length;
+    const privN = workers.filter((x) => privSet.has(x.traits?.occupation)).length;
+    const low = (x, k) => (x.needs?.[k] ?? 9999) < 2000;
+    const hungry = simsAll.filter((x) => low(x, 'hunger')).length;
+    const lonely = simsAll.filter((x) => low(x, 'social')).length;
+    const tired = simsAll.filter((x) => low(x, 'energy')).length;
+    const sickN = simsAll.filter((x) => x.sick).length;
+    const broke = simsAll.filter((x) => (x.money ?? 0) < 300).length;
+    const avgMoney = simsAll.length ? Math.round(simsAll.reduce((n, x) => n + (x.money ?? 0), 0) / simsAll.length) : 0;
+    const facByType = {};
+    for (const f of world?.map?.facilities ?? []) facByType[f.type] = (facByType[f.type] ?? 0) + 1;
+    let road = 0; let side = 0;
+    for (const t of world?.map?.tiles ?? []) { if (t === 1) road++; else if (t === 12) side++; }
+    const h7 = hist.slice(-8);
+    const slope = h7.length >= 2 ? Math.round((h7[h7.length - 1].treasury - h7[0].treasury) / (h7.length - 1)) : 0;
+    const pct = (n) => (simsAll.length ? Math.round(n * 100 / simsAll.length) : 0);
+    const couples = Math.floor(Object.keys(world?.partners ?? {}).length / 2);
+
+    const rows = [
+      ['사람', `👥 ${last.pop}명 · 😊 행복 ${happiness}% · 💼 고용 ${emp}% · 💑 커플 ${couples}쌍`],
+      ['주거', `🛏️ 침대 ${beds}개 · 여유 ${beds - last.pop}개${beds - last.pop <= 0 ? '  ⚠️ 이민이 막힌다' : ''}`],
+      ['일자리', `🏛️ 공공 ${pubN} · 🏪 민간서비스 ${privN} · 그 밖 ${workers.length - pubN - privN}` + (workers.length ? ` (공공 ${Math.round(pubN * 100 / workers.length)}%)` : '')],
+      ['살림', `🏛️ ${last.treasury.toLocaleString()}원 · 하루 ${slope >= 0 ? '+' : ''}${slope.toLocaleString()}원 · 평균 소지금 ${avgMoney.toLocaleString()}원`],
+      ['고통', `🍚 배고픔 ${hungry}(${pct(hungry)}%) · 😔 외로움 ${lonely} · 😴 피로 ${tired} · 🤒 아픔 ${sickN} · 💸 빈곤 ${broke}`],
+      ['도시', `🏗️ 시설 ${(world?.map?.facilities ?? []).length}곳 · 🛣️ 도로 ${road} · 🚶 인도 ${side} · ⭐ 평판 ${last.reputation}`],
+      ['구성', Object.entries(facByType).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k === 'house' ? '집' : k === 'apartment' ? '아파트' : (PLACE_KO[k] ?? k)} ${v}`).join(' · ')],
+    ];
+    const box = document.getElementById('dash-cards');
+    box.replaceChildren(...rows.map(([label, text]) => {
+      const d = document.createElement('div');
+      d.style.cssText = 'display:flex;gap:8px;margin:3px 0;line-height:1.5';
+      const lb = document.createElement('span');
+      lb.textContent = label;
+      lb.style.cssText = 'color:#8f88a0;min-width:52px;flex:0 0 auto';
+      const vv = document.createElement('span');
+      vv.textContent = text;
+      d.append(lb, vv);
+      return d;
+    }));
   }
   btn.addEventListener('click', () => { modal.style.display = 'flex'; drawDash(); });
   document.getElementById('dash-close').addEventListener('click', () => { modal.style.display = 'none'; });
