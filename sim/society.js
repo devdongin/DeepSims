@@ -962,6 +962,14 @@ export function maybeFiscalReview(world, t, day, emit) {
   const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
   const hoard = world.treasury > floorDiv(cashTotal * E.hoardRatioPct, 100);
   const runway = world.treasury < floorDiv(cashTotal * F.lowRatioPct, 100);
+  // 수준만 보면 바닥을 치고 회복 중인 세계도 계속 긴축한다. 최근 일일 관측값의
+  // 기울기를 함께 읽어 진단 근거를 남긴다(초기에는 0으로 보수적으로 처리).
+  const hist = world.statsHistory ?? [];
+  const window = hist.slice(-7);
+  const treasuryTrend = window.length >= 2
+    ? (window[window.length - 1].treasury - window[0].treasury) / (window.length - 1) : 0;
+  const populationTrend = window.length >= 2
+    ? (window[window.length - 1].pop - window[0].pop) / (window.length - 1) : 0;
   // 빈곤 신호 — 세계가 이미 집계한 불만과 심의 굶은 시간에서 읽는다 (새 계측 없음)
   const hungry = world.sims.some((s) => (s.hungerZeroTicks ?? 0) > 0)
     || (world.complaints ?? []).some((c) => c.kind === 'hungry');
@@ -981,7 +989,7 @@ export function maybeFiscalReview(world, t, day, emit) {
       changes.taxPct = Math.max(5, cur.taxPct - F.stepTaxPct);
       reason = 'hoard_taxcut';
     }
-  } else if (runway) {
+  } else if (runway && treasuryTrend <= 0) {
     // 긴축 — **지출 조정이 먼저, 세율은 최후 수단이다** (Helm & Stuhler 2024:
     // 독일 지자체 준실험에서 지출은 충격에 수년 안에 적응하지만 세율은 10년 이상
     // 걸리는 가장 느린 도구였다). 처음엔 세율부터 올리게 짰다가 문헌 조사에서
@@ -1006,6 +1014,7 @@ export function maybeFiscalReview(world, t, day, emit) {
   emit('policy_changed', world.mayorId, {
     source: mayor ? 'mayor' : 'interim', reason, changes, before,
     treasury: world.treasury, cashTotal,
+    diagnosis: { treasuryTrend, populationTrend, hoard, runway, hungry, noMoney },
     campaign: campaignStart, // Rogoff 순환 관측용
   });
   if (mayor) recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', reason] });
