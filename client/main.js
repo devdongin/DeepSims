@@ -3825,40 +3825,49 @@ setInterval(pushSpark, 5000);
   // 착공 레시피(ZONEABLE·비용)는 후속 라운드 — 언락 전에는 충족도 %를, 언락 후에는
   // 언락 사실을 보여주고 '지시'는 잠근다 (서버가 bad_type으로 거부할 주문을 보내지 않는다).
   const stationLocked = () => !(world?.transit?.stationUnlocked);
+  const jurisdiction = () => {
+    const id=cur?.villageId??'village:0';
+    const village=world?.villages?.find(v=>v.id===id);
+    return {id,name:village?.name??id,government:id==='village:0'?world:village?.government};
+  };
   const render = () => {
+    const local=jurisdiction();
     const isStation = type === 'train_station';
     const need = TIER_NEED[type] ?? 0;
     const industryLocked = ['workshop','lab','warehouse'].includes(type) && !world?.unlockedIndustries?.includes(type);
-    const locked = (world?.cityTier ?? 0) < need || industryLocked;
+    const locked = !local.government || (local.government.cityTier ?? 0) < need || industryLocked;
     const pct = world?.transit?.fulfillmentPct ?? 0;
     const info = isStation
       ? `공터 ${cur.plotId} · ${type} · ` + (stationLocked()
         ? `🔒 이동 수요 ${pct}% — 100%에 언락`
         : `🚉 언락됨 (수요 ${pct}%) · 착공 레시피는 후속 라운드`)
       : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원` + (locked ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
-    document.getElementById('zone-info').textContent = info;
+    document.getElementById('zone-info').textContent = `${local.name} · 국고 ${local.government?.treasury??'?'}원 · ${info}`;
     for (const b of modal.querySelectorAll('[data-zt]')) {
       const zt = b.dataset.zt;
-      const dim = zt === 'train_station' ? stationLocked() : (world?.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt));
+      const dim = zt === 'train_station' ? stationLocked() : !local.government || (local.government.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt));
       b.style.opacity = dim ? 0.4 : 1;
       b.style.borderColor = zt === type ? '#ffcf6a' : '#6b5638';
     }
     const go = document.getElementById('zone-go');
     const center = document.getElementById('zone-center');
-    const planned = world?.centers?.some((c) => c.x === cur.x && c.y === cur.y);
+    const planned = world?.centers?.some((c) => c.x === cur.x && c.y === cur.y && (c.villageId??'village:0')===local.id);
     center.textContent = planned ? '이미 지정된 계획 중심지' : `이 공터를 계획 중심지로 지정 (−${world?.plannedCenterCost ?? 5000}원)`;
-    center.disabled = !!planned;
-    go.disabled = isStation;
-    go.style.opacity = isStation ? 0.4 : 1;
+    center.disabled = !!planned || !local.government;
+    go.disabled = isStation || locked;
+    go.style.opacity = go.disabled ? 0.4 : 1;
   };
-  const plotsAvailable = () => (world?.plots ?? []).filter((p) => !p.used && !world.projects?.some((pr) => pr.plotId === p.plotId));
+  const plotsAvailable = () => (world?.plots ?? []).filter((p) => !p.used && p.foundingPetitionId==null
+    && !world.projects?.some((pr) => pr.plotId === p.plotId)
+    && !world.zoneOrders?.some((pr) => pr.plotId === p.plotId));
   window.openZoneModal = (plot) => {
     cur = plot; dir = 0; type = 'house';
     const select = document.getElementById('zone-plot');
     select.replaceChildren();
     for (const p of plotsAvailable()) {
       const option = document.createElement('option');
-      option.value = String(p.plotId); option.textContent = `공터 ${p.plotId} (${p.x}, ${p.y})`;
+      const name=world.villages?.find(v=>v.id===(p.villageId??'village:0'))?.name??(p.villageId??'village:0');
+      option.value = String(p.plotId); option.textContent = `${name} · 공터 ${p.plotId} (${p.x}, ${p.y})`;
       select.appendChild(option);
     }
     select.value = String(plot.plotId);
@@ -3877,17 +3886,19 @@ setInterval(pushSpark, 5000);
   document.getElementById('zone-rot').addEventListener('click', () => { dir = (dir + 1) % 4; render(); });
   document.getElementById('zone-close').addEventListener('click', () => { modal.style.display = 'none'; });
   document.getElementById('zone-center').addEventListener('click', async () => {
+    if(document.getElementById('zone-center').disabled)return;
     const msg = document.getElementById('zone-msg');
     try {
       const res = await fetch('/api/input', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientInputId: `center:${crypto.randomUUID()}`, command: 'plan_center', payload: { x: cur.x, y: cur.y } }),
+        body: JSON.stringify({ clientInputId: `center:${crypto.randomUUID()}`, command: 'plan_center', payload: { x: cur.x, y: cur.y, villageId:jurisdiction().id } }),
       });
       const j = await res.json();
       msg.textContent = res.ok ? '지정 요청을 보냈습니다. 적용 결과는 사건 기록에 표시됩니다.' : `거부: ${j.error}`;
     } catch { msg.textContent = '요청을 보내지 못했습니다. 연결을 확인하세요.'; }
   });
   document.getElementById('zone-go').addEventListener('click', async () => {
+    if(document.getElementById('zone-go').disabled)return;
     const res = await fetch('/api/input', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientInputId: `zone:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
