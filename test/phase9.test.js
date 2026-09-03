@@ -155,6 +155,7 @@ test('S-5. 이민: 빈 침대가 있어야 오고, 인구가 늘고, 이웃 기�
 test('S-6. 연애 수명주기: 교제 → 결혼(+이주) → (별도) 파혼', () => {
   const w = createWorld(SEED);
   const [a, b] = w.sims;
+  a.traits.age=b.traits.age=25; // Adult relationship fixture; generated ages include minors.
   // 교제 조건 충족
   w.affinity[0][1] = 7000; w.affinity[1][0] = 7000;
   w.interactions[0][1] = 150; w.interactions[1][0] = 150;
@@ -182,6 +183,7 @@ test('S-6. 연애 수명주기: 교제 → 결혼(+이주) → (별도) 파혼',
   // 파혼 (다른 페어로)
   const w2 = createWorld(SEED);
   w2.partners[2] = 3; w2.partners[3] = 2;
+  w2.sims[2].traits.age=w2.sims[3].traits.age=25;
   w2.partnerStage[2] = 'dating'; w2.partnerStage[3] = 'dating';
   w2.affinity[2][3] = 1000; // < breakup
   idleAll(w2, []);
@@ -271,6 +273,7 @@ test('S-11. §17.9: 결혼식 잔치 토큰·유세·새해 (결정적)', () => 
   // 결혼식: S-6과 같은 세팅으로 married 유발 → 잔치 토큰이 친구들에게 인지되는지
   const w = createWorld(SEED);
   const [a, b] = w.sims;
+  a.traits.age=b.traits.age=25;
   w.partners[0] = 1; w.partners[1] = 0;
   w.partnerStage[0] = 'dating'; w.partnerStage[1] = 'dating';
   w.affinity[0][1] = 9500; w.affinity[1][0] = 9500;
@@ -384,6 +387,7 @@ test('S-14. §17.11 개정: 별거 부부 신혼집 이사 + 별거 수요 건�
   // ⓑ 신혼집: lo 집도 만원 → 빈 침대 2개 집으로 부부가 함께 이사
   const w = createWorld(SEED);
   const a = w.sims[0]; const b = w.sims[2];
+  a.traits.age=b.traits.age=25;
   w.partners[0] = 2; w.partners[2] = 0;
   w.partnerStage[0] = 'married'; w.partnerStage[2] = 'married';
   assert.notEqual(a.homeId, b.homeId, '전제: 별거');
