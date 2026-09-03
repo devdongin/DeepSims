@@ -367,6 +367,7 @@ function sendSnapshot(ws) {
     transportStats: { today: engine.world.transportStats.today, history: engine.world.transportStats.history },
     storyteller: engine.world.storyteller,
     foodSupply: engine.world.foodSupply,
+    season: engine.world.season,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,

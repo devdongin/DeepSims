@@ -16,8 +16,9 @@ import { applyChildAllowance } from './family-policy.js';
 import { applyHouseholdIntents, evaluateHouseholds } from './household.js';
 import { settleHousing } from './housing.js';
 import { resolveStoryCandidates } from './storyteller.js';
+import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
-  completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve } from './food-supply.js';
+  completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
   recordTransportArrival, pruneTransportTrips, recordTransportEvent, transportSummary } from './transport-stats.js';
 import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
@@ -112,6 +113,7 @@ function needValueFor(sim, action, L) {
   if (action === 'work') return Math.min(sim.money, NEED_MAX); // 돈 0 → deficit 최대
   if (action === SUPPLY_ACTION) return Math.min(sim.money, NEED_MAX);
   if (action === GROW_ACTION) return Math.min(sim.money, NEED_MAX);
+  if (action === STOCK_ACTION) return NEED_MAX - L.seasons.stockDeficit;
   // coping: 기분이 나쁠수록 급함 — deficit = -mood (게이트로 mood < 0 보장, §15.1.A)
   if (COPING_ACTIONS.includes(action)) return NEED_MAX + sim.mood;
   if (action === 'build') return NEED_MAX - L.build.deficit; // 고정 중간 급함 (§15.1.B)
@@ -186,7 +188,7 @@ function scoreCandidate(sim, action, res, L, prepared = null) {
 // 아이는 먹고 자고 놀고 어울리고 배운다.
 const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol',
   'drink', 'binge_eat', 'shop', 'see_doctor', 'fish',
-  'volunteer', SUPPLY_ACTION, GROW_ACTION]); // §23.8 봉사는 어른 몫 — 산책·텃밭·연주·보드게임은 아이도 한다
+  'volunteer', SUPPLY_ACTION, GROW_ACTION, STOCK_ACTION]); // §23.8 봉사는 어른 몫 — 산책·텃밭·연주·보드게임은 아이도 한다
 const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol', SUPPLY_ACTION, GROW_ACTION]);
 
 // §22.18 (Codex 110차 ①) **'갈 곳이 없다'와 '자리가 다 찼다'는 다르다.**
@@ -228,7 +230,7 @@ export function facilityShortfallKind(world, sim, action, t) {
       anyFacility = true;
       for (const res of fac.resources) {
         if (fac.type === 'mall'
-          && ((action === 'shop' && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
+          && (((action === 'shop' || action === STOCK_ACTION) && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
         const holder = world.reservations[resKey(fac.id, res.id)];
         if (holder !== undefined && holder !== sim.id) continue;
         anyFree = true;
@@ -264,9 +266,11 @@ export function actionBlockReason(world, sim, action, t) {
     if (sim.education.studyDay === day && sim.education.dailyTicks >= L.education.dailyStudyTicks) return 'not_needed';
   }
   if (sim.traits.occupation === 'child' && CHILD_BLOCKED.has(action)) return 'too_young';
+  if (action === STOCK_ACTION && !shouldStockFood(world, sim, t)) return 'not_needed';
   if (action === 'see_doctor') return medicalBlockReason(world, sim);
-  const cost = L.actions[action]?.cost ?? 0;
+  const cost = action === 'shop' || action === STOCK_ACTION ? purchaseCost(world, sim, action) : (L.actions[action]?.cost ?? 0);
   if (cost > 0 && sim.money < cost) return 'no_money';
+  if (action === STOCK_ACTION && sim.money - cost < L.actions.eat.cost) return 'not_needed'; // 비축 뒤에도 긴급 한 끼 현금은 남긴다.
   if (action === 'work') {
     const ww = workWindowFor(sim, L, floorDiv(t, 1440)); // §17.13 단일 권위 (일별 야근 포함)
     if (!ww) return 'off_hours';
@@ -277,12 +281,12 @@ export function actionBlockReason(world, sim, action, t) {
     if (sim.traits.occupation !== 'firefighter') return 'not_needed';
     if (world.incidents.length === 0) return 'no_project'; // 불이 없다
   }
-  if (action === 'shop' && (sim.groceries > 0 || sim.money < L.actions.shop.cost)) {
-    return sim.money < L.actions.shop.cost ? 'no_money' : 'not_needed'; // 장바구니 차 있으면 불필요 (§16.B)
+  if (action === 'shop' && (sim.groceries > 0 || sim.money < cost)) {
+    return sim.money < cost ? 'no_money' : 'not_needed'; // 장바구니 차 있으면 불필요 (§16.B)
   }
-  if (action === 'shop') {
+  if (action === 'shop' || action === STOCK_ACTION) {
     const shops = world.map.facilities.filter(sellsGroceries);
-    if (shops.length && !shops.some(f => (f.groceryStock ?? 0) >= purchaseQuantity(world, sim))) return 'no_stock';
+    if (shops.length && !shops.some(f => (f.groceryStock ?? 0) >= purchaseQuantity(world, sim, action))) return 'no_stock';
   }
   if (action === 'cook_eat' && sim.groceries < 1) return 'no_groceries';
   if (action === 'construct' && world.projects.length === 0) return 'no_project';
@@ -436,7 +440,7 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
       const facilities = HOME_ONLY_ACTIONS.includes(action)
         ? (home?.type === ftype ? [home] : []) : (byType.get(ftype) ?? []);
       for (const fac of facilities) {
-        if (action === 'shop' && (fac.groceryStock ?? 0) < purchaseQuantity(world, sim)) continue;
+        if ((action === 'shop' || action === STOCK_ACTION) && (fac.groceryStock ?? 0) < purchaseQuantity(world, sim, action)) continue;
         if (action === SUPPLY_ACTION && !deliveryQuote(world, sim, fac).ok) continue;
         // §23.8 보드게임은 **혼자 할 수 없다.** 사람이 없는 카페에서는 후보가 아니다.
         // 게이트를 안 두면 30일 실측에서 480건까지 치솟아 놀이(71)·독서(72)를 밀어냈다.
@@ -471,7 +475,7 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
         let memo = memoCache.get(memoKey);
         for (const res of available) {
           // Action-dependent mall filtering must not leak into the shared availability cache.
-          if (fac.type === 'mall' && (((action === 'shop' || action === SUPPLY_ACTION) && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
+          if (fac.type === 'mall' && (((action === 'shop' || action === STOCK_ACTION || action === SUPPLY_ACTION) && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
           if (!memo) {
             const pl0 = (ctx && ctx.urgency)
               ? { factor: 100, partyPull: false }
@@ -909,6 +913,7 @@ export function tick(world, inputsForThisTick = []) {
 
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
+  updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
 
   // A guardian can die/emigrate between ticks. Never leave a child frozen or a
@@ -1154,11 +1159,11 @@ export function tick(world, inputsForThisTick = []) {
       // §23.8 텃밭은 **먹거리를 만든다** — 여가가 살림에 닿는 유일한 통로다.
       // 바깥에서 들어온 것이 아니라 땅에서 난 것이므로 돈이 아니라 식재료로 센다.
       const before = sim.groceries;
-      sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.garden.groceriesGain);
+      sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + seasonalYield(world, L.actions.garden.groceriesGain, t));
       recordGardenProduce(world, sim, before, emit);
     } else if (s.action === GROW_ACTION) {
       const before = sim.groceries;
-      sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.grow_groceries.groceriesGain);
+      sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + seasonalYield(world, L.actions.grow_groceries.groceriesGain, t));
       recordGardenProduce(world, sim, before, emit, GROW_ACTION);
     } else if (s.action === 'volunteer') {
       // 봉사는 마을의 평판을 올린다. 평판은 이민을 부르므로(§society.immigration)
@@ -1174,7 +1179,7 @@ export function tick(world, inputsForThisTick = []) {
     } else if (s.action === 'fish') {
       // §16.B: 완료 시 단 1드로우 (중단 시 정산 미도달 → 드로우 없음). 서브순서:
       // 드로우 → (성공 시) money+이벤트 / (허탕) mood 감점 → 이후 공통 완료 경로 (Codex 22차 항목 4)
-      const catchAmt = rngInt(world.rngSim, L.actions.fish.catchSpan);
+      const catchAmt = seasonalYield(world, rngInt(world.rngSim, L.actions.fish.catchSpan), t, 'fish');
       if (catchAmt > 0) {
         sim.money += catchAmt;
         world.externalInflow = (world.externalInflow ?? 0) + catchAmt; // §22.4 경계 유입 (강에서 온 것)
@@ -1190,8 +1195,8 @@ export function tick(world, inputsForThisTick = []) {
         emit('action_failed', sim.id, { action: s.action, reason: medicalBlockReason(world, sim) ?? 'invalid_site' });
         releaseReservation(world, sim); sim.state = emptyState(); continue;
       }
-    } else if (s.action === 'shop') {
-      const result = completeGroceryPurchase(world, sim, s.facilityId, emit);
+    } else if (s.action === 'shop' || s.action === STOCK_ACTION) {
+      const result = completeGroceryPurchase(world, sim, s.facilityId, emit, s.action);
       if (!result.ok) {
         emit('action_failed', sim.id, { action: s.action, reason: result.reason });
         releaseReservation(world, sim); sim.state = emptyState(); continue;
@@ -1345,6 +1350,7 @@ export function tick(world, inputsForThisTick = []) {
       if (need === 'energy' && age >= L.ageDecay.oldMin) d += L.ageDecay.oldEnergyAdd;
       if (need === 'energy') d = floorDiv(d * circadianEnergyPct(sim, L, t), 100); // §17.16 수면 압력 (개인 위상)
       if (need === 'energy' && sim.hangoverUntil > t) d += L.coping.hangoverEnergyDecay; // 숙취 (§15.1.A)
+      if (need === 'energy') d += winterExposureCost(world, sim);
       if (sim.sick && (need === 'energy' || need === 'fun')) d += floorDiv(d * L.disease.decayFactorNum, L.disease.decayFactorDen); // 병 (§17.3)
       const before = sim.needs[need];
       sim.needs[need] = Math.max(0, before - d);

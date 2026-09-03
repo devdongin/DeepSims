@@ -89,26 +89,33 @@ export function completeDelivery(world, sim, facilityId, emit) {
   return quote;
 }
 
-export function purchaseQuantity(world, sim) {
-  return Math.max(0, Math.min(world.logic.actions.shop.groceriesGain, world.logic.market.maxGroceries - sim.groceries));
+export function purchaseQuantity(world, sim, action = 'shop') {
+  return Math.max(0, Math.min(world.logic.actions[action].groceriesGain, world.logic.market.maxGroceries - sim.groceries));
 }
 
-export function completeGroceryPurchase(world, sim, facilityId, emit) {
-  const fac = world.map.facilities.find(f => f.id === facilityId), quantity = purchaseQuantity(world, sim);
+export function purchaseCost(world, sim, action = 'shop') {
+  const A = world.logic.actions[action];
+  return Math.ceil(A.cost * purchaseQuantity(world, sim, action) / A.groceriesGain);
+}
+
+export function completeGroceryPurchase(world, sim, facilityId, emit, action = 'shop') {
+  const fac = world.map.facilities.find(f => f.id === facilityId), quantity = purchaseQuantity(world, sim, action);
+  const cost = purchaseCost(world, sim, action);
   if (!fac || !sellsGroceries(fac)) return { ok: false, reason: 'no_facility' };
   if (world.incidents.some(i => i.facilityId === fac.id)) return { ok: false, reason: 'invalid_site' };
   if (!quantity) return { ok: false, reason: 'not_needed' };
-  if (sim.money < world.logic.actions.shop.cost) return { ok: false, reason: 'no_money' };
+  const reserve = action === 'stock_food' ? world.logic.actions.eat.cost : 0;
+  if (sim.money < cost + reserve) return { ok: false, reason: 'no_money' };
   if ((fac.groceryStock ?? 0) < quantity) {
     world.foodSupply.totals.stockFailures++;
     return { ok: false, reason: 'no_stock' };
   }
   fac.groceryStock -= quantity; sim.groceries += quantity;
-  sim.money -= world.logic.actions.shop.cost;
-  fac.revenue = (fac.revenue ?? 0) + world.logic.actions.shop.cost;
+  sim.money -= cost;
+  fac.revenue = (fac.revenue ?? 0) + cost;
   world.foodSupply.totals.soldUnits += quantity;
-  emit('goods_purchased', sim.id, { facilityId, quantity, stock: fac.groceryStock });
-  emit('money_changed', sim.id, { delta: -world.logic.actions.shop.cost, balance: sim.money, action: 'shop' });
+  emit('goods_purchased', sim.id, { facilityId, quantity, stock: fac.groceryStock, action });
+  emit('money_changed', sim.id, { delta: -cost, balance: sim.money, action });
   return { ok: true, quantity };
 }
 
