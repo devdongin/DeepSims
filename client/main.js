@@ -856,7 +856,9 @@ function actKo(id) { return ACTION_TRY_KO[id] ?? '뭘 좀 하려'; }
 function placeKo(id) {
   if (!id) return '동네';
   if (id.startsWith('house')) return '집';
-  return PLACE_KO[id] ?? id;
+  const facility = world?.map?.facilities?.find((f) => f.id === id);
+  if (facility) return PLACE_KO[facility.type] ?? '동네';
+  return PLACE_KO[id] ?? '동네';
 }
 
 // 대화 문장 생성 — 구조화 payload(detail)의 실제 데이터로 구체적인 말을 만든다 (§16 강화).
