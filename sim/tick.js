@@ -23,7 +23,7 @@ import {
   dailyDiseaseDraws, contagionDraw, naturalRecovery, maybeElection, mayorStipend, applyWelfare,
   dailyFireDraws, fireSelfOut, resolveFire, maybePromotion, zoneAllowedTypes, maybeBuyCar,
   collectComplaints, maybePetition, decayComplaints,
-  maybeImmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
+  maybeImmigration, maybeEmigration, checkClubJoin, clubMeetingTokens, pairDeltaBonus, applyRomance,
   updateCampaigners, maybeNewYear, maybeFestival, maybeChildren, maybeShare, maybeJobSwitch, maybeDeaths, growIdMatrices, remitPublicRevenue, maybeApproach, nextSimId, maybeFiscalReview, maybePublicWorks, evalStationDemand } from './society.js';
 import { bindSocietyHooks } from './cognition.js';
 bindSocietyHooks(applyRomance, checkClubJoin); // §17: 회고 훅 (모든 진입 경로에서 보장)
@@ -1189,6 +1189,7 @@ export function tick(world, inputsForThisTick = []) {
           if (nf > 0) world.reputation = Math.max(0, world.reputation - nf * L.pollution.repPerFactoryPerDay);
         }
         maybeImmigration(world, t, day, emit);
+        maybeEmigration(world, t, day, emit);
         maybePromotion(world, t, emit); // §18.T4 (이민 직후·새해 전 — 49차 합의)
         maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
