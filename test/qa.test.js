@@ -341,6 +341,7 @@ test('QA-16. §22.36 스프라이트가 성별·나이와 모순되지 않는다
 //     이 표를 늘리므로 여기서 막지 않으면 조용히 죽은 줄이 쌓인다.
 test('QA-17. §22.39 pickW가 무게대로 뽑고, QA_CHAINS 키가 전부 도달 가능하다', async () => {
   const occModule = await import('../sim/traits.js');
+  const { ACTIONS } = await import('../sim/constants.js');
   const MEMORY_KINDS = Object.keys(JSON.parse(
     fs.readFileSync(new URL('../logic/params.json', import.meta.url), 'utf8'),
   ).memory.importance);
@@ -415,6 +416,11 @@ test('QA-17. §22.39 pickW가 무게대로 뽑고, QA_CHAINS 키가 전부 도�
   const { OCCUPATIONS } = occModule;
   for (const occupation of OCCUPATIONS) details.push({ occupation });
   for (const kind of MEMORY_KINDS) details.push({ kind, placeId: 'park' }, { kind, placeId: null });
+  // unmet의 placeId는 장소가 아니라 **행동 이름**이다(§22.28 — 라이브 값 'eat').
+  // 행동을 안 훑으면 '밥 먹으려 …' 계열 키를 도달 불가로 오판한다(3회차에서 그래서 미뤘다).
+  for (const action of ACTIONS) details.push({ kind: 'unmet', placeId: action });
+  // 정치는 유세(campaign)와 임기 중(그 외 phase) 두 갈래다 — 임기 중이 라이브 2위였다.
+  details.push({ phase: 'aftermath', mayorId: 1 });
   for (const topic of topics) {
     for (const detail of details) {
       for (let t = 0; t < 40; t++) {
