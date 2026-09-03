@@ -16,6 +16,8 @@ import { applyChildAllowance } from './family-policy.js';
 import { applyHouseholdIntents, evaluateHouseholds } from './household.js';
 import { settleHousing } from './housing.js';
 import { resolveStoryCandidates } from './storyteller.js';
+import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
+  completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
   recordTransportArrival, pruneTransportTrips, recordTransportEvent, transportSummary } from './transport-stats.js';
 import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
@@ -108,6 +110,8 @@ export function socialPullPct(world, fac, presence, L, sim = null) {
 function needValueFor(sim, action, L) {
   if (action === 'study') return NEED_MAX - L.education.studyDeficit;
   if (action === 'work') return Math.min(sim.money, NEED_MAX); // 돈 0 → deficit 최대
+  if (action === SUPPLY_ACTION) return Math.min(sim.money, NEED_MAX);
+  if (action === GROW_ACTION) return Math.min(sim.money, NEED_MAX);
   // coping: 기분이 나쁠수록 급함 — deficit = -mood (게이트로 mood < 0 보장, §15.1.A)
   if (COPING_ACTIONS.includes(action)) return NEED_MAX + sim.mood;
   if (action === 'build') return NEED_MAX - L.build.deficit; // 고정 중간 급함 (§15.1.B)
@@ -182,8 +186,8 @@ function scoreCandidate(sim, action, res, L, prepared = null) {
 // 아이는 먹고 자고 놀고 어울리고 배운다.
 const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol',
   'drink', 'binge_eat', 'shop', 'see_doctor', 'fish',
-  'volunteer']); // §23.8 봉사는 어른 몫 — 산책·텃밭·연주·보드게임은 아이도 한다
-const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol']);
+  'volunteer', SUPPLY_ACTION, GROW_ACTION]); // §23.8 봉사는 어른 몫 — 산책·텃밭·연주·보드게임은 아이도 한다
+const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol', SUPPLY_ACTION, GROW_ACTION]);
 
 // §22.18 (Codex 110차 ①) **'갈 곳이 없다'와 '자리가 다 찼다'는 다르다.**
 // actionBlockReason이 null을 돌려줘도 그 안에는 시설 부재·만석·도달 불가가 섞여 있다.
@@ -203,6 +207,7 @@ export function facilityShortfallKind(world, sim, action, t) {
   // 억지로 판정하는 대신 명시적으로 비대상으로 둔다. 판정할 수 없는 것을 판정하지
   // 않는 것이 틀린 답을 내는 것보다 낫다.
   if (action === 'respond_fire') return null;
+  if (action === SUPPLY_ACTION) return null; // 주문·잉여·시장 자금으로 판정한다.
   if (action === 'work' && sim.traits.occupation === 'police') return null;
   if (action === 'work' && sim.traits.occupation === 'jobless') return null;
   // §23.9 집에서만 하는 일(집밥·텃밭·연주·은둔·침대 만들기)은 시설 수를 셀 대상이 아니다.
@@ -243,6 +248,15 @@ export function actionBlockReason(world, sim, action, t) {
   if (action === 'seek_food_aid') return foodAidBlockReason(world, sim);
   if (action === ESCORT_ACTION) return escortBlockReason(world, sim);
   if (LABOR_ACTIONS.has(action) && !canWork(sim)) return sim.traits.occupation === 'child' ? 'too_young' : 'not_needed';
+  if (action === SUPPLY_ACTION) {
+    if (sim.groceries <= L.supply.keepReserve || !world.foodSupply.orders.length) return 'not_needed';
+    if (!world.map.facilities.some(f => deliveryQuote(world, sim, f).ok)) return 'no_market_funds';
+  }
+  if (action === GROW_ACTION) {
+    if (sim.groceries > L.supply.keepReserve) return 'not_needed';
+    if (!world.foodSupply.orders.some(o => o.quantity > 0 && world.map.facilities.some(f => f.id === o.facilityId
+      && (f.revenue ?? 0) >= L.supply.unitPrice && !world.incidents.some(i => i.facilityId === f.id)))) return 'not_needed';
+  }
   if (action === 'study') {
     if (!schoolFor(sim) || sim.traits.occupation !== 'student') return 'not_needed';
     const day = Math.floor(t / 1440), tod = t % 1440;
@@ -265,6 +279,10 @@ export function actionBlockReason(world, sim, action, t) {
   }
   if (action === 'shop' && (sim.groceries > 0 || sim.money < L.actions.shop.cost)) {
     return sim.money < L.actions.shop.cost ? 'no_money' : 'not_needed'; // 장바구니 차 있으면 불필요 (§16.B)
+  }
+  if (action === 'shop') {
+    const shops = world.map.facilities.filter(sellsGroceries);
+    if (shops.length && !shops.some(f => (f.groceryStock ?? 0) >= purchaseQuantity(world, sim))) return 'no_stock';
   }
   if (action === 'cook_eat' && sim.groceries < 1) return 'no_groceries';
   if (action === 'construct' && world.projects.length === 0) return 'no_project';
@@ -418,6 +436,8 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
       const facilities = HOME_ONLY_ACTIONS.includes(action)
         ? (home?.type === ftype ? [home] : []) : (byType.get(ftype) ?? []);
       for (const fac of facilities) {
+        if (action === 'shop' && (fac.groceryStock ?? 0) < purchaseQuantity(world, sim)) continue;
+        if (action === SUPPLY_ACTION && !deliveryQuote(world, sim, fac).ok) continue;
         // §23.8 보드게임은 **혼자 할 수 없다.** 사람이 없는 카페에서는 후보가 아니다.
         // 게이트를 안 두면 30일 실측에서 480건까지 치솟아 놀이(71)·독서(72)를 밀어냈다.
         // 이건 가중치를 눌러 고칠 문제가 아니라 규칙이 빠진 문제다(§0.1) — 판을 펴려면
@@ -451,7 +471,7 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
         let memo = memoCache.get(memoKey);
         for (const res of available) {
           // Action-dependent mall filtering must not leak into the shared availability cache.
-          if (fac.type === 'mall' && ((action === 'shop' && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
+          if (fac.type === 'mall' && (((action === 'shop' || action === SUPPLY_ACTION) && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
           if (!memo) {
             const pl0 = (ctx && ctx.urgency)
               ? { factor: 100, partyPull: false }
@@ -1133,7 +1153,13 @@ export function tick(world, inputsForThisTick = []) {
     } else if (s.action === 'garden') {
       // §23.8 텃밭은 **먹거리를 만든다** — 여가가 살림에 닿는 유일한 통로다.
       // 바깥에서 들어온 것이 아니라 땅에서 난 것이므로 돈이 아니라 식재료로 센다.
+      const before = sim.groceries;
       sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.garden.groceriesGain);
+      recordGardenProduce(world, sim, before, emit);
+    } else if (s.action === GROW_ACTION) {
+      const before = sim.groceries;
+      sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.grow_groceries.groceriesGain);
+      recordGardenProduce(world, sim, before, emit, GROW_ACTION);
     } else if (s.action === 'volunteer') {
       // 봉사는 마을의 평판을 올린다. 평판은 이민을 부르므로(§society.immigration)
       // "좋은 사람들이 사는 곳"이 실제로 사람을 불러들인다.
@@ -1165,10 +1191,17 @@ export function tick(world, inputsForThisTick = []) {
         releaseReservation(world, sim); sim.state = emptyState(); continue;
       }
     } else if (s.action === 'shop') {
-      sim.money -= L.actions.shop.cost;
-      payToFacility(world, s.facilityId, L.actions.shop.cost); // §20.2
-      emit('money_changed', sim.id, { delta: -L.actions.shop.cost, balance: sim.money, action: 'shop' });
-      sim.groceries = Math.min(L.market.maxGroceries, sim.groceries + L.actions.shop.groceriesGain);
+      const result = completeGroceryPurchase(world, sim, s.facilityId, emit);
+      if (!result.ok) {
+        emit('action_failed', sim.id, { action: s.action, reason: result.reason });
+        releaseReservation(world, sim); sim.state = emptyState(); continue;
+      }
+    } else if (s.action === SUPPLY_ACTION) {
+      const result = completeDelivery(world, sim, s.facilityId, emit);
+      if (!result.ok) {
+        emit('action_failed', sim.id, { action: s.action, reason: result.reason });
+        releaseReservation(world, sim); sim.state = emptyState(); continue;
+      }
     } else if (s.action === 'cook_eat') {
       sim.hungerZeroTicks = 0; // §22.2
       sim.groceries = Math.max(0, sim.groceries - 1);
@@ -1210,7 +1243,8 @@ export function tick(world, inputsForThisTick = []) {
       const pub = !priv && L.economy.publicWageOccupations.includes(occ);
       if (priv) {
         const payer = world.map.facilities.find((f) => f.id === s.facilityId);
-        const avail = Math.max(0, payer?.revenue ?? 0);
+        const balance = Math.max(0, payer?.revenue ?? 0);
+        const avail = balance - procurementReserve(world, payer);
         const paid = Math.min(wage, avail);
         if (paid < wage) {
           sim.unpaidDays = (sim.unpaidDays ?? 0) + 1;
@@ -1219,7 +1253,7 @@ export function tick(world, inputsForThisTick = []) {
           });
         }
         else sim.unpaidDays = 0;
-        if (payer) payer.revenue = avail - paid;
+        if (payer) payer.revenue = balance - paid;
         wage = paid;
       } else if (pub) {
         // §22.23 공공 임금은 **전액 보장**이다 (사용자 지시). 예전에는
@@ -1380,6 +1414,7 @@ export function tick(world, inputsForThisTick = []) {
     if (pr.progress >= pr.required) {
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
       const fac = addBuilding(world.map, pr.type, plot, pr.dir ?? 0); // §18.T2 회전
+      openSupplyMarket(world, fac, emit);
       plot.used = true;
       world.projects.splice(world.projects.indexOf(pr), 1);
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
@@ -1724,6 +1759,7 @@ export function tick(world, inputsForThisTick = []) {
   }
 
   // 6) ordinal 부여 — 단계 순 + 단계 내 적용 순서 (1단계는 sequence 순)
+  refreshSupplyOrders(world, t, emit); // #76 소비/공급 후 실제 재고에서 다음 주문
   pruneTransportTrips(world);
   events.forEach((e, i) => { e.ordinal = i; });
 

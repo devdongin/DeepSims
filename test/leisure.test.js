@@ -21,7 +21,7 @@ test('L-1. 새 여가 5종이 표 세 곳에 빠짐없이 등록돼 있다', () 
     assert.ok((ACTION_FACILITY[a] ?? []).length > 0, `${a}가 갈 곳이 없다`);
   }
   // 순서는 pickBest의 동점 처리 순서다 — 끝에 붙어야 기존 우선순위가 안 흔들린다.
-  assert.deepEqual(ACTIONS.slice(-5), NEW, 'ACTIONS 끝 5칸이 새 여가여야 한다 (append-only)');
+  assert.deepEqual(ACTIONS.slice(ACTIONS.indexOf(NEW[0]), ACTIONS.indexOf(NEW[0]) + 5), NEW, '기존 여가 행동의 연속 순서는 보존한다 (이후 행동은 append-only)');
 });
 
 test('L-2. 텃밭·악기는 자기 집에서만 한다', () => {

@@ -2483,6 +2483,8 @@ const ACTION_KO = {
   read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기', see_doctor: '병원 진료',
   respond_fire: '화재 진압', study: '학교 수업', seek_food_aid: '공공 식사 요청',
   escort_child_doctor: '아이 병원 동행',
+  supply_groceries: '식료품 공급',
+  grow_groceries: '주문 식료품 재배',
   // §23.8 여가 확대
   stroll: '산책', garden: '텃밭 가꾸기', music: '악기 연주', volunteer: '봉사 활동', board_game: '보드게임',
 };
@@ -2492,6 +2494,7 @@ function actionKo(id, fallback = '활동') { return ACTION_KO[id] ?? fallback; }
 const BLOCK_KO = {
   no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
   not_coping: '멀쩡함', not_needed: '불필요', no_funds: '국고 부족',
+  no_stock: '시장 재고 부족', no_market_funds: '시장 구매 자금 부족',
 };
 // #107 직업 라벨. sim/traits.js의 OCCUPATIONS **전 원소**가 여기 있어야 한다 —
 // 5종만 있던 동안 라이브 주민 173명 중 137명(79%)의 직업 칸이 'undefined'였다(child만 71명).
@@ -2655,6 +2658,7 @@ function eventText(e) {
     case 'hangover': return `🥴 ${ga(n)} 과음했습니다… 내일이 걱정입니다`;
     case 'weather_changed': return { sunny: '☀️ 화창한 아침입니다', cloudy: '☁️ 날이 흐립니다', rain: '🌧️ 비가 내리기 시작했습니다' }[e.payload.kind];
     case 'item_spawned': return null; // 어디 떨어졌는지는 비밀 — 발견의 재미
+    case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
     case 'project_started': {

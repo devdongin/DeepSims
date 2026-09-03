@@ -23,10 +23,11 @@ import { collectCandidates } from '../sim/tick.js';
 //   #89     (사건 페이싱): 실제 발병/화재 배치 변경으로 이후 행동도 바뀐다. 새 전체 상태로 재고정.
 //   §23.17  (Codex 재검토)  : world 해시만 움직인다 — 강등의 unpaidDays 초기화와 플레이어
 //     초기 자금의 경계 유입 기록은 세계 상태에만 닿는다 (240틱 지평에서 결정 불변).
+//   #76     (실물 공급): 유한 재고·재배·운반 행동이 구매와 선택을 실제로 바꿔 재고정한다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', 'd722e921', 'e1d0affd', '5633e38b']],
-  [50, ['1dcfd840', '4cfaed7a', '9c2fd476', '8b1696f7']],
-  [200, ['3d43662d', '754cba2e', '905452de', '20d0c7d1']],
+  [10, ['0ab9198a', '32b2391b', '0e185273', 'dd3dc490']],
+  [50, ['5786ecd1', '9a3cd25b', '7a24166e', '61a5a6ea']],
+  [200, ['5dad1750', '45ef6cbf', '19de95b4', '81e89048']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
@@ -54,7 +55,7 @@ test('#97 mall resource-kind filters are not shared between actions', () => {
   const w = createWorld(20260831), sim = w.sims[0];
   sim.money = 10000;
   const source = w.map.facilities.find(f => f.type === 'cafe');
-  w.map.facilities.push({ ...source, id: 'test-mall', type: 'mall', resources: [
+  w.map.facilities.push({ ...source, id: 'test-mall', type: 'mall', groceryStock: 12, resources: [
     { id: 'till', kind: 'till', x: sim.x, y: sim.y },
     { id: 'seat', kind: 'seat', x: sim.x, y: sim.y },
   ] });
