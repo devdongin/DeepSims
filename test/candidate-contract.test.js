@@ -35,10 +35,13 @@ import { collectCandidates } from '../sim/tick.js';
 //     갈리지 않아 candidates·choices·events는 그대로이고 world 해시만 움직였다.
 //   §23.25  (기분 바닥선) : 인구 200에서는 240틱 안에도 선택이 갈린다 — 바닥선이 높으면
 //     mood < 0 조건의 play·socialize 보정이 덜 걸리기 때문이다. 10·50은 world만 움직인다.
+//   §23.26  (건설 슬롯 6) : 국고가 쌓인 세계에서만 갈린다. 창세 직후 국고로는 슬롯이
+//     1개라 240틱 지평에서는 아무것도 안 바뀌어야 하는데, world 해시는 로직 파라미터를
+//     포함하므로 그 값만 움직인다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', 'ddff0557', '8df187c5']],
-  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', 'd06851b2']],
-  [200, ['5dad1750', '0928031a', 'e157d46b', '41fb8be2']],
+  [10, ['0ab9198a', '32b2391b', 'ddff0557', 'd57f76f7']],
+  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '30b393e8']],
+  [200, ['5dad1750', '0928031a', 'e157d46b', '755532a8']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

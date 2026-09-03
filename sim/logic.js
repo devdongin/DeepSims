@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 64, // §23.25 mood.baseline 추가
+  logicSchemaVersion: 65, // §23.26 maxProjectSlots 3 → 6
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
   seasons: { winterHarvestPct: 50, winterFishPct: 50, winterOutdoorEnergy: 1,
@@ -406,7 +406,12 @@ export const DEFAULT_LOGIC = {
     repCap: 500, repDecayPct: 95, // 일일 ×95% 감쇠
     immigPerExtra: 80, immigWaveMax: 3, // 웨이브 = 1 + floor(평판/80), 캡
     slotPerTreasury: 150000, // §19.3 국고 15만당 동시 건설 슬롯 +1 (돈이 시공 능력을 만든다)
-    maxProjectSlots: 3,      // 동시 착공 상한
+    // §23.26 동시 착공 상한. 3이면 국고 45만을 넘는 순간부터 **돈이 아무것도 사지 않는다**
+    // (Codex 지적: 1.4~1.9M 국고가 경제에 연결되지 않은 저수지). 라이브 마을은 국고 600만에
+    // 침대가 18개 모자란 상태로 멈춰 있었다 — 살 돈이 있는데 집이 없다.
+    // 상한을 올린다고 억지로 짓지는 않는다: 슬롯은 수요(neededSchool·침대 부족·책상 부족)가
+    // 있을 때만 채워지고, 실제 진척은 심들이 construct에 쓰는 노동이 정한다.
+    maxProjectSlots: 6,      // 동시 착공 상한
   },
   // §17.15 경제 순환: 소득세 → 국고 → 복지·시장 수당 (Lengnick baseline 차용, 드로우 0회)
   economy: {

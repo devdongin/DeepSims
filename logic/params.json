@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 64,
+  "logicSchemaVersion": 65,
   "needsTiers": {
     "fulfilledMin": 4000,
     "deprivedMax": 1000,
@@ -876,7 +876,7 @@
     "immigPerExtra": 80,
     "immigWaveMax": 3,
     "slotPerTreasury": 150000,
-    "maxProjectSlots": 3
+    "maxProjectSlots": 6
   },
   "economy": {
     "healthCopayPct": 100,
