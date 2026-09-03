@@ -1,6 +1,20 @@
-# 제안: 평가 평균 5.5 → 9.0 (Opus 구현용 로드맵) — v9, Codex 8차 NO-GO 조건 반영
+# 제안: 평가 평균 5.5 → 9.0 (Opus 구현용 로드맵) — v10, Codex 9차 조건부 GO의 조건 4개 반영
 
 **성격**: 제안서. 구현하지 않는다. 한 항목 = *파일·함수 / 완료 기준(숫자) / 테스트 / 점수*.
+
+**v10에서 바뀐 것** (Codex 9차 **조건부 GO** — 남은 조건 4개 + 측정 보강 7건):
+- **T1-0 굶주림 지표를 상태 기반으로**: `starving`은 *진입 전이* 이벤트라 자주 먹을수록 더 찍힌다(`tick.js:1051-1056` 주석이 이미 그렇게 말한다).
+  위기 = **3일 창의 `Σ hungerZeroTicks` 증가분 ≥ 기준**. 굶주림 fixture 추가(5/5).
+- **C-3 참석 의미 단일화**: `party_attended`는 **`expireAndMeasureTokens` 집계 루프에서만** emit(§0.8 표의 "행동 완료 시"를 삭제). 행동 완료와
+  참석은 다른 사실이다.
+- **C-2 fallback 단일화**: top-level `name` fallback **폐기**(§0.7 문장 정정), 순서 = `payload.names` → `nameRegistry` → 프루닝 등으로 이름을 알 수
+  없으면 `simId` 고정 표기(`#id`); `NAME_BEARING_EVENT_TYPES` 목록 분리.
+- **C-1 `startAction()` 경로**: `sim.state = {...emptyState(), …}`로 상태를 통째로 다시 만들므로(`tick.js:473-480`) 먼저 세팅한 `inputId`는 사라진다 →
+  `startAction(sim, cand, inputId)` 인자로 전달해 그 리터럴에 넣는다. 거부·stale-order 경로 전수 테스트.
+- **T2-3B 키 = `(speaker→listener, topic, variant)`**: variant = `memory_share`의 kind / `gossip`의 tier·sentiment / 그 외 `''`; reply는 **별도 카운터**
+  `…:reply`. speaker·reply 문장 각각 측정, 표 길이 고정.
+- 게이트 표 순서 G2-0 → **G2-1** → T2-4로 이동. T0-3 3개 폭 = 1000/1400/1920. T0-9/T1-5 **kind별** 원본 건수 동일. G1-3·G1-2 fixture에
+  **manifest**(기억·관계·프로젝트·상호작용 카운트) + hash. T2-2 통제 fixture(같은 seed, 행동 비활성) 대비. T3-1 이미지 fixture·정답표 커밋.
 
 **v9에서 바뀐 것** (Codex 8차 NO-GO — 코드 사실 3건이 틀렸었다):
 - **C-3 정정**: 토큰은 이미 `tokenId`(= `world.tokenCounter++`, 전역 단조)를 가진다(`world.js:141`, `tick.js:609`, `planning.js:65`,
@@ -102,6 +116,7 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 (`tick.js:664`). 정의: SELECT에 `client_input_id` 추가 → `advance()` 입력 객체에 `clientInputId` → 수락·거부·결과 이벤트에 `payload.inputId`.
 **플레이어 원인 이벤트만 UUID를 싣고, 자동 원인(시장 재정 검토의 `policy_changed`, 자동 건설의 `project_started`, NPC의 `action_*`)은
 `inputId: null`** — 같은 이벤트 타입을 공유하므로 이 규칙이 없으면 "동일성 검사"가 성립하지 않는다.
+**`startAction()` 경로**: 현재 `sim.state = {...emptyState(), kind, action, …}`로 상태를 통째로 새로 만든다(`tick.js:473-480`) → 미리 `sim.state.inputId`를 두면 사라진다. `startAction(world, sim, cand, inputId = null)`로 **인자 전달**해 그 리터럴에 `inputId`를 넣는다. 거부 경로(`assign_rejected`·`zone_rejected`·stale order 만료)도 같은 UUID를 싣는 전수 테스트.
 **금지**: `inputId`는 이벤트 payload 전용이다 — 행동 선택·RNG·타이브레이크·해시 입력에 쓰지 않는다.
 **API 응답과 적용 위치**: `/api/input`은 접수 시점에 `{targetTick, sequence}`만 안다. 적용 `(tick, ordinal)`은 **`inputId`를 실은 첫 이벤트**로
 클라가 안다 — 카드·타임라인은 그 이벤트를 기다린다(접수 카드 즉시, 적용 표시는 이벤트 도착 시).
@@ -123,8 +138,8 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 싣는다(화자·청자·제3자·사망자 포함), ② `world.nameRegistry`(append-only, 사망해도 삭제 안 함)를 두고 직렬화·스냅샷·해시·
 마이그레이션에 포함 — 부재중 리포트와 과거 이벤트 렌더는 여기서 읽는다, ③ `create_player`는 클라 `surname`을 **무시**하고
 서버 결정 성만 저장(사용자 지시 유지).
-**우선순위 고정**: 렌더는 `payload.names`를 먼저 읽고, 없을 때만 구형 top-level `name`을 읽는다(구형 이벤트 호환) — 둘 다 있으면 `names`.
-- 완료: `names` 누락 이벤트 0(테스트로 전 `EVENT_TYPES` 검사), 사망·리싱크 후 같은 이벤트 문자열 해시 100/100 동일, **과거 DB
+**우선순위 고정**: 렌더는 `payload.names` → `world.nameRegistry[simId]` → (둘 다 없으면, 프루닝된 구이벤트 등) **`#simId` 고정 표기** 순이다. 구형 top-level `name`은 **읽지 않는다**(§0.10과 동일 규칙). 이름을 싣는 타입은 `NAME_BEARING_EVENT_TYPES`로 코드에서 열거(`player_created`·`died`·`married`·`child_born`·`immigrated`·`job_changed`·`conversation`·`elected`… 구현 시 전수 확정).
+- 완료: `NAME_BEARING_EVENT_TYPES` 전부에서 C-2 이후 발생 이벤트 `names` 누락 0, 구이벤트는 registry 조회 또는 `#simId` 표기(미정의 표기 0), 사망·리싱크 후 같은 이벤트 문자열 해시 100/100 동일, **과거 DB
   이벤트 100건 재생 문자열 동일**, 악의적 `surname` 주입 시 무시 10/10.
 
 **C-3 모임 데이터 모델 + 참석자 이벤트 (sim)** — 현재: 토큰은 `{topic: gathering|announce|festival, scheduledTick, placeId}`뿐이고(id·주최 없음,
@@ -146,7 +161,7 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 |---|---|---|---|---|---|---|
 | `attend_party` | ACTION | `sim.invitedTo !== null` 이고 `scheduledTick - 120 ≤ t ≤ scheduledTick + 60` | 60 | 기존 점수식 그대로, 급함 = `NEED_MAX - social.deficit`(초대는 사회 욕구 행동) | 소비 0 | `sim.invitedTo`(기존) |
 | `host_party` | ACTION | `world.tokens`에 `hostId === sim.id`이고 같은 시간창인 토큰 존재 | 90 | `attend_party`와 동일 식, 주최자 가산 없음 | 소비 0 | `token.hostId`(C-3 신규) |
-| `party_attended` | EVENT | 위 두 행동 완료 시 emit | — | — | — | payload `{partyId, simId, role}` |
+| `party_attended` | EVENT | **행동 완료가 아니라** `expireAndMeasureTokens` 집계 루프에서, scheduledTick에 그 장소에서 performing 중인 심마다 emit(§0.7 C-3) | — | — | — | payload `{partyId, simId, role}`; 행동을 골랐어도 도착 못 하면 참석 아님 |
 | `side_job` | ACTION | 민간 서비스 직, `wageShortfallDays ≥ 3`, **매출 > 0인 다른 민간 시설**에 근무 슬롯 있음 | 기존 `work.duration` | 기존 `work` 식 | 소비 0 | 소득은 기존 `money_changed` |
 | `job_changed` | EVENT | 기존 §21.3 전직 경로 재사용 | — | — | — | 기존 |
 
@@ -163,7 +178,7 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 | `world.goals` | world | `{}` (`{[id]: {doneTick}}`) | T1-0·T1-4 | 달성 이벤트 발생 시에만 기록 |
 | `world.goalsHash` | world | `''` | T1-4 | `logic/goals.json` SHA-256 |
 | `world.crisis` | world | `null` (`{kind, since}`) | T1-0 | 해제 시 `null` |
-| `world.pairTopicSeq` | world | `{}` (`{"a>b:topic": int}`) | T2-3B | conversation 이벤트 emit **직전** +1 |
+| `world.pairTopicSeq` | world | `{}` (`{"a>b:topic:variant": int}` + `"…:reply"`) | T2-3B | variant = `memory_share` kind / `gossip` tier·sentiment / 그 외 `''`; speaker·reply 카운터 분리; emit **직전** +1 |
 | `token.hostId` | world.tokens[] | `null` | C-3 | `tokenId`는 기존 필드 그대로 partyId로 사용; 구세이브 토큰은 `null` |
 | `world.nameRegistry` | world | `{}` (`{[simId]: {given, surname}}`) | C-2 | append-only; 생성(`player_created`·출생) 시 기록, 사망해도 유지. **구세이브 백필**: 마이그레이션이 현재 `sims` 전원 + DB 이벤트 중 이름 필드를 가진 `player_created`·`died` payload에서 채움. 클라 표기 = `payload.names?.[simId] ?? nameRegistry[simId]`(top-level 이름 fallback은 **폐기**) |
 | `sim.invitedTo.partyId` | sim | `null` | C-3 | 기존 `{facilityId, untilTick}` 확장 |
@@ -217,7 +232,7 @@ C-1은 "T1-0의 선행"이 아니라 **독립 게이트**다. 현재 `getPending
 - 완료(Tier 0): 입력 10건·공란·구세이브·악의적 `surname` 주입 각 10건에서 피드·패널·이름표 표시 전부 동일, 주입은 서버가 제거, 미등록 토큰 0. **C-2 전에는 사망·리싱크 후 문자열 동일성을 주장하지 않는다**(현재 `simName()`이 월드를 조회한다). 임시 표기 ↔ `payload.names` 표기의 일치는 **G2-0**(C-2 완료 게이트)에서 검사.
 
 **T0-3 상단바 레이아웃** — `client/index.html:15-17` `#clock` `position:absolute` → in-flow, 2단, 1000px 규칙.
-- 완료: 3개 폭에서 `elementFromPoint(버튼 중앙)` === 그 버튼(주 기준); 1000px에서 상단바 높이 ≤ 2줄(88px), `overflow` 잘림 요소 0, 비활성 버튼은 `disabled` + opacity 0.5로 상태 구분; 스냅샷은 보조.
+- 완료: 3개 폭(**1000/1400/1920px**)에서 `elementFromPoint(버튼 중앙)` === 그 버튼(주 기준); 1000px에서 상단바 높이 ≤ 2줄(88px), `overflow` 잘림 요소 0, 비활성 버튼은 `disabled` + opacity 0.5로 상태 구분; 스냅샷은 보조.
 
 **T0-4 피드 신호/잡음 분리 (클라 전용, 고정 틱 창)** — 전원 불만 1순위. **시뮬 원인 아님**: 테스터 DB 3개(Day 0·2·11)
 construct 575쌍의 시작→완료 차이 **최소 60·중앙 60·같은 틱 0** (`sim/logic.js` `duration: 60`). 배속 배치에 두 이벤트가
@@ -265,7 +280,7 @@ token_created weather_changed zoned`.
 식사, highlights 50칸 중 48칸 `lonely`). **백엔드 한계가 먼저 있다**: `Storage.getReport()`(`db/storage.js:212-222`)의 highlights는
 12종·`LIMIT 50`이고 `died`·`policy_changed`·`public_works`·`city_promoted`·`treasury_debt`가 **빠져 있다** → 그 확장은 **T1-5**.
 Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highlights kind별 상한, 사건 우선 정렬.
-- 완료: fixture = 커밋된 `test/fixtures/report-day.json`(seed·시작 tick 고정, 사건 ≥ 30건, 기대 원자료 count 동봉) — 20줄 미만은 fixture 오류로 실패; **상위 20줄 = 본문 사건 줄**(헤더·소개문·접힌 집계줄 제외), 사건 allowlist 고정, 같은 kind ≤ 6줄; 접힘·상한은 표시만 — **원본 사건 수 보존**(리포트 원자료 카운트 == DB 카운트); C-2 전에는 이름 문자열이 아니라 **`simId`로만** 검사.
+- 완료: fixture = 커밋된 `test/fixtures/report-day.json`(seed·시작 tick 고정, 사건 ≥ 30건, 기대 원자료 count 동봉) — 20줄 미만은 fixture 오류로 실패; **상위 20줄 = 본문 사건 줄**(헤더·소개문·접힌 집계줄 제외), 사건 allowlist 고정, 같은 kind ≤ 6줄; 접힘·상한은 표시만 — **kind별 원본 사건 수 보존**(리포트 원자료의 kind별 카운트 == DB kind별 카운트); C-2 전에는 이름 문자열이 아니라 **`simId`로만** 검사.
 
 **Tier 0 산술**: 재미 5.0 · 안정 7.5 · 이해 5.8 · UI 7.0 · 그럴듯 6.9 · 보는 6.0 · 성능 6.0 · 문서 7.4 = **51.6/8 = 6.45**. 게이트 ★3.3.
 
@@ -286,8 +301,8 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 행동 시작당 1회 BFS. 제안: 후보 스캔 공간 인덱스/근접 캐시, 맵 불변 구간 BFS 결과 캐시. **캐시는 같은 입력에 같은 출력만**(결정성).
 **workload 재정의**(Codex 지적): 현재 `bench/popscale.js`는 얕은 합성 인구·best-of-2라 실제 세계를 대표하지 않는다. fixture는 **실제
 138~200명 세계의 스냅샷**(라이브 DB 복사, 기억·관계·프로젝트·상호작용 포함)으로 고정하고, best-of를 폐기해 **5회 중 최악값**을 쓴다.
-- 완료: fixture = **커밋된 파일 `test/fixtures/perf-pop200.json`**(헤드리스 seed 실행으로 1회 생성: `{seed, worldTick, population: 200, sha256}`를
-  파일 헤더와 이 문서에 기록; 재생성은 커밋 메시지에 사유 명시) — 라이브 DB 의존 없음; Node 버전·CPU 유휴 상태 기록,
+- 완료: fixture = **커밋된 파일 `test/fixtures/perf-pop200.json`**(헤드리스 seed 실행으로 1회 생성: `{seed, worldTick, population: 200, sha256, manifest: {memories, relations, projects, facilities, interactionsLastDay}}`를
+  파일 헤더와 이 문서에 기록(manifest가 실제 workload임을 보인다 — 라이브 인구 200 시점 관측치와 ±20% 이내); 재생성은 커밋 메시지에 사유 명시) — 라이브 DB 의존 없음; Node 버전·CPU 유휴 상태 기록,
   워밍업 1일·측정 3일, **5회 최악 ≥ 2,000 tick/s(10배)**, 해시·리플레이 동일. 통과 시 성능 8.5 인정. **20,000 tick/s는 조건부 목표**다 — 인구 10의
   현재 값(18,179)보다 높고 제안된 캐시만으로 도달할 근거가 없으므로 약속하지 않는다; 성능 9는 이 조건이 충족될 때만이다.
 
@@ -312,9 +327,9 @@ base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효�
 증명한다고 주장하지 않는다(§0.1 — "이 행동 덕분"이 아니라 "이 행동 이후 3일간"). 같은 창 안에 다른 플레이어 입력이 있으면 카드에
 **겹침 표시**(그 `inputId` 목록). 자동 원인 이벤트(시장 재정 검토 등)는 카드를 만들지 않고 피드에만 나온다. 성공/실패:
 - 성공: 목표 트리 노드 달성(T1-4) → 카드(입력 ID·적용 tick·실측값 표기) + 다음 노드.
-- 실패(위기): 국고가 **3일(4320틱) 연속 음수** 또는 **`starving` 이벤트 ≥ 5건/일이 3일 연속** → `world.crisis = {kind, since}` + "위기" 카드 +
+- 실패(위기): 국고가 **3일(4320틱) 연속 음수** 또는 **굶주림: 3일 창에서 전 심 `Σ hungerZeroTicks` 증가분 ≥ 1440**(= 심 1명이 하루 종일 굶은 양; `starving` 건수는 진입 전이라 지표로 쓰지 않는다 — `tick.js:1051` 주석) → `world.crisis = {kind, since}` + "위기" 카드 +
   회복 행동 3개 — **전부 기존 명령**: `policy`(세율↑), `policy`(복지 기준↓), `zone`(주거 지시). "건설 취소"는 명령이 없으므로 쓰지 않는다.
-  관찰 구간 = 위기 진입 tick부터; 해제 = 국고 ≥ 0 **3일 연속** 또는 `starving` < 5건/일 **3일 연속**.
+  관찰 구간 = 위기 진입 tick부터; 해제 = 국고 ≥ 0 **3일 연속** 또는 3일 창 `Σ hungerZeroTicks` 증가분 < 1440 **3일 연속**. fixture: 국고 음수 5/5 **+ 굶주림(식료품 공급 0) 5/5**, 각각 진입·해제 tick 결정적.
 - 단순 지표 상승은 성공으로 인정하지 않는다 — 카드는 반드시 입력 ID를 참조한다(§0.1).
 **상태 전이**(§0.1 "행동 추가" — 카드만 붙이면 루프처럼 보이는 UI다): 성공 = 목표 노드의 달성 이벤트(`city_promoted`·`station_unlocked`·
 `facility_built`)가 실제로 발생 → `world.goals[node].done = tick` 기록 + 다음 노드 활성(보상은 곧 언락이다 — 이미 있는 §18 승급 언락을
@@ -377,7 +392,7 @@ base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효�
 전이: `wageShortfallDays ≥ 3` → `job_changed`(공석 있는 다른 직업·시설로 전직 → `vacancy` 이벤트) / `side_job`(매출 있는 다른 시설에서 근무
 슬롯 → 소득). 선택은 기존 ACTIONS 점수식(§0.8), 우선순위 append. **시설 매출·국고 직접 증액 금지.**
 **결과 지표(원래 문제가 완화됐는가)**: 행동이 났다는 것만으로는 부족하다.
-- 완료: **N = 3일(4320틱) 고정**; fixture = 매출 0인 카페·식당에 배치된 민간 서비스 직 10명 → 1440틱 내 행동 10/10, 7일 내 **심별 결과 이벤트
+- 완료: **N = 3일(4320틱) 고정**; fixture = 매출 0인 카페·식당에 배치된 민간 서비스 직 10명, **통제군 = 같은 seed에서 신규 행동만 비활성**(완화 지표는 통제군 대비로 계산하고 각 개선은 그 심의 `job_changed`/`side_job` 이벤트에 귀속) → 1440틱 내 행동 10/10, 7일 내 **심별 결과 이벤트
   정확히 1회** 10/10; 상태 델타 — `job_changed`면 원 시설 공석 +1(`vacancy` 이벤트 신규, §0.8 규약), `side_job`이면 소득 ≥
   **0.5 × 일 임금**(`wageBase × wagePct/100`; 1원은 통과 아님); **완화 지표**: 7일 창에서 해당 10명의 `wage_shortfall` 건수 ≥ **30% 감소**
   **또는** 심별 잔액 델타 ≥ 1일 임금; `wageShortfallDays` 규칙 테스트(가산·리셋·전직 시 0); 직접 국고 증액 0; 해시·리플레이 통과.
@@ -391,7 +406,7 @@ base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효�
 - **중복 기준 정정**: 발화 간격이 15틱(`sim/logic.js` `conversation.lineInterval`)이라 6시간 = 24회이고 표는 3~7줄이다 — "6시간 내
   재사용 0"은 **불가능**하다. 기준: **같은 쌍·같은 주제에서 테이블 길이 L 내 최초 L회는 중복 0**(B는 `pairSeq mod L` 라운드로빈으로
   보장, A는 통계적 감소만 — A의 완료 기준은 "연속 2회 동일 문장 ≤ 5%").
-- **채택: B**(A는 B 전 임시 폴백). `pairTopicSeq` 키 `"speakerId>listenerId:topic"`, 초기 0, **conversation 이벤트 emit 직전 +1**, payload에 `pairTopicSeq` 실음, 클라 인덱스 = `pairTopicSeq mod L`(L = 그 주제·kind 표 길이, 표 길이는 배열 추가로만 늘어남 §22.12). A의 reply 규칙: 같은 해시에 salt `|reply`. **표본**(A 검사용): 라이브 DB 같은 쌍 연속 대화 1,000쌍, 분모 = 쌍 수, "연속 동일" = 직전 발화와 문자열 동일.
+- **채택: B**(A는 B 전 임시 폴백). `pairTopicSeq` 키 `"speakerId>listenerId:topic:variant"`(variant = `memory_share` kind / `gossip` tier·sentiment / 그 외 `''`), reply는 `"…:reply"` 별도 카운터, 초기 0, **conversation 이벤트 emit 직전 +1**, payload에 `pairTopicSeq` 실음, 클라 인덱스 = `pairTopicSeq mod L`(L = 그 주제·kind 표 길이, 표 길이는 배열 추가로만 늘어남 §22.12). A의 reply 규칙: 같은 해시에 salt `|reply`. **표본**(A 검사용): 라이브 DB 같은 쌍 연속 대화 1,000쌍, 분모 = 쌍 수, "연속 동일" = 직전 발화와 문자열 동일.
 - 완료: 동일 이벤트 100건을 재접속·리싱크·재생성에서 비교해 문자열 해시 100/100 동일; B는 L회 내 중복 0, A는 연속 동일 ≤ 5%(1,000쌍).
 
 **T2-4 모임 0명 — 초대 이행 *행동* 추가 (튜닝 금지)** — 가설: 초대 이행(§22.6)이 construct 고정 급함(`logic.js:85`)에 밀림.
@@ -406,7 +421,7 @@ enum 순서가 바뀌지 않았음을 테스트로 고정**한다(§21.3의 appe
 ## 5. Tier 3: 마감
 
 **T3-1 보는 재미 (G1-1 위에)** — 프롭·간판 리스케일(에셋 회차, `put()` h 값 표 정리), 카메라 프레이밍.
-- 완료: **고정 이미지 20장 식별 시험**(건물 기능 10·심 성별/나이대 10), 5명 중 4명 이상 정답률 ≥ 80%.
+- 완료: **커밋된 fixture `test/fixtures/look-quiz/`(이미지 20장 + `answers.json`, sha256 기록)** 식별 시험(건물 기능 10·심 성별/나이대 10), 5명 중 4명 이상 개인별 정답률 ≥ 80%.
 **T3-2 조명** — `applyDaylight(tick)` 룩업. 완료: 05:00/07:00/12:00/19:00 네 tick에서 **고정 probe 픽셀 3점(좌표: 하늘 (20,20)·건물 창 (560,420)·바닥 (300,700), 1120×848 캡처 기준)**의 **인접 시각 쌍(05→07, 07→12, 12→19)** 색차 **ΔE ≥ 5 (CIE76, sRGB→CIELAB, D65)**; probe만 맞추는 악용을 막기 위해 **전체 캡처 평균 밝기가 05 < 07 < 12 > 19로 단조**, 정오의 점등 창 픽셀 비율 ≤ 5%, stale 상태 0.
 **T3-3a 성능(렌더·전송) — §22.10 나머지 병목** — #3 타일 1칸 변경이 전면 재빌드(2,218 스프라이트 + 61 Text/6초) → 증분 갱신,
 #4 스냅샷 map 542KB(12값을 2.0B) → 팔레트 인코딩, #5 스프라이트 70.5MB → 아틀라스 다운스케일, Text 재생성(261/4초) → 캐시,
@@ -451,10 +466,10 @@ tick/s 조건)** · 문서 8.8→9 · 안정 8.5→9 (네트워크 실패·과�
 | **G1-0** | C-1: UUID 동일 10/10 · 지연 lineage 4/4 · 리플레이/해시 동일 | 테스트 |
 | G-1 | 심 ≥48px·이름표 ≥11px 블라인드 ≥80%, mapLayer p95 ≤2ms, **G1-3 실세계 fixture 5회 최악 ≥2,000 tick/s**, **G1-4 재빌드 0·resync ≤200KB** | 계측 + 5인 |
 | Tier 1 | 평균 ≥ 7.6, ★4.0, **게임으로서 계속 ≥ 4/5, 2회 연속** | 같은 5인 × 2회 |
-| **G2-0** | C-2: `names` 누락 0 · 과거 100건 재생 동일 · 임시 표기 ↔ `names` 표기 일치 | 테스트 |
+| **G2-0** | C-2: `NAME_BEARING` `names` 누락 0 · 과거 100건 재생 동일 · 임시 표기 ↔ `names` 표기 일치 | 테스트 |
+| **G2-1** | C-3: 마이그레이션·해시·리플레이·참석 Set 5/5 (T2-4 전) | 테스트 |
 | Tier 2 | 평균 ≥ 7.8 | 같은 5인 |
 | Tier 3 | 평균 ≥ 8.3(절사) · G1-3 통과 시 ≥ 8.4 → §6.5 프로토콜 | 5인 + 20인, 2회 연속 |
-| G2-1 | C-3 마이그레이션·해시·리플레이·참석 Set 5/5 | 테스트 (T2-4 전) |
 | **G1-3 재실행** | Tier 2의 `sim/` 변경(T2-2·T2-3B·T2-4·C-2·C-3) 후 같은 fixture로 재측정 ≥ 2,000 tick/s | 계측 (§6.5 전 필수) |
 
 ## 8. 하지 말 것
@@ -599,3 +614,16 @@ T0-4b 삭제(오진 확인) · T1-0 신설 · T2-3 로컬 캐시 폐기 · rende
 | §6.5 null 조작 가능 | 시나리오 항목 null = 불합격, "계속" = Yes 수 4/5·16/20 |
 | T2-1 사유 토큰 allowlist | `logic/reason-tokens.json` + hash |
 | C-1 `inputId`를 선택·RNG·타이브레이크에 쓰지 말 것 | §0.7 C-1에 명시 (아래) |
+
+## 부록 I. Codex 9차 리뷰(조건부 GO) 반영
+
+| 조건·지적 | 반영 |
+|---|---|
+| `starving` 건수는 §0.1·G5와 충돌(진입 전이) | T1-0 굶주림 = 3일 창 `Σ hungerZeroTicks` 증가분 ≥ 1440, 굶주림 fixture 5/5 |
+| C-3 참석 의미 불일치(§0.7 집계 루프 vs §0.8 행동 완료) | 집계 루프에서만 emit으로 단일화 |
+| C-2 fallback 충돌 | top-level fallback 폐기, `names` → registry → `#simId`; `NAME_BEARING_EVENT_TYPES` |
+| T2-3 variant·reply 카운터 없음 | 키에 variant, reply 별도 카운터, 각각 측정 |
+| `startAction()`이 상태를 통째로 재생성 → inputId 소실 | 인자 전달; 거부·stale 경로 전수 테스트 |
+| G2-1 위치 | G2-0 → G2-1 → T2-4 |
+| T0-3 폭, T0-9 kind별, G1-3 manifest, T2-2 통제군, T3-1 fixture | 반영 |
+| 20k tick/s 전 성능 9 주장 불가 | 유지(조건부) |
