@@ -372,6 +372,12 @@ export const DEFAULT_LOGIC = {
     // 음수(공채)로 내려간다. maxDebt는 게임 장치가 아니라 **오버플로 가드**다 —
     // 여기 걸리면 insolvent 이벤트가 나고 그때만 부분 지급이 된다.
     maxDebt: 1000000000000, // 1e12
+    // §22.78 마을은 빈손으로 시작하지 않는다 (사용자 지시: "초기국고는 0원이 아니고
+    // 2000원정도는 있어야돼"). 예전엔 0이라 **첫날 첫 공공 임금부터 곧장 적자**였다
+    // (실측: 5시드 전부 day 0, tick 281~842에 첫 treasury_debt).
+    // 이건 지표를 누르는 게 아니라 **시작 조건**이다 — 적자 구조 자체는 그대로이고,
+    // 마을이 첫 급여를 낼 정도의 종잣돈만 갖고 출발한다.
+    initialTreasury: 2000,
     taxMoodPer: 5,          // §18.T1: 납세 시점 mood 델타 = -floorDiv(tax×taxMoodPer, 10) (그라데이션)
   },
   // §17.16 서카디언 수면 압력: 시각별 에너지 감쇠 % (0시..23시, 개인 위상 보정 후 조회)
@@ -697,6 +703,7 @@ function checkRanges(p, errors) {
   inRange('actions.construct.duration', p.actions.construct.duration, 1, 10000);
   // 119차 후속: MAX_SAFE_INTEGER까지 열면 차감 연산이 안전 정수를 벗어날 수 있다
   inRange('economy.maxDebt', p.economy.maxDebt, 0, 1e15);
+  inRange('economy.initialTreasury', p.economy.initialTreasury, 0, 1e9);
   for (const [ft, req] of Object.entries(p.construct.requiredByType)) {
     inRange(`construct.requiredByType.${ft}`, req, 1, 10000000);
   }

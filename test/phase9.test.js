@@ -523,6 +523,7 @@ test('S-17. §17.13 생활 리듬: 가중 야근·연속 오프셋·교대·수�
 
 test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () => {
   const w = createWorld(SEED);
+  const t0 = w.treasury; // §22.78 초기 국고가 0이 아니므로 증분으로 본다
   const L = w.logic;
   // 근무 정산: 원천징수
   const s = w.sims.find((x) => x.traits.occupation !== 'retired' && x.traits.occupation !== 'student') ?? w.sims[0];
@@ -537,7 +538,7 @@ test('S-18. §17.15 경제 순환: 소득세 → 국고 → 복지·수당', () 
   assert.ok(mc, '정산 발생');
   assert.equal(mc.payload.delta, net, '실수령 = 세후');
   assert.equal(mc.payload.tax, wage - net, '세금 필드');
-  assert.equal(w.treasury, wage - net, '국고 적립');
+  assert.equal(w.treasury - t0, wage - net, '국고 적립분(§22.78 종잣돈과 무관하게 세금만큼 는다)');
   assert.equal(s.money, before + net);
   // 복지: 가난한 심 id asc, 캡·국고 한도
   const w2 = createWorld(SEED);
@@ -1179,6 +1180,8 @@ test('S-37. §19.7 재무장 누락 수리: 불만이 사라진 kind도 재무�
 
 test('S-38. §19.10 불만 원인 분화: 돈이 없어서 막힌 것은 시설 부재가 아니다 (이슈 #49)', () => {
   const w = createWorld(SEED);
+  w.treasury = 0; // §22.78 종잣돈이 있으면 복지가 끼어들어 '돈 없음' 전제가 깨진다
+  // §22.78 종잣돈이 생기면서 복지가 끼어들어 전제가 깨진다 — 이 픽스처는 국고도 빈 마을이다
   const s = w.sims[0];
   idleAll(w, []);
   resetIdle(s);
@@ -1273,6 +1276,7 @@ test('S-58. §20.2 소비금은 소멸하지 않고 그 시설 매출로 간다 
 
 test('S-59. §20.2 민간 임금은 시설 매출에서 나오고, 모자라면 부분 지급된다 (#43)', () => {
   const L0 = createWorld(SEED).logic;
+  // §22.78 종잣돈이 생기면서 복지가 끼어들어 전제가 깨진다 — 이 픽스처는 국고도 빈 마을이다
   assert.ok(L0.economy.privateWageOccupations.includes('barista'), '바리스타는 민간 임금 직군');
   // §21.1: 임금에 능력치 보정이 붙으므로 대상 심에서 직접 계산한다.
   const probe = createWorld(SEED);
@@ -1282,6 +1286,7 @@ test('S-59. §20.2 민간 임금은 시설 매출에서 나오고, 모자라면 
 
   const run = (revenue) => {
     const w = createWorld(SEED);
+    w.treasury = 0; // §22.78 종잣돈이 있으면 복지가 끼어들어 '지급액 0 → 실수령 0' 전제가 깨진다
     const cafe = w.map.facilities.find((f) => f.type === 'cafe');
     const sim = w.sims.find((s) => s.traits.occupation === 'barista') ?? w.sims[0];
     sim.traits.occupation = 'barista';

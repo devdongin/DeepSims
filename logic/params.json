@@ -681,6 +681,7 @@
       "firefighter"
     ],
     "maxDebt": 1000000000000,
+    "initialTreasury": 2000,
     "taxMoodPer": 5
   },
   "circadian": {

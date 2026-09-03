@@ -141,6 +141,7 @@ test('R-B3. 자율 build: 과밀+자금이면 심이 스스로 침대를 짓는�
 
 test('R-C1. 사고 흐름: 돈 없는 배고픈 심의 chain에 eat=no_money 기록', () => {
   const w = createWorld(SEED);
+  w.treasury = 0; // §22.78 종잣돈이 생기면서 복지가 나가 '돈 없음' 전제가 깨진다 — 이 픽스처는 국고도 빈 마을이다
   const s = w.sims[0];
   idleAll(w, [0]);
   s.traits = { ...s.traits, age: 40, occupation: 'freelancer' };
