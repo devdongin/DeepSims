@@ -46,6 +46,16 @@ export function recordTransportDeparture(world, sim, path, t, known = true) {
   stats.pending[sim.id] = { action: s.action, facilityId: s.facilityId,
     resourceId: s.resourceId, known, walkingTicks: 0, lastWalkTick: -1 };
   if (!known) return; // Old saves have no observed departure.
+  // Residence-to-service visits, not guessed border crossings. Snapshot both
+  // identities at departure; a later move or municipal reassignment is not a visit.
+  if (world.villages?.length > 1 && purpose !== 'home' && s.action !== 'settle_village') {
+    const facility=world.map.facilities.find(f=>f.id===s.facilityId);
+    const from=sim.villageId, to=facility?.villageId;
+    if (from && to && from!==to && world.villages.some(v=>v.id===from)
+      && world.villages.some(v=>v.id===to)) {
+      stats.pending[sim.id].municipalVisit={from,to,purpose};
+    }
+  }
   today.departures++;
   today.pathTiles += path.length;
   today.maxPathTiles = Math.max(today.maxPathTiles, path.length);
@@ -74,6 +84,17 @@ export function recordTransportArrival(world, sim) {
     stats.today.arrivals++;
     stats.today.completedWalkingTicks += pending.walkingTicks;
     stats.today.maxWalkingTicks = Math.max(stats.today.maxWalkingTicks, pending.walkingTicks);
+    const visit=pending.municipalVisit;
+    if (visit && sim.villageId===visit.from) {
+      const facility=world.map.facilities.find(f=>f.id===pending.facilityId);
+      const resource=facility?.resources.find(r=>r.id===pending.resourceId);
+      if (facility?.villageId===visit.to && resource?.x===sim.x && resource?.y===sim.y) {
+        const visits=stats.today.municipalVisits??={};
+        const key=JSON.stringify([visit.from,visit.to,visit.purpose]);
+        const row=visits[key]??={...visit,arrivals:0,walkingTicks:0};
+        row.arrivals++; row.walkingTicks+=pending.walkingTicks;
+      }
+    }
   } else stats.today.partialArrivals++;
   delete stats.pending[sim.id];
 }
