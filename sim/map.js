@@ -12,7 +12,7 @@ export const MAP_W4 = 512;        // §17.0 3차 확장
 export const MAP_H4 = 512;
 export const TILE = { GRASS: 0, ROAD: 1, FLOOR: 2, WALL: 3, TREE: 4, WATER: 5,
   // §19 R-A 지형 (append-only — 기존 코드 0..5 의미 불변)
-  RIVER: 6, BANK: 7, SAND: 8, MOUNTAIN: 9, HILL: 10, BRIDGE: 11 };
+  RIVER: 6, BANK: 7, SAND: 8, MOUNTAIN: 9, HILL: 10, BRIDGE: 11, SIDEWALK: 12 };
 
 // 통행 가능 여부의 단일 권위 확장: 강·산은 막고, 다리·모래·언덕·강가는 통행 가능
 export const BLOCKING_TILES = new Set([TILE.WATER, TILE.WALL, TILE.RIVER, TILE.MOUNTAIN]);
