@@ -645,7 +645,8 @@
       "mall": 8000,
       "university": 10000
     },
-    "demolitionCostPerTile": 200
+    "demolitionCostPerTile": 200,
+    "plannedCenterCost": 5000
   },
   "growth": {
     "headroomBeds": 2,

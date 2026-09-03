@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 50; // §19.12 역 수요 관측·언락 (49=공공사업과 번호 충돌 → 50으로)
+export const SCHEMA_VERSION = 51; // §18.T6 계획 중심점
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -48,12 +48,12 @@ export const EVENT_TYPES = [
   'token_created', 'gathering', 'conversation', 'greeting',
   'road_formed', 'bed_built', 'hangover',
   'item_spawned', 'item_found', 'weather_changed', 'fish_caught',
-  'project_started', 'facility_built', 'moved_home',
+  'project_started', 'facility_built', 'moved_home', 'center_planned',
   'immigrated', 'fell_sick', 'recovered', 'election', 'started_dating', 'married', 'broke_up',
   'joined_club', 'mayor_stipend', 'new_year', 'graduated', 'retired_now', 'festival', 'child_settled',
 ];
 
-export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce'];
+export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];
 
 export const OUTDOOR_FACILITIES = ['park', 'pond']; // 비 날씨 페널티 대상 (§16.D)
 

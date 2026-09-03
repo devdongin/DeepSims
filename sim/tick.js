@@ -668,6 +668,26 @@ function applyZone(world, inp, t, emit) {
   emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, treasury: world.treasury });
 }
 
+// §18.T6: 플레이어가 지정한 계획 중심점 — 비용을 즉시 예약하고 자동 건설 점수에 반영한다.
+function applyPlanCenter(world, inp, t, emit) {
+  const p = inp.payload ?? {};
+  const cost = world.logic.zone.plannedCenterCost;
+  const validCoord = Number.isSafeInteger(p.x) && Number.isSafeInteger(p.y)
+    && p.x >= 0 && p.x < world.map.w && p.y >= 0 && p.y < world.map.h;
+  let reason = null;
+  if (!validCoord) reason = 'out_of_bounds';
+  else if (!isWalkable(world.map, p.x, p.y)) reason = 'not_walkable';
+  else if ((world.centers ?? []).some((c) => c.x === p.x && c.y === p.y)) reason = 'duplicate';
+  else if (world.treasury < cost) reason = 'treasury_short';
+  if (reason) { emit('input_rejected', null, { command: 'plan_center', reason }); return; }
+  world.treasury -= cost;
+  world.externalOutflow = (world.externalOutflow ?? 0) + cost;
+  world.centers ??= [];
+  const centerId = `center${world.centers.length}`;
+  world.centers.push({ centerId, x: p.x, y: p.y, createdTick: t });
+  emit('center_planned', null, { centerId, x: p.x, y: p.y, cost, treasury: world.treasury });
+}
+
 // §18.T1: 유효 경제값 — 정책 오버라이드 우선 (읽기 단일 권위)
 function econ(world, key) {
   return world.policy[key] ?? world.logic.economy[key];
@@ -709,6 +729,7 @@ export function tick(world, inputsForThisTick = []) {
     else if (inp.command === 'announce') applyAnnounce(world, inp, t, emit);
     else if (inp.command === 'policy') applyPolicy(world, inp, t, emit);
     else if (inp.command === 'zone') applyZone(world, inp, t, emit);
+    else if (inp.command === 'plan_center') applyPlanCenter(world, inp, t, emit);
     else emit('input_rejected', null, { reason: 'unknown_command', inputId: inp.id ?? null });
   }
 
@@ -1258,7 +1279,10 @@ export function tick(world, inputsForThisTick = []) {
       // §19.3: 이미 착공 중인 공터는 제외 (중복 배정 금지)
       const busy = new Set(world.projects.map((p) => p.plotId));
       const candidates = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)); // §17.23 침범 방지
-      const centers = world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type));
+      const centers = [
+        ...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)),
+        ...(world.centers ?? []),
+      ];
       const distance = (p, f) => Math.abs(p.x - f.x) + Math.abs(p.y - f.y);
       const freePlot = candidates.sort((a, b) => {
         const score = (p) => centers.length === 0 ? 0 : Math.min(...centers.map((f) => distance(p, f)));
