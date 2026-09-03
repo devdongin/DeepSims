@@ -162,7 +162,7 @@ const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', '
   // 에셋 에이전트가 다섯 회차 연속 이 키를 요청했는데 **배선이 없어서** 만들어도 안 보였다.
   // 배선을 먼저 둔다: 파일이 아직 없으면 loadImagesNative가 null로 받고 exists()가 false라
   // 아래 drawGardens가 통째로 건너뛴다 — 즉 지금은 무해하고, PNG가 생기는 순간 살아난다.
-  'tile_garden', 'wall_stone']
+  'tile_garden', 'wall_stone', 'hedge_low']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -293,7 +293,10 @@ class TownScene extends Phaser.Scene {
         // §22.65 목업의 경계는 "낮은 석벽·나무 울타리" **둘 다**다. Codex가 wall_stone(32×24,
         // fence_wood와 같은 규격)을 만들며 혼합 배치를 요청했다. 무작위가 아니라 위치로 정한다 —
         // 3칸마다 한 번 석벽. 같은 공원은 늘 같은 무늬가 나오고, 리플레이·리싱크에도 안 흔들린다.
-        const edgeKey = (fx, fy) => (((fx - fac.x) / 2 + fy) % 3 === 0 ? 'wall_stone' : 'fence_wood');
+        // §22.70 조경 3종을 돌린다 — 석벽·관목·나무 울타리. 목업의 경계는 한 재질이 아니라
+        // 섞여 있다. 무작위가 아니라 위치로 정해 같은 공원은 늘 같은 무늬가 나온다.
+        const EDGE_CYCLE = ['wall_stone', 'hedge_low', 'fence_wood'];
+        const edgeKey = (fx, fy) => EDGE_CYCLE[Math.abs((fx - fac.x) / 2 + fy) % EDGE_CYCLE.length];
         const fenceRow = (fy) => {
           for (let fx = fac.x; fx + 1 < fac.x + fac.w; fx += 2) put(edgeKey(fx, fy), fx, fy, 24, -2);
           // 폭이 홀수면 끝 한 칸이 빈다. 밖으로 내밀지 말고 안쪽에서 한 칸 겹쳐 채운다 —
