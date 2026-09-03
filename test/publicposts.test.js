@@ -1,6 +1,7 @@
 // §23.13 공공 정원 계약. 사용자 지적: "공무원이 너무 많은거지 / 인구수에 맞게
 // 공무원수도 설계되어야지." 여기서 못 박는 것은 **정원이 인구를 따라가는가**다.
 import { test } from 'node:test';
+import { moodBaseline } from '../sim/tick.js';
 import assert from 'node:assert/strict';
 import { createWorld, advance, hashWorld, serialize, deserialize } from '../sim/index.js';
 import { publicQuota, publicHeadcount, publicPostAvailable, fillPublicPosts, trimOverQuotaPosts } from '../sim/publicposts.js';
@@ -199,4 +200,41 @@ test('D-3. 병이 사라지지도, 마을을 뒤덮지도 않는다', () => {
   const sick = w.sims.filter((s) => s.sick).length;
   assert.ok(fell > 0, '60일 동안 아무도 안 아팠다 — 병이 죽은 콘텐츠가 됐다');
   assert.ok(sick * 3 < w.sims.length, `유병률이 3분의 1을 넘었다 (${sick}/${w.sims.length})`);
+});
+
+// §23.25 기분의 바닥선. 기분이 늘 0으로 수렴하면 **친구가 여섯인 사람과 아무도 없는
+// 사람이 같은 자리로 돌아간다** — 기분이 단기 완충일 뿐 상태가 아니게 된다.
+test('M-1. 삶의 조건이 다르면 기분의 바닥이 다르다', () => {
+  const w = createWorld(4242);
+  const L = w.logic;
+  const a = w.sims[0], b = w.sims[1];
+  a.relTiers = {}; b.relTiers = {};
+  a.homeId = null; a.traits.occupation = 'jobless'; a.sick = { kind: 'cold', untilTick: 9e9 };
+  b.homeId = w.map.facilities.find((f) => f.type === 'house').id;
+  b.relTiers = { 2: 'friend', 3: 'friend', 4: 'friend' };
+  w.partners[b.id] = 5; w.partnerStage[b.id] = 'married';
+  assert.ok(moodBaseline(b, w, L) > moodBaseline(a, w, L) + 1000,
+    `가진 것이 많은 쪽의 바닥이 안 높다 (${moodBaseline(a, w, L)} vs ${moodBaseline(b, w, L)})`);
+  assert.ok(moodBaseline(a, w, L) < 0, '집도 일도 없고 아픈데 바닥이 음수가 아니다');
+});
+
+test('M-2. 바닥선은 사건의 진폭을 삼키지 않는다', () => {
+  const w = createWorld(4242);
+  const span = w.logic.mood.baseline.span;
+  assert.ok(span * 3 < 10000, `바닥선 상한(${span})이 사건 진폭(±10000)에 너무 가깝다`);
+  for (const s of w.sims) {
+    const v = moodBaseline(s, w, w.logic);
+    assert.ok(v >= -span && v <= span, `바닥선이 상한을 넘었다 (${v})`);
+  }
+});
+
+test('M-3. 기분은 바닥선으로 수렴한다 (0이 아니라)', () => {
+  const w = createWorld(4242);
+  const s = w.sims.find((x) => x.homeId) ?? w.sims[0];
+  s.relTiers = { 2: 'friend', 3: 'friend' };
+  const base = moodBaseline(s, w, w.logic);
+  s.mood = 9000;
+  advance(w, {}, 1440 * 3);
+  assert.ok(Math.abs(s.mood - base) < 2000,
+    `사흘이 지나도 바닥선(${base})으로 안 내려왔다 (${s.mood})`);
 });

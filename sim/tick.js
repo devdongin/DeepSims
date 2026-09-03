@@ -129,6 +129,33 @@ function needValueFor(sim, action, L) {
 }
 
 // MBTI → 행동별 persFactor (PLAN §12.1). floorDiv 곱 후 [50,200] 클램프 1회.
+// §23.25 기분의 바닥선. 삶의 조건을 작은 가산으로 더한다 — 어느 하나가 지배하지 않게
+// 각 항이 작고, 합은 clamp로 묶는다. rng를 쓰지 않으므로 결정성에 관여하지 않는다.
+export function moodBaseline(sim, world, L) {
+  const B = L.mood.baseline;
+  let v = 0;
+  if (world.partners?.[sim.id] !== undefined) {
+    v += world.partnerStage?.[sim.id] === 'married' ? B.married : B.dating;
+  }
+  let friends = 0, rivals = 0;
+  for (const tier of Object.values(sim.relTiers ?? {})) {
+    if (tier === 'friend') friends++;
+    else if (tier === 'rival') rivals++;
+  }
+  v += Math.min(B.friendCap, friends * B.perFriend);
+  v -= Math.min(B.rivalCap, rivals * B.perRival);
+  if (sim.homeId) v += B.home;
+  if (sim.sick) v += B.sick;              // 아프면 바닥이 내려간다
+  if (sim.traits.occupation === 'jobless') v += B.jobless;
+  // 즐겨 하는 일이 있는 삶 — 습관이 붙은 여가 하나당 조금씩 (§17.6 클럽과 같은 신호)
+  let habits = 0;
+  for (const [k, n] of Object.entries(sim.habit ?? {})) {
+    if (n >= L.club.habitMin && !k.startsWith('work:')) habits++;
+  }
+  v += Math.min(B.habitCap, habits * B.perHabit);
+  return clamp(v, -B.span, B.span);
+}
+
 function persFactorFor(sim, action, L) {
   const m = sim.traits.mbti;
   let f = 100;
@@ -1378,10 +1405,16 @@ export function tick(world, inputsForThisTick = []) {
     }
     updateNeedsTier(sim, L, emit); // #91 감쇠 뒤 실제 충족 시간만 누적한다.
     naturalRecovery(world, sim, t, emit); // §17.3 자연 치유 (무드로우)
-    // 기분 감쇠: 0 방향으로 decayPerTick 수렴 — 5단계는 감쇠 후 기분을 읽는다
+    // §23.25 기분은 **0이 아니라 그 사람의 삶으로 돌아간다.**
+    // 예전에는 늘 0으로 수렴했다. 그래서 90일을 굴려도 마을의 평균 기분이 +50 언저리,
+    // 행복도 50%에 붙박였다 — 친구가 여섯인 사람과 아무도 없는 사람이 같은 자리로 돌아갔다.
+    // 기분이 단기 완충일 뿐 **상태가 아니었다.**
+    // 이제 바닥선은 그 사람이 살아온 결과다: 짝이 있는가, 친구가 몇인가, 누울 집이 있는가,
+    // 즐겨 하는 일이 있는가. 사건이 주는 진폭은 그대로이고, 가라앉는 자리만 달라진다.
+    const base = moodBaseline(sim, world, L);
     const dm = L.mood.decayPerTick;
-    if (sim.mood > 0) sim.mood = Math.max(0, sim.mood - dm);
-    else if (sim.mood < 0) sim.mood = Math.min(0, sim.mood + dm);
+    if (sim.mood > base) sim.mood = Math.max(base, sim.mood - dm);
+    else if (sim.mood < base) sim.mood = Math.min(base, sim.mood + dm);
   }
 
   // 4b) 고정 서브순서 (§16.D): 날씨 → 모임 판정 → 토큰 만료 → 토큰 생성 → 아이템 만료/스폰

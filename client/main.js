@@ -3030,8 +3030,11 @@ const GOALS = [
 
   { g: '삶', k: 'healthy', t: '건강한 마을', d: '아픈 사람이 열 명 미만', max: 1,
     v: (w) => w.sims.filter((s) => s.sick).length < 10 ? 1 : 0 },
-  { g: '삶', k: 'happy', t: '살 만하다', d: '평균 기분이 양수인 주민 70%', max: 70,
-    v: (w) => w.sims.length ? Math.round(100 * w.sims.filter((s) => (s.mood ?? 0) > 0).length / w.sims.length) : 0 },
+  // 기분은 매 틱 0으로 끌려가도록 설계돼 있다(mood.decayPerTick). 그래서 "양수인 주민 수"는
+  // 0 근처의 동전 던지기를 세는 것이지 마을이 살 만한지를 재는 것이 아니다 — 실측 18%가
+  // 나쁜 상태를 뜻하지 않았다. **평균 기분**을 본다. 대시보드의 행복도와 같은 척도다.
+  { g: '삶', k: 'happy', t: '살 만하다', d: '평균 기분 +1,500 (행복도 57%)', max: 1500,
+    v: (w) => w.sims.length ? Math.round(w.sims.reduce((a, s) => a + (s.mood ?? 0), 0) / w.sims.length) : 0 },
   { g: '삶', k: 'cars', t: '길이 붐빈다', d: '자가용 20대', max: 20, v: (w) => w.sims.filter((s) => s.hasCar).length },
 ];
 

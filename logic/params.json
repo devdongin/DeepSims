@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 63,
+  "logicSchemaVersion": 64,
   "needsTiers": {
     "fulfilledMin": 4000,
     "deprivedMax": 1000,
@@ -438,7 +438,21 @@
     "decayPerTick": 5,
     "lethargyThreshold": -5000,
     "reliefScale": 25000000,
-    "lethargyScale": 50000000
+    "lethargyScale": 50000000,
+    "baseline": {
+      "married": 900,
+      "dating": 500,
+      "perFriend": 150,
+      "friendCap": 900,
+      "perRival": 200,
+      "rivalCap": 800,
+      "home": 300,
+      "sick": -700,
+      "jobless": -500,
+      "perHabit": 120,
+      "habitCap": 480,
+      "span": 2500
+    }
   },
   "abilities": {
     "keyAbility": {
