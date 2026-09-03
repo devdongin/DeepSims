@@ -344,6 +344,7 @@ export const DEFAULT_LOGIC = {
   // §18.T2 건설 지시: 주문 시 국고 차감 (취소 없음 — 47차 합의), 착공 시 재검증
   zone: {
     costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000 },
+    demolitionCostPerTile: 200,
   },
   // §17.21 도시 성장 드라이브: 행동 이벤트 → 평판 → 이민 웨이브 + 선제·일자리 건설
   growth: {
@@ -734,6 +735,7 @@ function checkRanges(p, errors) {
   inRange('incidents.heroAffinity', p.incidents.heroAffinity, 0, 10000);
   inRange('incidents.heroRadius', p.incidents.heroRadius, 0, 1000);
   for (const k of Object.keys(p.zone.costs)) inRange(`zone.costs.${k}`, p.zone.costs[k], 0, 1000000);
+  inRange('zone.demolitionCostPerTile', p.zone.demolitionCostPerTile, 0, 1000000);
   inRange('pollution.repPerFactoryPerDay', p.pollution.repPerFactoryPerDay, 0, 10000);
   inRange('complaints.cap', p.complaints.cap, 1, 10000);
   inRange('complaints.lonelyMin', p.complaints.lonelyMin, 1, 1000);

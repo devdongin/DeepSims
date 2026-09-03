@@ -644,7 +644,8 @@
       "factory": 8000,
       "mall": 8000,
       "university": 10000
-    }
+    },
+    "demolitionCostPerTile": 200
   },
   "growth": {
     "headroomBeds": 2,

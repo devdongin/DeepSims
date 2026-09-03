@@ -646,15 +646,26 @@ function applyZone(world, inp, t, emit) {
   else if (!zoneAllowedTypes(world).includes(p.type)) reason = 'tier_locked'; // §18.T4 등급 게이트
   else if (!ZONEABLE.includes(p.type)) reason = 'bad_type'; // 언락됐지만 레시피 미구현(T3 대기)
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
-  else if (!(() => { const fp = zoneFootprint(p.type, p.dir); return plotBuildable(world.map, plot, fp.w, fp.h); })()) reason = 'not_buildable';
-  else if (world.treasury < cost) reason = 'treasury_short';
+  const demolitionTiles = () => { const fp = zoneFootprint(p.type, p.dir); let n = 0;
+    for (let y = plot.y; y < plot.y + fp.h; y++) for (let x = plot.x; x < plot.x + fp.w; x++) {
+      const tile = world.map.tiles[y * world.map.w + x];
+      if (tile === TILE.ROAD || tile === TILE.SIDEWALK) n++; else if (tile !== TILE.GRASS) return -1;
+    } return n; };
+  const demolished = plot ? demolitionTiles() : 0;
+  if (reason === null && !(() => { const fp = zoneFootprint(p.type, p.dir); return plotBuildable(world.map, plot, fp.w, fp.h) || demolished > 0; })()) reason = 'not_buildable';
+  else if (reason === null && world.treasury < cost + Math.max(0, demolished) * (L.zone.demolitionCostPerTile ?? 0)) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
-  world.treasury -= cost;
+  const demolitionCost = demolished * (L.zone.demolitionCostPerTile ?? 0);
+  if (demolished > 0) for (let y = plot.y; y < plot.y + zoneFootprint(p.type, p.dir).h; y++) for (let x = plot.x; x < plot.x + zoneFootprint(p.type, p.dir).w; x++) {
+    const tile = world.map.tiles[y * world.map.w + x];
+    if (tile === TILE.ROAD || tile === TILE.SIDEWALK) world.map.tiles[y * world.map.w + x] = TILE.GRASS;
+  }
+  world.treasury -= cost + demolitionCost;
   // §22.4 (93차 ②) 건설비는 마을 밖 시공사에게 나간다 — 경계 **유출**로 명시한다.
   // 안 세면 '내부에서 돈이 사라지는' 회계가 되어 G1 폐쇄 회계가 성립하지 않는다.
-  world.externalOutflow = (world.externalOutflow ?? 0) + cost;
+  world.externalOutflow = (world.externalOutflow ?? 0) + cost + demolitionCost;
   world.zoneOrders.push({ plotId: p.plotId, type: p.type, dir: p.dir });
-  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, treasury: world.treasury });
+  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, treasury: world.treasury });
 }
 
 // §18.T1: 유효 경제값 — 정책 오버라이드 우선 (읽기 단일 권위)
