@@ -652,6 +652,9 @@ class TownScene extends Phaser.Scene {
     this.syncGrassBg();
     this.syncTileCulling();
     this.followSelected();
+    // §23.21 미니맵은 6프레임마다 — 사람 200명 점 찍기를 매 프레임 할 이유가 없다.
+    this.__miniTick = (this.__miniTick ?? 0) + 1;
+    if (this.__miniTick % 6 === 0) drawMinimap();
   }
 
   // §UI 도로·바닥 레이어(59차 ③ 재검토): 구시가 한정(0..132) 개별 스탬프 — 실측 1,419개.
@@ -2485,6 +2488,7 @@ const ACTION_KO = {
   escort_child_doctor: '아이 병원 동행',
   supply_groceries: '식료품 공급',
   grow_groceries: '주문 식료품 재배',
+  stock_food: '식료품 비축',
   // §23.8 여가 확대
   stroll: '산책', garden: '텃밭 가꾸기', music: '악기 연주', volunteer: '봉사 활동', board_game: '보드게임',
 };
@@ -2658,6 +2662,7 @@ function eventText(e) {
     case 'hangover': return `🥴 ${ga(n)} 과음했습니다… 내일이 걱정입니다`;
     case 'weather_changed': return { sunny: '☀️ 화창한 아침입니다', cloudy: '☁️ 날이 흐립니다', rain: '🌧️ 비가 내리기 시작했습니다' }[e.payload.kind];
     case 'item_spawned': return null; // 어디 떨어졌는지는 비밀 — 발견의 재미
+    case 'season_changed': return `🍂 ${ {spring:'봄',summer:'여름',autumn:'가을',winter:'겨울'}[e.payload.to] }이 시작됐습니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
@@ -2947,6 +2952,76 @@ async function renderCityChronicle() {
 
 // §23.15 관계. 패널의 #relations는 처음부터 있었지만 아무도 쓰지 않았다.
 // 이 마을에서 사람들이 하는 일의 대부분이 관계인데 화면에는 그게 없었다.
+// §23.21 미니맵. 맵은 512×512이고 화면에는 그중 30칸 남짓이 보인다 — 카메라를 끌다 보면
+// **내가 어디 있는지, 마을이 어디였는지** 알 방법이 없었다. 따라가기를 넣고 나니 더 그랬다.
+//
+// 지형을 매 프레임 다시 그리면 26만 칸이라 감당이 안 된다. 지형은 **바뀔 때만** 오프스크린
+// 캔버스에 굽고(§22.104 컬링과 같은 발상), 매 프레임에는 구운 그림 위에 사람·시야만 얹는다.
+let miniBaked = null, miniKey = '';
+const MINI_SIZE = 168;
+function bakeMinimap() {
+  const map = world.map;
+  const key = `${map.facilities.length}:${world.terrainVersion ?? 0}`;
+  if (miniKey === key && miniBaked) return miniBaked;
+  const c = document.createElement('canvas');
+  c.width = MINI_SIZE; c.height = MINI_SIZE;
+  const g = c.getContext('2d');
+  g.fillStyle = '#20301c'; g.fillRect(0, 0, MINI_SIZE, MINI_SIZE); // 들판
+  const sc = MINI_SIZE / map.w;
+  // 도로·물만 굵게 — 미니맵에서 알아볼 수 있는 것은 길과 물과 건물뿐이다.
+  const img = g.createImageData(MINI_SIZE, MINI_SIZE);
+  const px = img.data;
+  const COL = { 1: [86, 80, 72], 2: [110, 104, 96], 12: [110, 104, 96], 5: [40, 62, 96], 6: [52, 82, 120],
+    7: [92, 104, 84], 8: [140, 128, 96], 9: [96, 92, 88], 10: [80, 88, 70], 11: [120, 104, 76], 4: [44, 74, 44] };
+  for (let y = 0; y < MINI_SIZE; y++) {
+    const my = Math.floor(y / sc);
+    for (let x = 0; x < MINI_SIZE; x++) {
+      const t = map.tiles[my * map.w + Math.floor(x / sc)];
+      const c3 = COL[t] ?? [32, 48, 28];
+      const o = (y * MINI_SIZE + x) * 4;
+      px[o] = c3[0]; px[o + 1] = c3[1]; px[o + 2] = c3[2]; px[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  // 시설은 그 위에 점으로 — 집은 흐리게, 그 밖은 또렷하게. 마을의 모양이 한눈에 든다.
+  for (const f of map.facilities) {
+    g.fillStyle = f.type === 'house' || f.type === 'apartment' ? '#8a6f4a' : '#ffcf6a';
+    g.fillRect(f.x * sc, f.y * sc, Math.max(2, f.w * sc), Math.max(2, f.h * sc));
+  }
+  miniKey = key; miniBaked = c;
+  return c;
+}
+
+function drawMinimap() {
+  const cv = $('minimap');
+  if (!cv || !world) return;
+  const g = cv.getContext('2d');
+  const map = world.map;
+  const sc = MINI_SIZE / map.w;
+  g.drawImage(bakeMinimap(), 0, 0);
+  // 사람 — 고른 사람만 눈에 띄게. 나머지는 옅은 점.
+  g.fillStyle = '#cfe8ff88';
+  for (const s of world.sims) g.fillRect(s.x * sc, s.y * sc, 1.5, 1.5);
+  const sel = selectedSimId !== null ? world.sims.find((s) => s.id === selectedSimId) : null;
+  if (sel) {
+    g.fillStyle = '#ff5f5f';
+    g.beginPath(); g.arc(sel.x * sc, sel.y * sc, 3, 0, Math.PI * 2); g.fill();
+  }
+  // 지금 보고 있는 곳 — 아이소 화면을 타일로 되돌리면 마름모다. 사각형으로 근사하지 않는다.
+  const cam = scene?.cameras?.main;
+  if (cam) {
+    const zoom = cam.zoom > 0 ? cam.zoom : 1;
+    const hw = cam.width / (2 * zoom), hh = cam.height / (2 * zoom);
+    const cx = cam.scrollX + cam.width / 2, cy = cam.scrollY + cam.height / 2;
+    const corners = [[cx - hw, cy - hh], [cx + hw, cy - hh], [cx + hw, cy + hh], [cx - hw, cy + hh]]
+      .map(([wx, wy]) => [(wx / (TW / 2) + wy / (TH / 2)) / 2 * sc, (wy / (TH / 2) - wx / (TW / 2)) / 2 * sc]);
+    g.strokeStyle = '#ffcf6a'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(corners[0][0], corners[0][1]);
+    for (let i = 1; i < 4; i++) g.lineTo(corners[i][0], corners[i][1]);
+    g.closePath(); g.stroke();
+  }
+}
+
 // §23.18 따라가기 상태. 씬은 매 프레임 이 값을 읽는다.
 let followSimId = null;
 function setFollow(id) {
@@ -3109,6 +3184,18 @@ for (const b of document.querySelectorAll('#feed-filter button')) {
     $('feed').replaceChildren();
   });
 }
+
+// §23.21 미니맵 클릭 = 그 자리로 간다. 따라가는 중이었다면 손이 이겼으니 따라가기는 끈다.
+$('minimap').addEventListener('click', (ev) => {
+  if (!world || !scene) return;
+  const r = ev.currentTarget.getBoundingClientRect();
+  const sc = MINI_SIZE / world.map.w;
+  const tx = (ev.clientX - r.left) * (MINI_SIZE / r.width) / sc;
+  const ty = (ev.clientY - r.top) * (MINI_SIZE / r.height) / sc;
+  setFollow(null);
+  scene.cameras.main.centerOn(isoX(tx, ty), isoY(tx, ty));
+  drawMinimap();
+});
 
 // §23.18 사람 목록·따라가기 배선
 $('people-btn').addEventListener('click', () => { $('people-modal').style.display = 'flex'; renderPeople(); });

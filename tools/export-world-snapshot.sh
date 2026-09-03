@@ -41,6 +41,7 @@ fs.writeFileSync('logs/world-snapshot.json', JSON.stringify({
   },
   incidents: w.incidents.length,
   storyteller: w.storyteller ?? null,
+  season: w.season ?? null,
   foodSupply: { ...(w.foodSupply ?? {}), markets: w.map.facilities.filter(f => f.type === 'market' || f.type === 'mall')
     .map(f => ({ id: f.id, stock: f.groceryStock ?? null, revenue: f.revenue ?? 0 })) },
   // §19 R-B 교통 현황 — #48이 '지표가 없다'고 지적한 부분의 최소 계측
