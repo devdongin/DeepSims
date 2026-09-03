@@ -1,6 +1,17 @@
-# 제안: 평가 평균 5.5 → 9.0 (Opus 구현용 로드맵) — v8, Codex 7차 NO-GO 조건 반영
+# 제안: 평가 평균 5.5 → 9.0 (Opus 구현용 로드맵) — v9, Codex 8차 NO-GO 조건 반영
 
 **성격**: 제안서. 구현하지 않는다. 한 항목 = *파일·함수 / 완료 기준(숫자) / 테스트 / 점수*.
+
+**v9에서 바뀐 것** (Codex 8차 NO-GO — 코드 사실 3건이 틀렸었다):
+- **C-3 정정**: 토큰은 이미 `tokenId`(= `world.tokenCounter++`, 전역 단조)를 가진다(`world.js:141`, `tick.js:609`, `planning.js:65`,
+  `society.js:339/502/579`). v8의 `tokenSeq`/`token.id`는 **중복 발명**이라 삭제 — `partyId = tokenId`, 추가는 `hostId` 하나. `world.gatherings`
+  잔재 제거. C-3에 **독립 게이트 G2-1**.
+- **T2-2 전제 정정**: 공공 임금은 §22.23(사용자 지시)로 **전액 보장**이고 `wage_shortfall`은 **민간 서비스 직(barista·chef·clerk)의 시설 매출
+  부족**에서만 난다(`tick.js:950-985`). "무급 공무원"은 존재하지 않는다 → T2-2는 **매출 없는 가게의 노동자**를 다루고, `protest`/`world.support`는
+  삭제(시장 책임이 아닌 것을 시장에 귀속시키지 않는다). 공공 임금 로직은 **건드리지 않는다**.
+- **§0.10에 `world.nameRegistry`** 추가(구세이브 백필 규칙, fallback 충돌 해소: fallback은 top-level 이름이 아니라 **registry 조회**).
+- **T0-4 커서 프로토콜 필드** 정의(`events`, `cursor`, `prevCursor`), 충돌 시 **스냅샷 값으로 교체 + 오류**. **G1-3 fixture는 커밋된 파일 + hash**
+  (라이브 DB 순환 의존 해소). G-0 **M = 28 목록**, T2-1 사유 토큰 allowlist + hash, T0-9/T1-5 fixture 명세, G1-4 델타 경로 기준, §6.5 null 규칙.
 
 **v8에서 바뀐 것** (Codex 7차 NO-GO 조건 4개 — 상태·프로토콜 계약):
 - **C-1 축소·정정**: `inputs.client_input_id` 컬럼은 **이미 있고** `addInput()`이 그걸로 중복 제거한다(`db/storage.js:141-148`). C-1은
@@ -8,7 +19,7 @@
   `inputId: null`** — 시장 정책·자동 건설·NPC 행동이 같은 타입을 쓰므로 이 구분이 없으면 "10종 동일"은 검증이 아니다.
 - **인과 판정 규칙**: `/api/input` 응답은 `{targetTick, sequence, duplicate?}`뿐이고 적용 `(tick, ordinal)`은 **`inputId`를 실은 이벤트로만**
   안다. 결과 카드는 `[applyTick, applyTick+4320]` 구간의 전후 비교이며 **인과 증명을 주장하지 않는다**(겹침 표시).
-- **§0.10 상태 계약 표**: `goals`·`goalsHash`·`crisis`·`support`·`pairTopicSeq`·`tokenSeq`·`token.id/hostId`·`invitedTo.partyId`·
+- **§0.10 상태 계약 표**: `goals`·`goalsHash`·`crisis`·`pairTopicSeq`·`token.hostId`·`nameRegistry`·`invitedTo.partyId`·
   `wageShortfallDays`·`state.inputId`·`zoneOrders[].inputId`·`projects[].inputId` — 초기값·마이그레이션(SCHEMA_VERSION 50→51)·
   직렬화·해시·구버전 세이브·`makeSim` 단일 창구.
 - **모임 데이터 모델(C-3)**: 현재 토큰은 `{topic, scheduledTick, placeId}`뿐이고 참석은 그 시각 그 장소에서 performing 중인 심 수
@@ -91,6 +102,7 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 (`tick.js:664`). 정의: SELECT에 `client_input_id` 추가 → `advance()` 입력 객체에 `clientInputId` → 수락·거부·결과 이벤트에 `payload.inputId`.
 **플레이어 원인 이벤트만 UUID를 싣고, 자동 원인(시장 재정 검토의 `policy_changed`, 자동 건설의 `project_started`, NPC의 `action_*`)은
 `inputId: null`** — 같은 이벤트 타입을 공유하므로 이 규칙이 없으면 "동일성 검사"가 성립하지 않는다.
+**금지**: `inputId`는 이벤트 payload 전용이다 — 행동 선택·RNG·타이브레이크·해시 입력에 쓰지 않는다.
 **API 응답과 적용 위치**: `/api/input`은 접수 시점에 `{targetTick, sequence}`만 안다. 적용 `(tick, ordinal)`은 **`inputId`를 실은 첫 이벤트**로
 클라가 안다 — 카드·타임라인은 그 이벤트를 기다린다(접수 카드 즉시, 적용 표시는 이벤트 도착 시).
 **지연 인과(lineage)** — 결과가 나중에 나오는 명령은 ID를 **월드 상태에 보존**해야 한다(현재 `startAction()`은 저장하지 않고
@@ -118,10 +130,12 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 **C-3 모임 데이터 모델 + 참석자 이벤트 (sim)** — 현재: 토큰은 `{topic: gathering|announce|festival, scheduledTick, placeId}`뿐이고(id·주최 없음,
 `planning.js:60`·`tick.js:606`·`society.js:338`), 참석은 `expireAndMeasureTokens`가 **그 시각 그 장소에서 performing 중인 심 수**로 센다
 (`planning.js:116`), `invitedTo`는 `{facilityId, untilTick}`(`society.js:1353`)이라 어느 모임인지 모른다. 정의:
-① `world.tokenSeq`(단조 증가) → `token.id`(**= partyId**), `token.hostId`(announce는 입력한 플레이어 심 id, gathering·festival은 `null`),
-② `sim.invitedTo`에 `partyId` 추가(초대 §22.6에서 설정), ③ `expireAndMeasureTokens`의 집계 루프에서 performing 중인 심마다
+① **`partyId = token.tokenId`**(이미 있음: `world.tokenCounter++`, 전역 단조, 파이프라인 순서로 결정적 — 새 카운터를 만들지 않는다),
+`token.hostId` **추가**(announce는 입력한 플레이어 심 id, gathering·festival·결혼식 잔치는 `null`; 생성 지점 5곳 전부), ② `sim.invitedTo`에
+`partyId` 추가(초대 §22.6에서 설정), ③ `expireAndMeasureTokens`(`planning.js:118`) 집계 루프에서 performing 중인 심마다
 `party_attended {partyId, simId, role: hostId === simId ? 'host' : 'guest'}` emit(집계 `count`는 유지).
-- 완료: fixture(announce 입력 → §22.6 초대 20명 → scheduledTick) 5회에서 party별 **`Set(simId)`가 실제 참석 심 목록과 일치**, `role` 정확, `count` == Set 크기.
+- **G2-1 (C-3 독립 게이트, T2-4 전)**: 마이그레이션(구세이브 토큰 `hostId: null`, `invitedTo.partyId: null`) 왕복, `hashWorld` 결정성, 리플레이 동일,
+  fixture(announce 입력 → §22.6 초대 20명 → scheduledTick) 5회에서 party별 **`Set(simId)`가 실제 참석 심 목록과 일치**, `role` 정확, `count` == Set 크기.
 
 ## 0.8 신규 행동·이벤트 계약 (T2-2·T2-4가 쓰는 것, 전부 `sim/` — Codex 합의)
 
@@ -131,11 +145,9 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 | 행동/이벤트 | 종류 | 후보 조건 | 지속(틱) | 우선순위 | RNG | 상태·직렬화 |
 |---|---|---|---|---|---|---|
 | `attend_party` | ACTION | `sim.invitedTo !== null` 이고 `scheduledTick - 120 ≤ t ≤ scheduledTick + 60` | 60 | 기존 점수식 그대로, 급함 = `NEED_MAX - social.deficit`(초대는 사회 욕구 행동) | 소비 0 | `sim.invitedTo`(기존) |
-| `host_party` | ACTION | `world.gatherings[].hostId === sim.id` 이고 같은 시간창 | 90 | `attend_party`와 동일 식, 주최자 가산 없음 | 소비 0 | `gathering.hostId`(기존 announce가 이미 기록) |
+| `host_party` | ACTION | `world.tokens`에 `hostId === sim.id`이고 같은 시간창인 토큰 존재 | 90 | `attend_party`와 동일 식, 주최자 가산 없음 | 소비 0 | `token.hostId`(C-3 신규) |
 | `party_attended` | EVENT | 위 두 행동 완료 시 emit | — | — | — | payload `{partyId, simId, role}` |
-| `protest` | ACTION | `sim.wageShortfallDays ≥ 3`(공무원) | 60 | 급함 = `NEED_MAX - money.deficit` | 소비 0 | `sim.wageShortfallDays` **신규 필드 → 마이그레이션 + `makeSim` 등록(§22.16 단일 창구)** |
-| `protested` | EVENT | `protest` 완료 시 | — | — | — | `{simId, mayorId}` → `world.support[mayorId] -= 1`(결과 델타) |
-| `side_job` | ACTION | 공무원, `wageShortfallDays ≥ 3`, 민간 시설 근무 슬롯 있음 | 기존 `work.duration` | 기존 `work` 식 | 소비 0 | 소득은 기존 `money_changed` |
+| `side_job` | ACTION | 민간 서비스 직, `wageShortfallDays ≥ 3`, **매출 > 0인 다른 민간 시설**에 근무 슬롯 있음 | 기존 `work.duration` | 기존 `work` 식 | 소비 0 | 소득은 기존 `money_changed` |
 | `job_changed` | EVENT | 기존 §21.3 전직 경로 재사용 | — | — | — | 기존 |
 
 - 완료(계약 자체): `ACTIONS`·`EVENT_TYPES` 기존 원소 인덱스 불변 테스트, 신규 필드 마이그레이션 왕복(`deserialize(serialize(w))` 고정점),
@@ -151,12 +163,11 @@ SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 �
 | `world.goals` | world | `{}` (`{[id]: {doneTick}}`) | T1-0·T1-4 | 달성 이벤트 발생 시에만 기록 |
 | `world.goalsHash` | world | `''` | T1-4 | `logic/goals.json` SHA-256 |
 | `world.crisis` | world | `null` (`{kind, since}`) | T1-0 | 해제 시 `null` |
-| `world.support` | world | `{}` (`{[mayorId]: int}`) | T2-2 | `protested`마다 −1; 선거 §22.20 회고 점수에 **읽기만** 추가(가중치 파라미터) |
 | `world.pairTopicSeq` | world | `{}` (`{"a>b:topic": int}`) | T2-3B | conversation 이벤트 emit **직전** +1 |
-| `world.tokenSeq` | world | `0` | C-3 | 토큰 생성마다 +1 |
-| `token.id` / `token.hostId` | world.tokens[] | 생성 시 부여 / `null` | C-3 | 구세이브 토큰은 마이그레이션에서 순번 부여·`null` |
+| `token.hostId` | world.tokens[] | `null` | C-3 | `tokenId`는 기존 필드 그대로 partyId로 사용; 구세이브 토큰은 `null` |
+| `world.nameRegistry` | world | `{}` (`{[simId]: {given, surname}}`) | C-2 | append-only; 생성(`player_created`·출생) 시 기록, 사망해도 유지. **구세이브 백필**: 마이그레이션이 현재 `sims` 전원 + DB 이벤트 중 이름 필드를 가진 `player_created`·`died` payload에서 채움. 클라 표기 = `payload.names?.[simId] ?? nameRegistry[simId]`(top-level 이름 fallback은 **폐기**) |
 | `sim.invitedTo.partyId` | sim | `null` | C-3 | 기존 `{facilityId, untilTick}` 확장 |
-| `sim.wageShortfallDays` | sim | `0` | T2-2 | 공공직만; `wage_shortfall` 있는 날 +1, 전액 지급 날 0으로, 전직 시 0 |
+| `sim.wageShortfallDays` | sim | `0` | T2-2 | **민간 서비스 직만**(`L.economy.privateWageOccupations`); 그날 `wage_shortfall`(source: facility) 있으면 +1, 전액 지급된 날 0, 전직 시 0 |
 | `sim.state.inputId` | sim.state | `null` | C-1 | `emptyState()`에 추가 |
 | `zoneOrders[].inputId` | world | `null` | C-1 | `applyZone`에서 설정 |
 | `projects[].inputId` | world | `null` | C-1 | 착공 시 order에서 복사, 자동 건설은 `null` |
@@ -174,7 +185,8 @@ C-1은 "T1-0의 선행"이 아니라 **독립 게이트**다. 현재 `getPending
 ## 0.5 사전 게이트
 
 **G-0 테스터 도구** — 3차 5인 전원 마우스 좌표 4.46~8.75배 어긋남.
-- 완료: 조작 대상 수를 **M**으로 고정(심·📣·🏛️·건설·배속·모달 버튼·패널 닫기 = 구현 시 열거) → **M × 3해상도(1000/1400/1920) × 2 DPR × 3회 무작위 순서** 전수 실제 `computer` 클릭, 명중 100%·오클릭 0. 미충족 시 재검증 결과 불채택.
+- 완료: 조작 대상 **M = 28**, 목록 고정: 심 스프라이트 5(화면 내 id 오름차순 앞 5명) · 📣 1 · 🏛️ 1 · 건설 메뉴 열기 1 · 구역 타입 항목 8(`L.tiers` 시설 종류) · 배속 4 · 모달 확인/취소 2 · 패널 닫기 3(심·시장·리포트) · 시장 패널 정책 조작 3 = 28.
+  UI가 늘면 목록·M을 이 문서에서 갱신하고 커밋. → **28 × 3해상도(1000/1400/1920) × 2 DPR × 3회 무작위 순서 = 504회** 전수 실제 `computer` 클릭, 명중 100%·오클릭 0. 미충족 시 재검증 결과 불채택.
 
 ## 1. 항목별 갭 (실측 → 목표 9)
 
@@ -220,9 +232,12 @@ construct 575쌍의 시작→완료 차이 **최소 60·중앙 60·같은 틱 0*
 **해시 정의**: 이벤트 하나 = canonical JSON `{tick, ordinal, type, simId, payload}`(키 정렬, 공백 없음, UTF-8) — **payload까지 보존**한다;
 멀티셋 해시 = 각 이벤트 SHA-256을 `(tick, ordinal)` 순으로 이어 붙인 SHA-256. 스냅샷에 포함하는 최근 이벤트 = **`[worldTick−59, worldTick]`**
 (N = 60틱). 사건 allowlist = T1-2의 allowlist와 동일 목록. fixture ≥ 500 이벤트(루틴·비루틴 혼합, 창 경계 걸침 포함).
-**리싱크 dedupe·커서**(현재 리싱크는 새 스냅샷만 보낸다, `server/index.js:248`): 클라 피드는 `Map` 키 `` `${tick}:${ordinal}` ``, 스냅샷 이벤트와
-기존 피드는 **키 합집합**(같은 키는 스냅샷 값으로 교체 없이 유지 — 내용이 같아야 하며 다르면 오류 로그), 리싱크 후 첫 tickBatch의 최소 tick이
-`snapshot.worldTick + 1`을 넘으면 **갭 경고** 1줄. 테스트: 5개 오프셋(창 시작·중간·끝·경계 전후)에서 재접속 → 중복 0·누락 0·갭 경고 0.
+**리싱크 커서 프로토콜**(현재 스냅샷엔 이벤트가 없고 `seq`만 있다, `server/index.js:243-275`): 메시지 필드 추가 —
+snapshot: `events: [{tick, ordinal, type, simId, payload}]`(범위 `[worldTick−59, worldTick]`), `cursor: {tick, ordinal}`(포함된 마지막 이벤트,
+없으면 `{tick: worldTick, ordinal: -1}`); tickBatch: `prevCursor`(이 배치 직전 커서), `cursor`(이 배치 마지막). 클라: 피드는 `Map` 키
+`` `${tick}:${ordinal}` ``, 스냅샷 이벤트와 기존 피드는 **키 합집합**, 같은 키에 내용이 다르면 **스냅샷 값으로 교체하고 `console.error`**(테스트에선
+실패); tickBatch의 `prevCursor`가 자기 커서와 다르면 **갭 경고 + 리싱크 요청**. 테스트: 5개 오프셋(창 시작·중간·끝·경계 전후)에서 재접속 →
+중복 0·누락 0·충돌 0·갭 경고 0.
 - 완료: 토글 끔에서 표시 줄 중 루틴 ≤ 30%(분모 = 표시 줄) **그리고** 비루틴 이벤트 표시 **100% 보존** **그리고** 롤업 줄의 집계 수 합 ==
   원본 루틴 이벤트 수; 원본 `(tick, ordinal)` 멀티셋 해시와 복원 해시가 창 경계 59/60/61틱·리싱크·재접속에서 동일(누락·중복 0).
 
@@ -250,7 +265,7 @@ token_created weather_changed zoned`.
 식사, highlights 50칸 중 48칸 `lonely`). **백엔드 한계가 먼저 있다**: `Storage.getReport()`(`db/storage.js:212-222`)의 highlights는
 12종·`LIMIT 50`이고 `died`·`policy_changed`·`public_works`·`city_promoted`·`treasury_debt`가 **빠져 있다** → 그 확장은 **T1-5**.
 Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highlights kind별 상한, 사건 우선 정렬.
-- 완료: **상위 20줄 = 본문 사건 줄**(헤더·소개문·접힌 집계줄 제외), 사건 allowlist 고정, 같은 kind ≤ 6줄, 20줄 미만이면 **미검증**; 접힘·상한은 표시만 — **원본 사건 수 보존**(리포트 원자료 카운트 == DB 카운트); C-2 전에는 이름 문자열이 아니라 **`simId`로만** 검사.
+- 완료: fixture = 커밋된 `test/fixtures/report-day.json`(seed·시작 tick 고정, 사건 ≥ 30건, 기대 원자료 count 동봉) — 20줄 미만은 fixture 오류로 실패; **상위 20줄 = 본문 사건 줄**(헤더·소개문·접힌 집계줄 제외), 사건 allowlist 고정, 같은 kind ≤ 6줄; 접힘·상한은 표시만 — **원본 사건 수 보존**(리포트 원자료 카운트 == DB 카운트); C-2 전에는 이름 문자열이 아니라 **`simId`로만** 검사.
 
 **Tier 0 산술**: 재미 5.0 · 안정 7.5 · 이해 5.8 · UI 7.0 · 그럴듯 6.9 · 보는 6.0 · 성능 6.0 · 문서 7.4 = **51.6/8 = 6.45**. 게이트 ★3.3.
 
@@ -263,7 +278,7 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 - 완료: 기본 줌에서 심 높이 ≥ 48px, 이름표 ≥ 11px; **고정 fixture(성별·나이대 라벨 있는 심 20명) 블라인드 판정 — 개인별 정답률 ≥ 80%**를 5명 중 4명 이상이 충족; fixture는 회차마다 **seed를 바꿔 20명을 새로 뽑는다**(암기 방지).
 
 **G1-2 mapLayer 최소 수정** — §22.10 #2: 22,027 다각형 매 프레임 재래스터화(9.9ms, 가시 2.9%) → 뷰포트 컬링/청크 캐시.
-- 완료: 고정 하드웨어·**브라우저 버전·DPR 2**·CPU 유휴(다른 부하 없음)·뷰포트 1440×900·**라이브 DB 특정 tick 스냅샷**(인구 100 시점, tick 기록)·워밍업 5분 후 **마지막 1,000프레임 p95** mapLayer 비용 ≤ 2ms(평균 아님, 계측 스크립트 첨부).
+- 완료: 고정 하드웨어·**브라우저 버전·DPR 2**·CPU 유휴(다른 부하 없음)·뷰포트 1440×900·**커밋된 fixture `test/fixtures/render-pop100.json`**(seed·tick·sha256 기록)·워밍업 5분 후 **마지막 1,000프레임 p95** mapLayer 비용 ≤ 2ms(평균 아님, 계측 스크립트 첨부).
 
 **G1-3 시뮬 성능 게이트 (sim, Tier 0과 병행하는 별도 트랙)** — v4의 T3-3b를 여기로 옮겼다. PLAN G6은 인구 200 성장 **전에**
 성능 게이트를 통과시키게 돼 있고 라이브 인구가 138이다. §22.27: 인구 200에서 158~278 tick/s(예산 20k의 70~127배 미달),
@@ -271,7 +286,8 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 행동 시작당 1회 BFS. 제안: 후보 스캔 공간 인덱스/근접 캐시, 맵 불변 구간 BFS 결과 캐시. **캐시는 같은 입력에 같은 출력만**(결정성).
 **workload 재정의**(Codex 지적): 현재 `bench/popscale.js`는 얕은 합성 인구·best-of-2라 실제 세계를 대표하지 않는다. fixture는 **실제
 138~200명 세계의 스냅샷**(라이브 DB 복사, 기억·관계·프로젝트·상호작용 포함)으로 고정하고, best-of를 폐기해 **5회 중 최악값**을 쓴다.
-- 완료: fixture = **라이브 DB의 특정 tick 스냅샷 하나로 고정**(인구 200 도달 시점, tick 기록), 브라우저 무관(서버 벤치)·Node 버전·CPU 유휴 상태 기록,
+- 완료: fixture = **커밋된 파일 `test/fixtures/perf-pop200.json`**(헤드리스 seed 실행으로 1회 생성: `{seed, worldTick, population: 200, sha256}`를
+  파일 헤더와 이 문서에 기록; 재생성은 커밋 메시지에 사유 명시) — 라이브 DB 의존 없음; Node 버전·CPU 유휴 상태 기록,
   워밍업 1일·측정 3일, **5회 최악 ≥ 2,000 tick/s(10배)**, 해시·리플레이 동일. 통과 시 성능 8.5 인정. **20,000 tick/s는 조건부 목표**다 — 인구 10의
   현재 값(18,179)보다 높고 제안된 캐시만으로 도달할 근거가 없으므로 약속하지 않는다; 성능 9는 이 조건이 충족될 때만이다.
 
@@ -281,8 +297,8 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 **resync 프로토콜 계약**: 스냅샷에 `protocolVersion`(정수, 불일치 시 클라가 전체 리로드), 타일은 **4비트 팔레트(12값) + 런렝스**로 인코딩해
 base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효과가 크다 — 단 실측 전엔 크기를 약속하지 않는다), 클라 디코더는 왕복
 동일성 테스트(`decode(encode(tiles)) === tiles`), 나머지 상태는 기존 JSON.
-- 완료: 배속 ×48·인구 100에서 30분간 전면 재빌드 0회, Text 생성 수 ≤ 변경 심 수; resync 페이로드는 **인코딩 실측 후 목표 확정**(1차 목표
-  ≤ 200KB, 미달이면 델타 리싱크로 대체 — 어느 쪽이든 10회 p95 기록); map/state 왕복 동일 100%, 이벤트 커서 연속(T0-4), `protocolVersion`
+- 완료: 배속 ×48·인구 100에서 30분간 전면 재빌드 0회, Text 생성 수 ≤ 변경 심 수; resync 페이로드: 4비트+RLE 전체 스냅샷이 **p95 ≤ 200KB**를
+  못 넘기면 델타 리싱크(마지막 커서 이후 변경분)로 대체하되, **어느 경로든 payload p95 ≤ 200KB·왕복 p95 ≤ 500ms·10회 측정**이 합격 기준; map/state 왕복 동일 100%, 이벤트 커서 연속(T0-4), `protocolVersion`
   불일치 케이스 리로드 1/1; p95 프레임 < 16.7ms(워밍업 후 **마지막 1,000프레임 창**). **oracle**: 증분 갱신 결과가 같은 상태의 전면 재빌드와
   동일 — 스프라이트 집합(키·좌표·깊이) 동일 + 두 캔버스 픽셀 ΔE(CIE76) 최대 0.
 
@@ -353,13 +369,16 @@ base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효�
 ## 4. Tier 2: 세계가 설명되게 (`sim/` 변경은 각각 Codex 합의)
 
 **T2-1 판단 사유 노출** — `action_started.payload.reason.chain`이 이미 있다. 패널에 문장으로.
-- 완료: `action_started` 1,000건에서 미표시·미등록 사유 토큰 0.
+- 완료: 사유 토큰 allowlist = `logic/reason-tokens.json`(현재 `reason.chain`에 등장하는 토큰 전수 열거, SHA-256을 문서·커밋에 기록; 새 토큰은 파일 추가 + hash 갱신), `action_started` 1,000건에서 목록 밖 토큰 0·미표시 0.
 
-**T2-2 무급 공무원 — 행동과 *결과*** — `wage_shortfall` N일 누적 → 결정적 전이: `protest`(시청 앞 집결 → 시장 지지도 하락
-이벤트) / `job_changed`(민간 전직 → 공석 이벤트 → 서비스 저하) / `side_job`(부업 → 소득 이벤트). **초기 국고 증액 금지.**
+**T2-2 임금 못 받는 가게 노동자 — 행동과 *결과*** — 사실: 공공 임금은 §22.23으로 전액 보장(국고 음수 허용)이고, `wage_shortfall`은
+**민간 서비스 직(barista·chef·clerk)이 매출 없는 시설에서 일할 때만** 난다(`tick.js:950-970`, `source: 'facility'`). 이 로직은 **바꾸지 않는다**
+(공공 임금을 깎아 `wage_shortfall`을 만들면 사용자 지시 위반). 문제는 "손님 없는 가게의 직원이 무한히 무급으로 출근한다"이다.
+전이: `wageShortfallDays ≥ 3` → `job_changed`(공석 있는 다른 직업·시설로 전직 → `vacancy` 이벤트) / `side_job`(매출 있는 다른 시설에서 근무
+슬롯 → 소득). 선택은 기존 ACTIONS 점수식(§0.8), 우선순위 append. **시설 매출·국고 직접 증액 금지.**
 **결과 지표(원래 문제가 완화됐는가)**: 행동이 났다는 것만으로는 부족하다.
-- 완료: **N = 3일(4320틱) 고정**; fixture 무급자 10명 → 1440틱 내 행동 10/10, 7일 내 **심별 결과 이벤트 정확히 1회** 10/10; 상태 델타 —
-  `protested`면 `world.support[mayorId]` −1 이상, `job_changed`면 공공직 공석 +1(`vacancy` 이벤트 신규, §0.8 규약), `side_job`이면 소득 ≥
+- 완료: **N = 3일(4320틱) 고정**; fixture = 매출 0인 카페·식당에 배치된 민간 서비스 직 10명 → 1440틱 내 행동 10/10, 7일 내 **심별 결과 이벤트
+  정확히 1회** 10/10; 상태 델타 — `job_changed`면 원 시설 공석 +1(`vacancy` 이벤트 신규, §0.8 규약), `side_job`이면 소득 ≥
   **0.5 × 일 임금**(`wageBase × wagePct/100`; 1원은 통과 아님); **완화 지표**: 7일 창에서 해당 10명의 `wage_shortfall` 건수 ≥ **30% 감소**
   **또는** 심별 잔액 델타 ≥ 1일 임금; `wageShortfallDays` 규칙 테스트(가산·리셋·전직 시 0); 직접 국고 증액 0; 해시·리플레이 통과.
 
@@ -417,8 +436,8 @@ tick/s 조건)** · 문서 8.8→9 · 안정 8.5→9 (네트워크 실패·과�
 
 - **평가자**: 같은 5인 페르소나 + 확대 20인(직전 회차 구성 재사용), 각자 별도 클론·포트, 세계 seed **고정**.
 - **플레이**: 스크립트 시나리오 30분(첫 접속 → 정책 1회 → 건설 1회 → 심 지시 1회 → 팔로우 5분 → 재접속 1회) + 자유 플레이 15분.
-- **평가표**: `docs/REVIEW_RUBRIC.md` 그대로, 미검증은 null, 근거 없는 점수 무효.
-- **산식**: 항목별 평균은 null 제외. **두 집단 모두 필수, 순차**: 5인에서 각 항목 검증자 ≥ 4/5로 먼저 통과 → 20인에서 각 항목 검증자 ≥ 16/20으로
+- **평가표**: `docs/REVIEW_RUBRIC.md` 그대로, 근거 없는 점수 무효. **스크립트 시나리오가 다루는 항목의 null은 불합격**(선택적 누락 방지); 자유 플레이에서만 생긴 null은 미검증.
+- **산식**: 항목별 평균은 (자유 플레이) null 제외. "게임으로서 계속"은 **Yes/No 응답의 Yes 수**로 센다. **두 집단 모두 필수, 순차**: 5인에서 각 항목 검증자 ≥ 4/5로 먼저 통과 → 20인에서 각 항목 검증자 ≥ 16/20으로
   확인. 어느 집단이든 미달 항목이 있으면 그 항목은 미검증 → 전체 불합격.
 - **합격**: 두 집단 모두 8항목 **각각 ≥ 9.0**, "게임으로서 계속" ≥ 4/5(5인)·≥ 16/20(20인), **2회 연속**(다른 seed 1회 포함). 소수 첫째 자리 절사.
 - **재현 조건**: 커밋 hash·seed·시나리오 파일·페르소나 정의를 결과와 함께 기록.
@@ -435,6 +454,7 @@ tick/s 조건)** · 문서 8.8→9 · 안정 8.5→9 (네트워크 실패·과�
 | **G2-0** | C-2: `names` 누락 0 · 과거 100건 재생 동일 · 임시 표기 ↔ `names` 표기 일치 | 테스트 |
 | Tier 2 | 평균 ≥ 7.8 | 같은 5인 |
 | Tier 3 | 평균 ≥ 8.3(절사) · G1-3 통과 시 ≥ 8.4 → §6.5 프로토콜 | 5인 + 20인, 2회 연속 |
+| G2-1 | C-3 마이그레이션·해시·리플레이·참석 Set 5/5 | 테스트 (T2-4 전) |
 | **G1-3 재실행** | Tier 2의 `sim/` 변경(T2-2·T2-3B·T2-4·C-2·C-3) 후 같은 fixture로 재측정 ≥ 2,000 tick/s | 계측 (§6.5 전 필수) |
 
 ## 8. 하지 말 것
@@ -522,7 +542,7 @@ T0-4b 삭제(오진 확인) · T1-0 신설 · T2-3 로컬 캐시 폐기 · rende
 | T1-2가 C-2에 의존 | (a) 카메라(Tier 1) / (b) 이름(C-2 후) 분리, `simId` 범위·이탈 정의 |
 | T0-4 비루틴 숨기면 조작 가능 | 비루틴 100% 보존 + 집계량 보존, 창 기준점 명시 |
 | T0-5 목록 미열거 | `NULL_EVENT_TYPES` 18종 열거 |
-| C-2 우선순위·과거 이벤트 | `names` 우선, 과거 DB 100건 재생 동일 |
+| C-2 우선순위·과거 이벤트 | `names` 우선, 과거 DB 100건 재생 동일 (v9: 구이벤트는 `nameRegistry` 백필 조회, top-level fallback 폐기) |
 | C-3/T2-4 `Set(simId)`, 전체 `ACTIONS` 불변 | 반영 |
 | G-0 M×3×2×3, T0-2 오라클, T0-7 30회, T0-9/T1-5 보존, T2-2 상태 델타, T2-3 표본·reply 규칙, T3-2 probe 좌표, T3-3a 샘플링, §6.5 집단 | 전부 반영 |
 
@@ -552,7 +572,7 @@ T0-4b 삭제(오진 확인) · T1-0 신설 · T2-3 로컬 캐시 폐기 · rende
 | 플레이어 vs 자동 이벤트 구분 없음 | 자동 원인 `inputId: null` 규칙 + fixture |
 | `goals/crisis/support/pairTopicSeq/gatherings` 상태·마이그레이션 없음 | **§0.10** 표(초기값·SCHEMA 50→51·직렬화·해시·구세이브·`makeSim`) |
 | 모임에 `hostId`·`partyId` 없음(토큰·count뿐) | C-3 재정의: `tokenSeq`→`token.id`=partyId, `hostId`, `invitedTo.partyId`, 집계 루프에서 emit |
-| T2-2 결과 지표 없음(1원도 통과) | 완화 지표(`wage_shortfall` 30%↓ 또는 잔액 ≥ 1일 임금), `side_job` ≥ 0.5×일 임금, `vacancy` 이벤트, `wageShortfallDays` 규칙 |
+| T2-2 결과 지표 없음(1원도 통과) | 완화 지표(`wage_shortfall` 30%↓ 또는 잔액 ≥ 1일 임금), `side_job` ≥ 0.5×일 임금, `vacancy` 이벤트, `wageShortfallDays` 규칙 (v9에서 대상을 민간 서비스 직으로 정정) |
 | T0-4 리싱크 dedupe·커서 없음 | `${tick}:${ordinal}` 키 합집합, 범위 `[worldTick−59, worldTick]`, 갭 경고, 5오프셋 테스트 |
 | G1-4 resync 프로토콜 없음, 200KB 근거 없음 | `protocolVersion`, 4비트+RLE, 왕복 동일, 목표는 실측 후 확정(델타 대체안) |
 | C-2가 Tier 2라 이름 의존 | C-2 전 기준은 `simId`만(T0-9·T1-5·T1-2) 명시 |
@@ -561,3 +581,21 @@ T0-4b 삭제(오진 확인) · T1-0 신설 · T2-3 로컬 캐시 폐기 · rende
 | 20k tick/s 근거 없음 | 조건부 목표로 명시 |
 | C-1이 `inp.id`를 넣고 있음 | 현재 상태 정확히 기술(`client_input_id` 컬럼·dedup은 이미 있음, SELECT 누락) |
 | 완료 기준 12건(T0-3·T0-7·T0-9·G1-1·G1-2·G1-3·T1-3·T1-4·T2-2·T2-3·T2-4·T3-2) | 전부 반영 |
+
+## 부록 H. Codex 8차 리뷰(NO-GO) 반영
+
+| 조건·지적 | 반영 |
+|---|---|
+| `world.gatherings` vs `tokens` 모델 불일치; `tokenCounter` 이미 존재 | C-3: `partyId = tokenId`(기존), `hostId`만 추가, `gatherings` 잔재 제거, `tokenSeq` 삭제 |
+| 공공 임금 전액 보장(§22.23)이라 무급 공무원 전제 오류 | T2-2를 **매출 없는 가게의 민간 서비스 직**으로 재정의, `protest`·`world.support` 삭제, 공공 임금 로직 불변 |
+| `nameRegistry`가 §0.10에 없음, fallback 충돌 | 행 추가(백필 규칙), fallback = registry 조회, top-level 이름 fallback 폐기 |
+| 리싱크 커서 필드 없음 | `events`·`cursor`·`prevCursor` 정의, 충돌 시 스냅샷 값으로 교체 + 오류 |
+| 동일 키 내용 불일치 시 기존 값 유지는 거짓 보존 | 교체 + `console.error`, 테스트 실패 |
+| G1-3 fixture 순환 의존 | 커밋된 `test/fixtures/perf-pop200.json` + sha256 (G1-2도 동일 방식) |
+| C-3 독립 게이트 | **G2-1** |
+| G-0 M 미정 | M = 28, 목록·504회 |
+| T0-9/T1-5 fixture | `test/fixtures/report-day.json`(사건 ≥ 30, 기대 count) |
+| G1-4 델타 경로 기준 | 어느 경로든 p95 ≤ 200KB·왕복 ≤ 500ms·10회 |
+| §6.5 null 조작 가능 | 시나리오 항목 null = 불합격, "계속" = Yes 수 4/5·16/20 |
+| T2-1 사유 토큰 allowlist | `logic/reason-tokens.json` + hash |
+| C-1 `inputId`를 선택·RNG·타이브레이크에 쓰지 말 것 | §0.7 C-1에 명시 (아래) |
