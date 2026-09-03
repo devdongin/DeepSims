@@ -1,6 +1,21 @@
-# 제안: 평가 평균 5.5 → 9.0 (Opus 구현용 로드맵) — v7, Codex 6차 NO-GO 조건 반영
+# 제안: 평가 평균 5.5 → 9.0 (Opus 구현용 로드맵) — v8, Codex 7차 NO-GO 조건 반영
 
 **성격**: 제안서. 구현하지 않는다. 한 항목 = *파일·함수 / 완료 기준(숫자) / 테스트 / 점수*.
+
+**v8에서 바뀐 것** (Codex 7차 NO-GO 조건 4개 — 상태·프로토콜 계약):
+- **C-1 축소·정정**: `inputs.client_input_id` 컬럼은 **이미 있고** `addInput()`이 그걸로 중복 제거한다(`db/storage.js:141-148`). C-1은
+  `getPendingInputs()`가 그 컬럼을 SELECT해 `advance()`로 넘기고 이벤트에 싣는 일이다. **플레이어 원인 이벤트만 UUID, 자동 이벤트는
+  `inputId: null`** — 시장 정책·자동 건설·NPC 행동이 같은 타입을 쓰므로 이 구분이 없으면 "10종 동일"은 검증이 아니다.
+- **인과 판정 규칙**: `/api/input` 응답은 `{targetTick, sequence, duplicate?}`뿐이고 적용 `(tick, ordinal)`은 **`inputId`를 실은 이벤트로만**
+  안다. 결과 카드는 `[applyTick, applyTick+4320]` 구간의 전후 비교이며 **인과 증명을 주장하지 않는다**(겹침 표시).
+- **§0.10 상태 계약 표**: `goals`·`goalsHash`·`crisis`·`support`·`pairTopicSeq`·`tokenSeq`·`token.id/hostId`·`invitedTo.partyId`·
+  `wageShortfallDays`·`state.inputId`·`zoneOrders[].inputId`·`projects[].inputId` — 초기값·마이그레이션(SCHEMA_VERSION 50→51)·
+  직렬화·해시·구버전 세이브·`makeSim` 단일 창구.
+- **모임 데이터 모델(C-3)**: 현재 토큰은 `{topic, scheduledTick, placeId}`뿐이고 참석은 그 시각 그 장소에서 performing 중인 심 수
+  (`planning.js` `expireAndMeasureTokens`)다 → `partyId = token.id`, `hostId`, `invitedTo.partyId`, `party_attended`를 그 루프에서 emit.
+- T2-2 **결과 지표**(임금 부족 실제 완화), T0-4 **리싱크 dedupe·커서 연속성**, G1-4 **resync 프로토콜**(`protocolVersion`, 4비트+RLE
+  타일, 왕복 동일성) — 200KB는 인코딩 실측 조건부. C-2 전 기준은 `simId`만. 순서 T1-4 → T1-0. 최종 9점 전 G1-3 **재실행**.
+  20k tick/s는 **조건부 목표**(약속 아님). 완료 기준 12건 수치화.
 
 **v7에서 바뀐 것** (Codex 6차 NO-GO 조건 4개 — 전부 *구현 명세*: 산술은 6차에서 "맞다"로 확정):
 - **T1-0**: 존재하지 않는 "건설 취소"를 **기존 명령**(`policy`: 세율·복지, `zone`: 주거 지시)으로 교체 — 새 명령을 만들지 않는다.
@@ -70,9 +85,14 @@
 
 ## 0.7 선행 계약 — 지금 저장소에 없는 것 (각각 Codex 합의 + 해시·리플레이 테스트)
 
-**C-1 입력 ID 전파 (server + sim)** — 현재: 클라가 `clientInputId`(UUID)를 보내지만 `db/storage.js getPendingInputs`는
-`id, target_tick, sequence, command, payload`만 시뮬에 넘긴다(`server/engine.js runBatch`). 즉 **인과 추적 계약이 아직 없다.**
-정의: `inputs` 테이블에 `client_input_id` 저장 → `advance()`에 전달 → 수락·거부·결과 이벤트 전부에 `payload.inputId`로 싣는다.
+**C-1 입력 ID 전파 (server + sim)** — 현재: `inputs.client_input_id` 컬럼은 **이미 있고** `addInput()`이 그것으로 중복을 걸러 `{targetTick,
+sequence, duplicate: true}`를 돌려준다(`db/storage.js:139-148`). 그러나 `getPendingInputs()`는 `id, target_tick, sequence, command, payload`만
+SELECT해 시뮬에 넘기므로(`storage.js:154`) **UUID가 시뮬에 닿지 않는다** — `applyAssign`이 이벤트에 넣는 `inp.id`는 내부 DB id다
+(`tick.js:664`). 정의: SELECT에 `client_input_id` 추가 → `advance()` 입력 객체에 `clientInputId` → 수락·거부·결과 이벤트에 `payload.inputId`.
+**플레이어 원인 이벤트만 UUID를 싣고, 자동 원인(시장 재정 검토의 `policy_changed`, 자동 건설의 `project_started`, NPC의 `action_*`)은
+`inputId: null`** — 같은 이벤트 타입을 공유하므로 이 규칙이 없으면 "동일성 검사"가 성립하지 않는다.
+**API 응답과 적용 위치**: `/api/input`은 접수 시점에 `{targetTick, sequence}`만 안다. 적용 `(tick, ordinal)`은 **`inputId`를 실은 첫 이벤트**로
+클라가 안다 — 카드·타임라인은 그 이벤트를 기다린다(접수 카드 즉시, 적용 표시는 이벤트 도착 시).
 **지연 인과(lineage)** — 결과가 나중에 나오는 명령은 ID를 **월드 상태에 보존**해야 한다(현재 `startAction()`은 저장하지 않고
 `zoneOrders`도 ID가 없다):
   · `applyAssign` → `sim.state.inputId` 설정 → `startAction`이 `action_started`에, 이후 `action_completed`/`action_failed`에 같은 ID.
@@ -82,8 +102,9 @@
 대상 이벤트(누락 금지): `action_started`·`action_completed`·`action_failed`·`project_started`·`facility_built`·`zoned`·`policy_changed`·
 `input_rejected`·`player_created`·`token_created`. **추적 전용** — 선택·RNG·타이브레이크에 쓰지 않는다. 서버는 `client_input_id`로 중복
 제거. 인과 식별은 언제나 **`(tick, ordinal)`**.
-- 완료: 즉시 이벤트 fixture에서 **`payload.inputId === 제출한 UUID`** 8/8(내부 DB `id`가 들어가면 실패), **지연 결과**(assign→completed,
-  zone→project_started→facility_built)까지 같은 UUID로 연결 4/4, 같은 UUID 재전송 시 적용 1회, 해시 동일.
+- 완료: 플레이어 원인 fixture에서 **`payload.inputId === 제출한 UUID`** 10/10(내부 DB `id`가 들어가면 실패), 자동 원인 fixture(시장 정책·
+  자동 건설·NPC 행동 각 1건 이상)에서 **`inputId === null`** 전수, **지연 결과**(assign→completed, zone→project_started→facility_built)까지
+  같은 UUID 4/4, 같은 UUID 재전송 시 `duplicate: true`이고 적용 1회, 해시 동일.
 
 **C-2 불변 이름 (sim)** — 현재: `player_created` payload는 `{name, occupation, homeId}`로 성이 없고, 서버는 클라 `surname`을
 받는다(`sim/tick.js:577`). 정의: ① 이름을 언급하는 모든 이벤트가 emit 시점에 `payload.names = {simId: {surname, name}}`를
@@ -94,9 +115,13 @@
 - 완료: `names` 누락 이벤트 0(테스트로 전 `EVENT_TYPES` 검사), 사망·리싱크 후 같은 이벤트 문자열 해시 100/100 동일, **과거 DB
   이벤트 100건 재생 문자열 동일**, 악의적 `surname` 주입 시 무시 10/10.
 
-**C-3 참석자 이벤트 (sim)** — 현재 모임은 `gathering.count`뿐이라 "수락자 ≥14/20 참석"을 검증할 수 없다. 정의: `party_attended`
-{partyId, simId, role: host|guest}를 참석 시점에 emit.
-- 완료: fixture 모임 5회에서 party별 **`Set(simId)`가 실제 참석 심 목록과 일치**(수만이 아니라).
+**C-3 모임 데이터 모델 + 참석자 이벤트 (sim)** — 현재: 토큰은 `{topic: gathering|announce|festival, scheduledTick, placeId}`뿐이고(id·주최 없음,
+`planning.js:60`·`tick.js:606`·`society.js:338`), 참석은 `expireAndMeasureTokens`가 **그 시각 그 장소에서 performing 중인 심 수**로 센다
+(`planning.js:116`), `invitedTo`는 `{facilityId, untilTick}`(`society.js:1353`)이라 어느 모임인지 모른다. 정의:
+① `world.tokenSeq`(단조 증가) → `token.id`(**= partyId**), `token.hostId`(announce는 입력한 플레이어 심 id, gathering·festival은 `null`),
+② `sim.invitedTo`에 `partyId` 추가(초대 §22.6에서 설정), ③ `expireAndMeasureTokens`의 집계 루프에서 performing 중인 심마다
+`party_attended {partyId, simId, role: hostId === simId ? 'host' : 'guest'}` emit(집계 `count`는 유지).
+- 완료: fixture(announce 입력 → §22.6 초대 20명 → scheduledTick) 5회에서 party별 **`Set(simId)`가 실제 참석 심 목록과 일치**, `role` 정확, `count` == Set 크기.
 
 ## 0.8 신규 행동·이벤트 계약 (T2-2·T2-4가 쓰는 것, 전부 `sim/` — Codex 합의)
 
@@ -115,6 +140,28 @@
 
 - 완료(계약 자체): `ACTIONS`·`EVENT_TYPES` 기존 원소 인덱스 불변 테스트, 신규 필드 마이그레이션 왕복(`deserialize(serialize(w))` 고정점),
   해시·리플레이 동일, `makeSim` 키 집합 4경로 동일(QA 기존 테스트 확장).
+
+## 0.10 신규 상태 필드 계약 (전부 `sim/`; 마이그레이션 `SCHEMA_VERSION` 50→51, `logicSchemaVersion` 45→46)
+
+규약: `deserialize(serialize(w))` 고정점(§22.13 — `undefined` 금지, 명시적 기본값), 심 필드는 **`makeSim`/`emptyState` 단일 창구**(§22.16, 4경로
+키 집합 동일 테스트), 마이그레이션은 `if (from < 51)` 블록에서 기본값 주입, 해시 대상 포함, 구버전 세이브는 마이그레이션 후 리플레이 동일.
+
+| 필드 | 소유 | 초기값 | 쓰는 항목 | 비고 |
+|---|---|---|---|---|
+| `world.goals` | world | `{}` (`{[id]: {doneTick}}`) | T1-0·T1-4 | 달성 이벤트 발생 시에만 기록 |
+| `world.goalsHash` | world | `''` | T1-4 | `logic/goals.json` SHA-256 |
+| `world.crisis` | world | `null` (`{kind, since}`) | T1-0 | 해제 시 `null` |
+| `world.support` | world | `{}` (`{[mayorId]: int}`) | T2-2 | `protested`마다 −1; 선거 §22.20 회고 점수에 **읽기만** 추가(가중치 파라미터) |
+| `world.pairTopicSeq` | world | `{}` (`{"a>b:topic": int}`) | T2-3B | conversation 이벤트 emit **직전** +1 |
+| `world.tokenSeq` | world | `0` | C-3 | 토큰 생성마다 +1 |
+| `token.id` / `token.hostId` | world.tokens[] | 생성 시 부여 / `null` | C-3 | 구세이브 토큰은 마이그레이션에서 순번 부여·`null` |
+| `sim.invitedTo.partyId` | sim | `null` | C-3 | 기존 `{facilityId, untilTick}` 확장 |
+| `sim.wageShortfallDays` | sim | `0` | T2-2 | 공공직만; `wage_shortfall` 있는 날 +1, 전액 지급 날 0으로, 전직 시 0 |
+| `sim.state.inputId` | sim.state | `null` | C-1 | `emptyState()`에 추가 |
+| `zoneOrders[].inputId` | world | `null` | C-1 | `applyZone`에서 설정 |
+| `projects[].inputId` | world | `null` | C-1 | 착공 시 order에서 복사, 자동 건설은 `null` |
+
+- 완료: 마이그레이션 왕복 테스트(구세이브 fixture 3종), `makeSim` 4경로 키 집합 동일, `hashWorld` 결정성, 리플레이 동일.
 
 ## 0.9 Tier 1 진입 게이트 G1-0 = C-1 완료
 
@@ -158,7 +205,7 @@ C-1은 "T1-0의 선행"이 아니라 **독립 게이트**다. 현재 `getPending
 - 완료(Tier 0): 입력 10건·공란·구세이브·악의적 `surname` 주입 각 10건에서 피드·패널·이름표 표시 전부 동일, 주입은 서버가 제거, 미등록 토큰 0. **C-2 전에는 사망·리싱크 후 문자열 동일성을 주장하지 않는다**(현재 `simName()`이 월드를 조회한다). 임시 표기 ↔ `payload.names` 표기의 일치는 **G2-0**(C-2 완료 게이트)에서 검사.
 
 **T0-3 상단바 레이아웃** — `client/index.html:15-17` `#clock` `position:absolute` → in-flow, 2단, 1000px 규칙.
-- 완료: 3개 폭에서 `elementFromPoint(버튼 중앙)` === 그 버튼(주 기준), 스냅샷은 보조.
+- 완료: 3개 폭에서 `elementFromPoint(버튼 중앙)` === 그 버튼(주 기준); 1000px에서 상단바 높이 ≤ 2줄(88px), `overflow` 잘림 요소 0, 비활성 버튼은 `disabled` + opacity 0.5로 상태 구분; 스냅샷은 보조.
 
 **T0-4 피드 신호/잡음 분리 (클라 전용, 고정 틱 창)** — 전원 불만 1순위. **시뮬 원인 아님**: 테스터 DB 3개(Day 0·2·11)
 construct 575쌍의 시작→완료 차이 **최소 60·중앙 60·같은 틱 0** (`sim/logic.js` `duration: 60`). 배속 배치에 두 이벤트가
@@ -171,8 +218,11 @@ construct 575쌍의 시작→완료 차이 **최소 60·중앙 60·같은 틱 0*
 **순수 함수로 재계산**한다(클라 로컬 상태에 의존 금지).
 창 기준점: `floor(tick / 60) * 60` (게임 정시). "루틴 ≤ 30%"는 비루틴을 숨겨도 통과할 수 있으므로 **보존 조건이 함께 있어야 한다**.
 **해시 정의**: 이벤트 하나 = canonical JSON `{tick, ordinal, type, simId, payload}`(키 정렬, 공백 없음, UTF-8) — **payload까지 보존**한다;
-멀티셋 해시 = 각 이벤트 SHA-256을 `(tick, ordinal)` 순으로 이어 붙인 SHA-256. 스냅샷에 포함하는 최근 이벤트 **N = 60틱**(창 하나).
-사건 allowlist = T1-2의 allowlist와 동일 목록. fixture ≥ 500 이벤트(루틴·비루틴 혼합, 창 경계 걸침 포함).
+멀티셋 해시 = 각 이벤트 SHA-256을 `(tick, ordinal)` 순으로 이어 붙인 SHA-256. 스냅샷에 포함하는 최근 이벤트 = **`[worldTick−59, worldTick]`**
+(N = 60틱). 사건 allowlist = T1-2의 allowlist와 동일 목록. fixture ≥ 500 이벤트(루틴·비루틴 혼합, 창 경계 걸침 포함).
+**리싱크 dedupe·커서**(현재 리싱크는 새 스냅샷만 보낸다, `server/index.js:248`): 클라 피드는 `Map` 키 `` `${tick}:${ordinal}` ``, 스냅샷 이벤트와
+기존 피드는 **키 합집합**(같은 키는 스냅샷 값으로 교체 없이 유지 — 내용이 같아야 하며 다르면 오류 로그), 리싱크 후 첫 tickBatch의 최소 tick이
+`snapshot.worldTick + 1`을 넘으면 **갭 경고** 1줄. 테스트: 5개 오프셋(창 시작·중간·끝·경계 전후)에서 재접속 → 중복 0·누락 0·갭 경고 0.
 - 완료: 토글 끔에서 표시 줄 중 루틴 ≤ 30%(분모 = 표시 줄) **그리고** 비루틴 이벤트 표시 **100% 보존** **그리고** 롤업 줄의 집계 수 합 ==
   원본 루틴 이벤트 수; 원본 `(tick, ordinal)` 멀티셋 해시와 복원 해시가 창 경계 59/60/61틱·리싱크·재접속에서 동일(누락·중복 0).
 
@@ -191,7 +241,7 @@ token_created weather_changed zoned`.
 (`main.js:1852-1855`, 서버 `index.js:213`의 거부 분기 있음). 접수/거부를 즉시 표시.
 **네트워크 경로**(Codex 지적): HTTP 4xx뿐 아니라 timeout·5xx·JSON 파싱 실패·중복 클릭을 표시한다. 재전송 정책: timeout에 한해
 같은 `clientInputId`로 최대 1회 재전송(서버가 ID로 중복 제거), 그 외는 표시만. 중복 클릭은 응답 전 버튼 비활성.
-- 완료: 명령 4종(assign·zone·policy·announce) × 실패 유형 4종(timeout·5xx·파싱 실패·중복 클릭) **각 30회** 시험 — 사용자에게 표시 100%, 상태 이중 적용 0, 고정 서버 응답 p95 ≤ 500ms, 시뮬 거부 2틱 이내, 거부 시 모달 유지.
+- 완료: 명령 4종(assign·zone·policy·announce) × 실패 유형 4종(timeout **10초**·5xx·파싱 실패·중복 클릭) **각 30회**(모집단 480회) — 사용자에게 표시 100%, 상태 이중 적용 0; **응답만 유실된 케이스**(서버는 적용, 클라는 timeout): 같은 UUID 재전송 → `duplicate: true` 수신 → "적용됨"으로 표시(30/30); 고정 서버 응답 p95 ≤ 500ms(480회 기준), 시뮬 거부 2틱 이내, 거부 시 모달 유지.
 
 **T0-8 패널 널 참조** — `renderPanel()`이 `find()` 결과를 검사 없이 `sim.name`으로 읽음. 선택 심 사망·이민·리싱크 시 예외.
 - 완료: 대상 소멸 시 패널 닫힘 + 안내 1줄; 선택 후 sims에서 제거하고 100틱 렌더 예외 0.
@@ -200,7 +250,7 @@ token_created weather_changed zoned`.
 식사, highlights 50칸 중 48칸 `lonely`). **백엔드 한계가 먼저 있다**: `Storage.getReport()`(`db/storage.js:212-222`)의 highlights는
 12종·`LIMIT 50`이고 `died`·`policy_changed`·`public_works`·`city_promoted`·`treasury_debt`가 **빠져 있다** → 그 확장은 **T1-5**.
 Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highlights kind별 상한, 사건 우선 정렬.
-- 완료: **항상 상위 20줄 기준**, 사건 allowlist 고정, 같은 kind ≤ 6줄, 20줄 미만이면 **미검증**; 접힘·상한은 표시만 — **원본 사건 수 보존**(리포트 원자료 카운트 == DB 카운트).
+- 완료: **상위 20줄 = 본문 사건 줄**(헤더·소개문·접힌 집계줄 제외), 사건 allowlist 고정, 같은 kind ≤ 6줄, 20줄 미만이면 **미검증**; 접힘·상한은 표시만 — **원본 사건 수 보존**(리포트 원자료 카운트 == DB 카운트); C-2 전에는 이름 문자열이 아니라 **`simId`로만** 검사.
 
 **Tier 0 산술**: 재미 5.0 · 안정 7.5 · 이해 5.8 · UI 7.0 · 그럴듯 6.9 · 보는 6.0 · 성능 6.0 · 문서 7.4 = **51.6/8 = 6.45**. 게이트 ★3.3.
 
@@ -210,10 +260,10 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 
 **G1-1 심 가독성** — `client/main.js` 카메라 기본 줌·`body.setScale(38/height)`·이름표 폰트. 기본 줌에서 심 실제 높이와 이름표
 최소 픽셀을 수치로 고정.
-- 완료: 기본 줌에서 심 높이 ≥ 48px, 이름표 ≥ 11px; **고정 fixture(성별·나이대 라벨 있는 심 20명) 블라인드 판정 정답률 ≥ 80%**, 5명 중 4명 이상.
+- 완료: 기본 줌에서 심 높이 ≥ 48px, 이름표 ≥ 11px; **고정 fixture(성별·나이대 라벨 있는 심 20명) 블라인드 판정 — 개인별 정답률 ≥ 80%**를 5명 중 4명 이상이 충족; fixture는 회차마다 **seed를 바꿔 20명을 새로 뽑는다**(암기 방지).
 
 **G1-2 mapLayer 최소 수정** — §22.10 #2: 22,027 다각형 매 프레임 재래스터화(9.9ms, 가시 2.9%) → 뷰포트 컬링/청크 캐시.
-- 완료: 고정 하드웨어·뷰포트·인구 100에서 **1,000프레임 p95** mapLayer 비용 ≤ 2ms(평균 아님, 계측 스크립트 첨부).
+- 완료: 고정 하드웨어·**브라우저 버전·DPR 2**·CPU 유휴(다른 부하 없음)·뷰포트 1440×900·**라이브 DB 특정 tick 스냅샷**(인구 100 시점, tick 기록)·워밍업 5분 후 **마지막 1,000프레임 p95** mapLayer 비용 ≤ 2ms(평균 아님, 계측 스크립트 첨부).
 
 **G1-3 시뮬 성능 게이트 (sim, Tier 0과 병행하는 별도 트랙)** — v4의 T3-3b를 여기로 옮겼다. PLAN G6은 인구 200 성장 **전에**
 성능 게이트를 통과시키게 돼 있고 라이브 인구가 138이다. §22.27: 인구 200에서 158~278 tick/s(예산 20k의 70~127배 미달),
@@ -221,21 +271,30 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 행동 시작당 1회 BFS. 제안: 후보 스캔 공간 인덱스/근접 캐시, 맵 불변 구간 BFS 결과 캐시. **캐시는 같은 입력에 같은 출력만**(결정성).
 **workload 재정의**(Codex 지적): 현재 `bench/popscale.js`는 얕은 합성 인구·best-of-2라 실제 세계를 대표하지 않는다. fixture는 **실제
 138~200명 세계의 스냅샷**(라이브 DB 복사, 기억·관계·프로젝트·상호작용 포함)으로 고정하고, best-of를 폐기해 **5회 중 최악값**을 쓴다.
-- 완료: 위 fixture로 인구 200 **5회 최악 ≥ 2,000 tick/s(10배)**, 해시·리플레이 동일. 통과 시 성능 8.5 인정, 20k는 9의 조건.
+- 완료: fixture = **라이브 DB의 특정 tick 스냅샷 하나로 고정**(인구 200 도달 시점, tick 기록), 브라우저 무관(서버 벤치)·Node 버전·CPU 유휴 상태 기록,
+  워밍업 1일·측정 3일, **5회 최악 ≥ 2,000 tick/s(10배)**, 해시·리플레이 동일. 통과 시 성능 8.5 인정. **20,000 tick/s는 조건부 목표**다 — 인구 10의
+  현재 값(18,179)보다 높고 제안된 캐시만으로 도달할 근거가 없으므로 약속하지 않는다; 성능 9는 이 조건이 충족될 때만이다.
 
 **G1-4 렌더·전송 핵심 병목 (Tier 1 전, client + server)** — T3-3a에서 앞당김. 플레이테스트를 다시 왜곡하는 항목만: §22.10 #3 타일
 1칸 변경 → 전면 재빌드(2,218 스프라이트 + 61 Text/6초) → **증분 갱신**, Text 재생성(261/4초) → **캐시**, resync 0.85MB/4~5초와
 스냅샷 map 542KB(#4) → **증분 + 팔레트 인코딩**. 나머지(#5 스프라이트 70.5MB)는 T3-3a에 남긴다.
-- 완료: 배속 ×48·인구 100에서 30분간 전면 재빌드 0회, Text 생성 수 ≤ 변경 심 수, resync 페이로드 ≤ 200KB(**10회 측정 p95**), p95 프레임
-  < 16.7ms(워밍업 후 **마지막 1,000프레임 창**). **oracle**: 증분 갱신 결과가 같은 상태의 전면 재빌드와 동일 — 스프라이트 집합(키·좌표·깊이)
-  집합 동일 + 두 캔버스 픽셀 ΔE(CIE76) 최대 0.
+**resync 프로토콜 계약**: 스냅샷에 `protocolVersion`(정수, 불일치 시 클라가 전체 리로드), 타일은 **4비트 팔레트(12값) + 런렝스**로 인코딩해
+base64(현재 map 542KB의 90%가 타일, 그중 90%가 바탕 0이라 RLE 효과가 크다 — 단 실측 전엔 크기를 약속하지 않는다), 클라 디코더는 왕복
+동일성 테스트(`decode(encode(tiles)) === tiles`), 나머지 상태는 기존 JSON.
+- 완료: 배속 ×48·인구 100에서 30분간 전면 재빌드 0회, Text 생성 수 ≤ 변경 심 수; resync 페이로드는 **인코딩 실측 후 목표 확정**(1차 목표
+  ≤ 200KB, 미달이면 델타 리싱크로 대체 — 어느 쪽이든 10회 p95 기록); map/state 왕복 동일 100%, 이벤트 커서 연속(T0-4), `protocolVersion`
+  불일치 케이스 리로드 1/1; p95 프레임 < 16.7ms(워밍업 후 **마지막 1,000프레임 창**). **oracle**: 증분 갱신 결과가 같은 상태의 전면 재빌드와
+  동일 — 스프라이트 집합(키·좌표·깊이) 동일 + 두 캔버스 픽셀 ΔE(CIE76) 최대 0.
 
 **G-1 산술**: 보는 6.0→7.5, 성능 6.0→7.0(G1-2) → **54.1/8 = 6.76**. G1-3 통과 시 성능 8.5(+1.5)는 Tier 3 산술에서 반영.
 
 ## 3. Tier 1: 게임이 되게 하기
 
-**T1-0 핵심 루프 (게이트) — 인과를 입력 ID로 묶는다. 선행: C-1.** 루프: 행동(정책·건설·심 지시, 각각 `clientInputId`) → 서버가
-적용 **`(tick, ordinal)`**을 돌려줌 → 결과 카드는 **그 입력의 적용 tick 이후 구간 실측**만 집계 → 다음 목표. 성공/실패:
+**T1-0 핵심 루프 (게이트) — 선행: G1-0(C-1), 그리고 T1-4(목표 트리)가 먼저다.** 루프: 행동(정책·건설·심 지시, 각각 `clientInputId`) →
+접수 응답 `{targetTick, sequence}` → **`inputId`를 실은 첫 이벤트**로 `applyTick=(tick, ordinal)` 확정 → 결과 카드 → 다음 목표(T1-4 노드).
+**인과 판정 규칙**: 카드의 관찰창은 **`[applyTick, applyTick + 4320]`**, 내용은 창 시작 값 vs 창 끝 값의 **전후 비교**다. 카드는 인과를
+증명한다고 주장하지 않는다(§0.1 — "이 행동 덕분"이 아니라 "이 행동 이후 3일간"). 같은 창 안에 다른 플레이어 입력이 있으면 카드에
+**겹침 표시**(그 `inputId` 목록). 자동 원인 이벤트(시장 재정 검토 등)는 카드를 만들지 않고 피드에만 나온다. 성공/실패:
 - 성공: 목표 트리 노드 달성(T1-4) → 카드(입력 ID·적용 tick·실측값 표기) + 다음 노드.
 - 실패(위기): 국고가 **3일(4320틱) 연속 음수** 또는 **`starving` 이벤트 ≥ 5건/일이 3일 연속** → `world.crisis = {kind, since}` + "위기" 카드 +
   회복 행동 3개 — **전부 기존 명령**: `policy`(세율↑), `policy`(복지 기준↓), `zone`(주거 지시). "건설 취소"는 명령이 없으므로 쓰지 않는다.
@@ -259,7 +318,7 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
   allowlist 사건 ≥ 5건, `(tick, ordinal)` 순서 보존, 이탈 프레임 0, **고정 fixture**(사망·이민·리싱크 유지·리싱크 해제) 4/4.
 
 **T1-3 레버의 인과** — 정책 변경(`clientInputId`)당 **접수 카드(즉시) 1장 + 결과 카드(`t+4320`) 1장**을 분리한다(접수 표시까지 막지 않는다). 결과 카드는 변경 전/후 값 + 구간 실측.
-- 완료: 정책 6회 연속(리싱크 포함) 접수 6/6·결과 6/6, 결과 카드 조기 표시 0.
+- 완료: 정책 6회 연속(리싱크 포함) 접수 6/6·결과 6/6, 결과 카드 조기 표시 0; 각 결과 카드의 창은 자기 `applyTick` 기준 `[applyTick, applyTick+4320]`이며 **겹치는 다른 입력 ID를 표시**(6회가 겹치면 6장 모두 겹침 표시); 자동 원인 `policy_changed`(시장 재정 검토)는 카드 0장.
 
 **T1-4 목표 트리 — 레지스트리를 지금 코드에서 열거한다 (K = 8)** — 승급 로직·언락 조건은 손대지 않는다(창발 유지). 커밋 시점에
 레지스트리 JSON의 hash를 기록한다.
@@ -277,6 +336,8 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 
 **레지스트리**: `logic/goals.json` — `params.json`과 같은 검증기 경로(T-14/T-16 부류 테스트: 배포 파일이 스키마를 통과). 스키마:
 `{ id, nameKo, source: {kind: 'tier'|'station'|'facility', ref}, target: {metric, op, value}, doneEvent: {type, match}, hint }[]`.
+**스키마 세부**: `id`는 유일(테스트), 배열 순서 = 표시 순서, `doneEvent.match`는 `{type: string, payload: {필드: 값}}`의 **동등 비교**(예:
+`{type:'city_promoted', payload:{to:1}}`, `{type:'facility_built', payload:{type:'apartment'}}`), `target.op ∈ {'>=','=='}`.
 **hash**: canonical JSON(키 정렬·공백 없음) SHA-256, 커밋 메시지와 `world.goalsHash`에 기록 — 레지스트리가 바뀌면 해시가 바뀌어 리플레이가
 그 시점을 안다.
 - 완료: 8/8 렌더, 각 노드에 현재값·목표값·상태·도달 행동; **8노드 각각** 성공 fixture(해당 전이 이벤트를 만드는 세계) 8/8 · 실패 fixture
@@ -296,7 +357,11 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 
 **T2-2 무급 공무원 — 행동과 *결과*** — `wage_shortfall` N일 누적 → 결정적 전이: `protest`(시청 앞 집결 → 시장 지지도 하락
 이벤트) / `job_changed`(민간 전직 → 공석 이벤트 → 서비스 저하) / `side_job`(부업 → 소득 이벤트). **초기 국고 증액 금지.**
-- 완료: **N = 3일(4320틱) 고정**; fixture 무급자 10명 → 1440틱 내 행동 10/10, 7일 내 **심별 결과 이벤트 정확히 1회** 10/10, 그리고 **결과의 상태 델타** 검사 — `protest`면 시장 지지도 감소분 > 0, `job_changed`면 공석 1 발생, `side_job`이면 소득 이벤트 > 0; 직접 국고 증액 0, 해시·리플레이 통과.
+**결과 지표(원래 문제가 완화됐는가)**: 행동이 났다는 것만으로는 부족하다.
+- 완료: **N = 3일(4320틱) 고정**; fixture 무급자 10명 → 1440틱 내 행동 10/10, 7일 내 **심별 결과 이벤트 정확히 1회** 10/10; 상태 델타 —
+  `protested`면 `world.support[mayorId]` −1 이상, `job_changed`면 공공직 공석 +1(`vacancy` 이벤트 신규, §0.8 규약), `side_job`이면 소득 ≥
+  **0.5 × 일 임금**(`wageBase × wagePct/100`; 1원은 통과 아님); **완화 지표**: 7일 창에서 해당 10명의 `wage_shortfall` 건수 ≥ **30% 감소**
+  **또는** 심별 잔액 델타 ≥ 1일 임금; `wageShortfallDays` 규칙 테스트(가산·리셋·전직 시 0); 직접 국고 증액 0; 해시·리플레이 통과.
 
 **T2-3 대화 반복 억제 — 결정성 보존** — 로컬 캐시 폐기.
 - A(클라, 무상태): 선택 인덱스를 `(tick, speakerId, listenerId)` 해시로 — 상관만 끊는다.
@@ -307,7 +372,7 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 - **중복 기준 정정**: 발화 간격이 15틱(`sim/logic.js` `conversation.lineInterval`)이라 6시간 = 24회이고 표는 3~7줄이다 — "6시간 내
   재사용 0"은 **불가능**하다. 기준: **같은 쌍·같은 주제에서 테이블 길이 L 내 최초 L회는 중복 0**(B는 `pairSeq mod L` 라운드로빈으로
   보장, A는 통계적 감소만 — A의 완료 기준은 "연속 2회 동일 문장 ≤ 5%").
-- **reply 규칙(A)**: 같은 해시에 salt `|reply`를 붙여 응답 표 인덱스를 고른다. **표본**: 라이브 DB에서 같은 쌍의 연속 대화 1,000쌍, 분모 = 쌍 수, "연속 동일" = 직전 발화와 문자열 동일.
+- **채택: B**(A는 B 전 임시 폴백). `pairTopicSeq` 키 `"speakerId>listenerId:topic"`, 초기 0, **conversation 이벤트 emit 직전 +1**, payload에 `pairTopicSeq` 실음, 클라 인덱스 = `pairTopicSeq mod L`(L = 그 주제·kind 표 길이, 표 길이는 배열 추가로만 늘어남 §22.12). A의 reply 규칙: 같은 해시에 salt `|reply`. **표본**(A 검사용): 라이브 DB 같은 쌍 연속 대화 1,000쌍, 분모 = 쌍 수, "연속 동일" = 직전 발화와 문자열 동일.
 - 완료: 동일 이벤트 100건을 재접속·리싱크·재생성에서 비교해 문자열 해시 100/100 동일; B는 L회 내 중복 0, A는 연속 동일 ≤ 5%(1,000쌍).
 
 **T2-4 모임 0명 — 초대 이행 *행동* 추가 (튜닝 금지)** — 가설: 초대 이행(§22.6)이 construct 고정 급함(`logic.js:85`)에 밀림.
@@ -315,7 +380,7 @@ Tier 0에서는 지금 오는 데이터로: 식사·근무 집계 접힘, highli
 오르게 한다(공지자는 주최 행동 `host_party`).
 `attend_party`가 `construct`보다 선택될 수 있는 것은 행동 추가이므로 §0.1 위반이 아니지만, **기존 `construct`의 점수·계수·타이브레이크·
 enum 순서가 바뀌지 않았음을 테스트로 고정**한다(§21.3의 append-only 원칙과 같다).
-- 완료(선행: C-3): 모임 **5회**·수락자 **20명** fixture → `party_attended`의 party별 `Set(simId)`로 **주최자 5/5**, 수락자 **≥ 14/20**, 수락자 0인 케이스 불인정; **기존 `ACTIONS` 전체**의 순서·타이브레이크·RNG 소비 순서 불변 테스트(construct만이 아니라) 통과.
+- 완료(선행: C-3): fixture 생성 = `announce` 입력(플레이어 심 = host) → §22.6 초대로 20명 `invitedTo.partyId` 설정 → `scheduledTick` 도달; 모임 **5회** → `party_attended`의 party별 `Set(simId)`로 **주최자 5/5**, 수락자 **≥ 14/20**, 수락자 0인 케이스 불인정; **기존 `ACTIONS` 전체**의 순서·타이브레이크·RNG 소비 순서 불변 테스트(construct만이 아니라) 통과.
 
 **Tier 2 산술**(검증용으로 8개 값 전부): 재미 8.4 · 안정 7.5 · 이해 8.3 · UI 8.0 · **그럴듯 8.6** · 보는 7.5 · 성능 7.0 · 문서 7.4 = **62.7/8 = 7.8375** → 절사 **7.8**. (Codex 5차의 63.3은 위 어느 값에도 대응하지 않는다 — 정정하지 않는다.)
 
@@ -323,7 +388,7 @@ enum 순서가 바뀌지 않았음을 테스트로 고정**한다(§21.3의 appe
 
 **T3-1 보는 재미 (G1-1 위에)** — 프롭·간판 리스케일(에셋 회차, `put()` h 값 표 정리), 카메라 프레이밍.
 - 완료: **고정 이미지 20장 식별 시험**(건물 기능 10·심 성별/나이대 10), 5명 중 4명 이상 정답률 ≥ 80%.
-**T3-2 조명** — `applyDaylight(tick)` 룩업. 완료: 05:00/07:00/12:00/19:00 네 tick에서 **고정 probe 픽셀 3점(좌표: 하늘 (20,20)·건물 창 (560,420)·바닥 (300,700), 1120×848 캡처 기준)**의 **인접 시각 쌍(05→07, 07→12, 12→19)** 색차 **ΔE ≥ 5 (CIE76, sRGB→CIELAB, D65)**, 정오 점등 0, stale 상태 0.
+**T3-2 조명** — `applyDaylight(tick)` 룩업. 완료: 05:00/07:00/12:00/19:00 네 tick에서 **고정 probe 픽셀 3점(좌표: 하늘 (20,20)·건물 창 (560,420)·바닥 (300,700), 1120×848 캡처 기준)**의 **인접 시각 쌍(05→07, 07→12, 12→19)** 색차 **ΔE ≥ 5 (CIE76, sRGB→CIELAB, D65)**; probe만 맞추는 악용을 막기 위해 **전체 캡처 평균 밝기가 05 < 07 < 12 > 19로 단조**, 정오의 점등 창 픽셀 비율 ≤ 5%, stale 상태 0.
 **T3-3a 성능(렌더·전송) — §22.10 나머지 병목** — #3 타일 1칸 변경이 전면 재빌드(2,218 스프라이트 + 61 Text/6초) → 증분 갱신,
 #4 스냅샷 map 542KB(12값을 2.0B) → 팔레트 인코딩, #5 스프라이트 70.5MB → 아틀라스 다운스케일, Text 재생성(261/4초) → 캐시,
 resync 0.85MB/4~5초 → 증분.
@@ -370,6 +435,7 @@ tick/s 조건)** · 문서 8.8→9 · 안정 8.5→9 (네트워크 실패·과�
 | **G2-0** | C-2: `names` 누락 0 · 과거 100건 재생 동일 · 임시 표기 ↔ `names` 표기 일치 | 테스트 |
 | Tier 2 | 평균 ≥ 7.8 | 같은 5인 |
 | Tier 3 | 평균 ≥ 8.3(절사) · G1-3 통과 시 ≥ 8.4 → §6.5 프로토콜 | 5인 + 20인, 2회 연속 |
+| **G1-3 재실행** | Tier 2의 `sim/` 변경(T2-2·T2-3B·T2-4·C-2·C-3) 후 같은 fixture로 재측정 ≥ 2,000 tick/s | 계측 (§6.5 전 필수) |
 
 ## 8. 하지 말 것
 
@@ -477,3 +543,21 @@ T0-4b 삭제(오진 확인) · T1-0 신설 · T2-3 로컬 캐시 폐기 · rende
 | 게이트 표 "30/30" 잔재 | M×3×2×3으로 교체 |
 | ΔE 방식·색공간 · 1,000프레임 창 · resync 횟수 | CIE76/sRGB→Lab/D65, 인접 쌍 명시 · 마지막 창 · 10회 p95 |
 | 점수 상승폭 근거 약함 | 유지 — 예측치이며 실제는 §6.5 재플레이로만(6차도 "타당" 판정) |
+
+## 부록 G. Codex 7차 리뷰(NO-GO) 반영
+
+| 조건·지적 | 반영 |
+|---|---|
+| API 응답이 `targetTick, sequence`뿐 — 인과 판정 규칙 없음 | 적용 위치는 `inputId` 이벤트로 확정, 카드 창 `[applyTick, +4320]` 전후 비교, 인과 증명 불주장, 겹침 표시 |
+| 플레이어 vs 자동 이벤트 구분 없음 | 자동 원인 `inputId: null` 규칙 + fixture |
+| `goals/crisis/support/pairTopicSeq/gatherings` 상태·마이그레이션 없음 | **§0.10** 표(초기값·SCHEMA 50→51·직렬화·해시·구세이브·`makeSim`) |
+| 모임에 `hostId`·`partyId` 없음(토큰·count뿐) | C-3 재정의: `tokenSeq`→`token.id`=partyId, `hostId`, `invitedTo.partyId`, 집계 루프에서 emit |
+| T2-2 결과 지표 없음(1원도 통과) | 완화 지표(`wage_shortfall` 30%↓ 또는 잔액 ≥ 1일 임금), `side_job` ≥ 0.5×일 임금, `vacancy` 이벤트, `wageShortfallDays` 규칙 |
+| T0-4 리싱크 dedupe·커서 없음 | `${tick}:${ordinal}` 키 합집합, 범위 `[worldTick−59, worldTick]`, 갭 경고, 5오프셋 테스트 |
+| G1-4 resync 프로토콜 없음, 200KB 근거 없음 | `protocolVersion`, 4비트+RLE, 왕복 동일, 목표는 실측 후 확정(델타 대체안) |
+| C-2가 Tier 2라 이름 의존 | C-2 전 기준은 `simId`만(T0-9·T1-5·T1-2) 명시 |
+| T1-4 → T1-0 순서 | 명시 |
+| 최종 전 성능 게이트 재실행 | G1-3 재실행 행 추가 |
+| 20k tick/s 근거 없음 | 조건부 목표로 명시 |
+| C-1이 `inp.id`를 넣고 있음 | 현재 상태 정확히 기술(`client_input_id` 컬럼·dedup은 이미 있음, SELECT 누락) |
+| 완료 기준 12건(T0-3·T0-7·T0-9·G1-1·G1-2·G1-3·T1-3·T1-4·T2-2·T2-3·T2-4·T3-2) | 전부 반영 |
