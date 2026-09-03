@@ -236,6 +236,37 @@ export class Storage {
   // 부팅뿐 아니라 **라이브 일 경계에서도** 호출된다 (§22.12: 부팅에만 걸면 라이브 세션이
   // 길어질수록 events가 무한 증가 — 실측 107게임일 205,092행·53.8MB, 시간당 +31MB).
   // 정착 상태에서는 cutoff 이하가 딱 하루치라 PK(tick, ordinal) 범위 스캔으로 싸다.
+  // §22.97 **집계가 영구 누적돼 OOM으로 간다** (사용자 지적: "자꾸 게임이 OOM 나는것도
+  // 확인해서 고쳐야돼"). pruneEvents는 오래된 events를 지우면서 (일 × 카테고리 × 심)
+  // 집계로 옮기는데, 그 집계는 **한 번도 지워지지 않았다**. 라이브 실측:
+  //   event_daily_aggregates 1,959,188행 = 1,908일 × 일평균 1,027행(카테고리 61 × 심 561)
+  //   DB 198MB + WAL 38MB, 서버 RSS 557MB.
+  // 화면은 이 집계에서 **일별 사건 합계만** 쓴다(client/main.js의 부재중 리포트 — sim_id·
+  // category를 읽지 않는다). 그래서 오래된 구간은 (일 × 카테고리) 한 줄로 접는다.
+  // sim_id = -1은 "마을 전체"를 뜻한다. 합계는 보존되므로 리포트 숫자는 그대로다.
+  rollupOldAggregates(lastSimulatedTick, keepDays = 90) {
+    const cutoff = lastSimulatedTick - keepDays * TICKS_PER_DAY;
+    if (cutoff <= 0) return 0;
+    const tx = this.db.transaction(() => {
+      const rows = this.db.prepare(
+        `SELECT day_start_tick, category, SUM(count) AS c, SUM(sum) AS s
+         FROM event_daily_aggregates WHERE day_start_tick < ? AND sim_id >= 0
+         GROUP BY day_start_tick, category`).all(cutoff);
+      if (rows.length === 0) return 0;
+      const before = this.db.prepare(
+        'SELECT COUNT(*) AS n FROM event_daily_aggregates WHERE day_start_tick < ? AND sim_id >= 0').get(cutoff).n;
+      this.db.prepare('DELETE FROM event_daily_aggregates WHERE day_start_tick < ? AND sim_id >= 0').run(cutoff);
+      const ins = this.db.prepare(
+        `INSERT INTO event_daily_aggregates(day_start_tick, category, sim_id, count, sum)
+         VALUES(?, ?, -1, ?, ?)
+         ON CONFLICT(day_start_tick, category, sim_id)
+         DO UPDATE SET count = count + excluded.count, sum = sum + excluded.sum`);
+      for (const r of rows) ins.run(r.day_start_tick, r.category, r.c, r.s);
+      return before - rows.length; // 줄어든 행 수
+    });
+    return tx();
+  }
+
   pruneEvents(lastSimulatedTick) {
     const cutoff = lastSimulatedTick - 30 * TICKS_PER_DAY;
     if (cutoff <= 0) return 0;

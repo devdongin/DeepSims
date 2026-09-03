@@ -121,6 +121,9 @@ export class Engine {
     const day = Math.floor(this.world.worldTick / TICKS_PER_DAY);
     if (day <= this.lastPruneDay) return;
     const deleted = this.storage.pruneEvents(this.world.worldTick);
+    // §22.97 집계도 접는다 — 안 접으면 events는 30일인데 집계는 영구 누적이다
+    const rolled = this.storage.rollupOldAggregates(this.world.worldTick);
+    if (rolled > 0) console.log(`  집계 롤업: ${rolled}행 접음 (90일 이전, 마을 단위로 합산)`);
     this.lastPruneDay = day;
     if (deleted > 0) this.storage.opsLog(this.now(), 'events_pruned', { deleted, day });
   }
