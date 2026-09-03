@@ -23,7 +23,28 @@ CREATE TABLE IF NOT EXISTS inputs(
   command TEXT NOT NULL, payload TEXT NOT NULL, applied INTEGER NOT NULL DEFAULT 0,
   UNIQUE(target_tick, sequence));
 CREATE TABLE IF NOT EXISTS ops_log(ts_utc_ms INTEGER NOT NULL, type TEXT NOT NULL, detail TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS chronicle(
+  sim_id INTEGER NOT NULL, tick INTEGER NOT NULL, ordinal INTEGER NOT NULL,
+  type TEXT NOT NULL, payload TEXT NOT NULL,
+  PRIMARY KEY(sim_id, tick, ordinal));
+CREATE INDEX IF NOT EXISTS chronicle_sim_tick ON chronicle(sim_id, tick);
 `;
+
+// §23.1 생애 연대기. events는 30일이 지나면 집계로 접히고 사라진다(pruneEvents) —
+// 한 사람의 **일생**을 보여주려면 그 사람에게 한 번뿐인 사건은 따로 남겨야 한다.
+// 이 테이블은 시뮬레이션 상태가 아니라 **투영**이다: 지워져도 결정성은 그대로다.
+const CHRONICLE_PERSONAL = new Set([
+  'immigrated', 'grew_up', 'graduated', 'job_changed', 'started_dating', 'married',
+  'broke_up', 'child_settled', 'moved_home', 'retired_now', 'bereaved', 'car_bought',
+  'joined_club', 'heroic_save', 'genius_born', 'died', 'emigrated', 'ability_changed',
+]);
+const CHRONICLE_CITY = new Set([
+  'festival', 'new_year', 'city_promoted', 'station_unlocked', 'election',
+  'policy_changed', 'public_works', 'center_planned', 'insolvent', 'facility_built',
+  'fire_started',
+]);
+const CHRONICLE_KEEP_PER_SIM = 120; // 한 사람당 남길 줄 수 — 넘치면 오래된 것부터 접는다
+const CHRONICLE_KEEP_CITY = 600;
 
 export class Storage {
   constructor(dbPath) {
@@ -117,12 +138,20 @@ export class Storage {
         .run(world.worldTick, serialize(world));
       const evIns = this.db.prepare(
         'INSERT INTO events(tick, ordinal, type, sim_id, payload, schema_version) VALUES (?, ?, ?, ?, ?, ?)');
+      const chrIns = this.db.prepare(
+        'INSERT OR IGNORE INTO chronicle(sim_id, tick, ordinal, type, payload) VALUES (?, ?, ?, ?, ?)');
       for (const e of events) {
         // 영속화 경계 강제 (PLAN §4): 타입 레지스트리 + payload ≤ 1KB. 위반 = 프로그래밍 오류.
         if (!EVENT_TYPES.includes(e.type)) throw new Error(`unregistered event type: ${e.type}`);
         const payloadJson = JSON.stringify(e.payload ?? {});
         if (Buffer.byteLength(payloadJson, 'utf8') > 1024) throw new Error(`event payload > 1KB: ${e.type}`);
         evIns.run(e.tick, e.ordinal, e.type, e.simId, payloadJson, SCHEMA_VERSION);
+        // §23.1 같은 트랜잭션에서 연대기에도 남긴다 — 이벤트가 프루닝돼도 일대기는 남는다.
+        if (e.simId != null && CHRONICLE_PERSONAL.has(e.type)) {
+          chrIns.run(e.simId, e.tick, e.ordinal, e.type, payloadJson);
+        } else if (CHRONICLE_CITY.has(e.type)) {
+          chrIns.run(-1, e.tick, e.ordinal, e.type, payloadJson);
+        }
       }
       if (appliedInputIds.length > 0) {
         const mark = this.db.prepare('UPDATE inputs SET applied = 1 WHERE id = ?');
@@ -265,6 +294,54 @@ export class Storage {
       return before - rows.length; // 줄어든 행 수
     });
     return tx();
+  }
+
+  // §23.1 최초 1회 채우기. 표를 새로 만든 시점에 events에 남아 있는 30일치에서 옮겨 온다.
+  // 그 이전은 이미 집계로 접혀 복구할 수 없다 — 연대기는 "지금부터" 온전해진다.
+  backfillChronicle() {
+    const done = this.db.prepare("SELECT value FROM meta WHERE key = 'chronicleBackfilled'").get();
+    if (done) return 0;
+    const personal = [...CHRONICLE_PERSONAL].map((t) => `'${t}'`).join(',');
+    const city = [...CHRONICLE_CITY].map((t) => `'${t}'`).join(',');
+    const tx = this.db.transaction(() => {
+      this.db.prepare(
+        `INSERT OR IGNORE INTO chronicle(sim_id, tick, ordinal, type, payload)
+         SELECT sim_id, tick, ordinal, type, payload FROM events
+         WHERE sim_id IS NOT NULL AND type IN (${personal})`).run();
+      this.db.prepare(
+        `INSERT OR IGNORE INTO chronicle(sim_id, tick, ordinal, type, payload)
+         SELECT -1, tick, ordinal, type, payload FROM events WHERE type IN (${city})`).run();
+      this.db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('chronicleBackfilled', '1')").run();
+    });
+    tx();
+    return this.db.prepare('SELECT COUNT(*) AS n FROM chronicle').get().n;
+  }
+
+  // §23.1 연대기 읽기. simId = -1이면 마을 연대기.
+  getChronicle(simId, limit = 120) {
+    return this.db.prepare(
+      `SELECT tick, type, payload FROM chronicle WHERE sim_id = ?
+       ORDER BY tick DESC, ordinal DESC LIMIT ?`).all(simId, limit)
+      .map((r) => ({ tick: r.tick, type: r.type, payload: JSON.parse(r.payload) }))
+      .reverse(); // 화면은 오래된 것부터 읽는다 — 일대기는 위에서 아래로 흐른다
+  }
+
+  // 사람마다 상한을 둔다. 90년을 살아도 줄 수는 유한하다.
+  pruneChronicle() {
+    const tx = this.db.transaction(() => {
+      this.db.prepare(
+        `DELETE FROM chronicle WHERE rowid IN (
+           SELECT rowid FROM (
+             SELECT rowid, ROW_NUMBER() OVER (PARTITION BY sim_id ORDER BY tick DESC, ordinal DESC) AS rn
+             FROM chronicle WHERE sim_id >= 0)
+           WHERE rn > ?)`).run(CHRONICLE_KEEP_PER_SIM);
+      this.db.prepare(
+        `DELETE FROM chronicle WHERE sim_id = -1 AND rowid NOT IN (
+           SELECT rowid FROM chronicle WHERE sim_id = -1 ORDER BY tick DESC, ordinal DESC LIMIT ?)`)
+        .run(CHRONICLE_KEEP_CITY);
+    });
+    tx();
+    return this.db.prepare('SELECT COUNT(*) AS n FROM chronicle').get().n;
   }
 
   pruneEvents(lastSimulatedTick) {

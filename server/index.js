@@ -188,6 +188,22 @@ app.get('/api/industry', (_req, res) => {
   });
 });
 
+// §23.1 일대기. sim=<id>면 그 사람의 일생, sim=-1(또는 생략)이면 마을 연대기.
+// 이벤트 로그는 30일 뒤 접히지만 이 표는 남는다 — "이 사람이 어떻게 살았는가"는
+// 지난 30일이 아니라 평생의 이야기다.
+app.get('/api/chronicle', (req, res) => {
+  const simId = Number.isFinite(Number(req.query.sim)) ? Math.trunc(Number(req.query.sim)) : -1;
+  const rows = storage.getChronicle(simId, 120);
+  const sim = simId >= 0 ? engine.world.sims.find((x) => x.id === simId) : null;
+  res.json({
+    simId,
+    name: sim?.name ?? null,
+    age: sim?.traits?.age ?? null,
+    nowTick: engine.world.worldTick,
+    rows,
+  });
+});
+
 app.post('/api/speed', (req, res) => {
   // §22.12 Number()는 [48]·"48"·" 48 "·true를 전부 삼킨다 (QA #5). 숫자만 받는다.
   const raw = req.body?.speed;

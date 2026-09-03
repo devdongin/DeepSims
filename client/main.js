@@ -406,12 +406,14 @@ class TownScene extends Phaser.Scene {
       if (!world) return;
       if (Math.abs(p.x - p.downX) > 6 || Math.abs(p.y - p.downY) > 6) return; // 드래그는 무시
       const wp = this.cameras.main.getWorldPoint(p.x, p.y);
-      let best = null, bestD = 24 * 24;
-      for (const sim of world.sims) {
-        const dx = wp.x - isoX(sim.x, sim.y), dy = wp.y - (isoY(sim.x, sim.y) - 8);
-        const d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = sim; }
-      }
+      // §23.3 **걷는 사람은 클릭이 안 됐다.** 판정은 서버가 준 타일(isoX(sim.x, sim.y))을
+      // 봤는데, 화면의 스프라이트는 900ms 트윈으로 따라가는 중이라 둘이 떨어져 있다.
+      // 배치는 250ms마다 오므로 트윈은 28%만 진행되고 나머지는 잘린다. 정상 상태 지연은
+      //   지연 = 한 배치 이동칸 / 0.385
+      // ×1이면 1칸이라 우연히 맞았지만 ×12는 8칸, ×48은 31칸 어긋난다. 반경은 24였다.
+      // 그래서 **눈에 보이는 자리**, 즉 스프라이트 컨테이너 좌표로 찾는다. 멈춰 있는 심은
+      // 트윈이 없어 예전과 같은 자리이므로 기존 동작은 그대로다.
+      const best = this.pickSimAt(wp);
       if (best) { selectSim(best.id); return; }
       // 심이 아니면 건물 토글 (§17.19 내부 모드): 화면→타일 역변환 후 발자국 검사
       const tx2 = (wp.x / (TW / 2) + wp.y / (TH / 2)) / 2;
@@ -486,6 +488,22 @@ class TownScene extends Phaser.Scene {
   //   tileScale = zoom → 무늬 한 칸이 화면에서 32*zoom px, 즉 월드 스케일이 유지된다.
   //   tilePosition = 월드뷰 좌상단 + 원래 위상(16, 8) → 예전과 같은 자리에 같은 무늬가 온다.
   // 값이 바뀔 때만 대입한다 — TileSprite 세터는 무조건 dirty를 세워 캔버스를 다시 채우기 때문.
+  // §23.3 화면에 보이는 자리로 사람을 고른다. 핸들러에서 떼어 놓아야 콘솔에서 검증할 수 있다.
+  pickSimAt(wp) {
+    if (!world) return null;
+    let best = null, bestD = Infinity;
+    const R = 26; // 몸통 반폭 — 아래 dy 보정으로 머리부터 발끝까지 덮는다
+    for (const sim of world.sims) {
+      const sp = simSprites.get(sim.id);
+      const bx = sp ? sp.x : isoX(sim.x, sim.y);
+      const by = sp ? sp.y : isoY(sim.x, sim.y);
+      const dx = wp.x - bx, dy = wp.y - (by - 16);
+      const d = dx * dx + dy * dy * 0.6; // 세로로 길쭉한 판정 (사람은 세로로 서 있다)
+      if (d < R * R && d < bestD) { bestD = d; best = sim; }
+    }
+    return best;
+  }
+
   // §22.104 타일 컬링. 맵은 512×512 = 26만 칸이고 그중 비-잔디가 37,594칸이다.
   // 지금까지는 화면 밖 · 접근조차 못 하는 변두리까지 전부 폴리곤으로 채웠다. 아이소 좌표는
   // u = x-y (가로), v = x+y (세로)로 분리되므로 카메라 사각형을 u·v 구간으로 뒤집으면
@@ -685,7 +703,7 @@ class TownScene extends Phaser.Scene {
     this.drawProps();
     let houseIdx = 0;
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학',workshop:'공방',lab:'연구소',warehouse:'창고' }[fac.type];
+      const label = facilityName(fac); // §23.7 가게마다 제 이름 (아래 SHOP_NAMES)
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
       const mode = this.facMode.get(fac.id) ?? 'tile';
       const opened = interiorOpen.has(fac.id);
@@ -773,14 +791,21 @@ class TownScene extends Phaser.Scene {
       sp.lastTile = { x: sim.x, y: sim.y };
       // §19 R-B: 자가용 보유자는 이동 중 차량 아이콘을 단다
       if (sim.hasCar && !sp.carIcon && this.textures.exists('car')) {
-        sp.carIcon = this.add.image(10, -4, 'car').setScale(16 / this.textures.get('car').getSourceImage().height);
+        // §23.2 차가 사람보다 작았다(높이 16px, 사람 몸 32px). 실물 비례가 뒤집혀 있으면
+        // "차를 탔다"가 아니라 "장난감을 들고 간다"로 보인다. 차 한 대는 두 칸 길이라
+        // 아이소 타일 폭(32)보다 넓어야 한다 — 높이 30, 사람 옆이 아니라 **자리 중앙**에.
+        const src = this.textures.get('car').getSourceImage();
+        sp.carIcon = this.add.image(0, 2, 'car').setScale(30 / src.height);
         sp.add(sp.carIcon);
       }
       // §22.87 차를 타면 **차만 보인다** (사용자 지시: "자동차를 타면 자동차만 보여야지
       // 사람이랑 같이 보이지 않게 한다"). 예전에는 차 아이콘이 걸어가는 사람 위에 겹쳐서
       // 사람과 차가 한 몸처럼 붙어 다녔다. 이동 중에는 몸·이름표를 숨기고 차만 남긴다.
       const driving = sim.hasCar && sim.state?.kind === 'walking';
-      if (sp.carIcon) sp.carIcon.setVisible(driving);
+      if (sp.carIcon) {
+        sp.carIcon.setVisible(driving);
+        if (driving && tx - sp.x !== 0) sp.carIcon.setFlipX(tx - sp.x > 0); // 가는 쪽을 본다
+      }
       if (sp.bodyRef) sp.bodyRef.setVisible(!driving);
       if (sp.labelRef) sp.labelRef.setVisible(!driving);
       if (sp.shadowRef) sp.shadowRef.setVisible(!driving);
@@ -789,11 +814,24 @@ class TownScene extends Phaser.Scene {
       const body = sp.bodyRef;
       if (body && sp.animKey) {
         if (moving) {
-          const back = (ddx + ddy) < 0; // 북쪽(카메라 반대)으로 이동 → 후면
-          const animKey = (back && this.ensureWalkAnim(arch, 'up')) || this.ensureWalkAnim(arch);
-          if (dx !== 0) body.setFlipX(dx > 0); // 원본 ↙/↖ — 오른쪽 이동 시 반전
-          body.anims.play(animKey, true);
-          sp.lastBack = back && this.ensureWalkAnim(arch, 'up') !== null;
+          // §23.5 방향이 틀리는 이유는 방향표가 아니라 **두 델타의 기준이 달라서**였다.
+          // back은 타일 델타(ddx+ddy)에서 오고 flipX는 화면 델타(tx - sp.x)에서 왔는데,
+          // 화면 델타는 900ms 트윈이 따라가는 중의 지연을 품고 있어 배속에서 부호가 어긋난다.
+          // 게다가 지도가 더러워진 배치에서는 syncSims가 두 번 돈다(drawWorld 끝에서 한 번,
+          // 배치 처리 끝에서 또 한 번). 두 번째에는 ddx=ddy=0이라 back이 늘 false가 되어
+          // **북쪽으로 걷는 사람이 전부 정면으로 뒤집혔다** — 사용자가 본 그 증상이다.
+          // 그래서 화면 델타를 버리고 타일 델타 하나에서 둘 다 뽑고, 0델타면 방향을 건드리지 않는다.
+          if (ddx !== 0 || ddy !== 0) {
+            const back = (ddx + ddy) < 0; // 북쪽(카메라 반대)으로 이동 → 후면
+            const animKey = (back && this.ensureWalkAnim(arch, 'up')) || this.ensureWalkAnim(arch);
+            body.setFlipX((ddx - ddy) > 0); // 화면 x = (x−y)·16 — 오른쪽으로 가면 반전
+            body.anims.play(animKey, true);
+            sp.lastBack = back && this.ensureWalkAnim(arch, 'up') !== null;
+            sp.lastFlip = body.flipX;
+          } else if (sp.animKey) {
+            body.anims.play(sp.lastBack ? this.ensureWalkAnim(arch, 'up') ?? sp.animKey : sp.animKey, true);
+            if (sp.lastFlip !== undefined) body.setFlipX(sp.lastFlip);
+          }
           if (sp.stopTimer) { sp.stopTimer.remove(); }
           sp.stopTimer = this.time.delayedCall(950, () => {
             body.anims.stop();
@@ -1049,6 +1087,62 @@ function hash32(s) {
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
   h ^= h >>> 15; h = Math.imul(h, 0x2545f491) >>> 0; h ^= h >>> 13;
   return h >>> 0;
+}
+
+// §23.7 가게 이름. "카페 두 군데의 이름이 같음" — 같은 종류라고 같은 가게는 아니다.
+// 시뮬레이션에는 이름 필드가 없고(시설은 id·좌표·매출뿐), 이름은 **보는 사람의 것**이므로
+// 화면에서 짓는다. id가 곧 자리이므로 같은 가게는 언제 봐도 같은 이름이다.
+const SHOP_NAMES = {
+  cafe: ['해솔다방', '달빛커피', '아침커피', '골목카페', '온기다방', '민들레커피', '창가커피', '노을다방'],
+  restaurant: ['한밭식당', '손칼국수', '우리식탁', '골목분식', '해솔밥상', '옛맛식당', '참숯화로'],
+  bar: ['밤바다', '한잔집', '등대주점', '골목선술집', '달빛한잔'],
+  market: ['해솔상회', '새벽마트', '골목슈퍼', '한아름상회', '아침시장'],
+  office: ['해솔사무소', '새벽상사', '늘봄기획', '한빛사무소', '두레상사'],
+  gym: ['튼튼체육관', '해솔짐', '새벽운동실'],
+  cinema: ['해솔극장', '달빛시네마', '동네영화관'],
+  library: ['마을도서관', '해솔문고', '숲속서재'],
+  hospital: ['해솔의원', '마을병원', '새벽의원'],
+  school: ['해솔학교', '마을학교'],
+  park: ['해솔공원', '달빛공원', '숲길공원', '햇살공원', '개울공원'],
+  pond: ['해솔못', '달빛저수지', '버들못'],
+  city_hall: ['시청'], house: ['집'], apartment: ['아파트'],
+  police_station: ['파출소'], fire_station: ['소방서'], mall: ['해솔몰', '달빛상가'],
+};
+const PLACE_FALLBACK = {
+  house: '집', apartment: '아파트', office: '직장', cafe: '카페', park: '공원', bar: '술집',
+  library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청',
+  school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', mall: '쇼핑몰',
+  police_station: '파출소', fire_station: '소방서',
+};
+// 해시로 고르면 카페 9곳에 이름 8개라 반드시 겹친다. 그래서 **같은 종류 안에서 몇 번째인가**로
+// 고른다 — 이름이 동나면 "2호점"이 붙는다. id 정렬이라 목록 순서가 바뀌어도 이름은 그대로다.
+let __nameCache = { key: '', map: null };
+function facilityNames() {
+  const facs = world?.map?.facilities ?? [];
+  const key = `${facs.length}:${facs[facs.length - 1]?.id ?? ''}`;
+  if (__nameCache.key === key && __nameCache.map) return __nameCache.map;
+  const byType = new Map();
+  for (const f of facs) {
+    if (!byType.has(f.type)) byType.set(f.type, []);
+    byType.get(f.type).push(f.id);
+  }
+  const out = new Map();
+  for (const [type, ids] of byType) {
+    ids.sort();
+    const pool = SHOP_NAMES[type];
+    ids.forEach((id, i) => {
+      if (!pool || pool.length === 0) { out.set(id, PLACE_FALLBACK[type] ?? type); return; }
+      const branch = Math.floor(i / pool.length);
+      out.set(id, pool[i % pool.length] + (branch > 0 ? ` ${branch + 1}호점` : ''));
+    });
+  }
+  __nameCache = { key, map: out };
+  return out;
+}
+function facilityName(fac) {
+  if (!fac) return '';
+  if (fac.type === 'house' || fac.type === 'apartment') return PLACE_FALLBACK[fac.type];
+  return facilityNames().get(fac.id) ?? PLACE_FALLBACK[fac.type] ?? fac.type;
 }
 
 function pickW(rows, t, seed = '') {
@@ -2550,6 +2644,9 @@ function renderPanel() {
   const panel = $('simpanel');
   if (selectedSimId === null || !world) { panel.style.display = 'none'; return; }
   const sim = world.sims.find((s) => s.id === selectedSimId);
+  // §23.6 선택한 사람이 죽거나 이주하면 여기서 TypeError가 나면서 **그 배치의 나머지 처리가
+  // 통째로 죽었다** (renderPanel은 매 배치 호출된다). 사람은 사라질 수 있다 — 화면이 먼저 안다.
+  if (!sim) { $('simname').textContent = '(마을을 떠났습니다)'; return; }
   panel.style.display = 'block';
   $('simname').textContent = sim.name;
   $('portrait').src = `./sprites/walk${archOf(sim)}_0.png`; // 도트 초상화 — 직업 제복 반영 (§17.14)
