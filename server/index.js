@@ -374,6 +374,7 @@ function sendSnapshot(ws) {
     foodSupply: engine.world.foodSupply,
     season: engine.world.season,
     villages: villageSummary(engine.world),
+    founding: engine.world.founding,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,

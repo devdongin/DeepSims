@@ -30,10 +30,12 @@ import { collectCandidates } from '../sim/tick.js';
 //     이후 승급에 따른 새 행동은 의도된 변화다.
 //   #32     (마을 저장): 스키마/소속 메타데이터만 추가해 world 해시를 갱신한다.
 //     4320틱 원본 대조에서 이벤트·메타데이터 제외 전체 상태가 동일함을 별도 검증했다.
+//   #32 청원: 일일 부족 관측/청원 상태와 로직 버전 추가. 초기240틱 후보·선택·이벤트는
+//     그대로이며 전체 저장 해시만 새 상태를 포함하도록 갱신한다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', 'ddff0557', '6cab2972']],
-  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '36b0b82c']],
-  [200, ['5dad1750', '45ef6cbf', 'b8398314', 'deaee076']],
+  [10, ['0ab9198a', '32b2391b', 'ddff0557', '5d9e797f']],
+  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '455ae6fc']],
+  [200, ['5dad1750', '45ef6cbf', 'b8398314', '56a394b5']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

@@ -4,7 +4,8 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 62, // #91 욕구 충족 실적 계층
+  logicSchemaVersion: 63, // #32 개척 청원 지속 조건
+  founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
   seasons: { winterHarvestPct: 50, winterFishPct: 50, winterOutdoorEnergy: 1,
@@ -960,6 +961,8 @@ function checkRanges(p, errors) {
   inRange('supply.unitPrice', p.supply.unitPrice, 1, 1000000);
   inRange('seasons.winterHarvestPct', p.seasons.winterHarvestPct, 0, 100);
   inRange('needsTiers.fulfilledMin', p.needsTiers.fulfilledMin, 1, 10000);
+  inRange('founding.petitionDays', p.founding.petitionDays, 1, 3650);
+  inRange('founding.minSettlers', p.founding.minSettlers, 1, 100000);
   inRange('needsTiers.deprivedMax', p.needsTiers.deprivedMax, 0, p.needsTiers.fulfilledMin);
   inRange('needsTiers.promoteTicks', p.needsTiers.promoteTicks, 1, 10000000);
   inRange('needsTiers.demoteTicks', p.needsTiers.demoteTicks, 1, 10000000);

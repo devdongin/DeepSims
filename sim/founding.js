@@ -4,6 +4,41 @@ import { canWork } from './education.js';
 import { isResidence, plotBuildable } from './map.js';
 import { PRIMARY_VILLAGE_ID } from './villages.js';
 
+export function newFoundingState() {
+  return { nextPetitionId: 0, lastDay: -1, pressure: {}, petitions: [] };
+}
+
+export function evaluateFoundingPetitions(world, t, emit) {
+  const state=world.founding, day=Math.floor(t/1440), F=world.logic.founding;
+  if (day===state.lastDay) return;
+  const consecutive=state.lastDay===day-1;
+  state.lastDay=day;
+  for (const village of world.villages) {
+    const evidence=foundingEvidence(world,village.id);
+    const constrained=evidence.population>0 && evidence.population>=evidence.beds
+      && evidence.vacantHomes===0 && evidence.localBuildablePlots===0
+      && evidence.pendingHomes===0 && evidence.eligibleSettlerIds.length>=F.minSettlers;
+    const previous=state.pressure[village.id];
+    const days=constrained ? Math.min(F.petitionDays,(consecutive ? previous?.days??0 : 0)+1) : 0;
+    state.pressure[village.id]={ day, days, evidence };
+    const existing=state.petitions.find(p=>p.villageId===village.id&&p.status==='pending');
+    if (existing && !constrained) {
+      existing.status='withdrawn';existing.resolvedTick=t;existing.reason='conditions_changed';
+      emit('founding_petition_withdrawn',existing.petitionerId,{petitionId:existing.id,villageId:village.id});
+    }
+    if (!constrained || days<F.petitionDays || existing) continue;
+    const petition={id:state.nextPetitionId++,villageId:village.id,petitionerId:evidence.eligibleSettlerIds[0],
+      createdTick:t,status:'pending',resolvedTick:null,reason:null,evidence};
+    state.petitions.push(petition);
+    emit('founding_petition_created',petition.petitionerId,{petitionId:petition.id,villageId:village.id,
+      constrainedDays:days,population:evidence.population,vacantHomes:0,localBuildablePlots:0});
+  }
+  // Pending requests remain actionable. Only old terminal records are pruned.
+  while(state.petitions.filter(p=>p.status!=='pending').length>32){
+    state.petitions.splice(state.petitions.findIndex(p=>p.status!=='pending'),1);
+  }
+}
+
 export function foundingEvidence(world, villageId) {
   const village = world.villages.find(v => v.id === villageId);
   if (!village) return null;

@@ -69,6 +69,6 @@ test('#92 seasonal transitions emit once and save/resume remains identical acros
 test('#92 v63 migration derives current season and installs stock action without RNG draws', () => {
   const w=createWorld(92),rng=serialize(w.rngSim);w.worldTick=100*1440;w.schemaVersion=63;
   w.logic.logicSchemaVersion=60;delete w.logic.seasons;delete w.logic.actions[STOCK_ACTION];delete w.season;
-  migrateWorld(w);assert.equal(w.schemaVersion,66);assert.equal(w.logic.logicSchemaVersion,62);
+  migrateWorld(w);assert.equal(w.schemaVersion,67);assert.equal(w.logic.logicSchemaVersion,63);
   assert.equal(w.season.name,'winter');assert.equal(serialize(w.rngSim),rng);
 });

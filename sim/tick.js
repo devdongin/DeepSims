@@ -19,6 +19,7 @@ import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
 import { syncResidenceVillage } from './villages.js';
+import { evaluateFoundingPetitions } from './founding.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -1490,6 +1491,7 @@ export function tick(world, inputsForThisTick = []) {
         applyChildAllowance(world, t, emit); // #71 실제 부모 가구에 이전, RNG 없음
         settleHousing(world,t,day,emit); // #93 지원 뒤 임대 정산, 다음 tick 이사 의도
         evaluateHouseholds(world,t,day,emit); // #51 지원·현재 잔고 뒤, 다음 틱 분가 의도 생성
+        evaluateFoundingPetitions(world,t,emit); // 실제 주거/공터 부족이 지속된 경우만 청원
         // §21.3 전직: 손님이 몰린 가게에 누군가 일하러 간다 (복지 다음 — 서브순서 고정).
         // 복지 뒤에 두는 이유: 오늘의 지원이 반영된 뒤에 진로를 정하는 게 순서상 자연스럽다.
         maybeJobSwitch(world, t, day, emit);

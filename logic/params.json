@@ -1,5 +1,6 @@
 {
-  "logicSchemaVersion": 62,
+  "logicSchemaVersion": 63,
+  "founding": { "petitionDays": 3, "minSettlers": 2 },
   "needsTiers": { "fulfilledMin": 4000, "deprivedMax": 1000, "promoteTicks": 7200, "demoteTicks": 720, "cultureDecay": 1, "cultureFun": 2000 },
   "seasons": { "winterHarvestPct": 50, "winterFishPct": 50, "winterOutdoorEnergy": 1, "stockLeadDays": 10, "stockTarget": 6, "stockDeficit": 5000 },
   "supply": { "openingStock": 12, "targetStock": 12, "reorderAt": 6, "keepReserve": 3, "maxDelivery": 3, "unitPrice": 40 },

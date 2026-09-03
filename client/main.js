@@ -2665,6 +2665,8 @@ function eventText(e) {
     case 'item_spawned': return null; // 어디 떨어졌는지는 비밀 — 발견의 재미
     case 'season_changed': return `🍂 ${ {spring:'봄',summer:'여름',autumn:'가을',winter:'겨울'}[e.payload.to] }이 시작됐습니다`;
     case 'needs_tier_changed': return `${simName(e.simId)}의 생활 단계가 ${e.payload.to === 1 ? '시민' : '정착민'}으로 바뀌었습니다`;
+    case 'founding_petition_created': return `🏘️ ${ga(simName(e.simId))} 주거와 지역 공터 부족으로 개척 청원을 올렸습니다`;
+    case 'founding_petition_withdrawn': return `🏘️ 개척 청원 조건이 달라져 청원이 철회됐습니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
@@ -2763,6 +2765,7 @@ const FEED_STORY = new Set([
   'joined_club', 'genius_born', 'heroic_save', 'festival', 'new_year', 'election',
   'city_promoted', 'station_unlocked', 'facility_built', 'argument', 'petition',
   'public_posts_filled', 'job_changed',
+  'founding_petition_created', 'founding_petition_withdrawn',
 ]);
 // conversation·greeting·gathering·invited는 뺐다. 실측에서 '이야기' 80줄이 전부 잡담(💬)이라
 // 결혼도 출생도 그 사이에 묻혔다 — 수다는 이 마을의 **바탕음**이지 사건이 아니다.
