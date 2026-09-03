@@ -300,6 +300,7 @@ export function migrateWorld(world) {
   }
   // §22.90 상대별 최근 대화 주제. 구세이브는 빈 기록에서 시작한다.
   for (const sim of world.sims) sim.conversationTopics ??= {};
+  for (const sim of world.sims) sim.unpaidDays ??= 0;
   if (from < 41) {
     // §22.13 플레이어 심의 groceries·sick 미초기화 복구 (플레이테스트 S2-1).
     // 살아 있는 세계에는 이미 NaN이 저장돼 null로 굳어 있거나 키가 아예 없다.

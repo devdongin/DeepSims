@@ -160,6 +160,7 @@ export function facilityShortfallKind(world, sim, action, t) {
   // 않는 것이 틀린 답을 내는 것보다 낫다.
   if (action === 'respond_fire') return null;
   if (action === 'work' && sim.traits.occupation === 'police') return null;
+  if (action === 'work' && sim.traits.occupation === 'jobless') return null;
   const ftypes = action === 'work'
     ? [].concat(L.workplace[sim.traits.occupation] ?? [])
     : (ACTION_FACILITY[action] ?? []);
@@ -956,10 +957,12 @@ export function tick(world, inputsForThisTick = []) {
         const avail = Math.max(0, payer?.revenue ?? 0);
         const paid = Math.min(wage, avail);
         if (paid < wage) {
+          sim.unpaidDays = (sim.unpaidDays ?? 0) + 1;
           emit('wage_shortfall', sim.id, {
             facilityId: s.facilityId, asked: wage, paid, shortfall: wage - paid, source: 'facility',
           });
         }
+        else sim.unpaidDays = 0;
         if (payer) payer.revenue = avail - paid;
         wage = paid;
       } else if (pub) {
