@@ -3038,6 +3038,37 @@ const GOALS = [
   { g: '삶', k: 'cars', t: '길이 붐빈다', d: '자가용 20대', max: 20, v: (w) => w.sims.filter((s) => s.hasCar).length },
 ];
 
+// §23.27 목표는 열어 봐야 보였다. **달성하는 순간**이 화면에 없으면 목표가 아니라 표다.
+// 배치마다 값을 다시 재기엔 열여덟 개가 무겁지 않다 — 전부 world 한 번 훑기다.
+// 처음 켤 때 이미 달성한 것들은 알리지 않는다 (2,000일 된 마을에서 열한 줄이 쏟아진다).
+const goalHit = new Set();
+let goalPrimed = false;
+function checkGoals() {
+  if (!world) return;
+  for (const g of GOALS) {
+    let v = 0;
+    try { v = g.v(world) ?? 0; } catch { v = 0; }
+    if (v < g.max || goalHit.has(g.k)) continue;
+    goalHit.add(g.k);
+    if (!goalPrimed) continue; // 첫 통과는 현재 상태를 담는 것뿐이다
+    pushGoalLine(g);
+  }
+  goalPrimed = true;
+}
+function pushGoalLine(g) {
+  if (feedFilter === 'money' || feedFilter === 'mine') return; // 그 화면의 주제가 아니다
+  const div = document.createElement('div');
+  div.className = 'ev';
+  div.style.color = '#ffcf6a';
+  const ts = document.createElement('span');
+  ts.className = 't';
+  ts.textContent = fmtClock(world.worldTick);
+  div.append(ts, document.createTextNode(`🏆 ${g.t} — ${g.d}`));
+  const feed = $('feed');
+  feed.prepend(div);
+  while (feed.children.length > 80) feed.lastChild.remove();
+}
+
 function renderGoals() {
   const box = $('goals-list');
   if (!box || !world) return;
@@ -3606,6 +3637,7 @@ function connect() {
             if (!document.hidden) handleVisualEvent(evs[i]);
           }
           for (let i = Math.max(0, shown.length - 80); i < shown.length; i++) pushFeed(shown[i]);
+          checkGoals(); // §23.27 목표 달성은 배치 끝에서 한 번만 본다
         }
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
         let mapDirty = false;
