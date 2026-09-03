@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 57; // #63 수요 기반 산업 언락 원장 (#96/#57 이후)
+export const SCHEMA_VERSION = 58; // #71 실제 진료 자기부담·가족 지불·완료 재검증
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -19,7 +19,7 @@ export const NEED_MAX = 10000;
 // 확장은 뒤에 append (기존 타이브레이크 순서 보존). drink~build는 §15.1 로드맵 행동.
 export const ACTIONS = ['eat', 'sleep', 'work', 'socialize', 'play', 'idle',
   'drink', 'binge_eat', 'hole_up', 'exercise', 'build',
-  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire', 'study', 'seek_food_aid'];
+  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire', 'study', 'seek_food_aid', 'escort_child_doctor'];
 export const COPING_ACTIONS = ['drink', 'binge_eat', 'hole_up', 'exercise'];
 export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat']; // 자기 집 시설만 후보
 
@@ -34,6 +34,7 @@ export const ACTION_FACILITY = {
   play: ['park', 'cinema', 'mall'],
   construct: [], // 가상 현장(site) — collectCandidates 특수 경로 (§16.5.B)
   see_doctor: ['hospital'],
+  escort_child_doctor: [],
 };
 export const NEED_OF_ACTION = { eat: 'hunger', sleep: 'energy', socialize: 'social', play: 'fun', read: 'fun', fish: 'fun', cook_eat: 'hunger', seek_food_aid: 'hunger' };
 
@@ -63,6 +64,9 @@ export const EVENT_TYPES = [
   'school_planned',
   'public_meal_taken',
   'industry_unlocked',
+  'medical_visit_paid',
+  'child_allowance_paid',
+  'child_escorted',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

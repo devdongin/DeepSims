@@ -30,6 +30,8 @@ export function emptyState() {
     ticksLeft: 0,
     pairedTicks: 0,
     sideTalkTicks: 0, // §22.14 옆 사람과 말이 트인 횟수
+    escortId: null,
+    escortPhase: null,
   };
 }
 

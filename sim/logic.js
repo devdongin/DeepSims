@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 52, // #63 수요 기반 산업/전직 (#96/#57 이후)
+  logicSchemaVersion: 53, // #71 진료 자기부담 정책과 완료 시 원자 정산
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
@@ -32,6 +32,7 @@ export const DEFAULT_LOGIC = {
     cook_eat: { duration: 25, recoverPerTick: 350, moodPerTick: 8 },
     construct: { duration: 60 }, // §16.5 스틴트
     see_doctor: { duration: 30, cost: 800 }, // §17.3 진료
+    escort_child_doctor: { duration: 1 },
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
@@ -380,6 +381,8 @@ export const DEFAULT_LOGIC = {
   },
   // §17.15 경제 순환: 소득세 → 국고 → 복지·시장 수당 (Lengnick baseline 차용, 드로우 0회)
   economy: {
+    healthCopayPct: 100,    // 진료 자기부담률; 나머지는 현재 국고 범위 내 병원 이전
+    childAllowance: 0,      // 아이당 일일 가구 지원금; 기본 비활성, 임금 아님
     taxPct: 15,             // 임금 원천징수율
     welfareThreshold: 300,  // 이 잔고 미만이면 복지 대상
     welfareAmount: 200,     // 1회 지급액
@@ -783,6 +786,7 @@ function checkRanges(p, errors) {
   // §17
   inRange('actions.see_doctor.duration', p.actions.see_doctor.duration, 1, 10000);
   inRange('actions.see_doctor.cost', p.actions.see_doctor.cost, 0, 1000000);
+  inRange('actions.escort_child_doctor.duration', p.actions.escort_child_doctor.duration, 1, 10000);
   for (const [o, w] of Object.entries(p.workplace)) {
     if (o === 'jobless' && w === null) continue;
     const ok = typeof w === 'string'
@@ -852,6 +856,8 @@ function checkRanges(p, errors) {
   inRange('economy.welfareThreshold', p.economy.welfareThreshold, 0, 100000);
   inRange('economy.welfareAmount', p.economy.welfareAmount, 0, 100000);
   inRange('economy.welfareDailyCap', p.economy.welfareDailyCap, 0, 1000);
+  inRange('economy.healthCopayPct', p.economy.healthCopayPct, 0, 100);
+  inRange('economy.childAllowance', p.economy.childAllowance, 0, 1000);
   if (!Array.isArray(p.economy.privateWageOccupations)
       || p.economy.privateWageOccupations.some((o) => !(o in p.occupations))) {
     errors.push('economy.privateWageOccupations: occupations에 있는 직업 이름의 배열이어야 함');
@@ -964,6 +970,8 @@ function checkShape(ref, val, path, errors) {
 export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university', 'primary_school','middle_school','high_school','workshop','lab','warehouse'];
 
 export const POLICY_FIELDS = {
+  healthCopayPct: [0, 100],
+  childAllowance: [0, 1000],
   taxPct: [5, 30],
   welfareAmount: [0, 1000],
   welfareThreshold: [0, 2000],
