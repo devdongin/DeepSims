@@ -289,6 +289,8 @@ function sendSnapshot(ws) {
     tokens: engine.world.tokens,
     transit: engine.world.transit ?? null, // §19.12 역 수요 관측·언락 (zone 메뉴 게이트)
     unlockedIndustries: engine.world.unlockedIndustries ?? [],
+    householdDaily: engine.world.householdDaily ?? { day:-1, households:[], failures:{} },
+    householdIntents: engine.world.householdIntents ?? [],
   } });
 }
 

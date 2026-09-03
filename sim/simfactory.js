@@ -38,7 +38,7 @@ export function emptyState() {
 // 모든 생성 경로가 이 함수를 쓴다. 필드가 하나라도 빠지면 그건 여기서 빠지는 것이고,
 // test/qa.test.js가 네 경로의 키 집합이 같은지 검사한다.
 export function makeSim({
-  id, name, surname, homeId, traits, seed,
+  id, name, surname, homeId, householdId = `household:${homeId}`, traits, seed,
   x, y, needs, money,
   isPlayer = false,
   logic = DEFAULT_LOGIC,
@@ -48,6 +48,7 @@ export function makeSim({
     name,
     surname,              // §22.16 성 — 표시는 `${surname}${name}`
     homeId,
+    householdId,
     isPlayer,
     isGenius: false,
     geniusBirth: null,
@@ -96,6 +97,7 @@ export function makeSim({
     // §22.19 일상 수요를 심·행동당 하루 1회로 묶는 가드
     wantDay: -1,
     wantedActions: [],
+    independenceDays: 0,
   };
   initializeDevelopment(sim, seed, logic);
   sim.education.lastStage = schoolFor(sim);

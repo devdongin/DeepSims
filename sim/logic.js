@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 54, // #71 진료 자기부담 + §23.8 여가 5종
+  logicSchemaVersion: 55, // #51 가구 안정성과 분가 의도 (§23.8 여가 5종 이후)
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
@@ -112,6 +112,7 @@ export const DEFAULT_LOGIC = {
   education: { annualTuition: 2000, degreeStudyTicks: 20000, bachelorYears: 4, mastersYears: 2, doctorateYears: 4,
     mastersStudyTicks: 10000, doctorateStudyTicks: 20000, postgraduatePctFactor: 50,
     studyDeficit: 6500, dailyStudyTicks: 240, startMinute: 540, endMinute: 900 },
+  household: { independenceAge: 19, stableDays: 7, reserveMoney: 2400 },
   // §21.2 나눔 (사용자 규칙 §0.1: 지표를 누르지 말고 행동을 준다).
   // 은퇴자는 소득이 0이라 저축을 쓰면 굶는다 — 복지 캡을 올리는 대신 '만나서 나눠주는' 행동을 준다.
   sharing: {
@@ -903,6 +904,9 @@ function checkRanges(p, errors) {
   inRange('society.festivalDays', p.society.festivalDays, 7, 100000);
   inRange('family.childPermille', p.family.childPermille, 0, 1000);
   inRange('family.familyBonus', p.family.familyBonus, 0, 1000);
+  inRange('household.independenceAge', p.household.independenceAge, 19, 100);
+  inRange('household.stableDays', p.household.stableDays, 1, 3650);
+  inRange('household.reserveMoney', p.household.reserveMoney, 0, 1000000000);
   inRange('election.campaignPull', p.election.campaignPull, 100, 150);
   inRange('election.campaignDays', p.election.campaignDays, 0, 29);
   for (const k of ['judgeStarving', 'judgeNoMoney', 'judgeWelfare']) inRange(`election.${k}`, p.election[k], 0, 100);
