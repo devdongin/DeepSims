@@ -19,7 +19,7 @@ import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
 import { syncResidenceVillage } from './villages.js';
-import { evaluateFoundingPetitions } from './founding.js';
+import { evaluateFoundingPetitions, applyFoundingDecision } from './founding.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -914,6 +914,7 @@ export function tick(world, inputsForThisTick = []) {
     else if (inp.command === 'policy') applyPolicy(world, inp, t, emit);
     else if (inp.command === 'zone') applyZone(world, inp, t, emit);
     else if (inp.command === 'plan_center') applyPlanCenter(world, inp, t, emit);
+    else if (inp.command === 'found_village') applyFoundingDecision(world, inp.payload, t, emit);
     else emit('input_rejected', null, { reason: 'unknown_command', inputId: inp.id ?? null });
   }
 

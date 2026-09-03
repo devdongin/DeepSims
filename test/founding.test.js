@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld } from '../sim/world.js';
 import { serialize } from '../sim/serialize.js';
-import { foundingEvidence, evaluateFoundingPetitions, quoteFoundingSites } from '../sim/founding.js';
+import { foundingEvidence, evaluateFoundingPetitions, quoteFoundingSites,
+  validateFoundingDecision, applyFoundingDecision } from '../sim/founding.js';
 import { deserialize, hashWorld } from '../sim/serialize.js';
 import { tick } from '../sim/tick.js';
 import { migrateWorld } from '../sim/migrate.js';
@@ -152,4 +153,73 @@ test('#32 approval rejects invalid, overlapping, reserved, unaffordable and stal
     assert.equal(quoteFoundingSites(w,0,ids).reason,reason);
     assert.equal(serialize(w),before,reason);
   }
+});
+
+const approval=()=>({petitionId:0,decision:'approve',name:'새솔',homePlotIds:[1]});
+
+test('#32 durable decision payload is a strict whitelist, including safe village names',()=>{
+  assert.equal(validateFoundingDecision(approval()).ok,true);
+  assert.equal(validateFoundingDecision({petitionId:0,decision:'reject'}).ok,true);
+  for(const payload of [null,[],{}, {...approval(),petitionId:-1}, {...approval(),decision:'spawn'},
+    {...approval(),money:100}, {...approval(),name:'<script>'}, {...approval(),name:' 새솔'},
+    {...approval(),name:'x\n'}, {...approval(),name:'x'.repeat(41)}, {...approval(),homePlotIds:[]},
+    {...approval(),homePlotIds:[1,1]}, {petitionId:0,decision:'reject',reason:'anything'}]){
+    assert.equal(validateFoundingDecision(payload).ok,false,JSON.stringify(payload));
+  }
+});
+
+test('#32 approval authorizes a saved plan without creating a village, spending, moving or granting population',()=>{
+  const w=approvalWorld(),events=[],other=()=>serialize({...w,founding:null});
+  const before=other();applyFoundingDecision(w,approval(),3000,(...e)=>events.push(e));
+  const p=w.founding.petitions[0];
+  assert.equal(p.status,'approved');assert.equal(p.approvedTick,3000);assert.equal(p.resolvedTick,null);
+  assert.equal(p.plan.name,'새솔');assert.deepEqual(p.plan.homePlotIds,[1]);assert.equal(p.plan.settlerIds.length,2);
+  assert.equal(p.plan.quotedCost,w.logic.zone.costs.house);assert.equal(other(),before);
+  assert.equal(events[0][0],'founding_approved');
+  const saved=serialize(w);applyFoundingDecision(w,approval(),3001,(...e)=>events.push(e));
+  assert.equal(serialize(w),saved);assert.equal(events.at(-1)[2].reason,'no_pending_petition');
+  for(let day=3;day<40;day++)evaluateFoundingPetitions(w,day*1440,()=>{});
+  assert.equal(w.founding.petitions.length,1,'approved work cannot generate duplicate petitions or be pruned');
+});
+
+test('#32 rejection persists its reason and requires fresh shortage days; failed approvals have no effects',()=>{
+  const w=approvalWorld(),events=[];
+  applyFoundingDecision(w,{petitionId:0,decision:'reject',reason:'budget_priority'},3000,(...e)=>events.push(e));
+  assert.equal(w.founding.petitions[0].status,'rejected');assert.equal(w.founding.petitions[0].resolvedTick,3000);
+  assert.equal(events[0][0],'founding_rejected');
+  evaluateFoundingPetitions(w,4320,()=>{});evaluateFoundingPetitions(w,5760,()=>{});
+  assert.equal(w.founding.petitions.length,1);
+  evaluateFoundingPetitions(w,7200,()=>{});assert.equal(w.founding.petitions.length,2);
+  for(const [setup,reason] of [[w=>{w.treasury=0;},'treasury_short'],
+    [w=>{w.villages[0].name='새솔';},'duplicate_name'],
+    [w=>{for(const s of w.sims)s.traits.occupation='student';},'no_settlers']]){
+    const bad=approvalWorld();setup(bad);const before=serialize(bad),ev=[];
+    applyFoundingDecision(bad,approval(),3000,(...e)=>ev.push(e));
+    assert.equal(serialize(bad),before);assert.equal(ev[0][0],'input_rejected');assert.equal(ev[0][2].reason,reason);
+  }
+});
+
+test('#32 found_village is applied from the durable input queue and survives engine reconstruction exactly once',async()=>{
+  const { Storage }=await import('../db/storage.js');
+  const { Engine }=await import('../server/engine.js');
+  const st=new Storage(':memory:');
+  try{
+    const e=new Engine(st,{seed:32,now:()=>1000});e.world=approvalWorld();
+    e.world.worldTick=2880;e.world.lastDailyDay=2;e.world.lastPlanDay=2;
+    st.commitBatch({world:e.world,events:[],appliedInputIds:[],epochUtcMs:e.epochUtcMs});
+    const expected=deserialize(serialize(e.world));
+    const input={clientInputId:'founding-approve-once',command:'found_village',payload:approval()};
+    const accepted=await e.submitInput(input);
+    assert.equal(accepted.duplicate,false);
+    assert.deepEqual(await e.submitInput(input),{...accepted,duplicate:true});
+    // Reconstruct before application: the input must come from committed SQLite.
+    const resumed=new Engine(st,{seed:32,now:()=>1000});
+    const actual=resumed.runLive(1).events;
+    const wanted=tick(expected,[{sequence:0,command:input.command,payload:input.payload}]);
+    assert.deepEqual(actual,wanted);assert.equal(hashWorld(resumed.world),hashWorld(expected));
+    const after=new Engine(st,{seed:32,now:()=>1000});
+    assert.equal(after.world.founding.petitions[0].status,'approved');
+    assert.equal(hashWorld(after.world),hashWorld(expected));
+    assert.ok(!after.runLive(1).events.some(e=>e.type==='founding_approved'));
+  }finally{st.close();}
 });

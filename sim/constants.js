@@ -96,6 +96,7 @@ export const EVENT_TYPES = [
   'season_changed',
   'needs_tier_changed',
   'founding_petition_created', 'founding_petition_withdrawn',
+  'founding_approved', 'founding_rejected',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

@@ -1,11 +1,60 @@
 // #32 Founding evidence. This measures actual capacity; it does not create
-// residents, grant funds, approve petitions, or claim a settlement exists.
+// residents, grant funds, or claim a settlement exists.
 import { canWork } from './education.js';
 import { isResidence, plotBuildable, zoneFootprint, sameRegion, addBuilding } from './map.js';
 import { PRIMARY_VILLAGE_ID } from './villages.js';
 
 export function newFoundingState() {
   return { nextPetitionId: 0, lastDay: -1, pressure: {}, petitions: [] };
+}
+
+// Shared HTTP/simulation shape validation; world-dependent checks happen when
+// the durable command is applied, not when it is admitted to the input queue.
+export function validateFoundingDecision(payload) {
+  const fail=error=>({ok:false,error});
+  if(!payload||typeof payload!=='object'||Array.isArray(payload))return fail('bad_payload');
+  if(!Number.isSafeInteger(payload.petitionId)||payload.petitionId<0)return fail('bad_petition');
+  if(!['approve','reject'].includes(payload.decision))return fail('bad_decision');
+  const keys=payload.decision==='approve'?['petitionId','decision','homePlotIds','name']:['petitionId','decision','reason'];
+  if(Object.keys(payload).some(k=>!keys.includes(k)))return fail('unknown_field');
+  if(payload.decision==='reject'){
+    if(payload.reason!==undefined&&!['not_now','site_unsuitable','budget_priority'].includes(payload.reason))return fail('bad_reason');
+  }else{
+    if(typeof payload.name!=='string'||payload.name!==payload.name.trim()||!payload.name.length
+      ||payload.name.length>40||/[\u0000-\u001f\u007f<>]/.test(payload.name))return fail('bad_name');
+    if(!Array.isArray(payload.homePlotIds)||!payload.homePlotIds.length||payload.homePlotIds.length>50000
+      ||payload.homePlotIds.some(id=>!Number.isSafeInteger(id)||id<0)
+      ||new Set(payload.homePlotIds).size!==payload.homePlotIds.length)return fail('invalid_sites');
+  }
+  return {ok:true};
+}
+
+export function applyFoundingDecision(world, payload, t, emit) {
+  const reject=reason=>emit('input_rejected',null,{command:'found_village',reason});
+  const shape=validateFoundingDecision(payload);
+  if(!shape.ok){reject(shape.error);return;}
+  const petition=world.founding.petitions.find(p=>p.id===payload.petitionId&&p.status==='pending');
+  if(!petition){reject('no_pending_petition');return;}
+  if(payload.decision==='reject'){
+    petition.status='rejected';petition.resolvedTick=t;petition.reason=payload.reason??'not_now';
+    const pressure=world.founding.pressure[petition.villageId];
+    if(pressure)pressure.days=0; // A new request needs fresh constrained days.
+    emit('founding_rejected',petition.petitionerId,{petitionId:petition.id,reason:petition.reason});
+    return;
+  }
+  if(world.villages.some(v=>v.name===payload.name)
+    ||world.founding.petitions.some(p=>p.status==='approved'&&p.plan.name===payload.name)){
+    reject('duplicate_name');return;
+  }
+  const quote=quoteFoundingSites(world,petition.id,payload.homePlotIds);
+  if(!quote.ok){reject(quote.reason);return;}
+  // Approval is durable authorization, not construction or a new village.
+  // Dispatch must revalidate and fund this plan before reserving any site.
+  petition.status='approved';petition.approvedTick=t;
+  petition.plan={name:payload.name,homePlotIds:quote.homePlotIds,settlerIds:quote.settlerIds,
+    quotedCost:quote.cost};
+  emit('founding_approved',petition.petitionerId,{petitionId:petition.id,name:payload.name,
+    homePlotIds:[...quote.homePlotIds],settlerIds:[...quote.settlerIds],quotedCost:quote.cost});
 }
 
 // Approval must validate all homes and the full price before any mutation.
@@ -71,8 +120,8 @@ export function evaluateFoundingPetitions(world, t, emit) {
     const previous=state.pressure[village.id];
     const days=constrained ? Math.min(F.petitionDays,(consecutive ? previous?.days??0 : 0)+1) : 0;
     state.pressure[village.id]={ day, days, evidence };
-    const existing=state.petitions.find(p=>p.villageId===village.id&&p.status==='pending');
-    if (existing && !constrained) {
+    const existing=state.petitions.find(p=>p.villageId===village.id&&['pending','approved'].includes(p.status));
+    if (existing?.status==='pending' && !constrained) {
       existing.status='withdrawn';existing.resolvedTick=t;existing.reason='conditions_changed';
       emit('founding_petition_withdrawn',existing.petitionerId,{petitionId:existing.id,villageId:village.id});
     }
@@ -83,9 +132,10 @@ export function evaluateFoundingPetitions(world, t, emit) {
     emit('founding_petition_created',petition.petitionerId,{petitionId:petition.id,villageId:village.id,
       constrainedDays:days,population:evidence.population,vacantHomes:0,localBuildablePlots:0});
   }
-  // Pending requests remain actionable. Only old terminal records are pruned.
-  while(state.petitions.filter(p=>p.status!=='pending').length>32){
-    state.petitions.splice(state.petitions.findIndex(p=>p.status!=='pending'),1);
+  // Approved plans are still active work, not terminal history.
+  const terminal=p=>['withdrawn','rejected','cancelled','completed'].includes(p.status);
+  while(state.petitions.filter(terminal).length>32){
+    state.petitions.splice(state.petitions.findIndex(terminal),1);
   }
 }
 
