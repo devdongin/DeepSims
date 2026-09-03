@@ -130,8 +130,9 @@ function archOf(sim) {
   return pool[sim.id % pool.length];
 }
 // §17.14 건물 스프라이트 (Codex imagegen — 존재하는 것만 로드, 없으면 타일 폴백)
-const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'workshop','lab','warehouse', 'house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
-  'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire'];
+const BLD_TYPES = ['apartment', 'factory', 'mall', 'university', 'house_a', 'house_b', 'house_c', 'cafe', 'office', 'hospital', 'city_hall', 'school',
+  'restaurant', 'gym', 'cinema', 'bar', 'library', 'market', 'police', 'fire',
+  'primary_school', 'middle_school', 'high_school', 'workshop', 'lab', 'warehouse'];
 const BLD_KEYS = BLD_TYPES.map((t) => [`bld_${t}`, `./props/bld_${t}.png`]);
 BLD_KEYS.push(['firework', './ui/fx_firework.png']); // §18.T4 승급 연출
 for (const t of ['grass', 'pavement', 'road', 'river', 'river_bank', 'sand', 'mountain', 'hill', 'bridge', 'water_deep']) {
@@ -141,16 +142,18 @@ for (const t of ['grass', 'pavement', 'road', 'river', 'river_bank', 'sand', 'mo
 const TILE_TEX = { 1: 'tile_road', 2: 'tile_pavement', 5: 'tile_water_deep', 6: 'tile_river',
   7: 'tile_river_bank', 8: 'tile_sand', 9: 'tile_mountain', 10: 'tile_hill', 11: 'tile_bridge', 12: 'tile_pavement' };
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
-for (const t of ['house_a', 'cafe', 'office','workshop','lab','warehouse']) for (const d of [1, 2, 3]) {
+for (const t of ['house_a', 'cafe', 'office', 'primary_school', 'middle_school', 'high_school', 'workshop', 'lab', 'warehouse']) for (const d of [1, 2, 3]) {
   BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
 }
-for (const t of ['apartment', 'factory', 'mall', 'university', 'workshop','lab','warehouse', 'house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
-  'cinema', 'bar', 'library', 'market', 'police', 'fire']) {
+for (const t of ['apartment', 'factory', 'mall', 'university', 'house', 'cafe', 'office', 'hospital', 'city_hall', 'school', 'restaurant', 'gym',
+  'cinema', 'bar', 'library', 'market', 'police', 'fire', 'primary_school', 'middle_school', 'high_school', 'workshop', 'lab', 'warehouse']) {
   BLD_KEYS.push([`bld_${t}_int`, `./props/bld_${t}_int.png`]); // §17.19 내부 컷어웨이
 }
 const BLD_OF_FACILITY = { apartment: 'bld_apartment', factory: 'bld_factory', mall: 'bld_mall', university: 'bld_university', workshop:'bld_workshop',lab:'bld_lab',warehouse:'bld_warehouse',
   cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
-  city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
+  city_hall: 'bld_city_hall', school: 'bld_school',
+  primary_school: 'bld_primary_school', middle_school: 'bld_middle_school', high_school: 'bld_high_school',
+  restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
   police_station: 'bld_police', fire_station: 'bld_fire' };
 const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', 'flowerbed', 'slide', 'fountain', 'bush', 'mailbox', 'cat', 'bar_counter', 'beer', 'dumbbell', 'bookshelf', 'market_stall', 'fishing_sign', 'coin', 'umbrella_stand', 'construction', 'plot_sign', 'hospital_cross', 'pill_bottle', 'ballot_box', 'flag_pole', 'wedding_arch', 'dog', 'school_desk', 'noticeboard', 'bus_stop', 'campaign_banner', 'restaurant_table', 'gym_rack', 'cinema_screen', 'popcorn', 'festival_lantern', 'police_car', 'fire_truck', 'ambulance', 'well', 'jangdok', 'laundry', 'bicycle', 'cart', 'flower_bed2', 'fence_wood', 'lamp_stone', 'street_tree_lit', 'bench2',
@@ -617,7 +620,7 @@ class TownScene extends Phaser.Scene {
     this.drawProps();
     let houseIdx = 0;
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학',workshop:'공방',lab:'연구소',warehouse:'창고' }[fac.type];
+      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학',workshop:'공방',lab:'연구소',warehouse:'창고' }[fac.type];
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
       const mode = this.facMode.get(fac.id) ?? 'tile';
       const opened = interiorOpen.has(fac.id);
@@ -739,7 +742,27 @@ class TownScene extends Phaser.Scene {
           if (tex && !body.anims.isPlaying && body.texture.key !== tex) body.setTexture(tex);
         }
       }
-      this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
+      // §22.100 **트윈이 쌓여 브라우저를 죽인다.** 심마다 매 tickBatch에 이동 트윈을
+      // 새로 만들면서 이전 트윈을 끊지 않았다 — 배속을 올리면 배치가 900ms보다 자주 와서
+      // 완료되지 못한 트윈이 계속 겹친다. 실측: 25초에 12,397 → 30,154개(초당 +710),
+      // 힙은 분당 29~52MB. 스프라이트 정리(§22.99)만으로는 안 잡혔던 진짜 누수다.
+      // 새 목적지를 주기 전에 그 스프라이트의 이전 트윈을 끊는다.
+      // §22.100 **탭이 숨으면 트윈이 쌓여 페이지가 죽는다.** 브라우저는 숨은 탭의
+      // requestAnimationFrame을 멈추므로 Phaser의 업데이트 루프가 서지만, 서버 tickBatch는
+      // 계속 들어온다 — 그래서 완료되지 못한 이동 트윈이 무한히 겹친다.
+      // 실측(숨긴 탭): 25초에 8,404 → 26,648개, 힙 분당 25~52MB. 탭 한도 4GB면 곧 죽는다.
+      //
+      // 안 보이는 동안은 **트윈 없이 즉시 배치**한다. 눈에 보이지 않는 보간에 메모리를
+      // 쓸 이유가 없고, 다시 보일 때는 어차피 최신 위치가 맞다.
+      // 그리고 어떤 이유로든 트윈이 넘치면(2,000개) 전부 끊고 스냅으로 돌린다 — 안전판이다.
+      const tweenCount = this.tweens.getTweens().length;
+      if (document.hidden || tweenCount > 2000) {
+        if (tweenCount > 2000) this.tweens.killAll();
+        sp.x = tx; sp.y = ty;
+      } else {
+        this.tweens.killTweensOf(sp);
+        this.tweens.add({ targets: sp, x: tx, y: ty, duration: 900, ease: 'Linear' });
+      }
       sp.setDepth(1000 + sim.x + sim.y);
     }
     // §22.99 **떠난 심의 스프라이트를 지운다 — 브라우저 OOM의 실제 원인이었다.**
@@ -758,6 +781,33 @@ class TownScene extends Phaser.Scene {
     }
   }
 }
+
+// §22.99 진단 창구 — OOM을 쫓을 때 "무엇이 몇 개인가"를 콘솔에서 바로 본다.
+// 힙 수치만 보면 GC 타이밍에 속는다. 개수는 속지 않는다.
+window.__diag = () => ({
+  sims: world?.sims?.length ?? 0,
+  simSprites: simSprites.size,
+  bubbles: bubbles.size,
+  items: itemSprites.size,
+  props: scene?.propSprites?.length ?? 0,
+  roads: scene?.roadSprites?.length ?? 0,
+  gardens: scene?.gardenSprites?.length ?? 0,
+  tweens: scene?.tweens?.getTweens?.().length ?? 0,
+  // 트윈이 어디서 오는지 — 대상 종류별로 센다 (OOM 추적용)
+  tweensBy: (() => {
+    const t = scene?.tweens?.getTweens?.() ?? [];
+    const by = {};
+    for (const x of t) {
+      const g = x.targets?.[0];
+      const k = g?.type ?? g?.constructor?.name ?? 'unknown';
+      by[k] = (by[k] ?? 0) + 1;
+    }
+    return by;
+  })(),
+  displayList: scene?.children?.list?.length ?? 0,
+  feed: document.querySelectorAll('#feed > *').length,
+  heapMB: performance.memory ? +(performance.memory.usedJSHeapSize / 1048576).toFixed(1) : null,
+});
 
 const game = new Phaser.Game({
   type: Phaser.CANVAS, // 임베디드 브라우저의 WebGL 프레임버퍼 이슈 회피
@@ -865,6 +915,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
 }
 
 const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', workshop:'공방',lab:'연구소',warehouse:'창고', site: '공사장' };
+Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교'});
 // §22.12 한국어 조사 — 종성(받침)으로 고른다.
 // 예전에는 이름 뒤에 조사를 하드코딩해 "수아이(가)", "은지이(가)", "수아과(와)"가
 // 나왔다. 이벤트 피드는 가상 플레이어 3인이 모두 이 게임 최고의 자산으로 꼽은
@@ -891,9 +942,9 @@ const ne = (w) => `${w}${hasJong(w) ? '이네' : '네'}`;
 const ACTION_TRY_KO = {
   eat: '밥 먹으려', sleep: '자려', work: '일하려', socialize: '사람 만나려',
   play: '놀려', drink: '한잔하려', binge_eat: '뭐 좀 먹으려', hole_up: '좀 쉬려',
-  exercise: '운동하려', build: '뭘 좀 만들려', read: '책 좀 읽으려', shop: '장 보려',
+  exercise: '운동하려', build: '뭘 좀 만들려', read: '책 좀 읽으려', study: '수업 들으려', shop: '장 보려',
   fish: '낚시하려', cook_eat: '밥 해 먹으려', construct: '공사 거들려',
-  see_doctor: '병원 가려', idle: '좀 쉬려',
+  see_doctor: '병원 가려', seek_food_aid: '공공 식사 받으려', idle: '좀 쉬려',
 };
 function actKo(id) { return ACTION_TRY_KO[id] ?? '뭘 좀 하려'; }
 
@@ -2187,14 +2238,14 @@ const ACTION_KO = {
   eat: '식사', sleep: '수면', work: '근무', socialize: '수다', play: '놀이', idle: '멍때리기',
   drink: '술 한잔', binge_eat: '폭식', hole_up: '은둔', exercise: '운동', build: '침대 만들기',
   read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기', see_doctor: '병원 진료',
-  respond_fire: '화재 진압',
+  respond_fire: '화재 진압', study: '학교 수업', seek_food_aid: '공공 식사 요청',
 };
 // 직업 라벨과 같은 규칙 — 표를 직접 인덱싱하지 않는다. 미등록 행동이 와도
 // 피드에 'undefined 시작'이 아니라 '활동 시작'이 뜬다.
 function actionKo(id, fallback = '활동') { return ACTION_KO[id] ?? fallback; }
 const BLOCK_KO = {
   no_money: '돈 부족', off_hours: '시간 아님', full: '자리 없음', sated: '필요 없음',
-  not_coping: '멀쩡함', not_needed: '불필요',
+  not_coping: '멀쩡함', not_needed: '불필요', no_funds: '국고 부족',
 };
 // #107 직업 라벨. sim/traits.js의 OCCUPATIONS **전 원소**가 여기 있어야 한다 —
 // 5종만 있던 동안 라이브 주민 173명 중 137명(79%)의 직업 칸이 'undefined'였다(child만 71명).
@@ -2392,6 +2443,14 @@ function eventText(e) {
     case 'road_work_planned': return `🏗️ 시장이 우회 연결로 ${e.payload.tiles}칸 공사를 계획했습니다 (예상 ${e.payload.cost}원)`;
     case 'ability_changed': return `📚 ${ga(n)} ${{stamina:'체력',dexterity:'손재주',intellect:'지능',charisma:'사교성'}[e.payload.ability]} ${e.payload.value}/${e.payload.potential} (${{study:'배움',career:'근무',exercise:'운동',age:'나이'}[e.payload.source]})`;
     case 'genius_born': return `⭐ ${ga(n)} 특별한 재능을 갖고 태어났습니다 (잠재치 ${e.payload.cap}, 성장에는 배움과 환경이 필요합니다)`;
+    case 'school_enrolled': return `🎒 ${ga(n)} ${PLACE_KO[e.payload.stage]}에 다닙니다 (${e.payload.age}세)`;
+    case 'school_planned': return `🏫 학생 수요에 따라 ${PLACE_KO[e.payload.type]} 공사를 시작했습니다 (국고 −${e.payload.cost}원)`;
+    case 'public_meal_taken': return `🍲 ${ga(n)} 공공 식사를 받았습니다 (국고 −${e.payload.cost}원)`;
+    case 'education_decided': return e.payload.choice === 'degree' ? `🎓 ${ga(n)} ${{university:'학부',masters:'석사',doctorate:'박사'}[e.payload.course]} 과정을 졸업했습니다`
+      : e.payload.choice === 'postgraduate' ? `🎓 ${ga(n)} ${{masters:'석사',doctorate:'박사'}[e.payload.course]} 과정에 진학합니다`
+      : e.payload.choice === 'university' ? `🎓 ${ga(n)} ${{university:'학부',masters:'석사',doctorate:'박사'}[e.payload.course]??'대학'} 과정에 등록했습니다 (학비 ${e.payload.tuition}원)`
+      : e.payload.choice === 'employment' ? `💼 ${ga(n)} 대학 대신 취업을 선택했습니다`
+      : `🎒 ${ga(n)} 대학 진학을 보류했습니다 (${{tuition:'학비 부족',unreachable:'통학로 없음',no_university:'대학 없음'}[e.payload.reason]})`;
     case 'side_talk': return `💬 ${ga(n)} 옆자리 ${wa(simName(e.payload.withSimId))} 말을 텄습니다`;
     case 'helped': {
       const why = { sick: '아픈', hungry: '배곯는', broke: '주머니가 빈' }[e.payload.why] ?? '';
@@ -2440,6 +2499,10 @@ function renderPanel() {
     if (pid !== undefined) extra += ` · ${world.partnerStage?.[sim.id] === 'married' ? '💍' : '💕'}${simName(pid)}`;
     if (world.mayorId === sim.id) extra += ' · 👑시장';
     if (sim.sick) extra += ' · 🤒';
+    if (sim.education?.stage) extra += ` · ${PLACE_KO[sim.education.stage]}`;
+    if (sim.education?.universityGraduated) extra += ' · 🎓대졸';
+    if (sim.education?.course) extra += ` · ${{university:'학부',masters:'석사',doctorate:'박사'}[sim.education.course]} ${sim.education.universityEnrolled?'재학':'등록 보류'}`;
+    if (sim.education?.highestDegree && sim.education.highestDegree !== 'bachelor') extra += ` · 🎓${{masters:'석사',doctorate:'박사'}[sim.education.highestDegree]}`;
     $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${sim.isPlayer ? ' · ◆나' : ''}${sim.isGenius ? ' · ⭐천재' : ''}${extra}`;
   }
   $('money').textContent = `💰 ${sim.money}원`;
@@ -2624,7 +2687,21 @@ function connect() {
         }
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
-        for (const e of msg.events) { pushFeed(e); handleVisualEvent(e); }
+        {
+          // §22.101 **고배속에서 할당이 GC를 앞지른다.** ×1에서는 힙이 평평한데(0.2MB/분)
+          // ×48에서는 분당 60MB 넘게 오른다 — 배치당 이벤트가 수백 개라 피드 DOM과
+          // 말풍선 객체가 쏟아진다. 탭이 숨으면 GC가 뒤로 밀려 그대로 쌓인다.
+          //
+          // 화면은 어차피 80줄만 보여준다. **한 배치에서 피드에 그리는 줄을 뒤에서 80개로
+          // 자르고**, 숨은 탭에서는 연출(말풍선·이모트)을 건너뛴다 — 안 보이는 것에
+          // 메모리를 쓰지 않는다. 상태 갱신은 그대로다.
+          const evs = msg.events;
+          const feedFrom = Math.max(0, evs.length - 80);
+          for (let i = 0; i < evs.length; i++) {
+            if (i >= feedFrom) pushFeed(evs[i]);
+            if (!document.hidden) handleVisualEvent(evs[i]);
+          }
+        }
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
         let mapDirty = false;
         for (const e of msg.events) {
@@ -2752,7 +2829,7 @@ setInterval(pushSpark, 5000);
   const modal = document.getElementById('zone-modal');
   if (!modal) return;
   let cur = null; let dir = 0; let type = 'house';
-  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, workshop:6000,lab:9000,warehouse:8000 };
+  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school:4000,middle_school:5000,high_school:6000, workshop:6000,lab:9000,warehouse:8000 };
   const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**가 언락한다 (world.transit, 이슈 #52).
   // 착공 레시피(ZONEABLE·비용)는 후속 라운드 — 언락 전에는 충족도 %를, 언락 후에는

@@ -111,8 +111,8 @@ export const KSIC = [
   },
   {
     code: 'P', nameKo: '교육 서비스업',
-    facilityTypes: ['school', 'university', 'library'], occupations: ['teacher'],
-    actions: ['read'],
+    facilityTypes: ['primary_school','middle_school','high_school', 'university', 'library'], occupations: ['teacher'],
+    actions: ['read', 'study'],
     // 109차 ②: student를 종사자로 세면 **고용 없이도 학교가 active**가 된다. 학생은
     // 이 산업의 이용자이지 종사자가 아니다. 별도로 participants에 센다.
     participantOccupations: ['student'],
@@ -238,11 +238,11 @@ export function purchasingPowerGap(world) {
 // 문턱은 서로 다른 단위이므로 합산하지 않고 각각의 계약으로 판정한다.
 export const INDUSTRY_DEVELOPMENTS = [
   { id:'workshop', facility:'workshop', occupation:'artisan', keyAbility:'dexterity',
-    signal:'construction', threshold:20 },
+    signal:'construction' },
   { id:'lab', facility:'lab', occupation:'researcher', keyAbility:'intellect',
-    signal:'study', threshold:3000 },
+    signal:'study' },
   { id:'warehouse', facility:'warehouse', occupation:'logistician', keyAbility:'stamina',
-    signal:'transport', threshold:300 },
+    signal:'transport' },
 ];
 
 export function industryDevelopmentEvidence(world, def) {
@@ -258,10 +258,11 @@ export function maybeUnlockIndustries(world, day, emit) {
   for (const def of INDUSTRY_DEVELOPMENTS) {
     if (world.unlockedIndustries.includes(def.id)) continue;
     const evidence=industryDevelopmentEvidence(world,def);
-    if(evidence<def.threshold) continue;
+    const threshold=world.logic.industryDevelopment[def.id];
+    if(evidence<threshold) continue;
     world.unlockedIndustries.push(def.id); // definition order is canonical and append-only
     emit('industry_unlocked',null,{id:def.id,facility:def.facility,occupation:def.occupation,
-      signal:def.signal,evidence,threshold:def.threshold,day});
+      signal:def.signal,evidence,threshold,day});
   }
 }
 

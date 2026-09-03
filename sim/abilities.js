@@ -42,7 +42,7 @@ export function developFromActivity(world, sim, t, emit) {
   const s = sim.state, D = sim.development, G = world.logic.development;
   if (!D || s.kind !== 'performing') return;
   let key = null, source = null;
-  if (s.action === 'read') { key = 'intellect'; source = 'study'; }
+  if (s.action === 'read' || s.action === 'study') { key = 'intellect'; source = 'study'; }
   else if (s.action === 'work') {
     key = world.logic.abilities.keyAbility[sim.traits.occupation];
     source = sim.traits.occupation === 'student' ? 'study' : 'career';

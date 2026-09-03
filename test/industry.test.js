@@ -6,6 +6,24 @@ import { createWorld, advance, hashWorld, serialize, deserialize, findNonFinite 
 import { OCCUPATIONS } from '../sim/traits.js';
 import { addBuilding, plotBuildable } from '../sim/map.js';
 import { zoneAllowedTypes } from '../sim/society.js';
+import { migrateWorld } from '../sim/migrate.js';
+import { occupationAllowed } from '../sim/traits.js';
+
+test('#63 schema56 and logic51 migrate new industry parameters without inventing an unlock', () => {
+  const w=createWorld(63);w.schemaVersion=56;w.logic.logicSchemaVersion=51;
+  delete w.unlockedIndustries;delete w.logic.industryDevelopment;
+  for(const job of ['artisan','researcher','logistician']) {
+    delete w.logic.occupations[job];delete w.logic.workplace[job];
+    assert.equal(occupationAllowed(job,18),false);assert.equal(occupationAllowed(job,19),true);
+  }
+  const education=JSON.stringify(w.sims.map(s=>s.education)),rng=JSON.stringify(w.rngSim);
+  migrateWorld(w);
+  assert.deepEqual(w.unlockedIndustries,[]);assert.equal(w.logic.industryDevelopment.lab,3000);
+  assert.equal(w.logic.workplace.researcher,'lab');assert.equal(w.schemaVersion,57);
+  assert.equal(w.logic.logicSchemaVersion,52);
+  assert.equal(JSON.stringify(w.sims.map(s=>s.education)),education);assert.equal(JSON.stringify(w.rngSim),rng);
+  assert.equal(hashWorld(w),hashWorld(migrateWorld(deserialize(serialize(w)))));
+});
 
 test('I-1. KSIC 대분류 21개가 A~U로 빠짐없이 있다', () => {
   const expected = 'ABCDEFGHIJKLMNOPQRSTU'.split('');

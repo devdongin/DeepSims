@@ -14,6 +14,7 @@ import { isResidence } from './map.js';
 import { learnToken as learnTokenRef } from './planning.js';
 import { maybeRoadWorks } from './roads.js';
 import { applyBirthTalent } from './genius.js';
+import { updateEducation, canWork } from './education.js';
 
 // §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
 function pushRecentCouple(world, a, b, t, kind) {
@@ -230,7 +231,7 @@ export function updateCampaigners(world, day) {
 }
 
 // §17.9 새해: 전원 age+1, 생애 주기 전직 (일일 평가 이민 다음 — 당일 이민자도 함께 나이 먹음)
-export function maybeNewYear(world, t, day, emit) {
+export function maybeNewYear(world, t, day, emit, resetActivity) {
   const S = world.logic.society;
   if (day === 0 || day % S.yearDays !== 0) return; // §17.9 새해 — 노화·졸업·은퇴는 연 단위 유지
   emit('new_year', null, { year: floorDiv(day, S.yearDays) });
@@ -238,31 +239,14 @@ export function maybeNewYear(world, t, day, emit) {
     // §22.2 상한을 없앴다. 예전엔 90에서 멈춰 '죽지 않는 90세'가 무한 누적됐다.
     sim.traits.age += 1;
     developWithAge(world, sim, t, emit);
-    if (sim.traits.occupation === 'child' && sim.traits.age >= S.schoolAge) {
-      sim.traits.occupation = 'student'; // §22.2 아이가 자라 학교에 간다
-      emit('grew_up', sim.id, { age: sim.traits.age, to: 'student' });
-    } else if (sim.traits.occupation === 'student' && sim.traits.age >= S.graduateAge) {
-      // §18.T3: 가중 풀 단일 드로우 (51차 (a)) — 대학 보유 마을은 고급 직업 풀 append
-      const G2 = world.logic.graduation;
-      const hasUni = world.map.facilities.some((f) => f.type === 'university');
-      const raw = hasUni ? [...G2.poolBase, ...G2.poolUni] : G2.poolBase;
-      let pool = raw.filter((o) => occupationAllowed(o, sim.traits.age)); // §18.T3: 나이 제약 (52차)
-      if (pool.length === 0) pool = ['office_worker']; // 폴백 풀 — 드로우 1회 계약 유지 (53차)
-      // §21.1 적성 가중 (이슈 #62): 잘하는 쪽으로 기울되 이분법은 아니다.
-      // 적성 높은 직업을 풀에 **여러 번 넣어** 확률을 올린다 — rngInt 드로우는 1회 그대로다.
-      const A = world.logic.abilities;
-      const weighted = [];
-      for (const o of pool) {
-        const reps = 1 + floorDiv(aptitudeFor(sim, o, world.logic) * A.aptitudePoolWeight, 10000);
-        for (let r = 0; r < reps; r++) weighted.push(o);
-      }
-      sim.traits.occupation = weighted[rngInt(world.rngSim, weighted.length)];
-      emit('graduated', sim.id, { to: sim.traits.occupation, uni: hasUni });
-    } else if (sim.traits.occupation !== 'retired' && sim.traits.age >= S.retireAge) {
+    // School promotion and degree-based graduation run immediately after aging in updateEducation.
+    if (sim.traits.occupation !== 'retired' && sim.traits.age >= S.retireAge) {
       sim.traits.occupation = 'retired';
       emit('retired_now', sim.id, {});
     }
   }
+  updateEducation(world,t,emit,resetActivity);
+  return true;
 }
 
 // §17.11 자녀 정착 (새해 평가 다음): 동거 married 부부, 가구 정원 여유 시 1드로우.
@@ -709,7 +693,7 @@ export function maybePromotion(world, t, emit) {
 
 // §18.T4: 현재 등급에서 zone 허용 타입 (기본 + 누적 언락)
 export function zoneAllowedTypes(world) {
-  const out = ['house', 'cafe', 'office', 'park'];
+  const out = ['house', 'cafe', 'office', 'park', 'primary_school','middle_school','high_school'];
   for (let i = 1; i <= world.cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**로 언락된다 (이슈 #52).
   // 건설 레시피(ZONEABLE·비용·footprint)는 후속 라운드 — 그 전까지 zone 주문은
@@ -1137,6 +1121,7 @@ export function maybeJobSwitch(world, t, day, emit) {
     for (const s of world.sims) {
       if (s.traits.occupation === occ) continue;
       if (!occupationAllowed(occ, s.traits.age)) continue;
+      if (!canWork(s)) continue;
       if (s.traits.occupation === 'retired' || s.traits.occupation === 'student') continue;
       const gain = aptitudeFor(s, occ, L) - aptitudeFor(s, s.traits.occupation, L);
       if (gain < I.minAptGain) continue; // 잦은 이직 방지 — 확실히 더 잘할 때만 옮긴다
@@ -1155,7 +1140,7 @@ export function maybeJobSwitch(world, t, day, emit) {
     pick.unpaidDays = 0;
     emit('job_changed', pick.id, { from, to: occ, facilityType: facType, aptitude: apt, revenue });
   }
-  for (const s of world.sims.filter((x) => (x.unpaidDays ?? 0) >= 3 && x.traits.occupation !== 'jobless')) {
+  for (const s of world.sims.filter((x) => canWork(x) && (x.unpaidDays ?? 0) >= 3 && x.traits.occupation !== 'jobless')) {
     const from = s.traits.occupation;
     s.traits.occupation = 'jobless';
     s.unpaidDays = 0;

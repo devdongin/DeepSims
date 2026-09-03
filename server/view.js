@@ -28,6 +28,10 @@ export function simView(sim) {
     hasCar: sim.hasCar,
     isPlayer: sim.isPlayer,
     isGenius: sim.isGenius,
+    education: sim.education ? { universityEnrolled: sim.education.universityEnrolled,
+      universityGraduated: sim.education.universityGraduated, stage: sim.education.lastStage,
+      tuitionPaid: sim.education.tuitionPaid, course: sim.education.course,
+      highestDegree: sim.education.highestDegree, completed: sim.education.completed } : null,
     abilities: sim.abilities,
     potential: sim.potential,
     // traits 전체가 아니라 화면이 쓰는 것만 (mbti는 성향 표시에 쓰인다)

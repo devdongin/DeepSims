@@ -36,18 +36,21 @@ export function generateTraits(rng) {
   const mbti = {};
   for (const axis of MBTI_AXES) mbti[axis] = rngInt(rng, 101); // 0~100
   const eligible = OCCUPATIONS.filter((o) => occupationAllowed(o, age)
+    && (o !== 'student' || age <= 22) // postgraduate enrollment is a lifecycle choice, not a random elder job
     && !SWITCH_ONLY_OCCUPATIONS.includes(o) && !BIRTH_STAGE_OCCUPATIONS.includes(o));
   const occupation = eligible[rngInt(rng, eligible.length)];
   return { gender, age, mbti, occupation };
 }
 
 export function occupationAllowed(occupation, age) {
-  if (['chef','clerk','artisan','researcher','logistician'].includes(occupation)) return age >= 18 && age < 65;
-  if (occupation === 'child') return age < 15; // §22.2 아동기
+  if (['chef','clerk','artisan','researcher','logistician'].includes(occupation)) return age >= 19 && age < 65;
+  if (occupation === 'child') return age < 7;
+  if (occupation === 'student') return age >= 7; // degrees can finish later; no age-forced employment
+  if (age < 19) return false; // compulsory school ages, not paid occupations
   if (occupation === 'jobless') return age >= 15;
   if (occupation === 'retired') return age >= 60;
-  if (occupation === 'student') return age <= 25;
-  if (occupation === 'doctor' || occupation === 'politician') return age >= 26 && age < 60;
+  if (occupation === 'doctor') return age >= 23 && age < 60;
+  if (occupation === 'politician') return age >= 26 && age < 60;
   if (['police', 'firefighter', 'nurse', 'worker'].includes(occupation)) return age >= 20 && age < 60;
   return true;
 }

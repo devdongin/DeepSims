@@ -4,10 +4,13 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 49, // #96 천재 잠재치 범위
+  logicSchemaVersion: 52, // #63 수요 기반 산업/전직 (#96/#57 이후)
+  industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
+    seek_food_aid: { duration: 30, mealCost: 200, hungerGain: 9000 },
+    study: { duration: 60, cost: 0 },
     respond_fire: { duration: 60, recoverPerTick: 0, cost: 0 }, // §17.20 화재 진압 (소방관 전용 위급 후보)
     eat: { duration: 30, recoverPerTick: 300, cost: 200 },
     sleep: { duration: 420, recoverPerTick: 25 },
@@ -34,7 +37,7 @@ export const DEFAULT_LOGIC = {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
     barista: { workStart: 420, workEnd: 960, wagePct: 90, startMoney: 1000, weekendWork: true }, // 카페는 주말도 연다
     freelancer: { workStart: 300, workEnd: 1260, wagePct: 80, startMoney: 1000, flex: true, weekendWork: true },
-    student: { workStart: 840, workEnd: 1200, wagePct: 50, startMoney: 500 },
+    student: { workStart: 540, workEnd: 900, wagePct: 0, startMoney: 500 },
     retired: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 3000 },
     // §17.2 신규 직업 — 근무지는 workplace 매핑
     doctor: { workStart: 480, workEnd: 1140, wagePct: 140, startMoney: 1500 },
@@ -58,12 +61,12 @@ export const DEFAULT_LOGIC = {
   },
   // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
   workplace: {
-    office_worker: 'office', barista: 'cafe', freelancer: 'office', student: ['school', 'university'], // §18.T3
-    retired: 'office', doctor: 'hospital', civil_servant: 'city_hall', teacher: 'school',
+    office_worker: 'office', barista: 'cafe', freelancer: 'office', student: ['primary_school', 'middle_school', 'high_school', 'university'],
+    retired: 'office', doctor: 'hospital', civil_servant: 'city_hall', teacher: ['primary_school','middle_school','high_school','university'],
     police: 'police_station', firefighter: 'fire_station', nurse: 'hospital', politician: 'city_hall',
     worker: 'factory', // §18.T3
     chef: 'restaurant', clerk: 'market', // §21.3
-    child: 'school', // §22.2 (근무하지 않지만 매핑 완결성)
+    child: 'primary_school', // 근무하지 않지만 매핑 완결성
     jobless: null,
     artisan: 'workshop', researcher: 'lab', logistician: 'warehouse',
   },
@@ -99,6 +102,9 @@ export const DEFAULT_LOGIC = {
     birthPct: 10, adultPct: 70, matureAge: 25, ticksPerPoint: 7200,
     physicalDeclineAge: 60, mentalDeclineAge: 75, declinePctPerYear: 1, minAgePct: 40,
   },
+  education: { annualTuition: 2000, degreeStudyTicks: 20000, bachelorYears: 4, mastersYears: 2, doctorateYears: 4,
+    mastersStudyTicks: 10000, doctorateStudyTicks: 20000, postgraduatePctFactor: 50,
+    studyDeficit: 6500, dailyStudyTicks: 240, startMinute: 540, endMinute: 900 },
   // §21.2 나눔 (사용자 규칙 §0.1: 지표를 누르지 말고 행동을 준다).
   // 은퇴자는 소득이 0이라 저축을 쓰면 굶는다 — 복지 캡을 올리는 대신 '만나서 나눠주는' 행동을 준다.
   sharing: {
@@ -262,6 +268,7 @@ export const DEFAULT_LOGIC = {
       park: 3000, house: 5000,
       cafe: 6000, restaurant: 6000, market: 6000, bar: 6000,
       office: 8000, school: 8000, gym: 8000, library: 8000,
+      primary_school: 8000, middle_school: 10000, high_school: 12000,
       hospital: 10000, city_hall: 10000, police_station: 10000, fire_station: 10000, cinema: 10000,
       apartment: 14000, mall: 14000,
       university: 20000, factory: 20000, workshop:10000, lab:16000, warehouse:14000,
@@ -276,8 +283,8 @@ export const DEFAULT_LOGIC = {
   society: {
     immigrationIntervalDays: 3,
     yearDays: 120,           // §17.9 새해 주기 (전원 age+1) — 실시간 관람 페이싱(v0.9.1)
-    schoolAge: 15,           // §22.2 child → student (0세로 태어나 여기서 학생이 된다)
-    graduateAge: 26,         // student → office_worker
+    schoolAge: 7,
+    graduateAge: 23,
     retireAge: 65,           // → retired
     festivalDays: 30,        // §17.10 마을 축제 주기
     childCheckDays: 30,      // §17.13 자녀 월간 평가 (나이는 새해 유지)
@@ -356,7 +363,7 @@ export const DEFAULT_LOGIC = {
   },
   // §18.T2 건설 지시: 주문 시 국고 차감 (취소 없음 — 47차 합의), 착공 시 재검증
   zone: {
-    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, workshop:6000, lab:9000, warehouse:8000 },
+    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school: 4000, middle_school: 5000, high_school: 6000, workshop:6000, lab:9000, warehouse:8000 },
     demolitionCostPerTile: 200,
     plannedCenterCost: 5000,
     centerRadius: 32,
@@ -384,7 +391,7 @@ export const DEFAULT_LOGIC = {
     // 시민이 병원·시청·학교에 낸 돈이 시설 원장에 고이기만 했다 — 라이브에서 hospital 매출이
     // 전체의 70%를 빨아들였다. 그 매출을 국고로 보내고, 공공 임금을 국고에서 지급한다.
     // 그러면 소비 → 국고 → 공공 임금 → 시민 → 소비 고리가 닫힌다.
-    publicFacilityTypes: ['hospital', 'city_hall', 'school', 'police_station', 'fire_station'],
+    publicFacilityTypes: ['hospital', 'city_hall', 'school', 'primary_school','middle_school','high_school','university', 'police_station', 'fire_station'],
     publicWageOccupations: ['doctor', 'nurse', 'teacher', 'civil_servant', 'politician', 'police', 'firefighter'],
     // §22.23 공공 임금 완전 보장 (사용자 지시: "공무원도 예외없이 일을 하면 반드시
     // 돈을 줘야 되고 공무원이면 국고에서 월급이 지급되어야 해"). 국고가 모자라면
@@ -484,6 +491,21 @@ export function mergeLogicDefaults(oldLogic) {
     }
   };
   copy(merged, oldLogic ?? {});
+  if ((oldLogic?.logicSchemaVersion ?? 1) < 50) {
+    // Array merging normally preserves tuning. The old school type no longer exists,
+    // so translate references rather than leaving teachers without a workplace.
+    for (const [occupation, places] of Object.entries(merged.workplace)) {
+      if (places === null) continue;
+      const translated = [].concat(places).flatMap(type => type === 'school'
+        ? (occupation === 'child' ? ['primary_school'] : ['primary_school', 'middle_school', 'high_school']) : [type]);
+      merged.workplace[occupation] = Array.isArray(places) || translated.length > 1 ? translated : translated[0];
+    }
+    merged.economy.publicFacilityTypes = [...new Set([...merged.economy.publicFacilityTypes,
+      'primary_school', 'middle_school', 'high_school', 'university'])];
+    merged.occupations.student.wagePct = 0;
+    merged.society.schoolAge = 7;
+    merged.society.graduateAge = 23;
+  }
   merged.logicSchemaVersion = DEFAULT_LOGIC.logicSchemaVersion;
   return merged;
 }
@@ -529,6 +551,9 @@ function checkRanges(p, errors) {
   const inRange = (path, v, lo, hi) => {
     if (v < lo || v > hi) errors.push(`범위 위반: ${path}=${v} (허용 ${lo}~${hi})`);
   };
+  inRange('actions.seek_food_aid.mealCost', p.actions.seek_food_aid.mealCost, 1, 1000000);
+  inRange('actions.seek_food_aid.hungerGain', p.actions.seek_food_aid.hungerGain, 1, 10000);
+  for (const [type, value] of Object.entries(p.industryDevelopment)) inRange(`industryDevelopment.${type}`, value, 1, 1000000000);
   for (const [k, v] of Object.entries(p.decay)) inRange(`decay.${k}`, v, 0, 1000);
   inRange('ageDecay.youngMax', p.ageDecay.youngMax, 15, 90);
   inRange('ageDecay.oldMin', p.ageDecay.oldMin, 15, 91);
@@ -608,6 +633,15 @@ function checkRanges(p, errors) {
   inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);
   inRange('abilities.wageSpanPct', p.abilities.wageSpanPct, 0, 200);
   inRange('development.birthPct', p.development.birthPct, 0, 100);
+  inRange('education.annualTuition', p.education.annualTuition, 0, 1000000);
+  inRange('education.degreeStudyTicks', p.education.degreeStudyTicks, 1, 10000000);
+  for (const k of ['bachelorYears','mastersYears','doctorateYears']) inRange(`education.${k}`,p.education[k],1,20);
+  for (const k of ['mastersStudyTicks','doctorateStudyTicks']) inRange(`education.${k}`,p.education[k],1,10000000);
+  inRange('education.postgraduatePctFactor',p.education.postgraduatePctFactor,0,100);
+  inRange('education.studyDeficit', p.education.studyDeficit, 1, 10000);
+  inRange('education.dailyStudyTicks', p.education.dailyStudyTicks, 1, 1440);
+  inRange('education.startMinute', p.education.startMinute, 0, 1439);
+  inRange('education.endMinute', p.education.endMinute, p.education.startMinute + 1, 1440);
   inRange('development.geniusMin', p.development.geniusMin, 100, 150);
   inRange('development.geniusMax', p.development.geniusMax, p.development.geniusMin, 150);
   inRange('development.adultPct', p.development.adultPct, p.development.birthPct, 100);
@@ -927,7 +961,7 @@ function checkShape(ref, val, path, errors) {
 }
 
 // §18.T1: 시장 정책 화이트리스트 — 필드·정수·범위 검증 (서버·시뮬 공유 단일 권위)
-export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university', 'workshop','lab','warehouse'];
+export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university', 'primary_school','middle_school','high_school','workshop','lab','warehouse'];
 
 export const POLICY_FIELDS = {
   taxPct: [5, 30],

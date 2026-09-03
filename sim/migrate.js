@@ -7,8 +7,11 @@ import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 import { SCHEMA_VERSION } from './constants.js';
+import { newEducation } from './education.js';
 import { surnameFor } from './surnames.js';
 import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단일 정의 공유
+import { isWalkable } from './map.js';
+import { emptyState } from './simfactory.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -205,7 +208,46 @@ export function migrateWorld(world) {
   if (from < 54) {
     for (const sim of world.sims) { sim.isGenius ??= false; sim.geniusBirth ??= null; }
   }
-  if (from < 55) world.unlockedIndustries ??= [];
+  if (from < 57) world.unlockedIndustries ??= [];
+  if (from < 55) {
+    for (const sim of world.sims) {
+      sim.education ??= newEducation();
+      // Legacy adult students must not silently become workers. Their historical
+      // credits/start date are unknown: begin tracking now, never invent a degree.
+      if (sim.traits.occupation === 'student' && sim.traits.age >= 19 && !sim.education.course) {
+        sim.education.course='university';sim.education.courseStartAge=sim.traits.age;
+        sim.education.wantsUniversity=true;
+      }
+    }
+    world.map.facilities = world.map.facilities.map(f => f.type === 'school' ? {...f,type:'primary_school'} : f);
+    // Old eight-wide factory/campus slot formulas put the last column on a wall.
+    // Preserve valid resources and IDs; move only invalid slots into free interior cells.
+    for (const f of world.map.facilities) {
+      if (!['factory','university','primary_school','middle_school','high_school'].includes(f.type)) continue;
+      const occupied=new Set(f.resources.filter(r=>isWalkable(world.map,r.x,r.y)).map(r=>`${r.x},${r.y}`));
+      for (const r of f.resources) {
+        if(isWalkable(world.map,r.x,r.y))continue;
+        let best=null,distance=Infinity;
+        for(let y=f.y+1;y<f.y+f.h-1;y++)for(let x=f.x+1;x<f.x+f.w-1;x++) {
+          if(!isWalkable(world.map,x,y)||occupied.has(`${x},${y}`))continue;
+          const d=Math.abs(x-r.x)+Math.abs(y-r.y);
+          if(d<distance){best={x,y};distance=d;}
+        }
+        if(!best)continue;
+        r.x=best.x;r.y=best.y;occupied.add(`${r.x},${r.y}`);
+        const key=`${f.id}:${r.id}`;
+        delete world.reservations[key];
+        for(const s of world.sims) {
+          if(s.state.facilityId===f.id&&s.state.resourceId===r.id)s.state=emptyState();
+          if(s.noPathCool)delete s.noPathCool[key];
+        }
+      }
+    }
+  }
+  if (from < 56) {
+    // #57 appends an action; existing sim states remain valid. New action defaults
+    // are installed by mergeLogicDefaults, with no retroactive meals or spending.
+  }
   if (from < 33) {
     // §20.3 사회적 중력: 새 파라미터는 mergeLogicDefaults가 설치한다. 세계 데이터 이관은 없다 —
     // 거동이 바뀌므로 구 로그 재생 불일치를 '버전 차이'로 식별하기 위한 표식이다 (75차 ①).

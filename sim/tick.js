@@ -8,6 +8,8 @@ import {
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
+import { schoolFor, updateEducation, recordStudy, neededSchool, SCHOOL_TYPES, canWork } from './education.js';
+import { foodAidBlockReason, takePublicMeal } from './food-aid.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
@@ -78,6 +80,7 @@ export function socialPullPct(world, fac, presence, L, sim = null) {
 
 
 function needValueFor(sim, action, L) {
+  if (action === 'study') return NEED_MAX - L.education.studyDeficit;
   if (action === 'work') return Math.min(sim.money, NEED_MAX); // 돈 0 → deficit 최대
   // coping: 기분이 나쁠수록 급함 — deficit = -mood (게이트로 mood < 0 보장, §15.1.A)
   if (COPING_ACTIONS.includes(action)) return NEED_MAX + sim.mood;
@@ -142,6 +145,7 @@ function scoreCandidate(sim, action, res, L) {
 // 아이는 먹고 자고 놀고 어울리고 배운다.
 const CHILD_BLOCKED = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol',
   'drink', 'binge_eat', 'shop', 'see_doctor', 'fish']);
+const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'patrol']);
 
 // §22.18 (Codex 110차 ①) **'갈 곳이 없다'와 '자리가 다 찼다'는 다르다.**
 // actionBlockReason이 null을 돌려줘도 그 안에는 시설 부재·만석·도달 불가가 섞여 있다.
@@ -164,7 +168,7 @@ export function facilityShortfallKind(world, sim, action, t) {
   if (action === 'work' && sim.traits.occupation === 'jobless') return null;
   const ftypes = action === 'work'
     ? [].concat(L.workplace[sim.traits.occupation] ?? [])
-    : (ACTION_FACILITY[action] ?? []);
+    : action === 'study' ? [schoolFor(sim)] : (ACTION_FACILITY[action] ?? []);
   if (ftypes.length === 0) return null; // 시설을 쓰지 않는 행동
   let anyFacility = false, anyFree = false;
   for (const ftype of ftypes) {
@@ -192,6 +196,14 @@ export function facilityShortfallKind(world, sim, action, t) {
 
 export function actionBlockReason(world, sim, action, t) {
   const L = world.logic;
+  if (action === 'seek_food_aid') return foodAidBlockReason(world, sim);
+  if (LABOR_ACTIONS.has(action) && !canWork(sim)) return sim.traits.occupation === 'child' ? 'too_young' : 'not_needed';
+  if (action === 'study') {
+    if (!schoolFor(sim) || sim.traits.occupation !== 'student') return 'not_needed';
+    const day = Math.floor(t / 1440), tod = t % 1440;
+    if (day % 7 >= 5 || tod < L.education.startMinute || tod >= L.education.endMinute) return 'off_hours';
+    if (sim.education.studyDay === day && sim.education.dailyTicks >= L.education.dailyStudyTicks) return 'not_needed';
+  }
   if (sim.traits.occupation === 'child' && CHILD_BLOCKED.has(action)) return 'too_young';
   const cost = L.actions[action]?.cost ?? 0;
   if (cost > 0 && sim.money < cost) return 'no_money';
@@ -336,7 +348,7 @@ function collectCandidates(world, sim, actions, t, includeZeroScore = false, ctx
     // §17.2: work는 자기 직업의 근무 시설에서만
     const ftypes = action === 'work'
       ? [].concat(L.workplace[sim.traits.occupation]) // §18.T3: 배열 허용 (student → school|university)
-      : ACTION_FACILITY[action];
+      : action === 'study' ? [schoolFor(sim)] : ACTION_FACILITY[action];
     for (const ftype of ftypes) {
       for (const fac of (byType.get(ftype) ?? [])) {
         if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue; // 자기 집만 (§15.1)
@@ -903,7 +915,20 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'performing') continue;
+    // Old saves may resume a shift or construction before the next lifecycle pass.
+    if (LABOR_ACTIONS.has(s.action) && !canWork(sim)) {
+      releaseReservation(world, sim); sim.state = emptyState(); continue;
+    }
     s.ticksLeft--;
+    if (s.action === 'study') {
+      const facility = world.map.facilities.find(f => f.id === s.facilityId);
+      if (actionBlockReason(world,sim,'study',t) !== null || !facility || !recordStudy(sim, facility.type)) {
+        releaseReservation(world, sim); sim.state = emptyState(); continue;
+      }
+      const day = Math.floor(t / 1440);
+      if (sim.education.studyDay !== day) { sim.education.studyDay = day; sim.education.dailyTicks = 0; }
+      sim.education.dailyTicks++;
+    }
     developFromActivity(world, sim, t, emit);
     const def = L.actions[s.action];
     const need = NEED_OF_ACTION[s.action];
@@ -942,7 +967,12 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'performing' || s.ticksLeft > 0) continue;
-    if (s.action === 'eat' || s.action === 'drink' || s.action === 'binge_eat') {
+    if (s.action === 'seek_food_aid') {
+      if (!takePublicMeal(world, sim, emit)) {
+        emit('action_failed', sim.id, { action: s.action, reason: foodAidBlockReason(world, sim) ?? 'invalid_site' });
+        releaseReservation(world, sim); sim.state = emptyState(); continue;
+      }
+    } else if (s.action === 'eat' || s.action === 'drink' || s.action === 'binge_eat') {
       if (s.action !== 'drink') sim.hungerZeroTicks = 0; // §22.2 먹으면 굶은 시계가 멈춘다
       const cost = L.actions[s.action].cost;
       sim.money -= cost;
@@ -1092,7 +1122,7 @@ export function tick(world, inputsForThisTick = []) {
       const kind = {
         eat: 'meal', work: 'work_done', socialize: 'small_talk', play: 'play_time',
         drink: 'drank', binge_eat: 'binge', hole_up: 'hole_up', exercise: 'workout', build: 'built_bed',
-        read: 'read_time', shop: 'shopping', fish: 'fishing', cook_eat: 'home_meal', construct: 'construct_work',
+        read: 'read_time', shop: 'shopping', fish: 'fishing', cook_eat: 'home_meal', construct: 'construct_work', seek_food_aid: 'public_meal',
         see_doctor: 'healed',
       }[s.action];
       if (kind) {
@@ -1266,7 +1296,9 @@ export function tick(world, inputsForThisTick = []) {
         maybeImmigration(world, t, day, emit);
         maybeEmigration(world, t, day, emit);
         maybePromotion(world, t, emit); // §18.T4 (이민 직후·새해 전 — 49차 합의)
-        maybeNewYear(world, t, day, emit); // 당일 이민자 포함 (§17.9 확정 규칙)
+        const resetStudent = sim => { releaseReservation(world,sim); sim.state=emptyState(); };
+        const aged = maybeNewYear(world, t, day, emit, resetStudent);
+        if(!aged) updateEducation(world, t, emit, resetStudent);
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10
         world.reputation = floorDiv(world.reputation * world.logic.growth.repDecayPct, 100); // §17.21 일일 감쇠
@@ -1324,7 +1356,7 @@ export function tick(world, inputsForThisTick = []) {
         ...(world.centers ?? []),
       ];
       const distance = (p, f) => Math.abs(p.x - f.x) + Math.abs(p.y - f.y);
-      const freePlot = candidates.sort((a, b) => {
+      let freePlot = candidates.sort((a, b) => {
         const score = (p) => centers.length === 0 ? 0 : Math.min(...centers.map((f) => distance(p, f)));
         return (score(a) - score(b)) || (a.plotId - b.plotId);
       })[0];
@@ -1360,7 +1392,9 @@ export function tick(world, inputsForThisTick = []) {
           && L.occupations[s2.traits.occupation].wagePct > 0).length;
         const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
           .reduce((n, f) => n + f.resources.length, 0);
-        let type = neededIndustryFacility(world);
+        let type = neededSchool(world);
+        if (type === 'university' && !zoneAllowedTypes(world).includes(type)) type = null;
+        if (!type) type = neededIndustryFacility(world);
         if (!type && pop + separated + observedHeadroom > beds) {
           // 읍 이상에서는 같은 공터로 더 많은 침대를 제공하는 아파트를 우선한다.
           // tier는 관측된 세계 상태이고, 타입 선택은 결정적이다.
@@ -1370,9 +1404,13 @@ export function tick(world, inputsForThisTick = []) {
         else if (!type && pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (!type && pop > parkSpots * L.construct.parkRatio) type = 'park';
         if (!type) break;
-        if (['workshop','lab','warehouse'].includes(type)) {
-          const cost=L.zone.costs[type];world.treasury-=cost;
-          world.externalOutflow=(world.externalOutflow??0)+cost;
+        if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
+          const fp=zoneFootprint(type,0);
+          freePlot=candidates.find(p=>plotBuildable(world.map,p,fp.w,fp.h));
+          if(!freePlot) break;
+          const cost=L.zone.costs[type];
+          world.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
+          if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:world.treasury});
         }
         {
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
