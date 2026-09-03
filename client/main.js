@@ -401,6 +401,8 @@ class TownScene extends Phaser.Scene {
       if (!p.isDown) return;
       this.cameras.main.scrollX -= (p.x - p.prevPosition.x) / this.cameras.main.zoom;
       this.cameras.main.scrollY -= (p.y - p.prevPosition.y) / this.cameras.main.zoom;
+      // §23.18 손으로 화면을 옮기면 따라가기는 그만둔다. 안 그러면 카메라가 손과 싸운다.
+      if (followSimId !== null) setFollow(null);
     });
     // 심 선택: 씬 레벨에서 최근접 심 탐색 (작은 스프라이트 히트박스보다 견고)
     this.input.on('pointerup', (p) => {
@@ -489,6 +491,26 @@ class TownScene extends Phaser.Scene {
   //   tileScale = zoom → 무늬 한 칸이 화면에서 32*zoom px, 즉 월드 스케일이 유지된다.
   //   tilePosition = 월드뷰 좌상단 + 원래 위상(16, 8) → 예전과 같은 자리에 같은 무늬가 온다.
   // 값이 바뀔 때만 대입한다 — TileSprite 세터는 무조건 dirty를 세워 캔버스를 다시 채우기 때문.
+  // §23.18 따라가기. 이 게임의 재미는 **한 사람을 오래 보는 것**인데, 지금까지는 사람이
+  // 화면 밖으로 걸어 나가면 그걸로 끝이었다. 카메라를 스프라이트에 붙인다 —
+  // 서버 좌표가 아니라 눈에 보이는 자리를 따라가야 그림이 튀지 않는다(§23.3과 같은 이유).
+  followSelected() {
+    if (!followSimId || !world) return;
+    const sp = simSprites.get(followSimId);
+    const cam = this.cameras.main;
+    let tx, ty;
+    if (sp) { tx = sp.x; ty = sp.y; }
+    else {
+      const sim = world.sims.find((s) => s.id === followSimId);
+      if (!sim) { setFollow(null); return; } // 떠났거나 죽었다
+      tx = isoX(sim.x, sim.y); ty = isoY(sim.x, sim.y);
+    }
+    // 부드럽게 — 매 프레임 순간이동하면 화면이 떨린다. 8분의 1씩 좁힌다.
+    const cx = cam.scrollX + cam.width / 2, cy = cam.scrollY + cam.height / 2;
+    cam.scrollX += (tx - cx) / 8;
+    cam.scrollY += (ty - cy) / 8;
+  }
+
   // §23.3 화면에 보이는 자리로 사람을 고른다. 핸들러에서 떼어 놓아야 콘솔에서 검증할 수 있다.
   pickSimAt(wp) {
     if (!world) return null;
@@ -629,6 +651,7 @@ class TownScene extends Phaser.Scene {
   update() {
     this.syncGrassBg();
     this.syncTileCulling();
+    this.followSelected();
   }
 
   // §UI 도로·바닥 레이어(59차 ③ 재검토): 구시가 한정(0..132) 개별 스탬프 — 실측 1,419개.
@@ -2789,6 +2812,48 @@ async function renderCityChronicle() {
 
 // §23.15 관계. 패널의 #relations는 처음부터 있었지만 아무도 쓰지 않았다.
 // 이 마을에서 사람들이 하는 일의 대부분이 관계인데 화면에는 그게 없었다.
+// §23.18 따라가기 상태. 씬은 매 프레임 이 값을 읽는다.
+let followSimId = null;
+function setFollow(id) {
+  followSimId = id;
+  const b = $('followbtn');
+  if (b) { b.classList.toggle('on', id !== null); b.textContent = id !== null ? '👁️ 따라가는 중' : '👁️ 따라가기'; }
+}
+
+// §23.18 사람 목록. 마을에 이백 명이 살면 화면에서 특정한 사람을 다시 찾기가 어렵다.
+// 이야기를 따라가려면 **그 사람을 다시 찾을 수 있어야 한다.**
+function renderPeople() {
+  const q = ($('people-q').value ?? '').trim();
+  const list = $('people-list');
+  const sims = [...(world?.sims ?? [])];
+  const match = (s) => {
+    if (!q) return true;
+    return `${s.surname ?? ''}${s.name}`.includes(q) || occKo(s.traits?.occupation, '').includes(q);
+  };
+  // 나이 많은 순이 아니라 **지금 무언가 하고 있는 사람**부터. 멍하니 선 사람은 뒤로.
+  const rows = sims.filter(match).sort((a, b) => (a.id - b.id)).slice(0, 200);
+  list.replaceChildren(...rows.map((s) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = simName(s.id);
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    const act = s.state?.kind === 'walking' ? `${actionKo(s.state.action)} 가는 중`
+      : s.state?.kind === 'performing' ? `${actionKo(s.state.action)} 중` : '멍때리는 중';
+    sub.textContent = `${s.traits?.age ?? '?'}세 · ${occKo(s.traits?.occupation)} · ${act}`;
+    row.append(nm, sub);
+    row.addEventListener('click', () => {
+      selectSim(s.id);
+      setFollow(s.id);
+      $('people-modal').style.display = 'none';
+    });
+    return row;
+  }));
+  if (rows.length === 0) list.textContent = '찾는 사람이 없다';
+}
+
 let relFor = null;
 async function renderRelations(simId) {
   const box = $('relations');
@@ -2852,6 +2917,8 @@ function selectSim(id) {
   selectedSimId = id;
   lifeOpenFor = null;
   relFor = null;
+  const fb = $('followbtn');
+  if (fb) fb.classList.toggle('on', followSimId === id);
   const box = $('lifelog'); if (box) box.style.display = 'none';
   renderPanel();
 }
@@ -2897,6 +2964,15 @@ function renderPanel() {
     }));
   $('action').textContent = `현재: ${actionKo(sim.state.action, '대기')} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
 }
+
+// §23.18 사람 목록·따라가기 배선
+$('people-btn').addEventListener('click', () => { $('people-modal').style.display = 'flex'; renderPeople(); });
+$('people-close').addEventListener('click', () => { $('people-modal').style.display = 'none'; });
+$('people-q').addEventListener('input', renderPeople);
+$('followbtn').addEventListener('click', () => {
+  if (selectedSimId === null) return;
+  setFollow(followSimId === selectedSimId ? null : selectedSimId);
+});
 
 // §23.1 일대기 토글. 열려 있을 때만 다시 읽는다 — 배치마다 서버를 찌르지 않는다.
 $('lifebtn').addEventListener('click', () => {

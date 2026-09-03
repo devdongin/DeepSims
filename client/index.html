@@ -52,9 +52,15 @@
     #assigns button:hover { background: #4a3a26; border-color: #c9a86a; }
     /* §23.1 일대기 — 사건이 아니라 삶으로 읽히게 세로선 하나에 매단다 */
     #lifebar { margin-top: 8px; }
-    #lifebtn { font-size: 11px; padding: 4px 10px; background: #3a2e1d; color: #ead9b0;
-      border: 1px solid #6b5638; border-radius: 6px; cursor: pointer; width: 100%; }
-    #lifebtn:hover { background: #4a3a26; border-color: #c9a86a; }
+    #lifebtn, #followbtn { font-size: 11px; padding: 4px 10px; background: #3a2e1d; color: #ead9b0;
+      border: 1px solid #6b5638; border-radius: 6px; cursor: pointer; flex: 1; }
+    #followbtn.on { background: #6b5638; border-color: #ffcf6a; color: #ffe6a8; }
+    #people-list .row { display: flex; gap: 8px; padding: 5px 6px; border-radius: 6px; cursor: pointer;
+      align-items: baseline; border-bottom: 1px solid #3a2e1d33; }
+    #people-list .row:hover { background: #3a2e1d; }
+    #people-list .nm { color: #ffcf6a; min-width: 78px; }
+    #people-list .sub { color: #9c8a6a; font-size: 11px; }
+    #lifebtn:hover, #followbtn:hover { background: #4a3a26; border-color: #c9a86a; }
     #lifelog { margin-top: 6px; max-height: 190px; overflow-y: auto; font-size: 10.5px;
       color: #cdc4d6; border-left: 2px solid #6b5638; padding-left: 8px; }
     #lifelog .yr { color: #ffcf6a; font-size: 10px; margin-top: 5px; }
@@ -97,6 +103,7 @@
         <button class="spd" data-s="48" title="1년 = 1시간" style="padding:3px 8px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:5px;cursor:pointer;font-size:11px">×48</button>
       </div>
       <button id="dash-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">📊 지표</button>
+      <button id="people-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🔍 사람</button>
       <button id="policy-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🏛️ 시정</button>
       <button id="planning-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">📍 도시계획</button>
       <canvas id="spark" width="120" height="30" title="인구(초록)·국고(금색) 추이" style="border:1px solid #3a2e1d;border-radius:4px;background:#14100b"></canvas>
@@ -135,13 +142,21 @@
           <button data-a="board_game">보드게임</button>
         </div>
         <!-- §23.1 일대기 — 이 사람이 어떻게 살아왔는가 -->
-        <div id="lifebar"><button id="lifebtn" type="button">📖 일대기</button></div>
+        <div id="lifebar" style="display:flex;gap:4px"><button id="lifebtn" type="button">📖 일대기</button><button id="followbtn" type="button">👁️ 따라가기</button></div>
         <div id="lifelog" style="display:none"></div>
       </div>
     </div>
     <div id="sidebar">
       <h2>이벤트</h2>
       <div id="feed"></div>
+    </div>
+  </div>
+  <div id="people-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">
+    <div class="box" style="width:460px;max-height:74vh;background:#241d14;border:2px solid #c9a86a;border-radius:12px;padding:18px;display:flex;flex-direction:column">
+      <h2 style="color:#ffcf6a;font-size:16px;margin-bottom:8px">🔍 마을 사람들</h2>
+      <input id="people-q" placeholder="이름·직업으로 찾기" style="width:100%;padding:6px 9px;background:#171310;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;font-size:12px;margin-bottom:8px">
+      <div id="people-list" style="overflow-y:auto;flex:1;font-size:12px"></div>
+      <button id="people-close" style="margin-top:10px;padding:6px 14px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer">닫기</button>
     </div>
   </div>
   <div id="dash-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">
