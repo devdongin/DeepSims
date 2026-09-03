@@ -9,6 +9,7 @@ const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, par
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
 
 let world = null;
+let updatePolicySummary=()=>{};
 let selectedSimId = null;
 let simSprites = new Map();
 let scene = null;
@@ -2636,7 +2637,8 @@ function eventText(e) {
       const parts = Object.entries(e.payload.changes).map(([k, v2]) => (bf[k] !== undefined
         ? `${ko[k] ?? k} ${bf[k]}→${v2}${k.endsWith('Pct') ? '%' : '원'}`
         : `${ko[k] ?? k} ${v2}${k.endsWith('Pct') ? '%' : '원'}로`));
-      return `🏛️ 시정 발표: ${parts.join(', ')}`;
+      const town=e.payload.villageId?(world?.villages?.find(v=>v.id===e.payload.villageId)?.name??e.payload.villageId):'';
+      return `🏛️ ${town?town+' ':''}시정 발표: ${parts.join(', ')}`;
     }
     case 'starving': return `⚠️ ${ga(n)} 굶고 있습니다!`;
     case 'medical_visit_paid': return `🏥 ${n} 진료 완료: 환자 측 ${e.payload.patientCost}원 · 공공 부담 ${e.payload.subsidy}원`;
@@ -2839,7 +2841,8 @@ function chronicleText(e, nameOf) {
       const parts = Object.entries(p.changes ?? {}).map(([k, v]) =>
         `${ko[k] ?? k} ${p.before?.[k] !== undefined ? `${p.before[k]}→` : ''}${v}${k === 'taxPct' ? '%' : '원'}`);
       const who = p.source === 'mayor' ? `시장 ${ga(n)} ` : '';
-      return `🏛️ ${who}정책을 바꿨습니다: ${parts.join(', ')}`;
+      const town=p.villageId?(world?.villages?.find(v=>v.id===p.villageId)?.name??p.villageId):'';
+      return `🏛️ ${town?town+' · ':''}${who}정책을 바꿨습니다: ${parts.join(', ')}`;
     }
     case 'started_dating': return `💕 ${wa(n)} ${ga(nameOf(p.withSimId))} 사귀기 시작했습니다`;
     case 'broke_up': return `💔 ${wa(n)} ${ga(nameOf(p.withSimId))} 헤어졌습니다`;
@@ -3541,6 +3544,7 @@ function connect() {
         break;
       case 'snapshot':
         world = msg.world;
+        updatePolicySummary();
         if (msg.world?.speed && window.__paintSpeed) window.__paintSpeed(msg.world.speed);
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
@@ -3582,6 +3586,8 @@ function connect() {
         if (msg.housingMarket) world.housingMarket = msg.housingMarket;
         if (msg.householdDaily) world.householdDaily = msg.householdDaily;
         if (msg.villages) world.villages = msg.villages;
+        if (msg.policyDefaults) world.policyDefaults=msg.policyDefaults;
+        updatePolicySummary();
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
         for (const e of msg.events ?? []) {
           if(e.type==='village_founded'){
@@ -3697,6 +3703,10 @@ document.addEventListener('visibilitychange', () => {
   const modal = document.getElementById('policy-modal');
   const btn = document.getElementById('policy-btn');
   if (!btn) return;
+  const villageSelect=document.getElementById('pol-village');
+  const applyButton=document.getElementById('pol-apply');
+  const info=document.getElementById('pol-village-info');
+  let submitting=false;
   const els = {
     taxPct: [document.getElementById('pol-tax'), document.getElementById('pol-tax-v'), '%'],
     welfareAmount: [document.getElementById('pol-amt'), document.getElementById('pol-amt-v'), '원'],
@@ -3705,28 +3715,59 @@ document.addEventListener('visibilitychange', () => {
     childAllowance: [document.getElementById('pol-child'), document.getElementById('pol-child-v'), '원'],
   };
   const DEFAULTS = { taxPct: 15, welfareAmount: 200, welfareThreshold: 300, healthCopayPct: 100, childAllowance: 0 };
+  const context=()=>{
+    const village=world?.villages?.find(v=>v.id===villageSelect.value);
+    return village?{village,government:village.id==='village:0'?world:village.government}:null;
+  };
+  updatePolicySummary=()=>{
+    if(modal.style.display!=='flex')return;
+    const selected=context();
+    applyButton.disabled=submitting||!selected?.government;
+    info.textContent=selected?.government?`${selected.village.name} · 국고 ${selected.government.treasury}원`:'대상 마을을 확인할 수 없습니다.';
+  };
+  const fillInputs=()=>{
+    const selected=context();
+    applyButton.disabled=submitting||!selected?.government;
+    for (const [k, [input, label, unit]] of Object.entries(els)) {
+      input.value=selected?.government?.policy?.[k]??world?.policyDefaults?.[k]??DEFAULTS[k];
+      label.textContent=input.value+unit;
+    }
+    document.getElementById('pol-msg').textContent='';
+    updatePolicySummary();
+  };
   for (const [k, [input, label, unit]] of Object.entries(els)) {
     input.addEventListener('input', () => { label.textContent = input.value + unit; });
   }
   btn.addEventListener('click', () => {
-    for (const [k, [input, label, unit]] of Object.entries(els)) {
-      input.value = world?.policy?.[k] ?? DEFAULTS[k];
-      label.textContent = input.value + unit;
+    if(!world)return;
+    const previous=villageSelect.value;
+    villageSelect.replaceChildren();
+    for(const village of world.villages??[]){
+      const option=document.createElement('option');option.value=village.id;option.textContent=village.name;
+      villageSelect.append(option);
     }
-    document.getElementById('pol-msg').textContent = '';
+    villageSelect.value=world.villages.some(v=>v.id===previous)?previous:'village:0';
     modal.style.display = 'flex';
+    fillInputs();
   });
+  villageSelect.addEventListener('change',fillInputs);
   document.getElementById('pol-close').addEventListener('click', () => { modal.style.display = 'none'; });
-  document.getElementById('pol-apply').addEventListener('click', async () => {
-    const payload = {};
+  applyButton.addEventListener('click', async () => {
+    const selected=context();if(submitting||!selected?.government)return;
+    const payload = {villageId:selected.village.id};
     for (const [k, [input]] of Object.entries(els)) payload[k] = parseInt(input.value, 10);
-    const res = await fetch('/api/input', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientInputId: `policy:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, command: 'policy', payload }),
-    });
-    const j = await res.json();
-    document.getElementById('pol-msg').textContent = res.ok ? '시행되었습니다. 다음 틱부터 적용됩니다.' : `거부: ${j.error}`;
-    if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
+    submitting=true;applyButton.disabled=true;villageSelect.disabled=true;
+    try{
+      const res = await fetch('/api/input', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientInputId: `policy:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, command: 'policy', payload }),
+      });
+      const j = await res.json();
+      document.getElementById('pol-msg').textContent = res.ok ? `${selected.village.name} 정책 입력이 저장됐습니다. 다음 틱부터 적용됩니다.` : `거부: ${j.error}`;
+      if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
+    }catch{
+      document.getElementById('pol-msg').textContent='응답을 받지 못했습니다. 연결 후 적용 여부를 확인해 주세요.';
+    }finally{submitting=false;applyButton.disabled=!context()?.government;villageSelect.disabled=false;}
   });
 })();
 

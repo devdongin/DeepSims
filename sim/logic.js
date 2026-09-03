@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 67, // #32 municipal reputation and trend inputs
+  logicSchemaVersion: 68, // #32 municipality-selected durable policy commands
   founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
@@ -1098,7 +1098,7 @@ export function validatePolicy(p) {
   const keys = Object.keys(p);
   if (keys.length === 0) return { ok: false, error: '변경 필드 없음' };
   for (const k of keys) {
-    const range = POLICY_FIELDS[k];
+    const range = Object.hasOwn(POLICY_FIELDS,k)?POLICY_FIELDS[k]:null;
     if (!range) return { ok: false, error: `허용되지 않은 필드: ${k}` };
     if (!Number.isSafeInteger(p[k]) || p[k] < range[0] || p[k] > range[1]) {
       return { ok: false, error: `${k}: ${range[0]}~${range[1]} 정수 필요` };

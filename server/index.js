@@ -14,7 +14,8 @@ import { Storage } from '../db/storage.js';
 import { Engine, MAX_SPEED } from './engine.js';
 import { simsView } from './view.js'; // §22.8 전송용 투영
 import { PROTOCOL_VERSION } from '../sim/constants.js';
-import { DEFAULT_LOGIC, validatePolicy } from '../sim/logic.js';
+import { DEFAULT_LOGIC, POLICY_FIELDS } from '../sim/logic.js';
+import { validatePolicyCommand } from '../sim/policy-command.js';
 import { industryStatus, purchasingPowerGap } from '../sim/industry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -314,7 +315,7 @@ app.post('/api/input', async (req, res) => {
     return res.status(400).json({ error: 'assign payload는 {simId: number, actionType: string} 형식입니다' });
   }
   if (command === 'policy') {
-    const v = validatePolicy(payload); // §18.T1 화이트리스트·범위 (시뮬과 단일 권위 공유)
+    const v = validatePolicyCommand(engine.world,payload);
     if (!v.ok) return res.status(400).json({ error: `policy: ${v.error}` });
   }
   if(command==='found_village'){
@@ -367,6 +368,7 @@ function sendSnapshot(ws) {
     publicTreasury: publicBalance(engine.world),
     incidents: engine.world.incidents,
     policy: engine.world.policy,
+    policyDefaults:Object.fromEntries(Object.keys(POLICY_FIELDS).map(key=>[key,engine.world.logic.economy[key]])),
     zoneOrders: engine.world.zoneOrders,
     centers: engine.world.centers,
     plannedCenterCost: engine.world.logic.zone.plannedCenterCost,

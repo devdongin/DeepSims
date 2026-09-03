@@ -33,7 +33,8 @@ import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
-import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
+import { validateLogic, logicHash, ZONEABLE } from './logic.js';
+import { applyPolicyCommand } from './policy-command.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor, developFromActivity } from './abilities.js'; // §21.1 / #96
 import { makeSim, emptyState } from './simfactory.js';
@@ -814,17 +815,7 @@ function applyAnnounce(world, inp, t, emit) {
 
 // §18.T1: 시장 정책 — 화이트리스트 필드만 월드 정책 오버라이드로 병합 (내구 입력, 리플레이 불변)
 function applyPolicy(world, inp, t, emit) {
-  const v = validatePolicy(inp.payload ?? {});
-  if (!v.ok) { emit('input_rejected', null, { command: 'policy', reason: v.error }); return; }
-  const before = {};
-  for (const k of Object.keys(inp.payload)) {
-    before[k] = world.policy[k] ?? world.logic.economy[k];
-    world.policy[k] = inp.payload[k];
-  }
-  // §22.22 플레이어의 정책 입력을 기록한다 — 시장이 이 창 안에서는 조정을 삼간다.
-  // 내구 입력을 NPC가 곧바로 되돌리면 입력의 의미가 훼손된다 (117차 ⑤).
-  world.playerPolicyDay = floorDiv(t, 1440);
-  emit('policy_changed', null, { changes: inp.payload, before, source: 'player' });
+  applyPolicyCommand(world,inp.payload,t,emit);
 }
 
 // §18.T2: 건설 지시 — 주문 시 국고 차감·FIFO 적재 (47차 합의: 취소 없음, 착공 시 재검증)
