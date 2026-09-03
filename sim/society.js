@@ -1,5 +1,6 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
+import { publicPostAvailable, demotePublicIfOverQuota, fillPublicPosts } from './publicposts.js';
 import { recordFact } from './cognition.js';
 import { makeSim } from './simfactory.js';
 import { surnameFor } from './surnames.js';
@@ -246,6 +247,15 @@ export function maybeNewYear(world, t, day, emit, resetActivity) {
     }
   }
   updateEducation(world,t,emit,resetActivity);
+  // §23.13 해마다 한 번, 인구에 맞춰 빈 공공 자리를 채운다. 마을이 문턱을 넘었는데
+  // 아무도 그 일을 하지 않으면 파출소도 병원도 껍데기다. 정원은 상한이자 필요 인원이다.
+  const hired = fillPublicPosts(world);
+  if (hired > 0) {
+    for (const s2 of world.sims) {
+      if (world.logic.economy.publicPosts?.[s2.traits.occupation]) resetActivity(s2);
+    }
+    emit('public_posts_filled', null, { hired, population: world.sims.length });
+  }
   return true;
 }
 
@@ -422,10 +432,13 @@ function immigrateOne(world, t, emit) {
     logic: L,
   });
   world.sims.push(sim);
+  // §23.13 이민자의 직업은 인구를 모르는 generateTraits가 뽑는다. 정원이 찬 공공직으로
+  // 들어왔으면 민간직으로 돌린다 — rng를 더 쓰지 않으므로 이후 드로우 순서는 그대로다.
+  demotePublicIfOverQuota(world, sim);
   // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).
   world.externalInflow = (world.externalInflow ?? 0) + sim.money;
   growIdMatrices(world); // §22.2 id 공간 기준 확장
-  emit('immigrated', id, { name, occupation: traits.occupation, homeId: home.id });
+  emit('immigrated', id, { name, occupation: sim.traits.occupation, homeId: home.id });
   for (const other of world.sims) {
     if (other.id !== id) recordFact(other, t, L, 'new_neighbor', { subjectSimId: id, tags: [`sim:${id}`, 'town'] });
   }
@@ -1125,6 +1138,7 @@ export function maybeJobSwitch(world, t, day, emit) {
     for (const s of world.sims) {
       if (s.traits.occupation === occ) continue;
       if (!occupationAllowed(occ, s.traits.age)) continue;
+      if (!publicPostAvailable(world, occ, s.id)) continue; // §23.13 정원이 찬 공공직으로는 못 간다
       if (!canWork(s)) continue;
       if (s.traits.occupation === 'retired' || s.traits.occupation === 'student') continue;
       const gain = aptitudeFor(s, occ, L) - aptitudeFor(s, s.traits.occupation, L);

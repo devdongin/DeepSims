@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 55, // #51 가구 안정성과 분가 의도 (§23.8 여가 5종 이후)
+  logicSchemaVersion: 56, // #51 가구 분가 의도 + §23.13 공공 정원
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
@@ -403,6 +403,17 @@ export const DEFAULT_LOGIC = {
     // 그러면 소비 → 국고 → 공공 임금 → 시민 → 소비 고리가 닫힌다.
     publicFacilityTypes: ['hospital', 'city_hall', 'school', 'primary_school','middle_school','high_school','university', 'police_station', 'fire_station'],
     publicWageOccupations: ['doctor', 'nurse', 'teacher', 'civil_servant', 'politician', 'police', 'firefighter'],
+    // §23.13 공공 정원 — minPop 미만이면 그런 자리가 아예 없고, 있으면 인구 per명당 1자리.
+    // 열 명 마을에 파출소도 소방서도 없는 것이 정상이다. 도시가 자라면 자리도 는다.
+    publicPosts: {
+      civil_servant: { minPop: 0, per: 50 },
+      teacher: { minPop: 14, per: 35 },
+      doctor: { minPop: 18, per: 60 },
+      police: { minPop: 20, per: 50 },
+      nurse: { minPop: 30, per: 50 },
+      firefighter: { minPop: 30, per: 70 },
+      politician: { minPop: 12, per: 150 },
+    },
     // §22.23 공공 임금 완전 보장 (사용자 지시: "공무원도 예외없이 일을 하면 반드시
     // 돈을 줘야 되고 공무원이면 국고에서 월급이 지급되어야 해"). 국고가 모자라면
     // 음수(공채)로 내려간다. maxDebt는 게임 장치가 아니라 **오버플로 가드**다 —
@@ -676,6 +687,16 @@ function checkRanges(p, errors) {
   //   ① 존재하는 직업이고 ② 그 시설에서 매출로 임금을 받으며 ③ 근무지 매핑이 일치해야 한다.
   // 하나라도 어긋나면 '손님은 있는데 임금이 안 나오는' 조용한 고장이 된다.
   // §22.4 공공 임금 직군은 민간 임금 화이트리스트와 겹치면 안 된다 — 재원이 둘로 갈린다
+  // §23.13 공공 정원표 검증 — 임금 직군과 어긋나면 '정원은 없는데 국고가 임금을 대는'
+  // 자리가 생긴다. 표에 없는 공공 직군은 정원 무제한이 되므로 조용히 새는 구멍이 된다.
+  const posts = p.economy.publicPosts ?? {};
+  for (const [occ, spec] of Object.entries(posts)) {
+    if (!p.economy.publicWageOccupations.includes(occ)) {
+      errors.push(`economy.publicPosts: ${occ}는 공공 임금 직군이 아니다`);
+    }
+    if (!Number.isSafeInteger(spec.minPop) || spec.minPop < 0) errors.push(`economy.publicPosts.${occ}.minPop 범위 오류`);
+    if (!Number.isSafeInteger(spec.per) || spec.per < 1) errors.push(`economy.publicPosts.${occ}.per 범위 오류`);
+  }
   for (const occ of p.economy.publicWageOccupations) {
     if (!(occ in p.occupations)) errors.push(`economy.publicWageOccupations: 알 수 없는 직업 ${occ}`);
     if (p.economy.privateWageOccupations.includes(occ)) {

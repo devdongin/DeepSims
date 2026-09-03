@@ -84,6 +84,7 @@ export const EVENT_TYPES = [
   'household_intent_created',
   'household_intent_applied',
   'household_intent_failed',
+  'public_posts_filled', // §23.13 인구에 맞춰 공공 자리를 채웠다
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

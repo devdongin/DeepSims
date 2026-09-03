@@ -2668,6 +2668,7 @@ function eventText(e) {
     case 'road_requested': return `🚶 ${ga(n)} 반복 우회로 개선을 요청했습니다 (${e.payload.walked}칸, 직선 ${e.payload.direct}칸)`;
     case 'road_work_planned': return `🏗️ 시장이 우회 연결로 ${e.payload.tiles}칸 공사를 계획했습니다 (예상 ${e.payload.cost}원)`;
     case 'ability_changed': return `📚 ${ga(n)} ${{stamina:'체력',dexterity:'손재주',intellect:'지능',charisma:'사교성'}[e.payload.ability]} ${e.payload.value}/${e.payload.potential} (${{study:'배움',career:'근무',exercise:'운동',age:'나이'}[e.payload.source]})`;
+    case 'public_posts_filled': return `🏛️ 인구 ${e.payload.population}명에 맞춰 공공 자리 ${e.payload.hired}곳을 채웠습니다`;
     case 'genius_born': return `⭐ ${ga(n)} 특별한 재능을 갖고 태어났습니다 (잠재치 ${e.payload.cap}, 성장에는 배움과 환경이 필요합니다)`;
     case 'school_enrolled': return `🎒 ${ga(n)} ${PLACE_KO[e.payload.stage]}에 다닙니다 (${e.payload.age}세)`;
     case 'school_planned': return `🏫 학생 수요에 따라 ${PLACE_KO[e.payload.type]} 공사를 시작했습니다 (국고 −${e.payload.cost}원)`;

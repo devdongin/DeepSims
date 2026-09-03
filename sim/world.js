@@ -1,4 +1,5 @@
 import { makeAbilities } from './abilities.js'; // §21.1
+import { demotePublicIfOverQuota, fillPublicPosts } from './publicposts.js';
 import { SCHEMA_VERSION } from './constants.js';
 // 월드 생성 — rngWorldgen만 사용, 이후 런타임은 rngSim (PLAN §2 네임드 스트림).
 // schemaVersion 2: traits(성별·나이·MBTI·직업)·mood·world.logic 포함 (PLAN §12.1).
@@ -82,7 +83,7 @@ export function createWorld(seed) {
   const interactions = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
   const lastGreetDay = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(-1));
 
-  return {
+  const world = {
     schemaVersion: SCHEMA_VERSION,
     treasury: DEFAULT_LOGIC.economy.initialTreasury ?? 0, // §17.15 국고 · §22.78 종잣돈
     reputation: 0, // §17.21 마을 평판 — 행동 이벤트 누적, 이민 웨이브 규모 결정
@@ -153,4 +154,11 @@ export function createWorld(seed) {
     // **모든 지표가 0% 변화로 나온다**. 실제로 이 절의 첫 설계를 거짓 반증할 뻔했다.
     logic: structuredClone(DEFAULT_LOGIC),
   };
+  // §23.13 공공 정원. generateTraits는 인구를 모른 채 직업을 뽑으므로, 열 명짜리 마을이
+  // 경찰 둘·소방관 하나·의사 하나를 데리고 태어났다(실측). 공공 임금은 국고가 전액
+  // 보장하니 1일차에 국고 −10,766이다. 만들어진 순서대로 정원을 넘은 자리를 민간직으로
+  // 돌린다 — rng를 쓰지 않아 월드젠의 드로우 순서는 그대로다.
+  for (const sim of world.sims) demotePublicIfOverQuota(world, sim);
+  fillPublicPosts(world); // 빈 자리는 채운다 — 경찰도 의사도 없는 마을을 만들지 않는다
+  return world;
 }

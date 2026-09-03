@@ -1,5 +1,6 @@
 // School stages, actual attendance, and university enrollment.
 import { riskHash } from './chrono.js';
+import { publicPostAvailable } from './publicposts.js';
 import { rngInt } from './prng.js';
 import { aptitudeFor } from './abilities.js';
 import { occupationAllowed } from './traits.js';
@@ -117,8 +118,10 @@ export function updateEducation(world, t, emit, resetActivity = () => {}) {
     else if (stage || (E.course && !E.completed)) sim.traits.occupation = 'student';
     else if (before === 'student' || before === 'child') {
       const G = world.logic.graduation;
+      // §23.13 정원이 찬 공공직은 후보에서 뺀다. 스무 명 마을에 경찰 셋이 생기던 자리다.
       const pool = (E.universityGraduated ? [...G.poolBase,...G.poolUni] : G.poolBase)
-        .filter(o => occupationAllowed(o,sim.traits.age));
+        .filter(o => occupationAllowed(o,sim.traits.age))
+        .filter(o => publicPostAvailable(world, o, sim.id));
       const weighted=[];
       for(const o of pool.length ? pool : ['office_worker']) {
         const n=1+Math.floor(aptitudeFor(sim,o,world.logic)*world.logic.abilities.aptitudePoolWeight/10000);
