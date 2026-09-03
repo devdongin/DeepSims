@@ -123,6 +123,13 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
         break;
       }
     }
+    // 같은 상대에게 최근 주제를 연달아 반복하지 않는다. 모든 후보가 제외되면
+    // weather로 폴백해 발화 자체는 보존한다.
+    const recent = speaker.conversationTopics?.[listener.id] ?? [];
+    if (recent.length > 0) {
+      const filtered = candidates.filter((c) => !recent.includes(c.key));
+      candidates.splice(0, candidates.length, ...filtered);
+    }
     if (candidates.length === 0) {
       topic = 'weather'; // 폴백 보장 — 문맥 필터로 전부 제외돼도 발화는 나간다 (드로우 없음)
       detail = { kind: world.weather?.kind ?? 'sunny' };
@@ -144,6 +151,11 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
     // 청자 반응의 구체: 청자→화자 호감도 부호 (클라가 반응 온도를 정함)
     listenerWarmth: Math.sign(world.affinity[listener.id][speaker.id]),
   });
+  if (topic !== 'party_invite') {
+    speaker.conversationTopics ??= {};
+    const recent = speaker.conversationTopics[listener.id] ?? [];
+    speaker.conversationTopics[listener.id] = [...recent.filter((x) => x !== topic), topic].slice(-3);
+  }
 }
 
 // 험담/칭찬 대상: 화자의 관계 티어가 stranger가 아닌 제3자 중 |호감도| 최대 (동점 id 낮은 쪽)

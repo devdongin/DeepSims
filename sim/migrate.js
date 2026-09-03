@@ -298,6 +298,8 @@ export function migrateWorld(world) {
     // §22.14 동석 대화 카운터. undefined면 직렬화 왕복이 고정점이 아니게 되므로 0으로 심는다.
     for (const sim of world.sims) if (sim.state && sim.state.sideTalkTicks === undefined) sim.state.sideTalkTicks = 0;
   }
+  // §22.90 상대별 최근 대화 주제. 구세이브는 빈 기록에서 시작한다.
+  for (const sim of world.sims) sim.conversationTopics ??= {};
   if (from < 41) {
     // §22.13 플레이어 심의 groceries·sick 미초기화 복구 (플레이테스트 S2-1).
     // 살아 있는 세계에는 이미 NaN이 저장돼 null로 굳어 있거나 키가 아예 없다.
