@@ -1613,12 +1613,21 @@ export function tick(world, inputsForThisTick = []) {
       })[0];
       if (!freePlot) break;
       {
+        // §23.28 **착공한 것도 세어야 한다** (Codex 지적). 완공된 침대만 세면, 집 한 채가
+        // 필요한 마을이 슬롯이 비어 있는 만큼 계속 착공한다 — 실측: 인구 10·침대 10인
+        // 마을에 국고 300만을 주자 첫 계획 틱에 집 6채가 한꺼번에 올라갔다.
+        // §23.26으로 슬롯을 3 → 6으로 올리면서 이 잠재 결함이 여섯 배로 드러났다.
+        const PLANNED_BEDS = { house: 2, apartment: 8 };
+        const pendingBeds = world.projects.reduce((n, p2) => n + (PLANNED_BEDS[p2.type] ?? 0), 0);
         const beds = world.map.facilities.filter(isResidence)
-          .reduce((n, f) => n + f.resources.length, 0);
+          .reduce((n, f) => n + f.resources.length, 0) + pendingBeds;
+        // §23.28 카페·공원도 착공 중인 것을 함께 센다 — 침대와 같은 이유다.
+        const PLANNED_SEATS = { cafe: 4, park: 1 }; // addBuilding이 만드는 자원 수와 같다
+        const pending = (type) => world.projects.filter((p2) => p2.type === type).length * (PLANNED_SEATS[type] ?? 0);
         const cafeSeats = world.map.facilities.filter((f) => f.type === 'cafe')
-          .reduce((n, f) => n + f.resources.length, 0);
+          .reduce((n, f) => n + f.resources.length, 0) + pending('cafe');
         const parkSpots = world.map.facilities.filter((f) => f.type === 'park')
-          .reduce((n, f) => n + f.resources.length, 0);
+          .reduce((n, f) => n + f.resources.length, 0) + pending('park');
         const pop = world.sims.length;
         // 주거 수요는 고정 여유가 아니라 최근 관측된 인구 증가 속도를 반영한다.
         // 통계가 없는 초기 세계는 기존 계약(headroomBeds)으로 시작한다.
@@ -1641,8 +1650,10 @@ export function tick(world, inputsForThisTick = []) {
         // §17.21 일자리 수요: office 근무 직업 심 수 vs 책상 슬롯 합
         const officeWorkers = world.sims.filter((s2) => L.workplace[s2.traits.occupation] === 'office'
           && L.occupations[s2.traits.occupation].wagePct > 0).length;
+        const PLANNED_DESKS = 4; // office 자원 수와 같은 값 — 착공 중인 사무실도 센다
         const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
-          .reduce((n, f) => n + f.resources.length, 0);
+          .reduce((n, f) => n + f.resources.length, 0)
+          + world.projects.filter((p2) => p2.type === 'office').length * PLANNED_DESKS;
         let type = neededSchool(world);
         if (type === 'university' && !zoneAllowedTypes(world).includes(type)) type = null;
         if (!type) type = neededIndustryFacility(world);

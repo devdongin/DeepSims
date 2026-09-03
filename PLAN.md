@@ -1143,7 +1143,9 @@ traits: {
 ### 19.3 라운드 24 — 동시 건설 슬롯 (구조 변경, Codex 66차 GO)
 - world.project(단수) → world.projects(배열), 세이브 v27. 마이그레이션은 legacy가 있고 배열이
   비었을 때만 이관(66차 ④ — `??=`는 이미 존재하는 빈 배열 때문에 놓친다).
-- 동시 슬롯 = clamp(1 + floor(treasury / slotPerTreasury 15만), 1, maxProjectSlots 3) — 계획 단계
+- 동시 슬롯 = clamp(1 + floor(treasury / slotPerTreasury 15만), 1, maxProjectSlots **6**) — 계획 단계
+  (§23.26에서 3 → 6. 상한 3이면 국고 45만을 넘는 순간부터 돈이 시공 능력을 못 산다.
+   수요 계산은 **착공 중인 예정 수용량도 뺀다** — §23.28, 안 그러면 한 채 수요에 여섯 채가 올라간다.)
   시작 시 1회 계산(66차 ②). 로직 v27.
 - construct 후보는 맨해튼 최근접 프로젝트(동률 plotId asc), 진행도는 자원 id `p{plotId}:`가
   프로젝트를 식별해 가산(§16.5 레이스 규칙 유지). 완공은 plotId asc 다중 처리(66차 ③).
