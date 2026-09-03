@@ -79,8 +79,13 @@ echo "▶ Codex 리뷰: $OUT"
 python3 - "$OUT" <<'PY' > logs/playtest-issues.tsv
 import re,sys
 t=open(sys.argv[1],encoding='utf-8',errors='ignore').read()
+seen=set()
 for m in re.finditer(r'---ISSUE---\s*TITLE:\s*(.+?)\n\s*LABELS:\s*(.*?)\n\s*BODY:\s*(.*?)---END---', t, re.S):
     title=m.group(1).strip(); labels=m.group(2).strip(); body=m.group(3).strip()
+    # 프롬프트에 적어 둔 형식 예시가 그대로 잡히던 문제 — 자리표시자는 버린다
+    if '카테고리' in title or 'P1|P2|P3' in title: continue
+    if title in seen: continue          # 로그에 같은 블록이 두 번 찍히는 경우가 있다
+    seen.add(title)
     print('\t'.join([title, labels, body.replace('\t',' ').replace('\n','\\n')]))
 PY
 COUNT=$(wc -l < logs/playtest-issues.tsv | tr -d ' ')
