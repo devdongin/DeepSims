@@ -138,8 +138,8 @@ for (const t of ['grass', 'pavement', 'road', 'river', 'river_bank', 'sand', 'mo
   BLD_KEYS.push([`tile_${t}`, `./props/tile_${t}.png`]); // 지형 (§UI, §19 R-A)
 }
 // §19 R-A: 타일 코드 → 텍스처 키 (스탬프 레이어가 사용)
-const TILE_TEX = { 1: 'tile_road', 2: 'tile_pavement', 5: 'tile_water_deep', 12: 'tile_pavement', 6: 'tile_river',
-  7: 'tile_river_bank', 8: 'tile_sand', 9: 'tile_mountain', 10: 'tile_hill', 11: 'tile_bridge' };
+const TILE_TEX = { 1: 'tile_road', 2: 'tile_pavement', 5: 'tile_water_deep', 6: 'tile_river',
+  7: 'tile_river_bank', 8: 'tile_sand', 9: 'tile_mountain', 10: 'tile_hill', 11: 'tile_bridge', 12: 'tile_pavement' };
 for (const t of ['house_a', 'cafe']) BLD_KEYS.push([`bld_${t}_night`, `./props/bld_${t}_night.png`]); // 야간 점등 변형
 for (const t of ['house_a', 'cafe', 'office']) for (const d of [1, 2, 3]) {
   BLD_KEYS.push([`bld_${t}_d${d}`, `./props/bld_${t}_d${d}.png`]); // §18.T2 회전 외형
@@ -2324,6 +2324,7 @@ function eventText(e) {
       return `🎪 ${ga(n)} ${cn}에 가입했습니다`;
     }
     case 'road_formed': return `🛤️ 많이 다니던 길이 도로가 되었습니다 (${e.payload.x}, ${e.payload.y})`;
+    case 'sidewalk_formed': return `🚶 많이 걷던 자리에 인도가 생겼습니다 (${e.payload.x}, ${e.payload.y})`;
     case 'bed_built': return `🛏️ ${ga(n)} 집에 침대를 새로 만들었습니다!`;
     case 'public_works': {
       const n2 = e.payload.tiles?.length ?? 0;
@@ -2558,8 +2559,8 @@ function connect() {
         // §15.1.B: 세계 변형 이벤트를 클라이언트 맵에 반영
         let mapDirty = false;
         for (const e of msg.events) {
-          if (e.type === 'road_formed' && world) {
-            world.map.tiles[e.payload.y * world.map.w + e.payload.x] = 1;
+          if ((e.type === 'road_formed' || e.type === 'sidewalk_formed') && world) {
+            world.map.tiles[e.payload.y * world.map.w + e.payload.x] = e.type === 'sidewalk_formed' ? 12 : 1;
             mapDirty = true;
           } else if (e.type === 'public_works' && world) {
             // §22.26 정부 포장 — road_formed와 같은 증분 갱신. 이 분기가 없으면 클라는
