@@ -24,6 +24,7 @@ export function emptyState() {
     facilityId: null,
     resourceId: null,
     path: [],
+    journey: null,
     ticksLeft: 0,
     pairedTicks: 0,
     sideTalkTicks: 0, // §22.14 옆 사람과 말이 트인 횟수

@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 46, // 계획 중심지 비용·외곽 거주 수요
+  logicSchemaVersion: 47, // #118 반복 우회 민원·연결로 공사
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
   ageDecay: { youngMax: 29, youngFunAdd: 2, oldMin: 60, oldEnergyAdd: 2 },
   actions: {
@@ -319,6 +319,9 @@ export const DEFAULT_LOGIC = {
   },
   // §19 R-B 교통 (64차 조건부 GO): 이동 수요가 쌓여야 수단이 생긴다 (4단계 모델의 ABM 대체)
   transport: {
+    detourMinExtra: 8,
+    detourRatioPct: 150,
+    detourRepeat: 3,
     longTripMin: 40,      // 이 칸수 이상이면 '장거리' 1회 (출발 시점 누적)
     carTripsMin: 12,      // 자가용 구매 문턱
     carPrice: 6000,       // 실측 조정: 잔고 상한 ~9.8천 (soak 검증, 64차 (c))
@@ -413,6 +416,8 @@ export const DEFAULT_LOGIC = {
   // 사람들이 이미 걷어 마모가 쌓인 자리(desire path)를 정부가 앞당겨 포장한다.
   // 수요를 창조하지 않고 창발을 증폭한다(§0.1). 광장은 후속 슬라이스(120차 B).
   publicWorks: {
+    bridgeCostPerTile: 500,
+    routeWorkDays: 2,
     paveCostPerTile: 250,   // 칸당 포장비 — 국고에서 externalOutflow로 (자재는 마을 밖에서 산다)
     paveMaxPerDay: 8,       // 리뷰당 상한 — 마을이 하루 만에 확 바뀌지 않게
     pavePickPct: 50,        // wear가 자연 도로화 임계의 이 % 이상인 칸만 후보
@@ -750,6 +755,9 @@ function checkRanges(p, errors) {
   inRange('complaints.decayPct', p.complaints.decayPct, 1, 100);
   inRange('complaints.windowDays', p.complaints.windowDays, 1, 365);
   inRange('transport.longTripMin', p.transport.longTripMin, 1, 10000);
+  inRange('transport.detourMinExtra', p.transport.detourMinExtra, 1, 10000);
+  inRange('transport.detourRatioPct', p.transport.detourRatioPct, 101, 10000);
+  inRange('transport.detourRepeat', p.transport.detourRepeat, 2, 1000);
   inRange('transport.carTripsMin', p.transport.carTripsMin, 1, 100000);
   inRange('transport.carPrice', p.transport.carPrice, 0, 10000000);
   inRange('transport.carSpeedTiles', p.transport.carSpeedTiles, 1, 8);
@@ -840,6 +848,8 @@ function checkRanges(p, errors) {
   inRange('fiscal.stepWelfare', p.fiscal.stepWelfare, 0, 1000);
   inRange('fiscal.lowRatioPct', p.fiscal.lowRatioPct, 0, 100);
   inRange('publicWorks.paveCostPerTile', p.publicWorks.paveCostPerTile, 0, 100000);
+  inRange('publicWorks.bridgeCostPerTile', p.publicWorks.bridgeCostPerTile, 1, 100000);
+  inRange('publicWorks.routeWorkDays', p.publicWorks.routeWorkDays, 1, 365);
   inRange('publicWorks.paveMaxPerDay', p.publicWorks.paveMaxPerDay, 0, 1000);
   inRange('publicWorks.pavePickPct', p.publicWorks.pavePickPct, 1, 100);
   for (const k of ['basePermille', 'starvingBonus', 'rainBonus', 'lowEnergyBonus', 'contagionPermille']) {

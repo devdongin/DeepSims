@@ -2265,13 +2265,13 @@ function eventText(e) {
     }
     case 'heroic_save': return `🎖️ ${n}: 영웅이 됐다`;
     case 'petition': {
-      const ko = { lonely: '외롭다', hungry: '배고프다' };
+      const ko = { lonely: '외롭다', hungry: '배고프다', road_detour: '길이 너무 돌아간다' };
       return `📢 주민 청원: "${ko[e.payload.kind] ?? e.payload.kind}" (${e.payload.total}건, 문턱 ${e.payload.threshold})`;
     }
     case 'car_bought': return `🚗 ${ga(n)} 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
     case 'station_unlocked': return `🚉 장거리 이동 수요가 문턱을 넘었다 — 기차역 언락! (수요 ${e.payload.demand}/${e.payload.threshold} · 충족도 ${e.payload.fulfillmentPct}% · 장거리 ${e.payload.totalLongTrips}회 · 차 ${e.payload.carsOwned}대)`;
     case 'city_promoted': return `🏙️ 해솔${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
-    case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
+    case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원${e.payload.demolished ? ` + 도로 ${e.payload.demolished}칸 철거 ${e.payload.demolitionCost}원` : ''}, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
       // §22.37 before가 없어도 피드가 죽으면 안 된다. 시장 경로가 before를 안 싣던
@@ -2336,8 +2336,11 @@ function eventText(e) {
     case 'bed_built': return `🛏️ ${ga(n)} 집에 침대를 새로 만들었습니다!`;
     case 'public_works': {
       const n2 = e.payload.tiles?.length ?? 0;
+      if (e.payload.kind === 'route') return `🏗️ 우회 민원 연결로 ${n2}칸 완공: ${e.payload.before} → ${e.payload.after}칸 이동 (-${e.payload.cost}원)`;
       return `🏗️ 시장이 사람들이 다니는 길 ${n2}칸을 포장했습니다 (-${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;
     }
+    case 'road_requested': return `🚶 ${ga(n)} 반복 우회로 개선을 요청했습니다 (${e.payload.walked}칸, 직선 ${e.payload.direct}칸)`;
+    case 'road_work_planned': return `🏗️ 시장이 우회 연결로 ${e.payload.tiles}칸 공사를 계획했습니다 (예상 ${e.payload.cost}원)`;
     case 'side_talk': return `💬 ${ga(n)} 옆자리 ${wa(simName(e.payload.withSimId))} 말을 텄습니다`;
     case 'helped': {
       const why = { sick: '아픈', hungry: '배곯는', broke: '주머니가 빈' }[e.payload.why] ?? '';
@@ -2570,10 +2573,12 @@ function connect() {
           if ((e.type === 'road_formed' || e.type === 'sidewalk_formed') && world) {
             world.map.tiles[e.payload.y * world.map.w + e.payload.x] = e.type === 'sidewalk_formed' ? 12 : 1;
             mapDirty = true;
-          } else if (e.type === 'public_works' && world) {
+          } else if ((e.type === 'public_works' || e.type === 'zoned') && world) {
             // §22.26 정부 포장 — road_formed와 같은 증분 갱신. 이 분기가 없으면 클라는
             // 다음 전체 resync(15초+)까지 포장을 모른 채 잔디를 그린다.
-            for (const idx of (e.payload.tiles ?? [])) world.map.tiles[idx] = 1;
+            if (e.payload.tileChanges) {
+              for (const c of e.payload.tileChanges) world.map.tiles[c.index] = c.tile;
+            } else for (const idx of (e.payload.tiles ?? [])) world.map.tiles[idx] = 1;
             mapDirty = true;
           } else if (e.type === 'bed_built' && world) {
             const fac = world.map.facilities.find((f) => f.id === e.payload.facilityId);

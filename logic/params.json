@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 46,
+  "logicSchemaVersion": 47,
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -594,6 +594,9 @@
     "windowDays": 3
   },
   "transport": {
+    "detourMinExtra": 8,
+    "detourRatioPct": 150,
+    "detourRepeat": 3,
     "longTripMin": 40,
     "carTripsMin": 12,
     "carPrice": 6000,
@@ -741,6 +744,8 @@
     "lowRatioPct": 10
   },
   "publicWorks": {
+    "bridgeCostPerTile": 500,
+    "routeWorkDays": 2,
     "paveCostPerTile": 250,
     "paveMaxPerDay": 8,
     "pavePickPct": 50
