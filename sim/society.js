@@ -1197,7 +1197,7 @@ export function deathRiskPer100k(world, sim, L) {
 
 // 사망 처리 — 심을 실제로 제거하고 남은 참조를 정리한다 (89차 ③의 정리 목록).
 // 행렬은 묘비로 남긴다(행을 지우면 id 인덱싱이 무너진다).
-function removeSim(world, sim, t, emit, cause) {
+function removeSim(world, sim, t, emit, cause, eventType = 'died') {
   const id = sim.id;
   // 예약 해제 — 죽은 사람이 자리를 붙들고 있으면 안 된다
   if (sim.state.facilityId !== null && sim.state.resourceId !== null) {
@@ -1244,7 +1244,22 @@ function removeSim(world, sim, t, emit, cause) {
   }
   const idx = world.sims.findIndex((s) => s.id === id);
   if (idx >= 0) world.sims.splice(idx, 1);
-  emit('died', id, { name: sim.name, age: sim.traits.age, cause, pop: world.sims.length });
+  emit(eventType, id, { name: sim.name, age: sim.traits.age, cause, pop: world.sims.length });
+}
+
+// 누적된 낮은 기분과 미충족 욕구가 실제로 쌓인 심은 마을을 떠난다.
+// riskHash를 써서 rng 스트림과 무관하게, 관측 상태에서만 결정한다.
+export function maybeEmigration(world, t, day, emit) {
+  const doomed = world.sims.filter((sim) => {
+    if (sim.isPlayer || sim.traits.occupation === 'child') return false;
+    const unmet = (sim.memories ?? []).filter((m) => m.kind === 'unmet').length;
+    return sim.mood <= world.logic.mood.lethargyThreshold && unmet >= 3
+      && riskHash(sim.id, day, 113) < 25000;
+  });
+  for (const sim of doomed) {
+    const reason = sim.mood <= world.logic.mood.lethargyThreshold ? 'low_mood' : 'unmet_needs';
+    removeSim(world, sim, t, emit, reason, 'emigrated');
+  }
 }
 
 // 일일 사망 판정 (id 오름차순 — 선거·수당·이민보다 먼저, 89차 ③).
