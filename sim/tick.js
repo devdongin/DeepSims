@@ -12,6 +12,8 @@ import { schoolFor, updateEducation, recordStudy, neededSchool, SCHOOL_TYPES, ca
 import { foodAidBlockReason, takePublicMeal } from './food-aid.js';
 import { medicalBlockReason, completeMedicalVisit } from './health-policy.js';
 import { applyChildAllowance } from './family-policy.js';
+import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
+  beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
@@ -90,6 +92,7 @@ function needValueFor(sim, action, L) {
   if (action === 'shop') return sim.needs.hunger; // 배고픈데 장이 비면 급함 (§16.B, Codex 22차 항목 5)
   if (action === 'construct') return NEED_MAX - L.construct.deficit; // §16.5 고정 급함
   if (action === 'see_doctor') return NEED_MAX - L.disease.doctorDeficit; // 아플 때 최우선급 (§17.3)
+  if (action === ESCORT_ACTION) return NEED_MAX - L.disease.doctorDeficit;
   if (action === 'respond_fire') return NEED_MAX - L.incidents.respondDeficit; // §17.20 화재 급함
   return sim.needs[NEED_OF_ACTION[action]];
 }
@@ -131,7 +134,7 @@ function prepareCandidateScore(sim, action, L) {
   const deficit = NEED_MAX - needValueFor(sim, action, L);
   return { deficit, num: deficit * deficit * 16,
     persFactor: persFactorFor(sim, action, L), moodMod: moodModFor(sim, action, L),
-    ignoresDistance: COPING_ACTIONS.includes(action) || action === 'respond_fire' };
+    ignoresDistance: COPING_ACTIONS.includes(action) || action === 'respond_fire' || action === ESCORT_ACTION };
 }
 function scoreCandidate(sim, action, res, L, prepared = null) {
   const p = prepared ?? prepareCandidateScore(sim, action, L);
@@ -162,6 +165,7 @@ const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'pa
 // rng 미소비, 세계를 바꾸지 않는다.
 export function facilityShortfallKind(world, sim, action, t) {
   const L = world.logic;
+
   // **가상 자원을 쓰는 행동은 시설 수로 판정할 수 없다** (Codex 111차 ①②).
   // 경찰의 근무는 patrol.targets에서 patrolIdx로 고른 좌표 하나를, 소방 대응은
   // firesite를 자원으로 쓴다. 후보 생성이 그 특수 분기를 타는데 여기서 시설을 세면
@@ -203,6 +207,7 @@ export function facilityShortfallKind(world, sim, action, t) {
 export function actionBlockReason(world, sim, action, t) {
   const L = world.logic;
   if (action === 'seek_food_aid') return foodAidBlockReason(world, sim);
+  if (action === ESCORT_ACTION) return escortBlockReason(world, sim);
   if (LABOR_ACTIONS.has(action) && !canWork(sim)) return sim.traits.occupation === 'child' ? 'too_young' : 'not_needed';
   if (action === 'study') {
     if (!schoolFor(sim) || sim.traits.occupation !== 'student') return 'not_needed';
@@ -275,6 +280,18 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
   for (const action of actions) {
     if (action === 'idle') continue;
     if (!actionAllowed(world, sim, action, t)) continue;
+    if (action === ESCORT_ACTION) {
+      for (const child of escortableChildren(world, sim)) {
+        const res={id:`child:${child.id}`,x:child.x,y:child.y};
+        const holder=world.reservations[resKey('childcare',res.id)];
+        if(holder!==undefined&&holder!==sim.id)continue;
+        const sc=scoreCandidate(sim,action,res,L),cand={action,facilityId:'childcare',resourceId:res.id,res,...sc,
+          planFactor:100,partyPull:false,weatherFactor:100,score:sc.core+sc.moodMod,
+          memoryMod:0,stateMod:0,habitMod:0,cited:[]};
+        if(cand.score>0||includeZeroScore)out.push(cand);
+      }
+      continue;
+    }
     // §16.5.B: construct는 가상 현장(site) — 활성 프로젝트 plot 모서리 4 작업 스팟
     if (action === 'construct') {
       // §19.3: 다중 프로젝트 중 맨해튼 최근접 현장으로 (동률 plotId asc — 결정적)
@@ -500,6 +517,10 @@ function startAction(world, sim, cand, t, emit, reason) {
     // §19.4: 순찰이 실패하면 다음 순찰 지점으로 넘어간다 (같은 곳 무한 재시도 방지 — 이슈 #40)
     if (cand.facilityId === 'patrol') sim.patrolIdx++;
     return false;
+  }
+  if(cand.action===ESCORT_ACTION&&!claimEscortPickup(world,sim,Number(cand.resourceId.slice(6)))){
+    delete world.reservations[resKey(cand.facilityId,cand.resourceId)];
+    emit('action_failed',sim.id,{action:cand.action,reason:'child_unavailable'});return false;
   }
   // §19 R-B: 장거리 이동 통계 — **출발 시점** 누적(64차 (c) 계약 고정)
   // §19.12: 칸수도 같은 자리에서 누적 — 거리 분포가 역 수요 판정의 입력이다 (이슈 #52)
@@ -806,16 +827,34 @@ export function tick(world, inputsForThisTick = []) {
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
 
+  // A guardian can die/emigrate between ticks. Never leave a child frozen or a
+  // hospital seat owned by that child when the escort no longer exists.
+  for(const child of world.sims){
+    if(!['awaiting_escort','being_escorted'].includes(child.state.kind))continue;
+    const guardian=world.sims.find(s=>s.id===child.state.escortId);
+    if(!guardian||guardian.state.action!==ESCORT_ACTION){
+      const key=`${child.state.facilityId}:${child.state.resourceId}`;
+      if(world.reservations[key]===child.id)delete world.reservations[key];
+      child.state=emptyState();
+    }
+  }
+
   // 2a) walking 전진 (id 오름차순). §19 R-B: 자가용은 한 틱에 최대 carSpeedTiles칸을
   // **경로 순서대로** 전진한다(64차 (a)) — 마모·습득·인사 등 칸 효과는 각 칸마다 그대로 적용.
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'walking') continue;
+    if(s.action===ESCORT_ACTION&&s.escortPhase==='travel'&&!syncEscortStep(world,sim)){
+      cancelEscort(world,sim);emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'child_unavailable'});continue;
+    }
     const steps = sim.hasCar ? world.logic.transport.carSpeedTiles : 1;
     let pickedThisTick = false; // §16.C 습득은 틱당 1회 — 차량이 습득률을 배로 늘리지 않도록 (65차 대비)
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
     sim.x = next.x; sim.y = next.y;
+    if(s.action===ESCORT_ACTION&&s.escortPhase==='travel'&&!syncEscortStep(world,sim)){
+      cancelEscort(world,sim);emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'child_unavailable'});break;
+    }
     if (s.journey) s.journey.walked++;
     // §22.91 보행 마모: 사람 발자국은 차도가 아니라 인도가 된다.
     const ti = sim.y * world.map.w + sim.x;
@@ -860,6 +899,11 @@ export function tick(world, inputsForThisTick = []) {
       recordRoadTrip(world, sim, s.journey, t, emit);
       s.journey = null;
       s.kind = 'performing';
+      if(s.action===ESCORT_ACTION&&s.escortPhase===null){
+        if(beginHospitalEscort(world,sim)){emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
+        else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
+        continue;
+      }
       // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
       if (s.action === 'sleep') { runReflection(world, sim, t, emit); maybeBuyCar(world, sim, t, emit); collectComplaints(world, sim, t, emit); } // §19 R-B/§19.5
     }
@@ -993,6 +1037,11 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'performing' || s.ticksLeft > 0) continue;
+    if(s.action===ESCORT_ACTION&&s.escortPhase===null){
+      if(beginHospitalEscort(world,sim)){emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
+      else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
+      continue;
+    }
     if (s.action === 'seek_food_aid') {
       if (!takePublicMeal(world, sim, emit)) {
         emit('action_failed', sim.id, { action: s.action, reason: foodAidBlockReason(world, sim) ?? 'invalid_site' });

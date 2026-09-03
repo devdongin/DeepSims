@@ -22,6 +22,7 @@
     "oldEnergyAdd": 2
   },
   "actions": {
+    "escort_child_doctor": { "duration": 1 },
     "seek_food_aid": { "duration": 30, "mealCost": 200, "hungerGain": 9000 },
     "study": { "duration": 60, "cost": 0 },
     "respond_fire": {

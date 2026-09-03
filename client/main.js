@@ -1051,6 +1051,7 @@ const ACTION_TRY_KO = {
   exercise: '운동하려', build: '뭘 좀 만들려', read: '책 좀 읽으려', study: '수업 들으려', shop: '장 보려',
   fish: '낚시하려', cook_eat: '밥 해 먹으려', construct: '공사 거들려',
   see_doctor: '병원 가려', seek_food_aid: '공공 식사 받으려', idle: '좀 쉬려',
+  escort_child_doctor: '아이와 병원 가려',
 };
 function actKo(id) { return ACTION_TRY_KO[id] ?? '뭘 좀 하려'; }
 
@@ -2401,6 +2402,7 @@ const ACTION_KO = {
   drink: '술 한잔', binge_eat: '폭식', hole_up: '은둔', exercise: '운동', build: '침대 만들기',
   read: '독서', shop: '장보기', fish: '낚시', cook_eat: '집밥', construct: '공사 돕기', see_doctor: '병원 진료',
   respond_fire: '화재 진압', study: '학교 수업', seek_food_aid: '공공 식사 요청',
+  escort_child_doctor: '아이 병원 동행',
 };
 // 직업 라벨과 같은 규칙 — 표를 직접 인덱싱하지 않는다. 미등록 행동이 와도
 // 피드에 'undefined 시작'이 아니라 '활동 시작'이 뜬다.
@@ -2548,6 +2550,7 @@ function eventText(e) {
     case 'starving': return `⚠️ ${ga(n)} 굶고 있습니다!`;
     case 'medical_visit_paid': return `🏥 ${n} 진료 완료: 환자 측 ${e.payload.patientCost}원 · 공공 부담 ${e.payload.subsidy}원`;
     case 'child_allowance_paid': return `🧒 ${n} 가구에 아이 #${e.payload.childId} 지원 ${e.payload.amount}원`;
+    case 'child_escorted': return `🏥 ${n} 아이 #${e.payload.childId}와 병원으로 동행합니다`;
     case 'lonely': return `${ga(n)} 혼자 시간을 보냈습니다…`;
     case 'argument': return `💢 ${wa(n)} ${ga(simName(e.payload.withSimId))} 말다툼했습니다`;
     case 'center_planned': return `📍 (${e.payload.x}, ${e.payload.y})에 계획 중심지가 지정되었다 (−${e.payload.cost}원, 국고 ${e.payload.treasury}원)`;

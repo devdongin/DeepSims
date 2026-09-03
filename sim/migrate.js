@@ -211,7 +211,8 @@ export function migrateWorld(world) {
   if (from < 57) world.unlockedIndustries ??= [];
   // #71: no retroactive payments/healing. In-flight visits revalidate at completion;
   // the logic defaults below install 100% copay without replacing existing policy.
-  if (from < 58) { world.policy ??= {}; world.childAllowanceDay ??= -1; }
+  if (from < 58) { world.policy ??= {}; world.childAllowanceDay ??= -1;
+    for(const sim of world.sims){sim.state.escortId??=null;sim.state.escortPhase??=null;} }
   if (from < 55) {
     for (const sim of world.sims) {
       sim.education ??= newEducation();

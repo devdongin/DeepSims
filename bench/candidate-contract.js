@@ -40,11 +40,15 @@ export function candidateContract(pop = 50) {
     assert.equal(w.logic.economy.childAllowance, 0);
     assert.equal(w.policy.childAllowance, undefined);
     assert.equal(w.childAllowanceDay, -1);
+    assert.equal(w.logic.actions.escort_child_doctor.duration, 1);
+    for(const sim of w.sims){assert.equal(sim.state.escortId,null);assert.equal(sim.state.escortPhase,null);}
     oracleWorld = structuredClone(w);
     oracleWorld.schemaVersion = 57; oracleWorld.logic.logicSchemaVersion = 52;
     delete oracleWorld.logic.economy.healthCopayPct;
     delete oracleWorld.logic.economy.childAllowance;
     delete oracleWorld.childAllowanceDay;
+    delete oracleWorld.logic.actions.escort_child_doctor;
+    for(const sim of oracleWorld.sims){delete sim.state.escortId;delete sim.state.escortPhase;}
     let lastTick = -1, ordinal = 0;
     events = events.filter(e => {
       if (e.type !== 'medical_visit_paid') return true;

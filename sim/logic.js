@@ -32,6 +32,7 @@ export const DEFAULT_LOGIC = {
     cook_eat: { duration: 25, recoverPerTick: 350, moodPerTick: 8 },
     construct: { duration: 60 }, // §16.5 스틴트
     see_doctor: { duration: 30, cost: 800 }, // §17.3 진료
+    escort_child_doctor: { duration: 1 },
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
@@ -785,6 +786,7 @@ function checkRanges(p, errors) {
   // §17
   inRange('actions.see_doctor.duration', p.actions.see_doctor.duration, 1, 10000);
   inRange('actions.see_doctor.cost', p.actions.see_doctor.cost, 0, 1000000);
+  inRange('actions.escort_child_doctor.duration', p.actions.escort_child_doctor.duration, 1, 10000);
   for (const [o, w] of Object.entries(p.workplace)) {
     if (o === 'jobless' && w === null) continue;
     const ok = typeof w === 'string'
