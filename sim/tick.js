@@ -1257,7 +1257,13 @@ export function tick(world, inputsForThisTick = []) {
       while (world.projects.length < maxProjects) {
       // §19.3: 이미 착공 중인 공터는 제외 (중복 배정 금지)
       const busy = new Set(world.projects.map((p) => p.plotId));
-      const freePlot = world.plots.find((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)); // §17.23 침범 방지
+      const candidates = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)); // §17.23 침범 방지
+      const centers = world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type));
+      const distance = (p, f) => Math.abs(p.x - f.x) + Math.abs(p.y - f.y);
+      const freePlot = candidates.sort((a, b) => {
+        const score = (p) => centers.length === 0 ? 0 : Math.min(...centers.map((f) => distance(p, f)));
+        return (score(a) - score(b)) || (a.plotId - b.plotId);
+      })[0];
       if (!freePlot) break;
       {
         const beds = world.map.facilities.filter(isResidence)
