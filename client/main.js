@@ -2787,6 +2787,40 @@ async function renderCityChronicle() {
   } catch { box.innerHTML = '<div>연대기를 못 읽었다.</div>'; }
 }
 
+// §23.15 관계. 패널의 #relations는 처음부터 있었지만 아무도 쓰지 않았다.
+// 이 마을에서 사람들이 하는 일의 대부분이 관계인데 화면에는 그게 없었다.
+let relFor = null;
+async function renderRelations(simId) {
+  const box = $('relations');
+  if (!box) return;
+  if (relFor === simId && box.dataset.done === '1') return; // 배치마다 서버를 찌르지 않는다
+  relFor = simId; box.dataset.done = '0';
+  box.textContent = '…';
+  try {
+    const d = await fetch(`/api/relations?sim=${simId}`).then((r) => r.json());
+    if (relFor !== simId) return; // 그새 다른 사람을 골랐다
+    const parts = [];
+    if (d.partner) parts.push(`${d.partner.stage === 'married' ? '💍' : '💕'} ${d.partner.name}`);
+    if (d.parents.length) parts.push(`👪 ${d.parents.map((x) => x.name).join('·')}`);
+    if (d.children.length) parts.push(`🧒 ${d.children.map((x) => x.name).join('·')}`);
+    if (d.friends.length) parts.push(`🤝 ${d.friends.map((x) => x.name).join('·')}`);
+    if (d.rivals.length) parts.push(`💢 ${d.rivals.map((x) => x.name).join('·')}`);
+    if (d.acquaintances) parts.push(`🙂 아는 사이 ${d.acquaintances}명`);
+    box.textContent = parts.length ? parts.join(' · ') : '아직 가까운 사람이 없다';
+    // §23.16 칭호는 이름 옆에 — 이 사람이 가장 자주 한 일이 곧 이 사람이다.
+    const nameEl = $('simname');
+    if (d.title && nameEl && !nameEl.dataset.titled) {
+      nameEl.textContent = `${nameEl.textContent} · ${d.title}`;
+      nameEl.dataset.titled = '1';
+    }
+    // 최근 기억 — "요즘 무엇을 겪었나". 있으면 관계 아래 한 줄.
+    if (d.memories?.length) {
+      box.textContent += `\n📌 ${d.memories.map((m) => m.who ? `${m.text} (${m.who})` : m.text).join(' · ')}`;
+    }
+    box.dataset.done = '1';
+  } catch { box.textContent = ''; }
+}
+
 let lifeOpenFor = null;
 async function renderLifeLog(simId) {
   const box = $('lifelog');
@@ -2817,6 +2851,7 @@ async function renderLifeLog(simId) {
 function selectSim(id) {
   selectedSimId = id;
   lifeOpenFor = null;
+  relFor = null;
   const box = $('lifelog'); if (box) box.style.display = 'none';
   renderPanel();
 }
@@ -2830,6 +2865,7 @@ function renderPanel() {
   if (!sim) { $('simname').textContent = '(마을을 떠났습니다)'; return; }
   panel.style.display = 'block';
   $('simname').textContent = sim.name;
+  $('simname').dataset.titled = '';
   $('portrait').src = `./sprites/walk${archOf(sim)}_0.png`; // 도트 초상화 — 직업 제복 반영 (§17.14)
   for (const k of ['hunger', 'energy', 'social', 'fun']) {
     $(`b-${k}`).style.width = `${sim.needs[k] / 100}%`;
@@ -2851,6 +2887,7 @@ function renderPanel() {
     if (sim.education?.highestDegree && sim.education.highestDegree !== 'bachelor') extra += ` · 🎓${{masters:'석사',doctorate:'박사'}[sim.education.highestDegree]}`;
     $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${sim.isPlayer ? ' · ◆나' : ''}${sim.isGenius ? ' · ⭐천재' : ''}${extra}`;
   }
+  renderRelations(sim.id); // §23.15 관계 (열려 있는 동안 사람이 바뀔 때만 다시 읽는다)
   $('money').textContent = `💰 ${sim.money}원`;
   $('abilities').replaceChildren(...Object.entries({stamina:'체력',dexterity:'손재주',intellect:'지능',charisma:'사교성'})
     .map(([key, label]) => {

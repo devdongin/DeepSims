@@ -188,6 +188,86 @@ app.get('/api/industry', (_req, res) => {
   });
 });
 
+// §23.15 인간관계. 패널에는 #relations 자리가 처음부터 있었지만 **아무것도 쓰지 않았다** —
+// 이 게임에서 사람들이 하는 일의 대부분이 관계인데 화면에는 그게 없었다.
+// 호감도 행렬(world.affinity)과 티어(sim.relTiers)는 스냅샷에 안 실린다. 사람마다 인구 수만큼
+// 있어서 다 보내면 투영이 세계만큼 커진다 — 그래서 고른 한 사람만 여기서 계산해 준다.
+app.get('/api/relations', (req, res) => {
+  const simId = Math.trunc(Number(req.query.sim));
+  const w = engine.world;
+  const sim = w.sims.find((s) => s.id === simId);
+  if (!sim) { res.status(404).json({ error: 'no such sim' }); return; }
+  const nameOf = (id) => {
+    const o = w.sims.find((s) => s.id === id);
+    return o ? `${o.surname ?? ''}${o.name}` : null;
+  };
+  const rows = [];
+  for (const other of w.sims) {
+    if (other.id === sim.id) continue;
+    const aff = w.affinity[sim.id]?.[other.id] ?? 0;
+    const met = w.interactions[sim.id]?.[other.id] ?? 0;
+    const tier = sim.relTiers?.[other.id] ?? 'stranger';
+    if (tier === 'stranger' && Math.abs(aff) < 500) continue; // 스쳐 간 사람은 빼고
+    rows.push({ id: other.id, name: nameOf(other.id), aff, met, tier });
+  }
+  rows.sort((a, b) => (b.aff - a.aff) || (a.id - b.id));
+  const partnerId = w.partners[sim.id];
+  const parents = w.parents[sim.id] ?? [];
+  const children = Object.entries(w.parents)
+    .filter(([, ps]) => ps.includes(sim.id)).map(([cid]) => Number(cid));
+  // §23.16 칭호. 이 사람이 **가장 자주 한 일**에서 나온다. 습관(sim.habit)은 회고가
+  // 반복 행동을 눌러 담아 둔 값이라, 하루이틀 유행이 아니라 삶의 결이 드러난다.
+  const HABIT_TITLE = {
+    fish: '낚시광', read: '책벌레', exercise: '운동광', drink: '술꾼', cook_eat: '집밥파',
+    socialize: '수다쟁이', play: '놀이꾼', work: '일벌레', shop: '장보기 담당',
+    stroll: '산책가', garden: '텃밭지기', music: '악사', volunteer: '봉사왕', board_game: '보드게임광',
+  };
+  let title = null, bestHabit = 0;
+  for (const [key, v] of Object.entries(sim.habit ?? {})) {
+    const act = key.split(':')[0];
+    if (!HABIT_TITLE[act]) continue;
+    if (v > bestHabit) { bestHabit = v; title = HABIT_TITLE[act]; }
+  }
+  // §23.16 최근 기억 — "이 사람이 요즘 무엇을 겪었나". 중요도 높은 것부터 셋.
+  // 기억 종류는 sim/logic.js의 memory.importance가 권위다. 여기 없는 종류가 오면
+  // 영문 키가 그대로 화면에 찍히므로(실측: "child") 전부 적어 둔다.
+  const MEM_KO = {
+    meal: '밥을 먹었다', work_done: '일을 마쳤다', small_talk: '수다를 떨었다',
+    play_time: '놀았다', drank: '한잔했다', binge: '폭식했다', hole_up: '틀어박혔다',
+    workout: '운동했다', read_time: '책을 읽었다', shopping: '장을 봤다',
+    home_meal: '집밥을 먹었다', fishing: '낚시했다', argument: '다퉜다',
+    helped: '누군가를 도왔다', was_helped: '도움을 받았다', new_neighbor: '새 이웃을 만났다',
+    unmet: '하려던 걸 못 했다', starving: '굶주렸다', lonely: '외로웠다',
+    party_info: '모임 소식을 들었다', relationship_changed: '사이가 달라졌다',
+    built_bed: '침대를 만들었다', found_item: '잃어버린 물건을 주웠다',
+    construct_work: '공사를 거들었다', sick: '앓아누웠다', healed: '병이 나았다',
+    love: '사랑에 빠졌다', wedding: '결혼했다', heartbreak: '이별했다',
+    elected: '시장으로 뽑혔다', voted: '투표했다', child: '아이를 얻었다',
+    club_joined: '모임에 들었다', heroic: '사람을 구했다', celebration: '축제를 즐겼다',
+    milestone: '마을의 큰일을 겪었다', welfare: '나라의 도움을 받았다', governed: '마을을 이끌었다',
+  };
+  const memories = [...(sim.memories ?? [])]
+    .sort((a, b) => (b.importance - a.importance) || (b.tick - a.tick))
+    .slice(0, 3)
+    .map((m) => ({
+      day: Math.floor(m.tick / 1440),
+      text: MEM_KO[m.kind] ?? m.kind,
+      who: m.subjectSimId != null ? nameOf(m.subjectSimId) : null,
+    }));
+  res.json({
+    simId,
+    title,
+    memories,
+    partner: partnerId === undefined ? null
+      : { id: partnerId, name: nameOf(partnerId), stage: w.partnerStage[sim.id] ?? null },
+    parents: parents.map((id) => ({ id, name: nameOf(id) })).filter((x) => x.name),
+    children: children.map((id) => ({ id, name: nameOf(id) })).filter((x) => x.name),
+    friends: rows.filter((r) => r.tier === 'friend').slice(0, 6),
+    rivals: rows.filter((r) => r.tier === 'rival').slice(-4).reverse(),
+    acquaintances: rows.filter((r) => r.tier === 'acquaintance').length,
+  });
+});
+
 // §23.1 일대기. sim=<id>면 그 사람의 일생, sim=-1(또는 생략)이면 마을 연대기.
 // 이벤트 로그는 30일 뒤 접히지만 이 표는 남는다 — "이 사람이 어떻게 살았는가"는
 // 지난 30일이 아니라 평생의 이야기다.
