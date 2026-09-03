@@ -294,6 +294,10 @@ function sendSnapshot(ws) {
 
 engine.onBatch((msg) => {
   for (const ws of clients) {
+    // #143 숨은 탭은 화면을 만들지 않는데도 250ms마다 전체 sims JSON을 받아 파싱했다.
+    // 그 클라이언트만 전송을 쉬고, 보일 때 최신 스냅샷 하나로 따라잡는다. 엔진과 다른
+    // 클라이언트는 계속 진행하며 send를 안 했으므로 해당 소켓의 seq에도 틈이 생기지 않는다.
+    if (ws.clientHidden) continue;
     if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, unlockedIndustries:msg.unlockedIndustries, plannedCenterCost: engine.world.logic.zone.plannedCenterCost });
     else send(ws, msg);
   }
@@ -309,6 +313,12 @@ wss.on('connection', async (ws) => {
     let msg;
     try { msg = JSON.parse(data); } catch { return; }
     if (msg.type === 'resync') sendSnapshot(ws); // 갭 감지 → 새 스냅샷 (PLAN §5)
+    else if (msg.type === 'visibility' && typeof msg.hidden === 'boolean') {
+      const wasHidden = ws.clientHidden === true;
+      ws.clientHidden = msg.hidden;
+      send(ws, { type: 'visibility', hidden: ws.clientHidden });
+      if (wasHidden && !ws.clientHidden) sendSnapshot(ws);
+    }
   });
   ws.on('close', () => {
     clients.delete(ws);

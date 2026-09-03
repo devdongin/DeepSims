@@ -946,6 +946,20 @@ window.__diag = () => ({
   heapMB: performance.memory ? +(performance.memory.usedJSHeapSize / 1048576).toFixed(1) : null,
 });
 
+// #143 장시간 검증용. ?diag=1에서만 현재 진단값을 DOM 속성 하나에 덮어써서,
+// 콘솔 전역에 접근할 수 없는 자동 브라우저도 같은 __diag 결과를 읽을 수 있게 한다.
+// 누적 배열/DOM은 만들지 않으며 일반 플레이에는 타이머 자체가 없다.
+if (new URLSearchParams(location.search).get('diag') === '1') {
+  const publishDiag = () => {
+    try { document.documentElement.dataset.deepsimsDiag = JSON.stringify(window.__diag()); }
+    catch { /* 모듈의 뒤쪽 게임 객체가 초기화되기 전이면 다음 수집에서 기록 */ }
+  };
+  window.__publishDiag = publishDiag;
+  setTimeout(publishDiag, 0);
+  setInterval(publishDiag, 60_000);
+  document.addEventListener('visibilitychange', publishDiag);
+}
+
 const game = new Phaser.Game({
   type: Phaser.CANVAS, // 임베디드 브라우저의 WebGL 프레임버퍼 이슈 회피
   parent: 'game',
@@ -2958,11 +2972,17 @@ async function showReport() {
 
 // ---- WebSocket ----
 let wsRef = null;
+const forcePausedStream = new URLSearchParams(location.search).get('stream') === 'paused'; // #143 진단 전용
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws`);
   wsRef = ws;
   lastSeq = -1;
+
+  // #143 숨은 탭에서는 서버 배치를 받지 않는다. 브라우저가 보이지 않는 동안 전체
+  // sims JSON을 계속 파싱해 버리던 할당 폭주를 막고, 복귀 시 서버의 최신 snapshot
+  // 하나로 회복한다. 시뮬레이션 자체와 다른 뷰어의 스트림은 계속 진행한다.
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'visibility', hidden: document.hidden || forcePausedStream }));
 
   ws.onmessage = (raw) => {
     const msg = JSON.parse(raw.data);
@@ -3008,6 +3028,7 @@ function connect() {
         sparkHist.length = 0; // 재접속 시 이전 세션 잔존 제거 (Codex 48차 P3)
         applyWeather();
         updateStats();
+        window.__publishDiag?.(); // #143 ?diag=1 초기 snapshot 직후의 안정된 기준값
         break;
       case 'tickBatch':
         if (!world) return;
@@ -3107,6 +3128,12 @@ function connect() {
   };
 }
 connect();
+
+document.addEventListener('visibilitychange', () => {
+  if (wsRef?.readyState === WebSocket.OPEN) {
+    wsRef.send(JSON.stringify({ type: 'visibility', hidden: document.hidden || forcePausedStream }));
+  }
+});
 
 // ---- §18.T1 시정 운영 패널 ----
 (() => {
