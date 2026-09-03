@@ -15,7 +15,7 @@ import { TILE, isRoadProtected } from './map.js';
 import { isResidence, isAvailableResidence } from './map.js';
 import { isSettlementInTransit } from './settlement.js';
 import { learnToken as learnTokenRef } from './planning.js';
-import { maybeRoadWorks } from './roads.js';
+import { maybeRoadWorks, roadMaintenanceVillage } from './roads.js';
 import { applyBirthTalent } from './genius.js';
 import { updateEducation, canWork } from './education.js';
 import { governmentFor, PRIMARY_GOVERNMENT, changeReputation } from './government.js';
@@ -1084,6 +1084,7 @@ export function maybeFiscalReview(world, t, day, emit) {
 // (자재를 마을 밖에서 산다). 국고만 깎고 기록하지 않으면 G1 보존식이 깨진다.
 // 공채로는 포장하지 않는다 — 부채는 임금 보장 전용이다(사용자: "국고가 충분할 때").
 export function maybePublicWorks(world, t, day, emit) {
+  const root = world.rootWorld ?? world;
   const P = world.logic.publicWorks;
   const E = world.logic.election;
   if (P.paveMaxPerDay === 0 || P.paveCostPerTile === 0) return; // A/B 스위치
@@ -1095,7 +1096,7 @@ export function maybePublicWorks(world, t, day, emit) {
   if (tillElection <= E.campaignDays) return;
   if (day % world.logic.fiscal.reviewIntervalDays !== 0) return; // 재정 리뷰와 같은 주기
   const mayor = world.sims.find((s) => s.id === world.mayorId);
-  if (!mayor || mayor.isPlayer) return; // 플레이어 시장은 직접 통치한다
+  if (!mayor || !canWork(mayor) || mayor.isPlayer) return; // 플레이어 시장은 직접 통치한다
   // 국고가 충분할 때만 — §22.20·§22.22와 같은 기준을 본다
   const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
   if (world.treasury <= floorDiv(cashTotal * E.hoardRatioPct, 100)) return;
@@ -1112,6 +1113,7 @@ export function maybePublicWorks(world, t, day, emit) {
   for (const [k, v] of Object.entries(world.wear ?? {})) {
     const idx = Number(k);
     if (!Number.isSafeInteger(idx) || !Number.isSafeInteger(v)) continue;
+    if (roadMaintenanceVillage(root, idx) !== (world.municipalityId ?? PRIMARY_GOVERNMENT)) continue;
     if (v >= threshold) cands.push([idx, v]);
   }
   cands.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]));
@@ -1123,11 +1125,11 @@ export function maybePublicWorks(world, t, day, emit) {
     // (121차 ②) — 비용 검사 뒤에 두면 국고가 마른 날의 stale 엔트리가 다음 리뷰까지
     // 남고, remainingCandidates가 실제 미처리 수와 어긋난다.
     if (world.map.tiles[idx] !== TILE.GRASS) { delete world.wear[idx]; stale++; continue; }
-    if (isRoadProtected(world.map, idx % world.map.w, Math.floor(idx / world.map.w))) continue;
+    if (isRoadProtected(root.map, idx % root.map.w, Math.floor(idx / root.map.w))) continue;
     if (paved.length >= P.paveMaxPerDay) continue; // 포장은 상한까지, 정리는 끝까지
     if (world.treasury - P.paveCostPerTile <= 0) continue; // 공채로 포장하지 않는다
     world.treasury -= P.paveCostPerTile;
-    world.externalOutflow = (world.externalOutflow ?? 0) + P.paveCostPerTile;
+    root.externalOutflow = (root.externalOutflow ?? 0) + P.paveCostPerTile;
     world.map.tiles[idx] = TILE.ROAD; // road_formed와 동일한 효과
     delete world.wear[idx];
     paved.push(idx);

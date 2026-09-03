@@ -1543,7 +1543,7 @@ export function tick(world, inputsForThisTick = []) {
           maybeElection(local,t,day,localEmit);
           maybeFiscalReview(local,t,day,localEmit);
         }
-        maybePublicWorks(world, t, day, emit); // §22.26 순서 고정: 선거 → 재정 → 공공사업 (120차 ⑥)
+        for(const local of governmentViews(world))maybePublicWorks(local, t, day, governmentEmitter(local,emit)); // 선거 → 재정 → 공공사업
         for(const local of governmentViews(world))maybePlanCenter(local, t, day, governmentEmitter(local,emit));
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.

@@ -4,7 +4,10 @@ export const PRIMARY_GOVERNMENT='village:0';
 export function newGovernment(){
   return {treasury:0,reputation:0,mayorId:null,policy:{},lastElectionDay:-1,
     termStartPolicy:null,lastFiscalDay:-1,playerPolicyDay:-1,campaigners:[],
-    childAllowanceDay:-1,statsHistory:[],petitions:{}};
+    childAllowanceDay:-1,lastPublicWorksDay:-1,statsHistory:[],petitions:{}};
+}
+export function initializeMunicipalWorks(world){
+  for(const v of world.villages??[])if(v.id!==PRIMARY_GOVERNMENT)v.government.lastPublicWorksDay??=-1;
 }
 export function initializeGovernments(world){
   for(const v of world.villages??[])if(v.id!==PRIMARY_GOVERNMENT)v.government??=newGovernment();
@@ -39,8 +42,10 @@ export function governmentViews(world){
       map:{...world.map,facilities:world.map.facilities.filter(f=>(f.villageId??PRIMARY_GOVERNMENT)===v.id)},
       // Aggregate complaints have no simId. Membership evidence lives on each
       // resident's complaintDays, so don't import another town's grievances.
-      complaints:(world.complaints??[]).filter(c=>sims.some(s=>s.complaintDays?.[c.kind]!==undefined
-        &&day-s.complaintDays[c.kind]<=window))};
+      complaints:(world.complaints??[]).filter(c=>c.kind==='road_detour'
+        ?(c.villageId??PRIMARY_GOVERNMENT)===v.id
+        :sims.some(s=>s.complaintDays?.[c.kind]!==undefined
+          &&day-s.complaintDays[c.kind]<=window))};
     for(const key of FIELDS)Object.defineProperty(view,key,{enumerable:true,configurable:true,
       get:()=>authority[key],set:value=>{authority[key]=value;}});
     if(v.id===PRIMARY_GOVERNMENT)Object.defineProperty(view,'statsHistory',{enumerable:true,configurable:true,
