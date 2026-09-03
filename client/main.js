@@ -2391,14 +2391,6 @@ $('an-btn').addEventListener('click', async () => {
   });
 });
 
-// #103 성까지 적었을 법한 길이(4자 이상)면 "성은 마을이 정해 준다" 안내를 살짝 강조한다.
-// 경고도 자동 수정도 하지 않는다 — 이름 확정은 서버(§22.16) 몫이다.
-function markLongName(name) {
-  const hint = $('ob-name-hint');
-  if (hint) hint.style.color = name.length >= 4 ? '#ffd97a' : '#8f88a0';
-}
-$('ob-name')?.addEventListener('input', (e) => markLongName(e.target.value.trim()));
-
 $('ob-submit').addEventListener('click', async () => {
   // §22.17 고르는 것은 이름·성별·MBTI **셋뿐**이다. 나이와 직업은 세계가 정한다 —
   // 나이는 시드에서, 직업은 능력치 적성에서. 서버가 결정하므로 여기서 보내지 않는다.
@@ -2407,11 +2399,11 @@ $('ob-submit').addEventListener('click', async () => {
   const axisVal = (letter, first) => (letter === first ? 25 : 75); // 글자 → 축 값 (완만한 극단)
   const payload = {
     name,
+    nameMode: 'full',
     gender: $('ob-gender').value,
     mbti: { EI: axisVal(type[0], 'E'), SN: axisVal(type[1], 'S'), TF: axisVal(type[2], 'T'), JP: axisVal(type[3], 'J') },
   };
   if (!name) { $('ob-error').textContent = '이름을 입력하세요'; return; }
-  markLongName(name); // #103 안내 강조만, 값은 손대지 않고 그대로 보낸다
   const res = await fetch('/api/input', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ clientInputId: crypto.randomUUID(), command: 'create_player', payload }),
