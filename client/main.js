@@ -162,7 +162,7 @@ const PROP_KEYS = ['tree', 'bed', 'cafe_table', 'desk', 'bench', 'streetlamp', '
   // 에셋 에이전트가 다섯 회차 연속 이 키를 요청했는데 **배선이 없어서** 만들어도 안 보였다.
   // 배선을 먼저 둔다: 파일이 아직 없으면 loadImagesNative가 null로 받고 exists()가 false라
   // 아래 drawGardens가 통째로 건너뛴다 — 즉 지금은 무해하고, PNG가 생기는 순간 살아난다.
-  'tile_garden', 'wall_stone', 'hedge_low', 'flower_row', 'path_stone', 'garden_pot']
+  'tile_garden', 'wall_stone', 'hedge_low', 'flower_row', 'path_stone', 'garden_pot', 'tree_young']
   .map((p) => [p, `./props/${p}.png`]);
 
 function loadImagesNative() {
@@ -535,6 +535,12 @@ class TownScene extends Phaser.Scene {
           if (t !== 1 && t !== 2 && this.textures.exists('path_stone') && (x * 2 + y) % 5 === 0) {
             const ps = this.add.image(isoX(x, y), isoY(x, y) - 2, 'path_stone').setDisplaySize(TW, 24).setDepth(-6);
             this.gardenSprites.push(ps);
+          }
+          // §22.80 어린 나무 — 정원 안쪽에 13칸 주기. 기존 tree(160×160, h=42)는 숲 타일용이고
+          // 이건 정원용 소품이라 크기·주기가 다르다. 화단 7·디딤돌 5와 서로소라 겹침이 드물다.
+          if (t !== 1 && t !== 2 && this.textures.exists('tree_young') && (x * 5 + y * 3) % 13 === 0) {
+            const ty = this.add.image(isoX(x, y), isoY(x, y) - 6, 'tree_young').setDisplaySize(TW, 24).setDepth(isoY(x, y));
+            this.gardenSprites.push(ty);
           }
           // §22.76 화분은 단품이라 드물게 놓는다 — 잔디 가장자리(정원 첫 줄·끝 줄)에만 11칸 주기.
           if (this.textures.exists('garden_pot') && (y === fac.y || y === fac.y + fac.h - 1) && (x * 3 + y) % 11 === 0) {
