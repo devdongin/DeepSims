@@ -111,8 +111,8 @@ export const KSIC = [
   },
   {
     code: 'P', nameKo: '교육 서비스업',
-    facilityTypes: ['school', 'university', 'library'], occupations: ['teacher'],
-    actions: ['read'],
+    facilityTypes: ['primary_school','middle_school','high_school', 'university', 'library'], occupations: ['teacher'],
+    actions: ['read', 'study'],
     // 109차 ②: student를 종사자로 세면 **고용 없이도 학교가 active**가 된다. 학생은
     // 이 산업의 이용자이지 종사자가 아니다. 별도로 participants에 센다.
     participantOccupations: ['student'],

@@ -7,6 +7,7 @@ import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 import { SCHEMA_VERSION } from './constants.js';
+import { newEducation } from './education.js';
 import { surnameFor } from './surnames.js';
 import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단일 정의 공유
 
@@ -204,6 +205,18 @@ export function migrateWorld(world) {
   }
   if (from < 54) {
     for (const sim of world.sims) { sim.isGenius ??= false; sim.geniusBirth ??= null; }
+  }
+  if (from < 55) {
+    for (const sim of world.sims) {
+      sim.education ??= newEducation();
+      // Legacy adult students must not silently become workers. Their historical
+      // credits/start date are unknown: begin tracking now, never invent a degree.
+      if (sim.traits.occupation === 'student' && sim.traits.age >= 19 && !sim.education.course) {
+        sim.education.course='university';sim.education.courseStartAge=sim.traits.age;
+        sim.education.wantsUniversity=true;
+      }
+    }
+    world.map.facilities = world.map.facilities.map(f => f.type === 'school' ? {...f,type:'primary_school'} : f);
   }
   if (from < 33) {
     // §20.3 사회적 중력: 새 파라미터는 mergeLogicDefaults가 설치한다. 세계 데이터 이관은 없다 —

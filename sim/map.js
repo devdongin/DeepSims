@@ -294,7 +294,7 @@ export function addSocietyVenuesTo(tiles, facilities, W) {
   if (!facilities.some((f) => f.id === 'school')) {
     bld(44, 56, 7, 5, 47, 56);
     facilities.push({
-      id: 'school', type: 'school', x: 44, y: 56, w: 7, h: 5, door: { x: 47, y: 56 },
+      id: 'school', type: 'primary_school', x: 44, y: 56, w: 7, h: 5, door: { x: 47, y: 56 },
       resources: [0, 1, 2].map((k) => ({
         id: `slot${k}`, kind: 'slot', x: 45 + k * 2, y: 58,
       })),
@@ -381,6 +381,7 @@ export function rotatedSize(w0, h0, dir) { return dir % 2 === 0 ? { w: w0, h: h0
 
 // §18.T2: 타입별 기본 footprint (dir 0 기준) — zone 검증·회전 치수의 단일 권위
 export const ZONE_DIMS = { house: [6, 5], cafe: [7, 5], office: [7, 5], park: [7, 5],
+  primary_school: [8,6], middle_school: [8,6], high_school: [8,6],
   apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [8, 6] }; // §18.T3
 // §18.T3: 주거 시설 판정 단일 권위 — 이민·합가·자녀·완공 이사·수면(HOME_ONLY는 homeId 기준이라 무관)
 export function isResidence(f) { return f.type === 'house' || f.type === 'apartment'; }
@@ -463,7 +464,7 @@ export function addBuilding(map, type, plot, dir = 0) {
         { id: 'seat2', kind: 'seat', x: x + 6, y: y + 4 },
       ],
     };
-  } else if (type === 'university') { // §18.T3: 학생 근무 확장 + 졸업 가중
+  } else if (['university','primary_school','middle_school','high_school'].includes(type)) {
     bld(x, y, 8, 6, x + 4, y + 5);
     fac = {
       id, type, x, y, w: 8, h: 6, door: { x: x + 4, y: y + 5 },

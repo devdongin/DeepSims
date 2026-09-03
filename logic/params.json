@@ -1,5 +1,8 @@
 {
-  "logicSchemaVersion": 49,
+  "logicSchemaVersion": 50,
+  "education": { "annualTuition": 2000, "degreeStudyTicks": 20000, "bachelorYears": 4, "mastersYears": 2, "doctorateYears": 4,
+    "mastersStudyTicks": 10000, "doctorateStudyTicks": 20000, "postgraduatePctFactor": 50,
+    "studyDeficit": 6500, "dailyStudyTicks": 240, "startMinute": 540, "endMinute": 900 },
   "development": {
     "geniusMin": 120, "geniusMax": 150,
     "birthPct": 10, "adultPct": 70, "matureAge": 25, "ticksPerPoint": 7200,
@@ -18,6 +21,7 @@
     "oldEnergyAdd": 2
   },
   "actions": {
+    "study": { "duration": 60, "cost": 0 },
     "respond_fire": {
       "duration": 60,
       "recoverPerTick": 0,
@@ -129,9 +133,9 @@
       "weekendWork": true
     },
     "student": {
-      "workStart": 840,
-      "workEnd": 1200,
-      "wagePct": 50,
+      "workStart": 540,
+      "workEnd": 900,
+      "wagePct": 0,
       "startMoney": 500
     },
     "retired": {
@@ -225,13 +229,13 @@
     "barista": "cafe",
     "freelancer": "office",
     "student": [
-      "school",
+      "primary_school", "middle_school", "high_school",
       "university"
     ],
     "retired": "office",
     "doctor": "hospital",
     "civil_servant": "city_hall",
-    "teacher": "school",
+    "teacher": ["primary_school", "middle_school", "high_school", "university"],
     "police": "police_station",
     "firefighter": "fire_station",
     "nurse": "hospital",
@@ -239,7 +243,7 @@
     "worker": "factory",
     "chef": "restaurant",
     "clerk": "market",
-    "child": "school",
+    "child": "primary_school",
     "jobless": null
   },
   "persFactor": {
@@ -494,6 +498,9 @@
       "bar": 6000,
       "office": 8000,
       "school": 8000,
+      "primary_school": 8000,
+      "middle_school": 10000,
+      "high_school": 12000,
       "gym": 8000,
       "library": 8000,
       "hospital": 10000,
@@ -515,8 +522,8 @@
   "society": {
     "immigrationIntervalDays": 3,
     "yearDays": 120,
-    "schoolAge": 15,
-    "graduateAge": 26,
+    "schoolAge": 7,
+    "graduateAge": 23,
     "retireAge": 65,
     "festivalDays": 30,
     "childCheckDays": 30
@@ -651,7 +658,10 @@
       "apartment": 6000,
       "factory": 8000,
       "mall": 8000,
-      "university": 10000
+      "university": 10000,
+      "primary_school": 4000,
+      "middle_school": 5000,
+      "high_school": 6000
     },
     "demolitionCostPerTile": 200,
     "plannedCenterCost": 5000,
@@ -687,6 +697,7 @@
       "hospital",
       "city_hall",
       "school",
+      "primary_school", "middle_school", "high_school", "university",
       "police_station",
       "fire_station"
     ],

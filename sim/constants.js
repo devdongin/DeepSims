@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 54; // #96 출생 천재·독립 표시
+export const SCHEMA_VERSION = 55; // #96 학업 기록·진학 선택
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -19,12 +19,13 @@ export const NEED_MAX = 10000;
 // 확장은 뒤에 append (기존 타이브레이크 순서 보존). drink~build는 §15.1 로드맵 행동.
 export const ACTIONS = ['eat', 'sleep', 'work', 'socialize', 'play', 'idle',
   'drink', 'binge_eat', 'hole_up', 'exercise', 'build',
-  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire'];
+  'read', 'shop', 'fish', 'cook_eat', 'construct', 'see_doctor', 'respond_fire', 'study'];
 export const COPING_ACTIONS = ['drink', 'binge_eat', 'hole_up', 'exercise'];
 export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat']; // 자기 집 시설만 후보
 
 // 행동 → 시설 타입 (구조), 행동 → 회복 욕구 (구조)
 export const ACTION_FACILITY = {
+  study: ['primary_school', 'middle_school', 'high_school', 'university'],
   eat: ['cafe', 'restaurant'], sleep: ['house', 'apartment'], work: ['office'],
   socialize: ['cafe', 'park'], idle: [],
   drink: ['bar'], binge_eat: ['cafe', 'restaurant'], hole_up: ['house', 'apartment'], exercise: ['park', 'gym'], build: ['house'],
@@ -57,6 +58,8 @@ export const EVENT_TYPES = [
   'road_requested', 'road_work_planned',
   'ability_changed',
   'genius_born',
+  'education_decided', 'school_enrolled',
+  'school_planned',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];
