@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import vm from 'node:vm';
 import { Storage } from '../db/storage.js';
 import { selectChronicle, CHRONICLE_PRIORITY, PER_KIND_CAP, TOTAL_BUDGET } from '../server/chronicle.js';
 import { advance } from '../sim/index.js';
@@ -138,6 +139,20 @@ test('C4b. current bachelor/master/doctorate graduation events remain in the chr
   const st=storageWith(events);
   assert.deepEqual(st.getReport(0,2000).chronicle.map(e=>e.payload.course),['university','masters','doctorate']);
   st.close();
+});
+
+test('C4c. degree report text uses recorded names and does not invent a job after postgraduate admission', () => {
+  const source=fs.readFileSync(new URL('../client/main.js',import.meta.url),'utf8');
+  const start=source.indexOf('function chronicleText('),end=source.indexOf('\nfunction pushFeed(',start);
+  assert.ok(start>=0&&end>start);
+  const render=vm.runInNewContext(`(${source.slice(start,end).trim()})`,{ga:s=>s});
+  for(const [course,label] of [['university','학부'],['masters','석사'],['doctorate','박사']]){
+    const text=render({simId:999,type:'education_decided',payload:{choice:'degree',course}},()=> '기록된 이름');
+    assert.ok(text.includes(`기록된 이름 ${label} 과정을 졸업`));
+  }
+  const text=render({simId:999,type:'education_decided',payload:{choice:'postgraduate',course:'doctorate'}},()=> '학생');
+  assert.ok(text.includes('박사 과정에 진학'));assert.ok(!/취업|근무|전직/.test(text));
+  assert.ok(!source.includes(' · 식사 ${rep.totals?.meals'), '사용자 식사 횟수 미표시 요구 유지');
 });
 
 test('C5. 총계 한 줄: 심별 나열 대신 스칼라 + 최대 증감자 (동률은 sim_id 낮은 쪽)', () => {
