@@ -60,7 +60,9 @@ test('#93 partial rent transfers only available cash and records the exact short
 
 test('#93 v59 migration adds public ownership and empty market ledgers without RNG draws',()=>{
  const w=createWorld(93),rng=JSON.stringify(w.rngSim);w.schemaVersion=59;delete w.facilityUseToday;delete w.housingMarket;delete w.rentPressure;
+ w.logic.logicSchemaVersion=56;delete w.logic.housing;
  for(const f of w.map.facilities)delete f.ownerSimId;migrateWorld(w);
  assert.equal(w.schemaVersion,60);assert.ok(w.map.facilities.filter(f=>['house','apartment'].includes(f.type)).every(f=>f.ownerSimId===null));
  assert.equal(JSON.stringify(w.rngSim),rng);assert.deepEqual(w.rentPressure,{});
+ assert.equal(w.logic.logicSchemaVersion,57);assert.ok(w.logic.housing.baseRent>0);
 });
