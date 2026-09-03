@@ -125,17 +125,21 @@ function moodModFor(sim, action, L) {
 
 // 점수 코어: base=floorDiv(num×1e5, den) × persFactor — planFactor·보정 합산은 collectCandidates에서
 // (§G 순서: base × pers → × plan → + mods). 경계 증명은 PLAN §2.5.G.
-function scoreCandidate(sim, action, res, L) {
+function prepareCandidateScore(sim, action, L) {
   const deficit = NEED_MAX - needValueFor(sim, action, L);
-  const num = deficit * deficit * 16;
+  return { deficit, num: deficit * deficit * 16,
+    persFactor: persFactorFor(sim, action, L), moodMod: moodModFor(sim, action, L),
+    ignoresDistance: COPING_ACTIONS.includes(action) || action === 'respond_fire' };
+}
+function scoreCandidate(sim, action, res, L, prepared = null) {
+  const p = prepared ?? prepareCandidateScore(sim, action, L);
   // 대처 행동은 거리 무시 (den 고정 16) — 대처 방식 선택은 성격이 지배해야 한다 (§15.1.A).
   // 아니면 "집이 가까워서 은둔"이 항상 이겨 성격 변조가 무력화된다.
   // §17.20: 화재 출동도 거리 무시 — 불은 어디든 달려간다
-  const den = (COPING_ACTIONS.includes(action) || action === 'respond_fire') ? 16 : manhattan(sim.x, sim.y, res.x, res.y) + 16;
-  const base = floorDiv(num * SCORE_SCALE, den);
-  const pf = persFactorFor(sim, action, L);
-  const mm = moodModFor(sim, action, L);
-  return { core: floorDiv(base * pf, 100), deficit, persFactor: pf, moodMod: mm };
+  const den = p.ignoresDistance ? 16 : manhattan(sim.x, sim.y, res.x, res.y) + 16;
+  const base = floorDiv(p.num * SCORE_SCALE, den);
+  return { core: floorDiv(base * p.persFactor, 100), deficit: p.deficit,
+    persFactor: p.persFactor, moodMod: p.moodMod };
 }
 
 // 하드 제약 (assign·자율 결정 공통). t = 전이 틱.
@@ -237,14 +241,16 @@ function actionAllowed(world, sim, action, t) {
 }
 
 // §17.22: 시설 타입 인덱스 — facilities 배열 길이 변화 시에만 재구축 (append-only라 안전)
-let facIndexRef = null; let facIndexLen = -1; let facIndex = null;
+let facIndexRef = null; let facIndexLen = -1; let facIndex = null; let facIdIndex = null;
 function facilitiesByType(map) {
   if (facIndexRef !== map.facilities || facIndexLen !== map.facilities.length) {
     facIndex = new Map();
+    facIdIndex = new Map();
     for (const f of map.facilities) {
       let arr = facIndex.get(f.type);
       if (!arr) { arr = []; facIndex.set(f.type, arr); }
       arr.push(f);
+      facIdIndex.set(f.id, f);
     }
     facIndexRef = map.facilities; facIndexLen = map.facilities.length;
   }
@@ -259,6 +265,10 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
   const stateModCache = new Map(); // 같은 결정 내 시설별 캐시 (심 상태 불변 구간 — 결과 동일)
   let presence = null;             // §20.3 사교 후보가 처음 나올 때 한 번만 만든다
   const memoCache = new Map(); // (action|facility) → {mm, pl} — 자원들이 공유 (결과 동일, §17.22)
+  // Decision-local only: reservations/cooldowns may change before the next sim or tick.
+  // Preserve resource order; own reservations remain available, not counted as full.
+  const availableCache = new Map();
+  const home = facIdIndex.get(sim.homeId);
   const candTags = ['', '']; // 재사용 버퍼 (memoryModFast는 동기 소비)
   for (const action of actions) {
     if (action === 'idle') continue;
@@ -349,40 +359,54 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
     const ftypes = action === 'work'
       ? [].concat(L.workplace[sim.traits.occupation]) // §18.T3: 배열 허용 (student → school|university)
       : action === 'study' ? [schoolFor(sim)] : ACTION_FACILITY[action];
+    let preparedScore = null; // Same sim/action: only distance changes between seats.
     for (const ftype of ftypes) {
-      for (const fac of (byType.get(ftype) ?? [])) {
-        if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue; // 자기 집만 (§15.1)
+      const facilities = HOME_ONLY_ACTIONS.includes(action)
+        ? (home?.type === ftype ? [home] : []) : (byType.get(ftype) ?? []);
+      for (const fac of facilities) {
         if (world.incidents.some((inc) => inc.facilityId === fac.id)) continue; // §17.20 화재 중 사용 불가
+        let available = availableCache.get(fac.id);
+        if (!available) {
+          available = [];
+          for (const res of fac.resources) {
+            const key = resKey(fac.id, res.id);
+            const holder = world.reservations[key];
+            if (holder !== undefined && holder !== sim.id) continue;
+            const cool = sim.noPathCool[key];
+            if (cool !== undefined && t < cool) continue;
+            available.push(res);
+          }
+          availableCache.set(fac.id, available);
+        }
+        if (available.length === 0) continue;
         const facTag = `facility:${fac.id}`; // 자원 루프 밖 1회
         // §17.22: (action, 시설) 단위 공유 계산 — 자원(좌석)별로 동일한 값 재사용 (결과 동일)
         const memoKey = action + '|' + fac.id;
         let memo = memoCache.get(memoKey);
-        if (!memo) {
-          const pl0 = (ctx && ctx.urgency)
-            ? { factor: 100, partyPull: false }
-            : planFactorFor(world, sim, action, fac.id, t, L);
-          let mm0 = null;
-          if (ctx) {
-            candTags[0] = action; candTags[1] = facTag;
-            mm0 = memoryModFast(ctx.prep, candTags, L);
-          }
-          memo = { pl: pl0, mm: mm0 };
-          memoCache.set(memoKey, memo);
-        }
-        for (const res of fac.resources) {
-          const holder = world.reservations[resKey(fac.id, res.id)];
-          if (holder !== undefined && holder !== sim.id) continue;
-          const cool = sim.noPathCool[`${fac.id}:${res.id}`];
-          if (cool !== undefined && t < cool) continue; // §17.23 no_path 쿨다운
-          // §18.T3 mall 복합 자원: shop은 계산대(till), play는 좌석(seat)만 (51차 합의 명시)
+        for (const res of available) {
+          // Action-dependent mall filtering must not leak into the shared availability cache.
           if (fac.type === 'mall' && ((action === 'shop' && res.kind !== 'till') || (action === 'play' && res.kind !== 'seat'))) continue;
-          const sc = scoreCandidate(sim, action, res, L);
+          if (!memo) {
+            const pl0 = (ctx && ctx.urgency)
+              ? { factor: 100, partyPull: false }
+              : planFactorFor(world, sim, action, fac.id, t, L);
+            let mm0 = null;
+            if (ctx) {
+              candTags[0] = action; candTags[1] = facTag;
+              mm0 = memoryModFast(ctx.prep, candTags, L);
+            }
+            memo = { pl: pl0, mm: mm0 };
+            memoCache.set(memoKey, memo);
+          }
+          preparedScore ??= prepareCandidateScore(sim, action, L);
+          const sc = scoreCandidate(sim, action, res, L, preparedScore);
           const pl = memo.pl;
           // §16.D: 우천 야외 축소 계수 — §G 곱셈 체인 확장 (base×pers×plan×weather, 축소만이라 경계 보존)
           const weatherFactor = (world.weather?.kind === 'rain' && OUTDOOR_FACILITIES.includes(ftype))
             ? L.weather.outdoorRainFactor : 100;
           const cand = {
-            action, facilityId: fac.id, resourceId: res.id, res, ...sc,
+            action, facilityId: fac.id, resourceId: res.id, res,
+            core: sc.core, deficit: sc.deficit, persFactor: sc.persFactor, moodMod: sc.moodMod,
             planFactor: pl.factor, partyPull: pl.partyPull, weatherFactor,
             score: floorDiv(floorDiv(sc.core * pl.factor, 100) * weatherFactor, 100) + sc.moodMod,
             memoryMod: 0, stateMod: 0, habitMod: 0, cited: [],
