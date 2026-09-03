@@ -2552,7 +2552,15 @@ $('ob-submit').addEventListener('click', async () => {
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
 
+// §22.102 요약은 **세션에 한 번**만 띄운다 (사용자 지적: "48배속으로 돌리다보면 게임이
+// 잠깐 멈췄다가 요약으로 보여주는데 문제가 있는 것 같다"). 고배속에서는 리싱크 스냅샷이
+// 주기적으로 오는데, 스냅샷 처리에서 showReport를 부르고 있었다 — 그래서 플레이 도중
+// "부재중 리포트"가 반복해서 튀어나왔다. 부재중 요약은 **돌아왔을 때 한 번** 보는 것이다.
+let reportShown = false;
+let lastWorldKey = null; // §22.102 전면 재빌드가 필요한지 판단하는 지도 서명
 async function showReport() {
+  if (reportShown) return;
+  reportShown = true;
   const cursor = Number(lsGet('deepsims.lastSeenTick') || 0);
   const rep = await fetch(`/api/report?cursor=${cursor}`).then((r) => r.json());
   lsSet('deepsims.lastSeenTick', String(rep.nextCursor));
@@ -2562,7 +2570,8 @@ async function showReport() {
   lines.push(`당신이 없는 동안 게임 시간 ${Math.floor(hours / 24)}일 ${hours % 24}시간이 흘렀습니다.`);
   const count = (t) => rep.counts.find((c) => c.type === t)?.n ?? 0;
   lines.push(`완료된 행동 ${count('action_completed')}건, 말다툼 ${count('argument')}건, 굶주림 ${count('starving')}건.`);
-  for (const m of rep.meals) lines.push(`· ${simName(m.sim_id)}: 식사 ${m.n}회`);
+  // §22.102 식사 횟수는 뺀다 (사용자 지적: "요약에 식사 몇회 했는지 적는건 별로인 것 같다").
+  // 심마다 '몇 회 먹었다'는 이야기가 아니라 계기판이다 — 요약은 무슨 일이 있었는지를 말해야 한다.
   for (const w of rep.works) lines.push(`· ${simName(w.sim_id)}: 근무 ${w.n}회`);
   for (const mo of rep.moneyBySim) lines.push(`· ${simName(mo.sim_id)}: 잔액 ${mo.delta > 0 ? '+' : ''}${mo.delta}원 변동`);
   if (rep.highlights.length) {
@@ -2625,7 +2634,17 @@ function connect() {
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
-        if (scene) { destroySimSprites(); scene.drawWorld(); }
+        {
+          // §22.102 **스냅샷마다 지도를 통째로 다시 그려서 화면이 멈췄다.** 리싱크는 고배속에서
+          // 주기적으로 오는데 그때마다 스프라이트 수천 개를 부수고 다시 만들었다.
+          // 시설 수·타일 버전이 그대로면 다시 그릴 이유가 없다 — 심 위치는 tickBatch가 옮긴다.
+          const key = `${world.map.facilities.length}:${world.map.tiles.length}:${world.terrainVersion ?? 0}`;
+          if (scene && key !== lastWorldKey) {
+            lastWorldKey = key;
+            destroySimSprites();
+            scene.drawWorld();
+          }
+        }
         showReport();
         maybeShowOnboarding();
         renderPanel();
@@ -2924,8 +2943,59 @@ setInterval(pushSpark, 5000);
     const last = hist[hist.length - 1];
     const happiness = Math.round(((last.avgMood + 10000) / 200)); // mood -10000..10000 → 0..100%
     const emp = last.pop > 0 ? Math.round(last.employed * 100 / last.pop) : 0;
-    document.getElementById('dash-cards').textContent =
-      `😊 행복도 ${happiness}% · 💼 고용률 ${emp}% · 👥 ${last.pop}명 · 🏛️ ${last.treasury.toLocaleString()}원 · ⭐ 평판 ${last.reputation} · ${['🏡 마을','🏘️ 읍','🏙️ 시','🌆 대도시'][last.tier]}`;
+    // §22.103 **세계 상태를 한 화면에서 본다** (사용자 요청). 한 줄 카드로는 무엇이 막혀
+    // 있는지 안 보인다. 화면이 이미 들고 있는 world에서 계산한다 — 서버 왕복 없음.
+    // 고르는 기준: **막힌 곳이 보이는 수치**만 넣는다. 침대 여유는 인구 상한(#122),
+    // 공공직 비율은 재정 적자의 원인(#113), 배고픔·외로움은 G5(고통이 보인다)다.
+    const simsAll = world?.sims ?? [];
+    // 스냅샷에는 logic이 오지 않는다(§22.8 투영은 화면이 쓰는 필드만 보낸다). 임금 재원
+    // 구분은 sim/logic.js의 화이트리스트와 같은 값을 여기 둔다 — 바뀌면 QA-19가 직업
+    // 커버리지에서 먼저 잡는다.
+    const pubSet = new Set(['doctor', 'nurse', 'teacher', 'civil_servant', 'politician', 'police', 'firefighter']);
+    const privSet = new Set(['barista', 'chef', 'clerk']);
+    const beds = (world?.map?.facilities ?? [])
+      .filter((f) => f.type === 'house' || f.type === 'apartment')
+      .reduce((n, f) => n + (f.resources?.length ?? 0), 0);
+    const workers = simsAll.filter((x) => !['child', 'retired', 'student', 'jobless'].includes(x.traits?.occupation));
+    const pubN = workers.filter((x) => pubSet.has(x.traits?.occupation)).length;
+    const privN = workers.filter((x) => privSet.has(x.traits?.occupation)).length;
+    const low = (x, k) => (x.needs?.[k] ?? 9999) < 2000;
+    const hungry = simsAll.filter((x) => low(x, 'hunger')).length;
+    const lonely = simsAll.filter((x) => low(x, 'social')).length;
+    const tired = simsAll.filter((x) => low(x, 'energy')).length;
+    const sickN = simsAll.filter((x) => x.sick).length;
+    const broke = simsAll.filter((x) => (x.money ?? 0) < 300).length;
+    const avgMoney = simsAll.length ? Math.round(simsAll.reduce((n, x) => n + (x.money ?? 0), 0) / simsAll.length) : 0;
+    const facByType = {};
+    for (const f of world?.map?.facilities ?? []) facByType[f.type] = (facByType[f.type] ?? 0) + 1;
+    let road = 0; let side = 0;
+    for (const t of world?.map?.tiles ?? []) { if (t === 1) road++; else if (t === 12) side++; }
+    const h7 = hist.slice(-8);
+    const slope = h7.length >= 2 ? Math.round((h7[h7.length - 1].treasury - h7[0].treasury) / (h7.length - 1)) : 0;
+    const pct = (n) => (simsAll.length ? Math.round(n * 100 / simsAll.length) : 0);
+    const couples = Math.floor(Object.keys(world?.partners ?? {}).length / 2);
+
+    const rows = [
+      ['사람', `👥 ${last.pop}명 · 😊 행복 ${happiness}% · 💼 고용 ${emp}% · 💑 커플 ${couples}쌍`],
+      ['주거', `🛏️ 침대 ${beds}개 · 여유 ${beds - last.pop}개${beds - last.pop <= 0 ? '  ⚠️ 이민이 막힌다' : ''}`],
+      ['일자리', `🏛️ 공공 ${pubN} · 🏪 민간서비스 ${privN} · 그 밖 ${workers.length - pubN - privN}` + (workers.length ? ` (공공 ${Math.round(pubN * 100 / workers.length)}%)` : '')],
+      ['살림', `🏛️ ${last.treasury.toLocaleString()}원 · 하루 ${slope >= 0 ? '+' : ''}${slope.toLocaleString()}원 · 평균 소지금 ${avgMoney.toLocaleString()}원`],
+      ['고통', `🍚 배고픔 ${hungry}(${pct(hungry)}%) · 😔 외로움 ${lonely} · 😴 피로 ${tired} · 🤒 아픔 ${sickN} · 💸 빈곤 ${broke}`],
+      ['도시', `🏗️ 시설 ${(world?.map?.facilities ?? []).length}곳 · 🛣️ 도로 ${road} · 🚶 인도 ${side} · ⭐ 평판 ${last.reputation}`],
+      ['구성', Object.entries(facByType).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k === 'house' ? '집' : k === 'apartment' ? '아파트' : (PLACE_KO[k] ?? k)} ${v}`).join(' · ')],
+    ];
+    const box = document.getElementById('dash-cards');
+    box.replaceChildren(...rows.map(([label, text]) => {
+      const d = document.createElement('div');
+      d.style.cssText = 'display:flex;gap:8px;margin:3px 0;line-height:1.5';
+      const lb = document.createElement('span');
+      lb.textContent = label;
+      lb.style.cssText = 'color:#8f88a0;min-width:52px;flex:0 0 auto';
+      const vv = document.createElement('span');
+      vv.textContent = text;
+      d.append(lb, vv);
+      return d;
+    }));
   }
   btn.addEventListener('click', () => { modal.style.display = 'flex'; drawDash(); });
   document.getElementById('dash-close').addEventListener('click', () => { modal.style.display = 'none'; });
