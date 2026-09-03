@@ -940,15 +940,14 @@ export function maybeFiscalReview(world, t, day, emit) {
   const F = world.logic.fiscal;
   const E = world.logic.election;
   if (F.stepTaxPct === 0 && F.stepWelfare === 0) return; // A/B 대조군 스위치
-  if (world.mayorId === null) return;                    // 통치할 사람이 없다
   if (world.lastFiscalDay === day) return;               // 하루 1회
   if (day % E.intervalDays === 0) return;                // 선거일에는 선거가 우선이다
   // 리뷰 주기 또는 유세 시작일(Rogoff — 재선을 노리는 재임자는 선거 앞에서 움직인다)
   const campaignStart = (day % E.intervalDays) === (E.intervalDays - E.campaignDays);
   if (day % F.reviewIntervalDays !== 0 && !campaignStart) return;
-  const mayor = world.sims.find((s) => s.id === world.mayorId);
-  if (!mayor) return;
-  if (mayor.isPlayer) return; // 플레이어 시장은 UI로 직접 통치한다 (117차 ⑤)
+  const mayor = world.mayorId === null ? null : world.sims.find((s) => s.id === world.mayorId);
+  if (world.mayorId !== null && !mayor) return;
+  if (mayor?.isPlayer) return; // 플레이어 시장은 UI로 직접 통치한다 (117차 ⑤)
   // 플레이어가 이번 리뷰 주기 안에 정책을 만졌으면 존중한다 — 내구 입력을 시장이
   // 곧바로 되돌리면 입력의 의미가 훼손된다 (117차 ⑤).
   if (world.playerPolicyDay >= 0 && day - world.playerPolicyDay < F.reviewIntervalDays) return;
@@ -1005,11 +1004,11 @@ export function maybeFiscalReview(world, t, day, emit) {
   for (const k of Object.keys(changes)) before[k] = cur[k];
   world.policy = { ...world.policy, ...changes };
   emit('policy_changed', world.mayorId, {
-    source: 'mayor', reason, changes, before,
+    source: mayor ? 'mayor' : 'interim', reason, changes, before,
     treasury: world.treasury, cashTotal,
     campaign: campaignStart, // Rogoff 순환 관측용
   });
-  recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', reason] });
+  if (mayor) recordFact(mayor, t, world.logic, 'governed', { tags: ['politics', reason] });
 }
 
 // ---- §22.26 공공사업 — 사람들이 걷는 길을 정부가 포장한다 (사용자 지시) ----
