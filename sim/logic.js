@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 64, // §23.24 면역 이후 #32 개척 청원 지속 조건
+  logicSchemaVersion: 65, // §23.25 기분 바닥선 이후 #32 개척 경로
   founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
@@ -96,6 +96,15 @@ export const DEFAULT_LOGIC = {
   mood: {
     argument: -800, lonely: -400, starving: -1000, actionCompleted: 50, moneyGain: 100,
     decayPerTick: 5, lethargyThreshold: -5000, reliefScale: 25000000, lethargyScale: 50000000,
+    // §23.25 기분이 가라앉는 자리. 0이 아니라 **그 사람의 삶**이다.
+    // 항 하나하나는 작다 — 어느 조건도 혼자서 사람을 행복하게 만들지 않는다.
+    baseline: {
+      married: 900, dating: 500,
+      perFriend: 150, friendCap: 900, perRival: 200, rivalCap: 800,
+      home: 300, sick: -700, jobless: -500,
+      perHabit: 120, habitCap: 480,
+      span: 2500, // 바닥선 자체의 상한 — 사건이 주는 진폭(±10000)을 삼키지 않게
+    },
   },
   // §21.1 심 능력치 (이슈 #62). 효과는 이분법이 아니라 **가중치**다.
   abilities: {
@@ -1018,6 +1027,11 @@ function checkRanges(p, errors) {
   }
   inRange('disease.durationTicks', p.disease.durationTicks, 1, 1000000);
   inRange('disease.immuneTicks', p.disease.immuneTicks, 0, 1000000);
+  // §23.25 바닥선 검증 — span이 사건 진폭(±10000)에 가까워지면 기분이 사건에 반응하지 않는다.
+  for (const k of ['married', 'dating', 'perFriend', 'friendCap', 'perRival', 'rivalCap',
+    'home', 'perHabit', 'habitCap']) inRange(`mood.baseline.${k}`, p.mood.baseline[k], 0, 5000);
+  for (const k of ['sick', 'jobless']) inRange(`mood.baseline.${k}`, p.mood.baseline[k], -5000, 0);
+  inRange('mood.baseline.span', p.mood.baseline.span, 0, 5000);
   inRange('disease.decayFactorNum', p.disease.decayFactorNum, 0, 100);
   inRange('disease.decayFactorDen', p.disease.decayFactorDen, 1, 100);
   inRange('disease.doctorDeficit', p.disease.doctorDeficit, 0, 10000);
