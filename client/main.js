@@ -2490,6 +2490,7 @@ const ACTION_KO = {
   grow_groceries: '주문 식료품 재배',
   stock_food: '식료품 비축',
   visit_culture: '문화 생활',
+  settle_village: '가족과 이주',
   // §23.8 여가 확대
   stroll: '산책', garden: '텃밭 가꾸기', music: '악기 연주', volunteer: '봉사 활동', board_game: '보드게임',
 };
@@ -2672,6 +2673,9 @@ function eventText(e) {
     case 'founding_funded': return `🏘️ 개척 주택의 건설비가 지급되고 부지가 예약됐습니다`;
     case 'founding_cancelled': return `🏘️ 개척 계획의 조건이 달라져 취소됐습니다`;
     case 'founding_homes_built': return `🏘️ 개척 주택이 완공되어 정착을 기다립니다`;
+    case 'founding_gathering': return `🏘️ 가족들이 이주를 준비합니다`;
+    case 'founding_departed': return `🏘️ 가족들이 새 정착지로 출발했습니다`;
+    case 'village_founded': return `🏘️ 주민들이 도착해 새 마을을 세웠습니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
@@ -2773,6 +2777,7 @@ const FEED_STORY = new Set([
   'founding_petition_created', 'founding_petition_withdrawn',
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
+  'founding_gathering', 'founding_departed', 'village_founded',
 ]);
 // conversation·greeting·gathering·invited는 뺐다. 실측에서 '이야기' 80줄이 전부 잡담(💬)이라
 // 결혼도 출생도 그 사이에 묻혔다 — 수다는 이 마을의 **바탕음**이지 사건이 아니다.
@@ -3575,8 +3580,14 @@ function connect() {
         if (msg.unlockedIndustries) world.unlockedIndustries = msg.unlockedIndustries;
         if (msg.housingMarket) world.housingMarket = msg.housingMarket;
         if (msg.householdDaily) world.householdDaily = msg.householdDaily;
+        if (msg.villages) world.villages = msg.villages;
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
         for (const e of msg.events ?? []) {
+          if(e.type==='village_founded'){
+            for(const f of world.map.facilities)if(e.payload.homeIds.includes(f.id)){
+              f.villageId=e.payload.id;delete f.foundingPetitionId;
+            }
+          }
           if (e.type === 'center_planned') {
             world.centers ??= [];
             if (!world.centers.some((c) => c.centerId === e.payload.centerId)) world.centers.push(e.payload);

@@ -50,6 +50,7 @@ export const DEFAULT_LOGIC = {
     grow_groceries: { duration: 120, cost: 0, groceriesGain: 3 },
     stock_food: { duration: 15, cost: 600, groceriesGain: 3 },
     visit_culture: { duration: 40, cost: 100 },
+    settle_village: { duration: 1 },
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },

@@ -103,6 +103,7 @@
     "oldEnergyAdd": 2
   },
   "actions": {
+    "settle_village": { "duration": 1 },
     "supply_groceries": {
       "duration": 30,
       "cost": 0

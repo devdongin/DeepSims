@@ -207,7 +207,7 @@ export class Engine {
       if (n <= 0) return;
       const batch = this.runLive(n);
       // §22.8 sims는 **화면이 쓰는 필드만** 투영해 보낸다 (라이브 실측 71배 절감).
-      this.emit({ type: 'tickBatch', ...batch, sims: simsView(this.world.sims), treasury: this.world.treasury, incidents: this.world.incidents, cityTier: this.world.cityTier, projects: this.world.projects, statsToday: this.world.statsHistory[this.world.statsHistory.length - 1] ?? null, speed: this.speed ?? 1, transit: this.world.transit ?? null, unlockedIndustries:this.world.unlockedIndustries ?? [], housingMarket:this.world.housingMarket, householdDaily:this.world.householdDaily });
+      this.emit({ type: 'tickBatch', ...batch, sims: simsView(this.world.sims), villages:this.world.villages, treasury: this.world.treasury, incidents: this.world.incidents, cityTier: this.world.cityTier, projects: this.world.projects, statsToday: this.world.statsHistory[this.world.statsHistory.length - 1] ?? null, speed: this.speed ?? 1, transit: this.world.transit ?? null, unlockedIndustries:this.world.unlockedIndustries ?? [], housingMarket:this.world.housingMarket, householdDaily:this.world.householdDaily });
     }, 250);
   }
 

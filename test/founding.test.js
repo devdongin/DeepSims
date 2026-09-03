@@ -118,14 +118,37 @@ function approvalWorld(){
   return w;
 }
 
+test('#32 family-sized founding housing is actually quoted, paid and queued as an apartment',()=>{
+  const w=approvalWorld(),[a,b,child]=w.sims;
+  child.householdId=a.householdId;child.homeId=a.homeId;
+  child.traits.age=12;child.traits.occupation='student';
+  b.householdId=a.householdId;b.homeId=a.homeId;
+  // Preserve the deliberately constrained fixture after changing household occupancy.
+  for(const f of w.map.facilities)if(['house','apartment'].includes(f.type)){
+    const count=w.sims.filter(s=>s.homeId===f.id).length;
+    f.resources=Array.from({length:count},(_,i)=>({...f.resources[0],id:`fixture:${f.id}:${i}`}));
+  }
+  const q=quoteFoundingSites(w,0,[1]);
+  assert.equal(q.ok,true);assert.equal(q.cost,w.logic.zone.costs.apartment);
+  assert.deepEqual(q.homes,[{type:'apartment',residentIds:[a.id,b.id,child.id],plotId:1}]);
+  assert.deepEqual(q.settlerIds,[a.id,b.id]);
+  const money=w.treasury;
+  applyFoundingDecision(w,{petitionId:0,decision:'approve',name:'가족마을',homePlotIds:[1]},3000,()=>{});
+  fundFoundingPlans(w,3001,()=>{});
+  assert.equal(w.founding.petitions[0].status,'building');
+  assert.equal(w.treasury,money-w.logic.zone.costs.apartment);
+  assert.equal(w.zoneOrders[0].type,'apartment');assert.equal(w.plots[0].foundingType,'apartment');
+});
+
 test('#32 approval quotes are pure, provide actual beds, and exclude all student labor',()=>{
   const w=approvalWorld(),p=w.founding.petitions[0];
   w.sims[0].traits.occupation='student';
   w.sims[1].education.course='doctorate';w.sims[1].education.completed=false;
   w.sims[2].traits.age=18;
-  const before=serialize(w),q=quoteFoundingSites(w,p.id,[1]);
-  assert.equal(q.ok,true);assert.equal(q.cost,w.logic.zone.costs.house);
-  assert.deepEqual(q.homePlotIds,[1]);assert.equal(q.settlerIds.length,2);
+  const before=serialize(w),q=quoteFoundingSites(w,p.id,[1,2]);
+  assert.equal(q.ok,true);assert.equal(q.cost,2*w.logic.zone.costs.house);
+  assert.deepEqual(q.homePlotIds,[1,2]);assert.equal(q.settlerIds.length,2);
+  assert.ok(q.residents.some(r=>r.simId===w.sims[2].id),'the minor accompanies the household, not the labor force');
   assert.ok(q.settlerIds.every(id=>!w.sims.slice(0,3).some(s=>s.id===id)));
   assert.equal(serialize(w),before,'no cost, reservation, resident, RNG or approval mutation');
   w.logic.founding.minSettlers=3;

@@ -2,6 +2,7 @@
 import { isResidence, isAvailableResidence } from './map.js';
 import { syncResidenceVillage } from './villages.js';
 import { askingRent } from './housing.js';
+import { isSettlementInTransit } from './settlement.js';
 
 const employed = (world, sim) => sim.traits.occupation !== 'student'
   && sim.traits.occupation !== 'child'
@@ -26,6 +27,7 @@ export function applyHouseholdIntents(world, t, emit) {
   const due = (world.householdIntents ?? []).filter(i => i.applyTick <= t)
     .sort((a,b) => a.intentId-b.intentId);
   for (const intent of due) {
+    if((intent.memberIds??[intent.simId]).some(id=>isSettlementInTransit(world,id)))continue;
     const sim = world.sims.find(s => s.id === intent.simId);
     let reason = null;
     if(intent.kind==='rent_move'){

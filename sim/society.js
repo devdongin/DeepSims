@@ -13,6 +13,7 @@ import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
 import { TILE, isRoadProtected } from './map.js';
 import { isResidence, isAvailableResidence } from './map.js';
+import { isSettlementInTransit } from './settlement.js';
 import { learnToken as learnTokenRef } from './planning.js';
 import { maybeRoadWorks } from './roads.js';
 import { applyBirthTalent } from './genius.js';
@@ -469,9 +470,14 @@ function immigrateOne(world, t, emit) {
 // ---- §17.5 연애 (회고에서 호출 — 먼저 회고하는 쪽이 실행, PLAN §17.8) ----
 
 export function applyRomance(world, sim, t, emit) {
-  if (sim.traits.occupation === 'child') return; // §22.2 (91차 ②) 아이는 연애하지 않는다
+  if(isSettlementInTransit(world,sim.id)||isSettlementInTransit(world,world.partners[sim.id]))return;
+  if (sim.traits.age<19 || sim.traits.occupation === 'child') return; // School enrollment changes occupation, not adulthood.
   const R = world.logic.romance;
   const partner = world.partners[sim.id];
+  if(partner!==undefined){
+    const other=world.sims.find(s=>s.id===partner);
+    if(!other||other.traits.age<19||other.traits.occupation==='child')return;
+  }
   // ① 파혼: 어느 한 방향 호감 < breakup
   if (partner !== undefined && world.partnerStage[sim.id] === 'dating') {
     const other = world.sims.find((s) => s.id === partner);
@@ -566,7 +572,7 @@ export function applyRomance(world, sim, t, emit) {
     let best = null, bestMutual = 0;
     for (const other of world.sims) {
       if (other.id === sim.id || world.partners[other.id] !== undefined) continue;
-      if (other.traits.occupation === 'child') continue; // §22.2 아이는 상대가 되지 않는다
+      if (other.traits.age<19 || other.traits.occupation === 'child') continue;
       const mutual = Math.min(world.affinity[sim.id][other.id], world.affinity[other.id][sim.id]);
       if (mutual >= R.datingMin && world.interactions[sim.id][other.id] >= R.datingInteractions
         && (mutual > bestMutual || (mutual === bestMutual && best !== null && other.id < best.id))) {

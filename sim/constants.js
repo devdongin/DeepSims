@@ -23,7 +23,7 @@ export const ACTIONS = ['eat', 'sleep', 'work', 'socialize', 'play', 'idle',
   'escort_child_doctor',
   // §23.8 여가 확대. 배열 순서는 pickBest의 동점 처리 순서라 **끝에만 붙인다**.
   // 마을에 할 일이 여덟 가지뿐이면 사람들은 여덟 가지 삶만 산다.
-  'stroll', 'garden', 'music', 'volunteer', 'board_game', 'supply_groceries', 'grow_groceries', 'stock_food', 'visit_culture'];
+  'stroll', 'garden', 'music', 'volunteer', 'board_game', 'supply_groceries', 'grow_groceries', 'stock_food', 'visit_culture', 'settle_village'];
 export const COPING_ACTIONS = ['drink', 'binge_eat', 'hole_up', 'exercise'];
 export const HOME_ONLY_ACTIONS = ['hole_up', 'build', 'cook_eat', 'garden', 'music', 'grow_groceries']; // 자기 집 시설만 후보
 
@@ -39,6 +39,7 @@ export const ACTION_FACILITY = {
   construct: [], // 가상 현장(site) — collectCandidates 특수 경로 (§16.5.B)
   see_doctor: ['hospital'],
   escort_child_doctor: [],
+  settle_village: [],
   // §23.8 여가 확대
   stroll: ['park', 'pond'],           // 돈이 한 푼도 안 드는 유일한 즐거움
   garden: ['house', 'apartment'],     // 텃밭 — 먹거리가 나온다
@@ -98,6 +99,7 @@ export const EVENT_TYPES = [
   'founding_petition_created', 'founding_petition_withdrawn',
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
+  'founding_gathering', 'founding_departed', 'village_founded',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

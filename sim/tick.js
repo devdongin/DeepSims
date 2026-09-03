@@ -21,6 +21,8 @@ import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVis
 import { syncResidenceVillage } from './villages.js';
 import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
   foundingSiteReserved, foundingWorkerAllowed, recordFoundingHome, cancelFoundingConstruction } from './founding.js';
+import { SETTLE_ACTION, isSettlementInTransit, settlementGatherTarget,
+  advanceSettlementPlans, completeSettlementArrivals } from './settlement.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -278,6 +280,8 @@ export function facilityShortfallKind(world, sim, action, t) {
 }
 
 export function actionBlockReason(world, sim, action, t) {
+  if(isSettlementInTransit(world,sim.id)&&action!==SETTLE_ACTION)return 'household_in_transit';
+  if(action===SETTLE_ACTION)return settlementGatherTarget(world,sim)?null:'not_needed';
   const L = world.logic;
   if (action === 'seek_food_aid') return foodAidBlockReason(world, sim);
   if (action === ESCORT_ACTION) return escortBlockReason(world, sim);
@@ -383,6 +387,10 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
       continue;
     }
     // §16.5.B: construct는 가상 현장(site) — 활성 프로젝트 plot 모서리 4 작업 스팟
+    if(action===SETTLE_ACTION){
+      const target=settlementGatherTarget(world,sim);if(target)out.push(target.candidate);
+      continue;
+    }
     if (action === 'construct') {
       // §19.3: 다중 프로젝트 중 맨해튼 최근접 현장으로 (동률 plotId asc — 결정적)
       let pr = null; let best = Infinity;
@@ -954,6 +962,7 @@ export function tick(world, inputsForThisTick = []) {
   fundFoundingPlans(world,t,emit);
   updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
+  advanceSettlementPlans(world,t,emit,(sim,cand)=>startAction(world,sim,cand,t,emit,{settlement:true}));
 
   // A guardian can die/emigrate between ticks. Never leave a child frozen or a
   // hospital seat owned by that child when the escort no longer exists.
@@ -976,7 +985,7 @@ export function tick(world, inputsForThisTick = []) {
     if(s.action===ESCORT_ACTION&&s.escortPhase==='travel'&&!syncEscortStep(world,sim)){
       cancelEscort(world,sim);emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'child_unavailable'});continue;
     }
-    const steps = sim.hasCar ? world.logic.transport.carSpeedTiles : 1;
+    const steps = sim.hasCar&&s.action!==SETTLE_ACTION ? world.logic.transport.carSpeedTiles : 1;
     let pickedThisTick = false; // §16.C 습득은 틱당 1회 — 차량이 습득률을 배로 늘리지 않도록 (65차 대비)
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
@@ -1041,6 +1050,7 @@ export function tick(world, inputsForThisTick = []) {
     }
   }
 
+  completeSettlementArrivals(world,t,emit);
   // 2a-2) 스쳐 지나가는 인사 (D9) — 전파(2b)보다 먼저: 같은 틱 전파는 인사 후 호감도를 본다
   processGreetings(world, t, emit);
 
@@ -1176,6 +1186,7 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'performing' || s.ticksLeft > 0) continue;
+    if(s.action===SETTLE_ACTION){releaseReservation(world,sim);sim.state=emptyState();continue;}
     if(s.action===ESCORT_ACTION&&s.escortPhase===null){
       if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
       else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
@@ -1485,7 +1496,8 @@ export function tick(world, inputsForThisTick = []) {
         // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
         let worst = null, worstOver = 0;
         for (const h of world.map.facilities) {
-          if (!isResidence(h) || h.id === fac.id) continue;
+          if (!isResidence(h) || h.id === fac.id
+            ||!world.sims.some(s=>s.homeId===h.id&&!isSettlementInTransit(world,s.id))) continue;
           const res = world.sims.filter((x) => x.homeId === h.id).length;
           const over = res - h.resources.length;
           if (over > worstOver || (over === worstOver && worst && h.id < worst.id)) {
@@ -1493,7 +1505,7 @@ export function tick(world, inputsForThisTick = []) {
           }
         }
         if (worst) {
-          const mover = world.sims.filter((x) => x.homeId === worst.id).sort((a, b) => b.id - a.id)[0];
+          const mover = world.sims.filter((x) => x.homeId === worst.id&&!isSettlementInTransit(world,x.id)).sort((a, b) => b.id - a.id)[0];
           mover.homeId = fac.id;
           syncResidenceVillage(world, mover.id);
           emit('moved_home', mover.id, { from: worst.id, to: fac.id });
@@ -1750,6 +1762,15 @@ export function tick(world, inputsForThisTick = []) {
         if (kind18 === 'no_facility') recordIndustryDemand(world, act, day18);
         else if (kind18 === 'capacity_full') recordCapacityShortfall(world, act, day18);
       }
+    }
+    if(!urgency){
+      const gather=settlementGatherTarget(world,sim);
+      if(gather){
+        if(gather.hold)startIdle(sim,L,emit);
+        else startAction(world,sim,gather.candidate,t,emit,{settlement:true});
+        continue;
+      }
+      if(isSettlementInTransit(world,sim.id)){startIdle(sim,L,emit);continue;}
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false, occ: occSnapshot });
     const best = pickBest(cands);

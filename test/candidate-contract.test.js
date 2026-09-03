@@ -38,9 +38,9 @@ import { collectCandidates } from '../sim/tick.js';
 //   #32 개척 저장은 mood.baseline 위에 schema68/logic65로 통합했다. main 대비
 //     후보·선택·이벤트는 동일하며 개척 관측/저장 필드 때문에 world 해시만 갱신한다.
 for (const [pop, expected] of [
-  [10, ['0ab9198a', '32b2391b', 'ddff0557', '3ca74c86']],
-  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '232a8ce4']],
-  [200, ['5dad1750', '0928031a', 'e157d46b', 'd688722b']],
+  [10, ['0ab9198a', '32b2391b', 'ddff0557', 'dc80eeac']],
+  [50, ['5786ecd1', '9a3cd25b', '7885fc6a', '34fb4a52']],
+  [200, ['5dad1750', '0928031a', 'e157d46b', 'ec40b275']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
