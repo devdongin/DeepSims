@@ -102,30 +102,45 @@ test('P-9. 창세 때는 채우고, 그 뒤로는 무직자만 뽑는다', () =>
   assert.equal(idle.unpaidDays, 0, '새 자리에 밀린 임금이 따라왔다');
 });
 
-test('P-10. 초과 공공직은 해마다 조금씩 줄어든다 (기존 세이브 연착륙)', () => {
+test('P-10. 초과 공공직은 해마다 비율로 줄어든다 (기존 세이브 연착륙)', () => {
+  // 직군당 한 명씩이면 초과 50명은 50년이 걸린다 — 연착륙이 아니라 사실상 방치다
+  // (Codex 지적). 비율 감축이라 초과가 클수록 빨리 줄고 마지막 몇 명도 반드시 정리된다.
   const w = createWorld(4242);
   for (const s of w.sims) if (s.traits.age >= 20 && s.traits.age < 60) s.traits.occupation = 'police';
-  const before = w.sims.filter((s) => s.traits.occupation === 'police').length;
-  assert.ok(before > 1, '표본이 성립하지 않는다');
-  const t1 = trimOverQuotaPosts(w);
-  assert.equal(t1, 1, '한 해에 자리당 한 명씩이어야 한다 (하루아침에 다 자르지 않는다)');
-  assert.equal(w.sims.filter((s) => s.traits.occupation === 'police').length, before - 1);
+  const before = publicHeadcount(w, 'police');
+  assert.ok(before >= 4, `표본이 너무 작다 (${before}명)`);
+  const rate = DEFAULT_LOGIC.economy.publicTrimRatePct;
+  const expected = Math.min(before, Math.max(1, Math.ceil(before * rate / 100)));
+  assert.equal(trimOverQuotaPosts(w), expected, '감축 인원이 비율과 다르다');
+  // 끝까지 줄어드는가 — 남은 몇 명이 영원히 남으면 안 된다
+  let years = 1;
+  while (publicHeadcount(w, 'police') > 0 && years < 40) { trimOverQuotaPosts(w); years++; }
+  assert.equal(publicHeadcount(w, 'police'), 0, '초과 인원이 끝내 정리되지 않았다');
+  assert.ok(years <= 12, `정리에 ${years}년이 걸렸다 — 너무 느리다`);
 });
 
-test('P-11. 플레이어도 정원을 지킨다', () => {
+test('P-11. 플레이어도 정원을 지키고, 들고 온 돈은 경계 유입으로 잡힌다', () => {
   // Codex 재현: 인구 11명 마을에 플레이어가 police로 태어났고 경찰 정원은 0이었다.
+  // 예전 P-11은 mbti를 문자열 'ENFP'로 넣어 **생성 자체가 거부됐고**, 그래서 아무것도
+  // 검증하지 않는 테스트였다 (Codex 지적). 실제 클라이언트와 같은 축 객체로 보낸다.
   const w = createWorld(1);
-  const ev = advance(w, {}, 5);
-  const inputs = { 5: [{ id: 1, command: 'create_player', payload: { name: '테스트', gender: 'F', mbti: 'ENFP' } }] };
-  advance(w, inputs, 10);
+  const mbti = { EI: 70, SN: 40, TF: 30, JP: 60 };
+  const inflowBefore = w.externalInflow ?? 0;
+  const inputs = { 5: [{ id: 1, command: 'create_player', payload: { name: '테스트', gender: 'F', mbti } }] };
+  const ev = advance(w, inputs, 10);
   const player = w.sims.find((s) => s.isPlayer);
-  if (player) {
-    const posts = DEFAULT_LOGIC.economy.publicPosts;
-    if (posts[player.traits.occupation]) {
-      assert.ok(publicHeadcount(w, player.traits.occupation) <= publicQuota(w, player.traits.occupation),
-        `플레이어가 정원 0인 ${player.traits.occupation}으로 태어났다`);
-    }
+  assert.ok(player, `플레이어가 생성되지 않았다: ${JSON.stringify(ev.filter((e) => e.type === 'input_rejected'))}`);
+  const posts = DEFAULT_LOGIC.economy.publicPosts;
+  if (posts[player.traits.occupation]) {
+    assert.ok(publicHeadcount(w, player.traits.occupation) <= publicQuota(w, player.traits.occupation),
+      `플레이어가 정원 ${publicQuota(w, player.traits.occupation)}인 ${player.traits.occupation}으로 태어났다`);
   }
+  // G1 폐쇄 회계: 플레이어가 들고 온 돈은 마을 밖에서 들어온 돈이다. 예전에는 이민자
+  // 경로에만 있어서 플레이어를 만들 때마다 장부에 구멍이 났다.
+  assert.ok((w.externalInflow ?? 0) >= inflowBefore + player.money,
+    `플레이어 초기 자금이 경계 유입에 안 잡혔다 (${inflowBefore} → ${w.externalInflow})`);
+  const created = ev.find((e) => e.type === 'player_created');
+  assert.equal(created.payload.occupation, player.traits.occupation, '이벤트의 직업이 실제와 다르다');
 });
 
 test('P-12. 공공 임금 직군인데 정원표에 없으면 검증이 막는다', () => {

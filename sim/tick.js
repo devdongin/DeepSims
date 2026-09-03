@@ -704,9 +704,13 @@ function applyCreatePlayer(world, inp, t, emit) {
   // §23.14 플레이어도 정원을 지킨다 (Codex 지적: 인구 11명 마을에 플레이어가 police로
   // 태어났고 경찰 정원은 0이었다). 규칙이 사람을 가려서 적용되면 규칙이 아니다.
   // 강등되면 돈도 새 직업 기준으로 맞춘다 — 이민자와 같은 이유다.
-  if (demotePublicIfOverQuota(world, sim)) {
+  if (demotePublicIfOverQuota(world, sim, emit, 'player_quota')) {
     sim.money = world.logic.occupations[sim.traits.occupation].startMoney;
   }
+  // §23.17 플레이어가 들고 오는 돈도 **마을 밖에서 들어온 돈**이다 (Codex 지적: 이민자
+  // 경로에만 있었고 여기엔 없어서, 플레이어를 만들 때마다 폐쇄 회계 G1에 구멍이 났다).
+  // 강등까지 끝난 최종 금액을 잡는다 — 중간 상태를 장부에 남기지 않는다.
+  world.externalInflow = (world.externalInflow ?? 0) + sim.money;
   // 행렬은 **id 공간** 기준으로 늘린다. sims.length 기준으로 늘리면 사망으로 심이
   // 빠진 뒤 첨자가 어긋난다 (§22.2에서 같은 이유로 growIdMatrices를 만들었다).
   growIdMatrices(world);

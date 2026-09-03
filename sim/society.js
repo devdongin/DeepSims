@@ -254,7 +254,9 @@ export function maybeNewYear(world, t, day, emit, resetActivity) {
   // 아무도 그 일을 하지 않으면 파출소도 병원도 껍데기다. 정원은 상한이자 필요 인원이다.
   // §23.14 정원 초과분은 해마다 자리당 한 명씩 줄이고(기존 세이브 연착륙), 빈 자리는
   // **무직자로만** 채운다. 민간에서 사람을 빼 오지 않는다 (Codex 지적).
-  const trimmed = trimOverQuotaPosts(world, emit);
+  // §23.17 감축된 사람은 **하던 근무를 놓아야 한다** (Codex 지적). 예전에는 직업만 바꾸고
+  // 활동은 그대로 둬서, 민간직이 된 사람이 공공 시설 자리를 붙들고 계속 일했다.
+  const trimmed = trimOverQuotaPosts(world, emit, resetActivity);
   const hired = fillPublicPosts(world, emit);
   if (hired > 0 || trimmed > 0) {
     for (const s2 of world.sims) {
@@ -443,7 +445,7 @@ function immigrateOne(world, t, emit) {
   // §23.14 돈은 makeSim이 **강등 전 직업** 기준으로 줬다 (Codex 지적). 정치인으로
   // 들어왔다가 사무직이 되면 정치인 초기 자금을 들고 사무직으로 사는 셈이다.
   // 강등이 실제로 일어났을 때만 새 직업 기준으로 다시 맞춘다 — 경계 유입 회계도 함께.
-  if (demotePublicIfOverQuota(world, sim)) {
+  if (demotePublicIfOverQuota(world, sim, emit, 'immigration_quota')) {
     sim.money = L.occupations[sim.traits.occupation].startMoney;
   }
   // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).

@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 58, // #89 사건 간격과 최근 밀도
+  logicSchemaVersion: 59, // #89 사건 페이싱 + §23.17 publicTrimRatePct
   storyteller: { minGapDays: 2, windowDays: 7, maxEventsPerWindow: 3 },
   industryDevelopment: { workshop: 20, lab: 3000, warehouse: 300 },
   decay: { hunger: 6, energy: 4, social: 3, fun: 3 },
@@ -409,6 +409,9 @@ export const DEFAULT_LOGIC = {
     publicWageOccupations: ['doctor', 'nurse', 'teacher', 'civil_servant', 'politician', 'police', 'firefighter'],
     // §23.13 공공 정원 — minPop 미만이면 그런 자리가 아예 없고, 있으면 인구 per명당 1자리.
     // 열 명 마을에 파출소도 소방서도 없는 것이 정상이다. 도시가 자라면 자리도 는다.
+    // §23.17 연간 감축률(%) — 초과 공공직을 해마다 이 비율만큼 줄인다. 100이면 즉시,
+    // 1이면 사실상 방치다. 25%면 초과 50명이 약 10년에 걸쳐 정리된다.
+    publicTrimRatePct: 25,
     publicPosts: {
       civil_servant: { minPop: 0, per: 50 },
       teacher: { minPop: 14, per: 35 },
@@ -732,6 +735,7 @@ function checkRanges(p, errors) {
     }
   }
   inRange('abilities.aptitudePoolWeight', p.abilities.aptitudePoolWeight, 0, 2000);
+  inRange('economy.publicTrimRatePct', p.economy.publicTrimRatePct, 1, 100);
   for (const [o, k] of Object.entries(p.abilities.keyAbility)) {
     if (!(o in p.occupations)) errors.push(`abilities.keyAbility: 알 수 없는 직업 ${o}`);
     if (!['stamina', 'dexterity', 'intellect', 'charisma'].includes(k)) {

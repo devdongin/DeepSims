@@ -1,4 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
 import {createWorld} from '../sim/world.js';import {landValue,askingRent,settleHousing} from '../sim/housing.js';
 import {applyHouseholdIntents} from '../sim/household.js';import {migrateWorld} from '../sim/migrate.js';
 
@@ -64,5 +65,6 @@ test('#93 v59 migration adds public ownership and empty market ledgers without R
  for(const f of w.map.facilities)delete f.ownerSimId;migrateWorld(w);
  assert.equal(w.schemaVersion,62);assert.ok(w.map.facilities.filter(f=>['house','apartment'].includes(f.type)).every(f=>f.ownerSimId===null));
  assert.equal(JSON.stringify(w.rngSim),rng);assert.deepEqual(w.rentPressure,{});
- assert.equal(w.logic.logicSchemaVersion,58);assert.ok(w.logic.housing.baseRent>0);
+ assert.equal(w.logic.logicSchemaVersion,DEFAULT_LOGIC.logicSchemaVersion); // 버전을 올릴 때마다 고치지 않게 상수를 본다
+ assert.ok(w.logic.housing.baseRent>0);
 });

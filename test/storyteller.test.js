@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
 import assert from 'node:assert/strict';
 import { createWorld } from '../sim/world.js';
 import { tick } from '../sim/tick.js';
@@ -83,7 +84,7 @@ test('#89 v61 migration installs empty pacing state and logic defaults without R
   const w = createWorld(89), rng = serialize(w.rngSim); w.schemaVersion = 61;
   w.logic.logicSchemaVersion = 57; delete w.logic.storyteller; delete w.storyteller;
   migrateWorld(w);
-  assert.equal(w.schemaVersion, 62); assert.equal(w.logic.logicSchemaVersion, 58);
+  assert.equal(w.schemaVersion, 62); assert.equal(w.logic.logicSchemaVersion, DEFAULT_LOGIC.logicSchemaVersion); // 버전을 올릴 때마다 고치지 않게 상수를 본다
   assert.deepEqual(w.storyteller, makeStoryteller()); assert.equal(serialize(w.rngSim), rng);
 });
 

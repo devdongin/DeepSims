@@ -38,7 +38,7 @@ export function publicPostAvailable(world, occ, selfId = null) {
 
 // 정원을 넘은 공공직을 민간직으로 돌린다. **rng를 쓰지 않는다** — 적성이 가장 높은
 // 자리로 보내고, 같으면 OCCUPATIONS 순서로 끊는다. 그래야 세이브를 다시 읽어도 같다.
-export function demotePublicIfOverQuota(world, sim) {
+export function demotePublicIfOverQuota(world, sim, emit = null, reason = 'over_quota') {
   const occ = sim.traits.occupation;
   if (!world.logic.economy.publicPosts?.[occ]) return false;
   if (publicPostAvailable(world, occ, sim.id)) return false;
@@ -52,6 +52,11 @@ export function demotePublicIfOverQuota(world, sim) {
     if (apt > bestApt) { bestApt = apt; best = o; }
   }
   sim.traits.occupation = best ?? 'jobless';
+  // §23.17 강등도 이직이다 (Codex 지적). 밀린 임금이 새 자리로 따라오면 안 되고,
+  // 사람의 직업이 바뀐 사실은 로그에 남아야 한다 — 호출자가 기억해서 하는 게 아니라
+  // 여기서 한다. 이민·플레이어·연간 감축 어느 경로로 들어와도 같게 처리된다.
+  sim.unpaidDays = 0;
+  if (emit) emit('job_changed', sim.id, { from: occ, to: sim.traits.occupation, reason });
   return true;
 }
 
@@ -96,21 +101,24 @@ export function fillPublicPosts(world, emit = null, genesis = false) {
 // §23.14 정원을 넘긴 공공직을 **조금씩** 줄인다. 기존 세이브에는 정원제 이전에 뽑힌
 // 공공직이 그대로 남아 국고를 계속 갉아먹는데(실측 49~51명), 한 해에 전부 자르면
 // 마을이 하루아침에 뒤집힌다. 해마다 자리당 한 명씩, 적성이 가장 낮은 사람부터 내보낸다.
-export function trimOverQuotaPosts(world, emit = null) {
+export function trimOverQuotaPosts(world, emit = null, onChange = null) {
+  const E = world.logic.economy;
   let trimmed = 0;
-  for (const occ of Object.keys(world.logic.economy.publicPosts ?? {})) {
+  for (const occ of Object.keys(E.publicPosts ?? {})) {
     const over = publicHeadcount(world, occ) - publicQuota(world, occ);
     if (over <= 0) continue;
+    // §23.17 예전에는 직군당 한 명이었다. 초과가 50명이면 50년 동안 초과 임금을 계속
+    // 낸다는 뜻이라 "연착륙"이 아니라 사실상 미해결이었다 (Codex 지적).
+    // 비율로 줄인다 — 초과가 클수록 빨리 줄고, 남은 몇 명은 최소 한 명씩 정리된다.
+    const n = Math.min(over, Math.max(1, Math.ceil(over * E.publicTrimRatePct / 100)));
     const holders = world.sims.filter((s) => s.traits.occupation === occ);
     holders.sort((a, b) => (aptitudeFor(a, occ, world.logic) - aptitudeFor(b, occ, world.logic)) || (a.id - b.id));
-    const s = holders[0];
-    if (!s) continue;
-    const from = s.traits.occupation;
-    demotePublicIfOverQuota(world, s);
-    if (s.traits.occupation !== from) {
-      s.unpaidDays = 0;
-      trimmed++;
-      if (emit) emit('job_changed', s.id, { from, to: s.traits.occupation, reason: 'over_quota' });
+    for (let i = 0; i < n && i < holders.length; i++) {
+      const s = holders[i];
+      if (demotePublicIfOverQuota(world, s, emit, 'over_quota')) {
+        trimmed++;
+        if (onChange) onChange(s); // 하던 근무를 놓아야 한다 — 남의 자리를 붙들고 있게 두지 않는다
+      }
     }
   }
   return trimmed;

@@ -21,10 +21,12 @@ import { collectCandidates } from '../sim/tick.js';
 //   #93     (일일 임대 정산): 첫 tick 잔액과 이후 선택이 실제로 바뀌므로 다시 고정한다.
 //   §23.14  (Codex −1 반영) : 창세 충원 규칙이 바뀌어 월드젠 직업 구성이 또 달라졌다.
 //   #89     (사건 페이싱): 실제 발병/화재 배치 변경으로 이후 행동도 바뀐다. 새 전체 상태로 재고정.
+//   §23.17  (Codex 재검토)  : world 해시만 움직인다 — 강등의 unpaidDays 초기화와 플레이어
+//     초기 자금의 경계 유입 기록은 세계 상태에만 닿는다 (240틱 지평에서 결정 불변).
 for (const [pop, expected] of [
-  [10, ['0ab9198a', 'd722e921', 'e1d0affd', '2f21f171']],
-  [50, ['1dcfd840', '4cfaed7a', '9c2fd476', '70a54f23']],
-  [200, ['3d43662d', '754cba2e', '905452de', 'f47874c7']],
+  [10, ['0ab9198a', 'd722e921', 'e1d0affd', '5633e38b']],
+  [50, ['1dcfd840', '4cfaed7a', '9c2fd476', '8b1696f7']],
+  [200, ['3d43662d', '754cba2e', '905452de', '20d0c7d1']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 58,
+  "logicSchemaVersion": 59,
   "storyteller": { "minGapDays": 2, "windowDays": 7, "maxEventsPerWindow": 3 },
   "industryDevelopment": { "workshop": 20, "lab": 3000, "warehouse": 300 },
   "education": { "annualTuition": 2000, "degreeStudyTicks": 20000, "bachelorYears": 4, "mastersYears": 2, "doctorateYears": 4,
@@ -729,6 +729,7 @@
       "police",
       "firefighter"
     ],
+    "publicTrimRatePct": 25,
     "publicPosts": { "civil_servant": { "minPop": 0, "per": 50 }, "teacher": { "minPop": 14, "per": 35 },
       "doctor": { "minPop": 18, "per": 60 }, "police": { "minPop": 20, "per": 50 },
       "nurse": { "minPop": 30, "per": 50 }, "firefighter": { "minPop": 30, "per": 70 },
