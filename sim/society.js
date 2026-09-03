@@ -1136,7 +1136,14 @@ export function maybeJobSwitch(world, t, day, emit) {
     if (dayHash(pick.id, day, 53) >= pct) continue;
     const from = pick.traits.occupation;
     pick.traits.occupation = occ;
+    pick.unpaidDays = 0;
     emit('job_changed', pick.id, { from, to: occ, facilityType: facType, aptitude: apt, revenue });
+  }
+  for (const s of world.sims.filter((x) => (x.unpaidDays ?? 0) >= 3 && x.traits.occupation !== 'jobless')) {
+    const from = s.traits.occupation;
+    s.traits.occupation = 'jobless';
+    s.unpaidDays = 0;
+    emit('job_changed', s.id, { from, to: 'jobless', reason: 'unpaid_wages' });
   }
 }
 

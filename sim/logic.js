@@ -51,6 +51,7 @@ export const DEFAULT_LOGIC = {
     // §22.2 아동기 — 일하지 않는다. 먹고 자고 놀고 어울리며 자란다.
     child: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 0 },
     clerk: { workStart: 540, workEnd: 1140, wagePct: 85, startMoney: 1000, weekendWork: true },
+    jobless: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 0 },
   },
   // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
   workplace: {
@@ -60,6 +61,7 @@ export const DEFAULT_LOGIC = {
     worker: 'factory', // §18.T3
     chef: 'restaurant', clerk: 'market', // §21.3
     child: 'school', // §22.2 (근무하지 않지만 매핑 완결성)
+    jobless: null,
   },
   persFactor: { socializeBase: 150, playBase: 100, workBase: 150 },
   affinity: {
@@ -716,6 +718,7 @@ function checkRanges(p, errors) {
   inRange('actions.see_doctor.duration', p.actions.see_doctor.duration, 1, 10000);
   inRange('actions.see_doctor.cost', p.actions.see_doctor.cost, 0, 1000000);
   for (const [o, w] of Object.entries(p.workplace)) {
+    if (o === 'jobless' && w === null) continue;
     const ok = typeof w === 'string'
       || (Array.isArray(w) && w.length > 0 && w.every((x) => typeof x === 'string')); // §18.T3 배열 허용
     if (!ok) errors.push(`workplace.${o} 문자열/문자열 배열 아님`);

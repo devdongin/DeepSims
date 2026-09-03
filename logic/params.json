@@ -201,7 +201,13 @@
       "wagePct": 0,
       "startMoney": 0
     },
-    "clerk": {
+      "jobless": {
+        "workStart": -1,
+        "workEnd": -1,
+        "wagePct": 0,
+        "startMoney": 0
+      },
+      "clerk": {
       "workStart": 540,
       "workEnd": 1140,
       "wagePct": 85,
@@ -228,7 +234,8 @@
     "worker": "factory",
     "chef": "restaurant",
     "clerk": "market",
-    "child": "school"
+    "child": "school",
+    "jobless": null
   },
   "persFactor": {
     "socializeBase": 150,

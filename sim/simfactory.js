@@ -76,6 +76,7 @@ export function makeSim({
     complaintDays: {},
     sharedDay: -1,
     sharedTo: [],         // §21.2 나눔: 쌍당 하루 1회
+    unpaidDays: 0,        // §22.92 연속 무급 근무일
     conversationTopics: {}, // §22.90 상대별 최근 대화 주제
     hungerZeroTicks: 0,   // §22.2 굶은 채 머문 시간
     approachedDay: -1,
