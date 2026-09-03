@@ -2879,6 +2879,13 @@ function pushFeed(e) {
 // "이 사람이 어떻게 살아왔나"다. 그래서 문장을 따로 쓴다 — 시제도, 고르는 사건도 다르다.
 // 나이는 지금 나이에서 지난 햇수를 빼서 되짚는다 (한 해 = 1440틱 × 365).
 const TICKS_PER_YEAR = 1440 * 365;
+// 일대기는 **떠난 사람**을 자주 부른다 (사별·이별·옛 동료). 그 사람은 이미 world.sims에
+// 없으므로 simName이 'sim{id}'를 만들어 낸다. 없는 이름을 지어내느니 이름 없이 쓴다.
+function withName(id, withIt, without) {
+  if (id == null) return without;
+  const s2 = world?.sims?.find((x) => x.id === id);
+  return s2 ? withIt(simName(id)) : without;
+}
 function lifeLine(r, ctx) {
   const p = r.payload ?? {};
   const occ = (id) => occKo(id, '일');
@@ -2890,13 +2897,15 @@ function lifeLine(r, ctx) {
       if (p.to === 'jobless') return '일자리를 잃었다';
       if (p.from === 'jobless' && p.to) return `${ro(occ(p.to))} 다시 일을 잡았다`;
       return p.to ? `${ro(occ(p.to))} 일을 옮겼다` : '하던 일을 바꿨다';
-    case 'started_dating': return `${simName(p.partner ?? p.with)}와 사귀기 시작했다`;
-    case 'married': return `${simName(p.partner ?? p.with)}와 결혼했다`;
-    case 'broke_up': return `${simName(p.partner ?? p.with)}와 헤어졌다`;
+    // 짝 이벤트의 payload 키는 withSimId다 (sim/society.js). 예전엔 partner/with를 봐서
+    // 화면에 "심undefined와 사귀기 시작했다"가 찍혔다 — 이름을 모르면 이름을 빼고 쓴다.
+    case 'started_dating': return withName(p.withSimId, (n) => `${wa(n)} 사귀기 시작했다`, '누군가와 사귀기 시작했다');
+    case 'married': return withName(p.withSimId, (n) => `${wa(n)} 결혼했다`, '결혼했다');
+    case 'broke_up': return withName(p.withSimId, (n) => `${wa(n)} 헤어졌다`, '헤어졌다');
     case 'child_settled': return '아이가 제 살림을 차렸다';
     case 'moved_home': return '집을 옮겼다';
     case 'retired_now': return '일을 놓고 은퇴했다';
-    case 'bereaved': return `${simName(p.who ?? p.simId)}를 떠나보냈다`;
+    case 'bereaved': return withName(p.lostSimId, (n) => `${eul(n)} 떠나보냈다`, '가까운 사람을 떠나보냈다');
     case 'car_bought': return '차를 장만했다';
     case 'joined_club': return `${CLUB_KO[p.clubId] ?? '모임'}에 들었다`;
     case 'heroic_save': return '불길에서 사람을 구했다';
