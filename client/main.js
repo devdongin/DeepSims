@@ -673,6 +673,9 @@ function syncItems() {
 }
 
 // ---- 날씨 시각화 (§16.D) ----
+// §18.T5 상단 지표는 스냅샷뿐 아니라 매 tickBatch에서도 갱신한다(#104).
+// 배치마다 호출되므로 문자열이 실제로 달라졌을 때만 DOM에 쓴다 — 불필요한 리페인트 방지.
+let lastStatsText = null;
 function updateStats() {
   const el = document.getElementById('stats');
   if (!el || !world) return;
@@ -680,7 +683,10 @@ function updateStats() {
   const married = Object.values(world.partnerStage ?? {}).filter((s) => s === 'married').length / 2;
   const mayor = world.mayorId !== null && world.mayorId !== undefined ? simName(world.mayorId) : '없음';
   const tre = world.treasury ?? 0;
-  el.textContent = `👥${world.sims.length} 💑${Math.floor(couples)} 💍${Math.floor(married)} 👑${mayor} 🏛️${tre.toLocaleString()}원`;
+  const text = `👥${world.sims.length} 💑${Math.floor(couples)} 💍${Math.floor(married)} 👑${mayor} 🏛️${tre.toLocaleString()}원`;
+  if (text === lastStatsText) return;
+  lastStatsText = text;
+  el.textContent = text;
 }
 
 function applyWeather() {
@@ -2232,6 +2238,7 @@ function connect() {
         }
         if (scene) scene.syncSims();
         renderPanel();
+        updateStats(); // #104: 인구·국고는 매 배치 바뀐다 — 스냅샷만 기다리면 화면이 멈춘 듯 보인다
         lsSet('deepsims.lastSeenTick', String(world.worldTick));
         break;
     }
