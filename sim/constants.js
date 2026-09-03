@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 54; // #96 출생 천재·독립 표시
+export const SCHEMA_VERSION = 55; // #63 수요 기반 산업 언락 원장
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -57,6 +57,7 @@ export const EVENT_TYPES = [
   'road_requested', 'road_work_planned',
   'ability_changed',
   'genius_born',
+  'industry_unlocked',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

@@ -1,9 +1,11 @@
 // §22.18 산업 분류 + 수요 원장 테스트.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { KSIC, KSIC_CODES, industryStatus, purchasingPowerGap, industryOfAction, industryOfFacilityType, industryOfOccupation, recordIndustryDemand } from '../sim/industry.js';
+import { KSIC, KSIC_CODES, industryStatus, purchasingPowerGap, industryOfAction, industryOfFacilityType, industryOfOccupation, recordIndustryDemand, maybeUnlockIndustries, neededIndustryFacility } from '../sim/industry.js';
 import { createWorld, advance, hashWorld, serialize, deserialize, findNonFinite } from '../sim/index.js';
 import { OCCUPATIONS } from '../sim/traits.js';
+import { addBuilding, plotBuildable } from '../sim/map.js';
+import { zoneAllowedTypes } from '../sim/society.js';
 
 test('I-1. KSIC 대분류 21개가 A~U로 빠짐없이 있다', () => {
   const expected = 'ABCDEFGHIJKLMNOPQRSTU'.split('');
@@ -12,6 +14,41 @@ test('I-1. KSIC 대분류 21개가 A~U로 빠짐없이 있다', () => {
     assert.ok(s.nameKo.length > 0, `${s.code}: 한국어 이름이 없다`);
     assert.ok(s.note.length > 0, `${s.code}: 이 분류가 지금 세계에서 어떤 상태인지 적혀 있어야 한다`);
   }
+});
+
+test('#63 an unlocked industry creates one funded project rather than a duplicate', () => {
+  const w=createWorld(63);w.unlockedIndustries=['workshop'];w.treasury=1000000;
+  assert.equal(neededIndustryFacility(w),'workshop');
+  w.worldTick=1440;w.lastDailyDay=0;w.lastPlanDay=0;advance(w,{},1);
+  const projects=w.projects.filter(p=>p.type==='workshop');
+  assert.equal(projects.length,1);assert.equal(w.externalOutflow,6000);
+  assert.equal(neededIndustryFacility(w),null);
+});
+
+test('#63 locked facilities stay out of zoning; unlocked facilities have real rotated work slots', () => {
+  const w=createWorld(63);
+  assert.equal(zoneAllowedTypes(w).includes('lab'),false);
+  w.unlockedIndustries=['lab'];assert.equal(zoneAllowedTypes(w).includes('lab'),true);
+  const plot=w.plots.find(p=>plotBuildable(w.map,p,8,6));
+  const fac=addBuilding(w.map,'lab',plot,1);
+  assert.equal(fac.type,'lab');assert.equal(fac.w,6);assert.equal(fac.h,8);
+  assert.equal(fac.resources.length,4);
+  assert.ok(fac.resources.every(r=>r.kind==='slot'));
+});
+
+test('#63 산업은 서로 다른 실제 수요 문턱에서 정의 순서로 비가역 언락된다', () => {
+  const w=createWorld(63),events=[];
+  const emit=(type,simId,payload)=>events.push({type,payload});
+  maybeUnlockIndustries(w,0,emit);assert.deepEqual(w.unlockedIndustries,[]);
+  w.transit.demand=300;
+  for(const s of w.sims)s.development.studyTicks=300;
+  maybeUnlockIndustries(w,1,emit);
+  assert.deepEqual(w.unlockedIndustries,['lab','warehouse']);
+  assert.deepEqual(events.map(e=>e.payload.signal),['study','transport']);
+  const hash=hashWorld(w);maybeUnlockIndustries(w,2,emit);
+  assert.equal(hashWorld(w),hash);assert.equal(events.length,2);
+  assert.deepEqual(findNonFinite(w),[]);
+  assert.equal(hashWorld(deserialize(serialize(w))),hashWorld(w));
 });
 
 test('I-2. 분류가 겹치지 않는다 — 시설·직업·행동이 두 산업에 속하지 않는다', () => {

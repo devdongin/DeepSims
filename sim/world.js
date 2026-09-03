@@ -124,6 +124,7 @@ export function createWorld(seed) {
     plots, // 공터 96곳 (§16.5/16.6/17.0) — 지형 생성 전에 확정해 보호 대상으로 넘긴다
     projects: [], // §19.3 동시 건설 슬롯 (재정 비례)
     complaints: [], // §19.5 시민 불만: { kind, placeId, severity, sinceDay, count }
+    unlockedIndustries: [], // 수요 증거로 비가역 언락된 업종 id (정의 순서)
     complaintReasonDay: 0, // §19.10 원인 분화 시행일 (신규 월드는 처음부터 정확)
     petitions: {},  // §19.5 kind별 { lastDay, armed } — 재발화 방지 (70차 ②)         // 활성 건설 프로젝트 (최대 1)
     lastPlanDay: -1,       // 도시계획 트리거 일일 가드

@@ -218,7 +218,10 @@
       "wagePct": 85,
       "startMoney": 1000,
       "weekendWork": true
-    }
+    },
+    "artisan": { "workStart": 540, "workEnd": 1080, "wagePct": 105, "startMoney": 1000 },
+    "researcher": { "workStart": 540, "workEnd": 1080, "wagePct": 120, "startMoney": 1200, "flex": true },
+    "logistician": { "workStart": 420, "workEnd": 1020, "wagePct": 100, "startMoney": 1000, "shift": "rotating" }
   },
   "workplace": {
     "office_worker": "office",
@@ -240,7 +243,8 @@
     "chef": "restaurant",
     "clerk": "market",
     "child": "school",
-    "jobless": null
+    "jobless": null,
+    "artisan": "workshop", "researcher": "lab", "logistician": "warehouse"
   },
   "persFactor": {
     "socializeBase": 150,
@@ -283,7 +287,7 @@
       "child": "stamina",
       "nurse": "charisma",
       "politician": "charisma",
-      "worker": "stamina"
+      "worker": "stamina", "artisan": "dexterity", "researcher": "intellect", "logistician": "stamina"
     },
     "wageSpanPct": 40,
     "aptitudePoolWeight": 300
@@ -300,7 +304,7 @@
   "industry": {
     "openings": {
       "restaurant": "chef",
-      "market": "clerk"
+      "market": "clerk", "workshop": "artisan", "lab": "researcher", "warehouse": "logistician"
     },
     "minRevenueToHire": 5000,
     "workersPerFacility": 1,
@@ -504,7 +508,7 @@
       "apartment": 14000,
       "mall": 14000,
       "university": 20000,
-      "factory": 20000
+      "factory": 20000, "workshop": 10000, "lab": 16000, "warehouse": 14000
     },
     "deficit": 4000,
     "persJDiv": 4,
@@ -651,7 +655,7 @@
       "apartment": 6000,
       "factory": 8000,
       "mall": 8000,
-      "university": 10000
+      "university": 10000, "workshop": 6000, "lab": 9000, "warehouse": 8000
     },
     "demolitionCostPerTile": 200,
     "plannedCenterCost": 5000,

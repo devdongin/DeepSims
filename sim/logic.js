@@ -52,6 +52,9 @@ export const DEFAULT_LOGIC = {
     child: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 0 },
     clerk: { workStart: 540, workEnd: 1140, wagePct: 85, startMoney: 1000, weekendWork: true },
     jobless: { workStart: -1, workEnd: -1, wagePct: 0, startMoney: 0 },
+    artisan: { workStart: 540, workEnd: 1080, wagePct: 105, startMoney: 1000 },
+    researcher: { workStart: 540, workEnd: 1080, wagePct: 120, startMoney: 1200, flex: true },
+    logistician: { workStart: 420, workEnd: 1020, wagePct: 100, startMoney: 1000, shift: 'rotating' },
   },
   // §17.2: 직업 → 근무 시설 타입 (work 후보는 여기서만)
   workplace: {
@@ -62,6 +65,7 @@ export const DEFAULT_LOGIC = {
     chef: 'restaurant', clerk: 'market', // §21.3
     child: 'school', // §22.2 (근무하지 않지만 매핑 완결성)
     jobless: null,
+    artisan: 'workshop', researcher: 'lab', logistician: 'warehouse',
   },
   persFactor: { socializeBase: 150, playBase: 100, workBase: 150 },
   affinity: {
@@ -82,6 +86,7 @@ export const DEFAULT_LOGIC = {
       chef: 'dexterity', clerk: 'charisma', // §21.3
       child: 'stamina', // §22.2 (임금이 0이라 실효 없음 — 매핑 완결성용)
       nurse: 'charisma', politician: 'charisma', worker: 'stamina',
+      artisan: 'dexterity', researcher: 'intellect', logistician: 'stamina',
     },
     // 임금 진폭(%): 능력 0 → -(span/2)%, 50 → 0%, 99 → +(span/2)% 로 완만하게 갈린다.
     wageSpanPct: 40,
@@ -109,7 +114,7 @@ export const DEFAULT_LOGIC = {
   // §20.2 매출 원장이 드러낸 문제: restaurant·market에 손님은 오는데 근무자가 없어 돈이 고인다.
   // 시설을 더 짓는 게 아니라 **사람이 그 일을 하러 가는 행동**을 준다.
   industry: {
-    openings: { restaurant: 'chef', market: 'clerk' }, // 시설 타입 → 그 일을 하는 직업
+    openings: { restaurant: 'chef', market: 'clerk', workshop:'artisan', lab:'researcher', warehouse:'logistician' },
     minRevenueToHire: 5000,   // 손님이 이만큼은 와야 사람을 쓴다 (수요에서 파생)
     workersPerFacility: 1,
     switchPctPerApt: 40,      // 적성 100이면 하루 40% — 이분 컷이 아니라 기울기
@@ -259,7 +264,7 @@ export const DEFAULT_LOGIC = {
       office: 8000, school: 8000, gym: 8000, library: 8000,
       hospital: 10000, city_hall: 10000, police_station: 10000, fire_station: 10000, cinema: 10000,
       apartment: 14000, mall: 14000,
-      university: 20000, factory: 20000,
+      university: 20000, factory: 20000, workshop:10000, lab:16000, warehouse:14000,
     },
     deficit: 4000,       // needValue = NEED_MAX - deficit (고정 급함)
     persJDiv: 4,         // persFactor = 100 + floorDiv(100 - JP, persJDiv)
@@ -351,7 +356,7 @@ export const DEFAULT_LOGIC = {
   },
   // §18.T2 건설 지시: 주문 시 국고 차감 (취소 없음 — 47차 합의), 착공 시 재검증
   zone: {
-    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000 },
+    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, workshop:6000, lab:9000, warehouse:8000 },
     demolitionCostPerTile: 200,
     plannedCenterCost: 5000,
     centerRadius: 32,
@@ -374,7 +379,7 @@ export const DEFAULT_LOGIC = {
     welfareDailyCap: 5,     // 하루 최대 수급자 수 (필요도 순 — §20.1)
     // §20.2 임금이 '일한 시설의 매출'에서 나오는 민간 서비스 직군 (화이트리스트).
     // 여기 없는 직군은 기반 부문(외부 소득)·공공 부문으로 보고 기존대로 지급한다.
-    privateWageOccupations: ['barista', 'chef', 'clerk'], // §21.3: 매출에서 임금이 나온다
+    privateWageOccupations: ['barista', 'chef', 'clerk'],
     // §22.4 (이슈 #43, 대목표 G1) 공공 부문 회계를 닫는다.
     // 시민이 병원·시청·학교에 낸 돈이 시설 원장에 고이기만 했다 — 라이브에서 hospital 매출이
     // 전체의 70%를 빨아들였다. 그 매출을 국고로 보내고, 공공 임금을 국고에서 지급한다.
@@ -645,7 +650,7 @@ function checkRanges(p, errors) {
       errors.push(`industry.openings.${facType}: 알 수 없는 직업 ${occ}`);
       continue;
     }
-    if (!p.economy.privateWageOccupations.includes(occ)) {
+    if (!['workshop','lab','warehouse'].includes(facType) && !p.economy.privateWageOccupations.includes(occ)) {
       errors.push(`industry.openings.${facType}: ${occ}는 economy.privateWageOccupations에 있어야 함 (매출에서 임금이 나온다)`);
     }
     if (p.workplace[occ] !== facType) {
@@ -922,7 +927,7 @@ function checkShape(ref, val, path, errors) {
 }
 
 // §18.T1: 시장 정책 화이트리스트 — 필드·정수·범위 검증 (서버·시뮬 공유 단일 권위)
-export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university']; // §18.T2/T3
+export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university', 'workshop','lab','warehouse'];
 
 export const POLICY_FIELDS = {
   taxPct: [5, 30],

@@ -148,7 +148,7 @@ for (const t of ['apartment', 'factory', 'mall', 'university', 'house', 'cafe', 
   'cinema', 'bar', 'library', 'market', 'police', 'fire']) {
   BLD_KEYS.push([`bld_${t}_int`, `./props/bld_${t}_int.png`]); // §17.19 내부 컷어웨이
 }
-const BLD_OF_FACILITY = { apartment: 'bld_apartment', factory: 'bld_factory', mall: 'bld_mall', university: 'bld_university',
+const BLD_OF_FACILITY = { apartment: 'bld_apartment', factory: 'bld_factory', mall: 'bld_mall', university: 'bld_university', workshop:'bld_workshop',lab:'bld_lab',warehouse:'bld_warehouse',
   cafe: 'bld_cafe', office: 'bld_office', hospital: 'bld_hospital',
   city_hall: 'bld_city_hall', school: 'bld_school', restaurant: 'bld_restaurant', gym: 'bld_gym',
   cinema: 'bld_cinema', bar: 'bld_bar', library: 'bld_library', market: 'bld_market',
@@ -617,7 +617,7 @@ class TownScene extends Phaser.Scene {
     this.drawProps();
     let houseIdx = 0;
     for (const fac of map.facilities) {
-      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학' }[fac.type];
+      const label = { house: '집', office: '직장', cafe: '카페', park: '공원', bar: '술집', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학',workshop:'공방',lab:'연구소',warehouse:'창고' }[fac.type];
       // §17.14 건물 스프라이트: 발자국 바닥 중앙 앵커, 깊이 = 남쪽 모서리 (심 오클루전)
       const mode = this.facMode.get(fac.id) ?? 'tile';
       const opened = interiorOpen.has(fac.id);
@@ -850,7 +850,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
   scene.tweens.add({ targets: t, y: y - 14, alpha: 0.2, duration: ms, onComplete: () => t.destroy() });
 }
 
-const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', site: '공사장' };
+const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', workshop:'공방',lab:'연구소',warehouse:'창고', site: '공사장' };
 // §22.12 한국어 조사 — 종성(받침)으로 고른다.
 // 예전에는 이름 뒤에 조사를 하드코딩해 "수아이(가)", "은지이(가)", "수아과(와)"가
 // 나왔다. 이벤트 피드는 가상 플레이어 3인이 모두 이 게임 최고의 자산으로 꼽은
@@ -1764,6 +1764,9 @@ function conversationLine(e) {
           '민원 대기표가 오늘 백 번을 넘었어', '점심시간에도 창구를 못 비워'],
         // child는 직업이 아니다 — 아이의 '일'은 학교와 숙제다. student와도 다르게,
         // 아이는 앞날을 계산하지 않고 오늘 하루를 말한다.
+        artisan: ['오늘 만든 물건은 손에 딱 맞게 나왔어', '공방 주문이 밀려서 손을 못 놓겠네'],
+        researcher: ['실험 결과가 예상과 달라서 다시 보고 있어', '오늘은 가설 하나를 제대로 확인했어'],
+        logistician: ['물건이 제때 도착해야 마을이 돌아가', '오늘 동선은 어제보다 훨씬 나았어'],
         child: ['숙제 다 하면 놀아도 된댔어', '오늘 학교에서 재밌는 일 있었다?',
           '받아쓰기 또 틀렸어…', '빨리 커서 어른 되고 싶어', '학교 끝나고 뭐 할지 벌써 정했어'],
         // 은퇴한 사람에게 '일 얘기'는 **일이 없는 것에 대한 얘기**다. 라이브 표본에는
@@ -2190,6 +2193,7 @@ const OCC_KO = {
   chef: '요리사', clerk: '점원',
   child: '아이',
   jobless: '구직 중',
+  artisan:'장인', researcher:'연구원', logistician:'물류 담당자',
 };
 // 라벨은 **한 곳에서만** 푼다. 표를 직접 인덱싱하면 미등록 키가 화면에
 // 'undefined'로(폴백 없는 자리) 또는 원시 영문 키로(폴백이 키인 자리) 새어 나간다.
@@ -2300,6 +2304,7 @@ function eventText(e) {
     }
     case 'car_bought': return `🚗 ${ga(n)} 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
     case 'station_unlocked': return `🚉 장거리 이동 수요가 문턱을 넘었다 — 기차역 언락! (수요 ${e.payload.demand}/${e.payload.threshold} · 충족도 ${e.payload.fulfillmentPct}% · 장거리 ${e.payload.totalLongTrips}회 · 차 ${e.payload.carsOwned}대)`;
+    case 'industry_unlocked': return `🏭 ${PLACE_KO[e.payload.facility]} 산업이 실제 수요로 열렸습니다 (${e.payload.evidence}/${e.payload.threshold})`;
     case 'city_promoted': return `🏙️ 해솔${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원${e.payload.demolished ? ` + 도로 ${e.payload.demolished}칸 철거 ${e.payload.demolitionCost}원` : ''}, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
@@ -2585,6 +2590,7 @@ function connect() {
         if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.transit) world.transit = msg.transit; // §19.12 역 수요 관측·언락 (zone 모달 게이트)
+        if (msg.unlockedIndustries) world.unlockedIndustries = msg.unlockedIndustries;
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
         for (const e of msg.events ?? []) {
           if (e.type === 'center_planned') {
@@ -2732,7 +2738,7 @@ setInterval(pushSpark, 5000);
   const modal = document.getElementById('zone-modal');
   if (!modal) return;
   let cur = null; let dir = 0; let type = 'house';
-  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000 };
+  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, workshop:6000,lab:9000,warehouse:8000 };
   const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**가 언락한다 (world.transit, 이슈 #52).
   // 착공 레시피(ZONEABLE·비용)는 후속 라운드 — 언락 전에는 충족도 %를, 언락 후에는
@@ -2741,17 +2747,18 @@ setInterval(pushSpark, 5000);
   const render = () => {
     const isStation = type === 'train_station';
     const need = TIER_NEED[type] ?? 0;
-    const locked = (world?.cityTier ?? 0) < need;
+    const industryLocked = ['workshop','lab','warehouse'].includes(type) && !world?.unlockedIndustries?.includes(type);
+    const locked = (world?.cityTier ?? 0) < need || industryLocked;
     const pct = world?.transit?.fulfillmentPct ?? 0;
     const info = isStation
       ? `공터 ${cur.plotId} · ${type} · ` + (stationLocked()
         ? `🔒 이동 수요 ${pct}% — 100%에 언락`
         : `🚉 언락됨 (수요 ${pct}%) · 착공 레시피는 후속 라운드`)
-      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원` + (locked ? ` · 🔒${['','읍','시','대도시'][need]} 필요` : '');
+      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원` + (locked ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
     document.getElementById('zone-info').textContent = info;
     for (const b of modal.querySelectorAll('[data-zt]')) {
       const zt = b.dataset.zt;
-      const dim = zt === 'train_station' ? stationLocked() : (world?.cityTier ?? 0) < (TIER_NEED[zt] ?? 0);
+      const dim = zt === 'train_station' ? stationLocked() : (world?.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt));
       b.style.opacity = dim ? 0.4 : 1;
       b.style.borderColor = zt === type ? '#ffcf6a' : '#6b5638';
     }
