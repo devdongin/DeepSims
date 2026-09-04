@@ -115,6 +115,7 @@ export const EVENT_TYPES = [
   'rail_opened', 'rail_cancelled', 'rail_suspended', 'rail_resumed',
   'rail_alighted', 'rail_boarded',
   'employment_started', 'employment_ended',
+  'flight_boarded', 'flight_alighted', 'flight_transfer',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];
