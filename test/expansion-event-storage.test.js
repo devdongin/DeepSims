@@ -32,6 +32,11 @@ test('expansion event names pass the real atomic storage boundary; unknown names
     assert.throws(()=>st.commitBatch({world,events:[{tick:2,ordinal:0,type:'not_registered',simId:null,payload:{}}],
       appliedInputIds:[],epochUtcMs:1000}),/unregistered event/);
     assert.equal(st.db.prepare('SELECT count(*) AS n FROM events').get().n,expansion.length);
+    const snapshot=st.db.prepare('SELECT state FROM snapshot WHERE id=1').get().state;
+    assert.throws(()=>st.commitBatch({world,events:[{tick:2,ordinal:0,type:'rail_opened',simId:null,
+      payload:{text:'가'.repeat(400)}}],appliedInputIds:[],epochUtcMs:2000}),/event payload > 1KB/);
+    assert.equal(st.db.prepare('SELECT count(*) AS n FROM events').get().n,expansion.length);
+    assert.equal(st.db.prepare('SELECT state FROM snapshot WHERE id=1').get().state,snapshot);
   }finally{st.close();}
 });
 
