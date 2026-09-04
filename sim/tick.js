@@ -985,7 +985,7 @@ export function tick(world, inputsForThisTick = []) {
       world.wear[ti] = (world.wear[ti] ?? 0) + 1; // 희소 객체 (§17.0)
       if (world.wear[ti] >= world.logic.build.wearThreshold) {
         delete world.wear[ti]; // 0 엔트리 금지 규칙의 연장 — 도로화된 칸은 제거
-        if (!isRoadProtected(world.map, sim.x, sim.y, false)) {
+        if (!isRoadProtected(world.map, sim.x, sim.y, false, world.plots)) {
           world.map.tiles[ti] = TILE.SIDEWALK;
           emit('sidewalk_formed', sim.id, { x: sim.x, y: sim.y });
         }
