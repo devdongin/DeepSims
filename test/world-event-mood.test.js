@@ -4,6 +4,7 @@ import {createWorld} from '../sim/world.js';
 import {tick,moodBaseline} from '../sim/tick.js';
 import {serialize,deserialize} from '../sim/serialize.js';
 import {applyWorldEvent,validateWorldEvent} from '../sim/world-events.js';
+import {emptyState} from '../sim/simfactory.js';
 const event=(delta,durationTicks=10)=>({effect:'mood',delta,durationTicks});
 
 test('mood shock uses a bounded signed value and same-channel replacement applies only the difference',()=>{
@@ -36,4 +37,20 @@ test('mood shock tick execution and exclusive expiry replay identically through 
   }
   assert.equal(expired,1);assert.deepEqual(w.worldEvents,[]);
   assert.equal(serialize(copy),serialize(w));
+});
+
+test('mood shock changes an actual autonomous action from volunteering to coping',()=>{
+  const base=createWorld(32),s=base.sims[0];
+  base.worldTick=600;base.lastDailyDay=0;base.lastPlanDay=0;
+  s.traits.age=30;s.traits.occupation='office_worker';s.education.course=null;
+  s.mood=0;s.money=10000;s.state=emptyState();
+  s.needs={hunger:9000,energy:9000,social:9000,fun:9000};
+  const affected=deserialize(serialize(base));
+  const normal=tick(base,[{sequence:0,command:'world_event',payload:event(0,100)}]);
+  const shock=tick(affected,[{sequence:0,command:'world_event',payload:event(-3000,100)}]);
+  const action=events=>events.find(e=>e.simId===s.id&&e.type==='action_started')?.payload.action;
+  assert.equal(action(normal),'volunteer');assert.equal(action(shock),'hole_up');
+  const replay=deserialize(serialize(affected));
+  for(let i=0;i<200;i++)assert.deepEqual(tick(replay),tick(affected));
+  assert.equal(serialize(replay),serialize(affected));
 });
