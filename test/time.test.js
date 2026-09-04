@@ -1,5 +1,8 @@
 // 시간 모델 테스트 (PLAN §7 6)
 import { test } from 'node:test';
+import { MAX_SPEED } from '../server/engine.js';
+import { DEFAULT_LOGIC } from '../sim/logic.js';
+import { TICK_DURATION_MS } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import { computeTarget } from '../sim/time.js';
 import { createWorld, advance, hashWorld } from '../sim/index.js';
@@ -9,7 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const TICK = 1000;
+const TICK = TICK_DURATION_MS; // §23.42 상수에서 — 하루 길이를 바꿔도 안 깨진다
 const MAX = 240 * 1440; // §22.1 따라잡기 클램프 (게임 2년치)
 
 test('6a. 기본: 경과 실시간 → 틱', () => {
@@ -41,7 +44,8 @@ test('6d. 전진 점프 = 오프라인 경과와 동일 취급', () => {
 });
 
 test('T-8. §20 배속: 목표 틱만 배율, 시뮬 결과는 불변', () => {
-  const base = { nowUtcMs: 60_000, epochUtcMs: 0, lastSimulatedTick: 0 };
+  // §23.42 60틱이 걸리는 실시간을 상수에서 구한다 — 배율만 검사하고 값은 안 박는다.
+  const base = { nowUtcMs: 60 * TICK_DURATION_MS, epochUtcMs: 0, lastSimulatedTick: 0 };
   assert.equal(computeTarget({ ...base }).target, 60, 'x1 = 60틱');
   assert.equal(computeTarget({ ...base, speed: 2 }).target, 120, 'x2 = 2배');
   assert.equal(computeTarget({ ...base, speed: 3 }).target, 180, 'x3 = 3배');
@@ -53,7 +57,7 @@ test('T-8. §20 배속: 목표 틱만 배율, 시뮬 결과는 불변', () => {
   assert.equal(hashWorld(a), hashWorld(b), '틱 수가 같으면 결과 동일');
   // 배속 변경 시 epoch 재기준화가 시간축을 연속으로 유지한다
   const t1 = computeTarget({ nowUtcMs: 100_000, epochUtcMs: 0, lastSimulatedTick: 100, speed: 1 });
-  const rebased = 100_000 - Math.floor((100 * 1000) / 2); // setSpeed(2)의 재기준화 공식
+  const rebased = 100_000 - Math.floor((100 * TICK_DURATION_MS) / 2); // setSpeed(2)의 재기준화 공식
   const t2 = computeTarget({ nowUtcMs: 100_000, epochUtcMs: rebased, lastSimulatedTick: 100, speed: 2 });
   assert.equal(t2.target, 100, '재기준화 직후 목표는 현재 틱 (시간축 점프 없음)');
   assert.ok(t1.target >= 100);
@@ -86,54 +90,55 @@ test('T-9. §20 따라잡기 중 배속 변경: 완료 후 재기준화되어 �
   });
   assert.equal(t0.target, engine.world.worldTick, '재기준화 직후 목표 = 현재 틱 (점프 없음)');
 
-  nowMs += 10_000; // 벽시계 10초
+  nowMs += 10 * TICK; // §23.42 배속 1 기준 10틱분 실시간 (틱 길이에서 유도)
   const t1 = computeTarget({
     nowUtcMs: nowMs, epochUtcMs: engine.epochUtcMs,
     lastSimulatedTick: engine.world.worldTick, speed: engine.speed,
   });
-  assert.equal(t1.target, engine.world.worldTick + 30, 'x3에서 10초 = 30틱 — 정지하지 않는다');
+  assert.equal(t1.target, engine.world.worldTick + 30, 'x3에서 30틱분 실시간 = 30틱 — 정지하지 않는다');
   st.close();
 });
 
-test('T-10. §22.1 ×48이면 실시간 1시간 = 게임 1년', () => {
-  // 1년 = yearDays(120) × TICKS_PER_DAY(1440) = 172,800틱.
-  // ×48이면 3,600초(1시간)에 그만큼 진행해야 한다.
-  const YEAR_TICKS = 120 * 1440;
-  const r = computeTarget({ nowUtcMs: 3600 * 1000, epochUtcMs: 0, lastSimulatedTick: 0, speed: 48 });
-  assert.equal(r.target, YEAR_TICKS, '1시간 × ×48 = 1년치 틱');
-  assert.equal(r.clamped, false, '2년 클램프 안에 들어온다');
-
-  // 달력은 그대로다 — 배속은 관람 속도만 바꾼다
-  assert.equal(YEAR_TICKS / 1440, 120, '1년은 여전히 120일');
+test('T-10. §20 배속은 벽시계를 틱으로 옮기는 배율이다 (달력은 안 건드린다)', () => {
+  // §23.42 예전에는 "×48이면 1시간 = 1년"을 값으로 박아 뒀다. 하루 길이(TICK_DURATION_MS)나
+  // 한 해 길이(yearDays)를 조정할 때마다 깨지는 테스트는 **규칙이 아니라 값**을 검사한다.
+  // 검사하려는 규칙은 하나다: 목표 틱 = 경과 실시간 × 배속 ÷ 틱 길이.
+  const YEAR_TICKS = DEFAULT_LOGIC.society.yearDays * 1440;
+  const speed = 4;
+  const elapsed = YEAR_TICKS * TICK_DURATION_MS / speed; // 1년치를 이 배속으로 지나는 실시간
+  const r = computeTarget({ nowUtcMs: elapsed, epochUtcMs: 0, lastSimulatedTick: 0, speed });
+  assert.equal(r.target, YEAR_TICKS, '경과 실시간 × 배속 ÷ 틱 길이 = 목표 틱');
+  assert.equal(r.clamped, false, '클램프 안에 들어온다');
+  assert.equal(YEAR_TICKS / 1440, DEFAULT_LOGIC.society.yearDays, '배속은 달력을 안 바꾼다');
 });
 
-test('T-11. §22.1 따라잡기 클램프는 ×48에서도 2시간 부재를 버티고, 넘으면 재기준화한다', () => {
-  const TICK = 1000;
-  // 2시간 부재 = 2년치 = 345,600틱 = 클램프 경계
-  const twoHours = 2 * 3600 * 1000;
-  const ok = computeTarget({ nowUtcMs: twoHours, epochUtcMs: 0, lastSimulatedTick: 0, speed: 48 });
-  assert.equal(ok.clamped, false, '2시간(2년치)까지는 버리지 않는다');
+test('T-11. §22.1 따라잡기 클램프는 한도까지 버티고, 넘으면 재기준화한다', () => {
+  // §23.42 한도(MAX_CATCHUP_TICKS)에 **정확히 닿는** 부재 시간을 상수에서 계산한다.
+  const speed = 20;
+  const twoHours = MAX * TICK_DURATION_MS / speed;
+  const ok = computeTarget({ nowUtcMs: twoHours, epochUtcMs: 0, lastSimulatedTick: 0, speed });
+  assert.equal(ok.clamped, false, '한도까지는 버리지 않는다');
   assert.equal(ok.target, MAX);
 
   // 그 이상은 클램프되고 epoch가 재기준화된다 (세계가 멈추지 않게)
-  const over = computeTarget({ nowUtcMs: twoHours * 2, epochUtcMs: 0, lastSimulatedTick: 0, speed: 48 });
+  const over = computeTarget({ nowUtcMs: twoHours * 2, epochUtcMs: 0, lastSimulatedTick: 0, speed });
   assert.equal(over.clamped, true, '한도를 넘으면 클램프');
   assert.equal(over.target, MAX, '한도까지만 진행');
   assert.ok(over.newEpochUtcMs > 0, 'epoch 재기준화 — 다음 목표가 현재 틱 아래로 내려가지 않는다');
   const next = computeTarget({
-    nowUtcMs: twoHours * 2, epochUtcMs: over.newEpochUtcMs, lastSimulatedTick: MAX, speed: 48,
+    nowUtcMs: twoHours * 2, epochUtcMs: over.newEpochUtcMs, lastSimulatedTick: MAX, speed,
   });
   assert.equal(next.target, MAX, '재기준화 직후 목표 = 현재 틱');
 });
 
 test('T-12. §22.11 배속 epoch 불일치 → 세계 영구 정지 (플레이테스트 블로커 A)', () => {
-  // 가상 플레이어 2인이 독립적으로 밟은 블로커. ×48로 돌던 세계를 재시작하면
-  // speed는 1로 리셋되는데 epoch는 ×48 기준으로 DB에 박혀 있다. rawTarget이
+  // 가상 플레이어 2인이 독립적으로 밟은 블로커. 최고 배속으로 돌던 세계를 재시작하면
+  // speed는 1로 리셋되는데 epoch는 최고 배속 기준으로 DB에 박혀 있다. rawTarget이
   // worldTick 한참 아래로 나오고 역행 클램프가 전진량을 0으로 만드는데,
   // clamped가 **전진** 클램프에서만 켜져 epoch 재고정이 안 일어난다 → 스스로 회복 못 함.
   const tick = 32092;
   const now = 10_000_000_000;
-  const epoch48 = now - Math.ceil((tick * TICK) / 48); // rebaseEpoch의 ×48 결과
+  const epoch48 = now - Math.ceil((tick * TICK) / MAX_SPEED); // rebaseEpoch의 최고 배속 결과
   const r = computeTarget({ nowUtcMs: now, epochUtcMs: epoch48, lastSimulatedTick: tick, speed: 1 });
   assert.equal(r.target, tick, '전진량 0 — 여기까지는 올바른 클램프');
   assert.equal(r.clamped, true, 'epoch가 현재 틱보다 뒤 → 재고정이 필요함을 알려야 한다');
@@ -155,14 +160,14 @@ test('T-13. §22.11 배속은 재시작 후에도 유지된다 — epoch와 짝�
 
   const st1 = new Storage(dbPath);
   const e1 = new Engine(st1, { seed: 4242, now: () => nowMs });
-  e1.setSpeed(48);
-  assert.equal(e1.speed, 48);
+  e1.setSpeed(MAX_SPEED);
+  assert.equal(e1.speed, MAX_SPEED);
   st1.close();
 
   // 재시작 — 같은 DB를 다시 연다
   const st2 = new Storage(dbPath);
   const e2 = new Engine(st2, { seed: 4242, now: () => nowMs });
-  assert.equal(e2.speed, 48, '배속이 재시작을 넘어 유지된다');
+  assert.equal(e2.speed, MAX_SPEED, '배속이 재시작을 넘어 유지된다');
 
   // 그리고 세계가 실제로 흐른다 (블로커 A의 최종 증상)
   nowMs += 20 * TICK;
@@ -188,7 +193,7 @@ test('T-14. §22.11 커밋된 logic/params.json이 자기 검증기를 통과한
 test('T-15. §22.11 setSpeed 직후 커밋 전에 죽어도 (epoch, speed) 짝이 맞는다', async () => {
   // Codex 100차 ②: speed만 즉시 저장하고 epoch는 메모리만 갱신하면, 그 창에서
   // 프로세스가 죽었을 때 **새 speed + 옛 epoch**가 디스크에 남는다. 이는 이 절이
-  // 고치려던 정지 버그와 같은 부류이고 방향만 반대다 — ×1 기준 epoch에 ×48로 붙어
+  // 고치려던 정지 버그와 같은 부류이고 방향만 반대다 — ×1 기준 epoch에 최고 배속으로 붙어
   // 잘못된 대량 따라잡기가 일어난다.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-clock-atomic-'));
   const dbPath = path.join(dir, 't.db');
@@ -202,13 +207,13 @@ test('T-15. §22.11 setSpeed 직후 커밋 전에 죽어도 (epoch, speed) 짝�
   await e1.catchUp();
   assert.equal(e1.world.worldTick, 600);
 
-  e1.setSpeed(48);          // ← 여기서 epoch가 ×48 기준으로 옮겨간다
+  e1.setSpeed(MAX_SPEED);          // ← 여기서 epoch가 최고 배속 기준으로 옮겨간다
   const memEpoch = e1.epochUtcMs;
   st1.close(); // ← 배치 커밋 없이 종료 (크래시 흉내)
 
   const st2 = new Storage(dbPath);
   const e2 = new Engine(st2, { seed: 4242, now: () => nowMs });
-  assert.equal(e2.speed, 48, '배속이 저장돼 있다');
+  assert.equal(e2.speed, MAX_SPEED, '배속이 저장돼 있다');
   assert.equal(e2.epochUtcMs, memEpoch, 'epoch도 같은 트랜잭션에 함께 저장됐다');
 
   // 짝이 맞으므로 목표는 현재 틱 — 유령 따라잡기가 없다.

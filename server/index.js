@@ -386,7 +386,10 @@ function sendSnapshot(ws) {
     reputation: engine.world.reputation,
     unlockedIndustries: engine.world.unlockedIndustries,
     statsHistory: engine.world.statsHistory,
-    // §23.37 transportStats도 화면이 안 읽는다 (0.23MB).
+    // §23.41 transportStats는 docs/BEHAVIOR.md §이동에서 **관측 창구로 명시**돼 있다
+    // ("스냅샷 transportStats와 내보낸 리포트에서 확인한다"). 화면이 안 읽는다고 빼면
+    // 문서가 가리키는 확인 경로가 끊긴다. 접속당 한 번(0.23MB)이라 배치 비용과 무관하다.
+    transportStats: { today: engine.world.transportStats.today, history: engine.world.transportStats.history },
 
     storyteller: engine.world.storyteller,
     foodSupply: engine.world.foodSupply,
