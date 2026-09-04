@@ -247,6 +247,7 @@ app.get('/api/relations', (req, res) => {
     helped: '누군가를 도왔다', was_helped: '도움을 받았다', new_neighbor: '새 이웃을 만났다',
     unmet: '하려던 걸 못 했다', starving: '굶주렸다', lonely: '외로웠다',
     party_info: '모임 소식을 들었다', relationship_changed: '사이가 달라졌다',
+    rejected: '같이 하자는 말을 거절당했다', // §23.47
     built_bed: '침대를 만들었다', found_item: '잃어버린 물건을 주웠다',
     construct_work: '공사를 거들었다', sick: '앓아누웠다', healed: '병이 나았다',
     love: '사랑에 빠졌다', wedding: '결혼했다', heartbreak: '이별했다',

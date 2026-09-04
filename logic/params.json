@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 103,
+  "logicSchemaVersion": 104,
   "founding": {
     "petitionDays": 3,
     "minSettlers": 2
@@ -38,61 +38,6 @@
     "lab": 3000,
     "warehouse": 300
   },
-  "education": {
-    "annualTuition": 2000,
-    "degreeStudyTicks": 20000,
-    "bachelorYears": 4,
-    "mastersYears": 2,
-    "doctorateYears": 4,
-    "mastersStudyTicks": 10000,
-    "doctorateStudyTicks": 20000,
-    "postgraduatePctFactor": 50,
-    "studyDeficit": 6500,
-    "dailyStudyTicks": 240,
-    "startMinute": 540,
-    "endMinute": 900
-  },
-  "household": {
-    "independenceAge": 19,
-    "stableDays": 7,
-    "reserveMoney": 2400
-  },
-  "housing": {
-    "baseLandValue": 10,
-    "proximityRadius": 64,
-    "proximityPoint": 2,
-    "useCap": 20,
-    "usePoint": 2,
-    "baseRent": 40,
-    "landRentPct": 25,
-    "bedRent": 10,
-    "maxIncomePct": 40,
-    "moveAfterDays": 3,
-    "serviceTypes": [
-      "primary_school",
-      "middle_school",
-      "high_school",
-      "university",
-      "hospital",
-      "police_station",
-      "fire_station",
-      "park",
-      "library",
-      "market"
-    ]
-  },
-  "development": {
-    "geniusMin": 120,
-    "geniusMax": 150,
-    "birthPct": 10,
-    "adultPct": 70,
-    "matureAge": 25,
-    "ticksPerPoint": 7200,
-    "physicalDeclineAge": 60,
-    "mentalDeclineAge": 75,
-    "declinePctPerYear": 1,
-    "minAgePct": 40
-  },
   "decay": {
     "hunger": 6,
     "energy": 4,
@@ -106,59 +51,6 @@
     "oldEnergyAdd": 2
   },
   "actions": {
-    "settle_village": {
-      "duration": 1
-    },
-    "supply_groceries": {
-      "duration": 30,
-      "cost": 0
-    },
-    "grow_groceries": {
-      "duration": 120,
-      "cost": 0,
-      "groceriesGain": 3
-    },
-    "stock_food": {
-      "duration": 15,
-      "cost": 600,
-      "groceriesGain": 3
-    },
-    "visit_culture": {
-      "duration": 40,
-      "cost": 100
-    },
-    "escort_child_doctor": {
-      "duration": 1
-    },
-    "stroll": {
-      "duration": 30,
-      "recoverPerTick": 70,
-      "moodPerTick": 6
-    },
-    "garden": {
-      "duration": 45,
-      "recoverPerTick": 55,
-      "moodPerTick": 7,
-      "groceriesGain": 1
-    },
-    "music": {
-      "duration": 35,
-      "recoverPerTick": 90,
-      "moodPerTick": 8
-    },
-    "volunteer": {
-      "duration": 60,
-      "recoverPerTick": 90,
-      "moodPerTick": 10,
-      "repGain": 1
-    },
-    "board_game": {
-      "duration": 40,
-      "recoverPerTick": 110,
-      "moodPerTick": 6,
-      "socialPerTick": 40,
-      "cost": 100
-    },
     "seek_food_aid": {
       "duration": 30,
       "mealCost": 200,
@@ -253,6 +145,59 @@
     "see_doctor": {
       "duration": 30,
       "cost": 800
+    },
+    "escort_child_doctor": {
+      "duration": 1
+    },
+    "stroll": {
+      "duration": 30,
+      "recoverPerTick": 70,
+      "moodPerTick": 6
+    },
+    "garden": {
+      "duration": 45,
+      "recoverPerTick": 55,
+      "moodPerTick": 7,
+      "groceriesGain": 1
+    },
+    "music": {
+      "duration": 35,
+      "recoverPerTick": 90,
+      "moodPerTick": 8
+    },
+    "volunteer": {
+      "duration": 60,
+      "recoverPerTick": 90,
+      "moodPerTick": 10,
+      "repGain": 1
+    },
+    "board_game": {
+      "duration": 40,
+      "recoverPerTick": 110,
+      "moodPerTick": 6,
+      "socialPerTick": 40,
+      "cost": 100
+    },
+    "supply_groceries": {
+      "duration": 30,
+      "cost": 0
+    },
+    "grow_groceries": {
+      "duration": 120,
+      "cost": 0,
+      "groceriesGain": 3
+    },
+    "stock_food": {
+      "duration": 15,
+      "cost": 600,
+      "groceriesGain": 3
+    },
+    "visit_culture": {
+      "duration": 40,
+      "cost": 100
+    },
+    "settle_village": {
+      "duration": 1
     }
   },
   "occupations": {
@@ -356,18 +301,18 @@
       "wagePct": 0,
       "startMoney": 0
     },
-    "jobless": {
-      "workStart": -1,
-      "workEnd": -1,
-      "wagePct": 0,
-      "startMoney": 0
-    },
     "clerk": {
       "workStart": 540,
       "workEnd": 1140,
       "wagePct": 85,
       "startMoney": 1000,
       "weekendWork": true
+    },
+    "jobless": {
+      "workStart": -1,
+      "workEnd": -1,
+      "wagePct": 0,
+      "startMoney": 0
     },
     "artisan": {
       "workStart": 540,
@@ -489,6 +434,61 @@
     "wageSpanPct": 40,
     "aptitudePoolWeight": 300
   },
+  "development": {
+    "geniusMin": 120,
+    "geniusMax": 150,
+    "birthPct": 10,
+    "adultPct": 70,
+    "matureAge": 25,
+    "ticksPerPoint": 7200,
+    "physicalDeclineAge": 60,
+    "mentalDeclineAge": 75,
+    "declinePctPerYear": 1,
+    "minAgePct": 40
+  },
+  "education": {
+    "annualTuition": 2000,
+    "degreeStudyTicks": 20000,
+    "bachelorYears": 4,
+    "mastersYears": 2,
+    "doctorateYears": 4,
+    "mastersStudyTicks": 10000,
+    "doctorateStudyTicks": 20000,
+    "postgraduatePctFactor": 50,
+    "studyDeficit": 6500,
+    "dailyStudyTicks": 240,
+    "startMinute": 540,
+    "endMinute": 900
+  },
+  "household": {
+    "independenceAge": 19,
+    "stableDays": 7,
+    "reserveMoney": 2400
+  },
+  "housing": {
+    "baseLandValue": 10,
+    "proximityRadius": 64,
+    "proximityPoint": 2,
+    "useCap": 20,
+    "usePoint": 2,
+    "baseRent": 40,
+    "landRentPct": 25,
+    "bedRent": 10,
+    "maxIncomePct": 40,
+    "moveAfterDays": 3,
+    "serviceTypes": [
+      "primary_school",
+      "middle_school",
+      "high_school",
+      "university",
+      "hospital",
+      "police_station",
+      "fire_station",
+      "park",
+      "library",
+      "market"
+    ]
+  },
   "sharing": {
     "needyBelow": 300,
     "giverKeepMin": 1500,
@@ -564,6 +564,7 @@
       "welfare": 6,
       "helped": 5,
       "was_helped": 6,
+      "rejected": 6,
       "governed": 4
     },
     "recencyLut": [
@@ -611,6 +612,8 @@
     "helpAcceptBonusPct": 25,
     "helpGiverSocialPct": 100,
     "helpGratitudeAffinity": 300,
+    "declineAffinity": 300,
+    "declineEscalationCap": 5,
     "helpMoodGiver": 40,
     "helpMoodTaker": 60,
     "rivalStatePenalty": 200000000000,
@@ -644,6 +647,7 @@
   "conversation": {
     "lineInterval": 15,
     "topicWeights": {
+      "conflict_news": 25,
       "couple_news": 25,
       "family_talk": 30,
       "food": 20,
@@ -698,11 +702,11 @@
       "bar": 6000,
       "office": 8000,
       "school": 8000,
+      "gym": 8000,
+      "library": 8000,
       "primary_school": 8000,
       "middle_school": 10000,
       "high_school": 12000,
-      "gym": 8000,
-      "library": 8000,
       "hospital": 10000,
       "city_hall": 10000,
       "police_station": 10000,
@@ -872,14 +876,14 @@
       "factory": 8000,
       "mall": 8000,
       "university": 10000,
+      "primary_school": 4000,
+      "middle_school": 5000,
+      "high_school": 6000,
       "workshop": 6000,
       "lab": 9000,
       "warehouse": 8000,
       "train_station": 8000,
-      "airport": 30000,
-      "primary_school": 4000,
-      "middle_school": 5000,
-      "high_school": 6000
+      "airport": 30000
     },
     "demolitionCostPerTile": 200,
     "plannedCenterCost": 5000,
@@ -1003,10 +1007,10 @@
     "lowEnergyBonus": 20,
     "contagionPermille": 40,
     "durationTicks": 4320,
+    "immuneTicks": 2880,
     "decayFactorNum": 1,
     "decayFactorDen": 2,
-    "doctorDeficit": 8500,
-    "immuneTicks": 2880
+    "doctorDeficit": 8500
   },
   "fiscal": {
     "reviewIntervalDays": 5,
@@ -1035,6 +1039,8 @@
     "retroCap": 40
   },
   "romance": {
+    "minRomanceAge": 19,
+    "ageGapBase": 7,
     "datingMin": 4500,
     "datingInteractions": 40,
     "marryMin": 7500,
@@ -1042,9 +1048,7 @@
     "breakup": 2000,
     "breakupMood": 1500,
     "partnerSocialPct": 150,
-    "sweetTalkDelta": 8,
-    "minRomanceAge": 19,
-    "ageGapBase": 7
+    "sweetTalkDelta": 8
   },
   "club": {
     "habitMin": 10000000000,

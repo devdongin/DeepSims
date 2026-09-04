@@ -79,6 +79,26 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
         candidates.push({ key, w, about, detail: { phase: pre ? 'campaign' : 'aftermath', mayorId: world.mayorId } });
         continue;
       }
+      if (key === 'conflict_news') {
+        // §23.52 커플 소식과 **같은 규칙**: 최근 7일, 링 뒤에서부터 최신 우선,
+        // 화자·청자가 당사자면 건너뛴다(자기 얘기는 소문이 아니다).
+        let found = null;
+        for (let i = (world.recentConflicts ?? []).length - 1; i >= 0; i--) {
+          const rc = world.recentConflicts[i];
+          if (day - rc.day <= 7 && rc.a !== speaker.id && rc.b !== speaker.id
+            && rc.a !== listener.id && rc.b !== listener.id) { found = rc; break; }
+        }
+        if (!found) continue;
+        // 화자는 **자기가 덜 좋아하는 쪽** 편을 들지 않는다 — 그쪽 흉을 본다.
+        // 이래야 마을이 편으로 갈린다. 동점이면 id가 작은 쪽으로 결정적으로 고른다.
+        const affA = world.affinity[speaker.id]?.[found.a] ?? 0;
+        const affB = world.affinity[speaker.id]?.[found.b] ?? 0;
+        const blamed = affA <= affB ? found.a : found.b;
+        const other = blamed === found.a ? found.b : found.a;
+        candidates.push({ key, w, about: blamed,
+          detail: { otherId: other, kind: found.kind, sentiment: -1 } });
+        continue;
+      }
       if (key === 'couple_news') {
         // §17.9: 최근 7일 내 커플 (링 뒤에서부터 최신 우선, 경계 포함 0..7)
         let found = null;
@@ -152,6 +172,11 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
   }
   // §17.7: 험담은 청자의 대상 인식을 실제로 바꾼다 (말 → 관계 → 선택)
   if (topic === 'gossip' && detail) {
+    applyGossipInfluence(world, listener, aboutSimId, detail.sentiment, emit);
+  }
+  // §23.52 갈등 소식도 청자의 인식을 바꾼다 — 험담과 **같은 채널**이다.
+  // 이게 있어야 앙숙이 두 사람의 사건이 아니라 마을의 편이 된다.
+  if (topic === 'conflict_news' && detail) {
     applyGossipInfluence(world, listener, aboutSimId, detail.sentiment, emit);
   }
   emit('conversation', speaker.id, {

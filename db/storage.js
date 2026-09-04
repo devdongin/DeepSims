@@ -38,6 +38,12 @@ const CHRONICLE_PERSONAL = new Set([
   'immigrated', 'grew_up', 'graduated', 'job_changed', 'started_dating', 'married',
   'broke_up', 'child_settled', 'moved_home', 'retired_now', 'bereaved', 'car_bought',
   'joined_club', 'heroic_save', 'genius_born', 'died', 'emigrated', 'ability_changed',
+  // §23.51 말다툼. 여태 빠져 있던 이유는 §23.47 이전에 argument가 **한 번도 일어나지
+  // 않았기** 때문이 아니라, 일어나면 고빈도일 것이라 봤기 때문이다. 실측은 반대다 —
+  // 4시드 100일에 4.3 ± 1.0건으로 결혼(16건)보다 희귀하다. 그동안 두 번 다툰 사람의
+  // 📖 일대기 전문이 "49살 / 차를 장만했다 / 지능이 29까지 늘었다"였다.
+  // 사람에게 일어난 가장 사람다운 일이 그 사람의 유일한 영구 기록에서 빠져 있었다.
+  'argument',
 ]);
 // §23.11 마을 연대기에 무엇을 남길지는 **빈도**로 정한다. 화재는 이틀에 한 번 나는
 // 일상이라 넣었더니 60줄 중 30줄이 "불이 났다"였고, 축제도 선거도 그 사이에 묻혔다.

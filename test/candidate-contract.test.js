@@ -69,9 +69,20 @@ for (const [pop, expected] of [
   // logic102: retirement observation is inert without airports; same behavior vectors.
   // logic103: critical survival priority; these initial 240-tick behavior vectors
   // remain identical. Longer deficient-world behavior intentionally changes (#176).
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', 'cc1b03cc']],
-  [50, ['8f96407c', '8464940b', 'a2baa370', '1e41226f']],
-  [200, ['23a3029f', '3b0afc44', '1dcc03c1', '313e9b04']],
+  //   schema77/logic100 (§23.47 거절이 호감도·기억에 닿는다 + contacts 행렬):
+  //     거절 감산은 rngSim을 소비하지 않으므로 드로우 순서가 보존된다. 그 증거가 인구10이다
+  //     — 후보(272da7d7)·선택(4ae751f3)·이벤트(9bcc9d00) **세 해시가 부모와 한 글자도 다르지
+  //     않고** 세계 해시만 움직였다. affinity·contacts 행렬이 실제로 변했기 때문이다.
+  //     인구50·200에서는 선택·이벤트도 갈리는데, 사람이 많으면 240틱 안에도 거절이 쌓여
+  //     호감과 기분(말다툼 −800)이 결정에 닿기 때문이다 — 의도한 변화다.
+  //     logic101 (§23.52 갈등 소식 채널): 후보·선택·이벤트 세 해시가 위와 **또 동일**하고
+  //     세계 해시만 움직였다. 초기 240틱에는 대화 자체가 없어 topicWeights를 한 번도
+  //     참조하지 않으므로 rngSim 소비가 그대로고, 바뀐 것은 새 상태 필드(recentConflicts)뿐이다.
+  // schema78/logic104 integrates both branches: all three behavior vectors
+  // match main1572cf2, retaining rejection/conflict behavior. World hashes add air.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '06ca8790']],
+  [50, ['8f96407c', '31c608eb', '1a80ff90', 'dd76bfab']],
+  [200, ['23a3029f', 'df690287', 'd6564dc2', '84c281c8']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

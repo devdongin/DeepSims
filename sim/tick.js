@@ -55,7 +55,7 @@ import { makeSim, emptyState } from './simfactory.js';
 import { recordIndustryDemand, recordCapacityShortfall, recordIndustryWant, maybeUnlockIndustries, neededIndustryFacility } from './industry.js';
 import { makeAbilities } from './abilities.js';
 import { surnameFor, surnameHash } from './surnames.js';
-import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
+import { argumentThreshold, pushRecentConflict, recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
@@ -743,11 +743,7 @@ function scaleDelta(delta, factor) {
   return s * floorDiv(Math.abs(delta) * factor, 100);
 }
 
-function argumentThreshold(sim, L) {
-  return clamp(
-    L.affinity.argumentBase - (sim.traits.mbti.TF - 50) * L.affinity.argumentTfCoef,
-    L.affinity.argClampMin, L.affinity.argClampMax);
-}
+// §23.47 argumentThreshold는 cognition.js로 옮겼다 — 거절 경로도 같은 문턱을 쓴다.
 
 // ---- 입력 명령 핸들러 (1단계) ----
 
@@ -1186,6 +1182,9 @@ export function tick(world, inputsForThisTick = []) {
         const IC = 1000000;
         world.interactions[a.id][b.id] = Math.min(IC, world.interactions[a.id][b.id] + 1);
         world.interactions[b.id][a.id] = Math.min(IC, world.interactions[b.id][a.id] + 1);
+        // §23.47 대화는 접촉이기도 하다 — contacts는 대화 + 거절이고 앙숙 판정만 쓴다.
+        world.contacts[a.id][b.id] = Math.min(IC, world.contacts[a.id][b.id] + 1);
+        world.contacts[b.id][a.id] = Math.min(IC, world.contacts[b.id][a.id] + 1);
         const delta = rngInt(world.rngSim, L.affinity.deltaSpan) + L.affinity.deltaMin // [-20, 40]
           + pairDeltaBonus(world, a, b); // §17: 연인·동아리 동료 보너스
         const fA = L.affinity.tfScaleBase + a.traits.mbti.TF;
@@ -1200,6 +1199,7 @@ export function tick(world, inputsForThisTick = []) {
         const thr = Math.max(argumentThreshold(a, L), argumentThreshold(b, L));
         const crossed = (beforeAB >= thr && afterAB < thr) || (beforeBA >= thr && afterBA < thr);
         if (crossed) {
+          pushRecentConflict(world, a.id, b.id, t, 'argument'); // §23.52
           emit('argument', a.id, { withSimId: b.id });
           applyMood(a, L.mood.argument); applyMood(b, L.mood.argument); // 사실 발생 지점 (PLAN §12.1)
           recordFact(a, t, L, 'argument', { subjectSimId: b.id, placeId: facId, tags: ['argument', `facility:${facId}`, `sim:${b.id}`] });

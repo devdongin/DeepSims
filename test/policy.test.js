@@ -39,11 +39,21 @@ test('W-1. 세율 레버가 연결돼 있다 — 올리면 세수가 는다', ()
   const low = run(4242, (w) => { w.logic.economy.taxPct = 5; });
   const high = run(4242, (w) => { w.logic.economy.taxPct = 30; });
   const tax = (r) => r.sum('money_changed', (e) => (e.payload.action === 'work' ? -Math.min(0, e.payload.delta) : 0));
-  // 임금 실수령은 세율만큼 깎인다. 같은 노동량이면 실수령 합이 줄어야 한다.
-  const netLow = low.sum('money_changed', (e) => (e.payload.action === 'work' ? e.payload.delta : 0));
-  const netHigh = high.sum('money_changed', (e) => (e.payload.action === 'work' ? e.payload.delta : 0));
-  assert.ok(netLow > 0 && netHigh > 0, '근로 소득 이벤트가 없다 — 표본이 성립하지 않는다');
-  assert.ok(netHigh < netLow, `세율 30%의 실수령 합(${netHigh})이 5%(${netLow})보다 크다 — 세율 레버가 안 걸린다`);
+  // §23.47 예전에는 **실수령 합**을 비교했다. 그런데 두 세계는 12일이면 이미 다른
+  // 세계다 — 국고가 두꺼운 30% 쪽이 공공 일자리와 복지를 더 굴려서 **노동 건수 자체가
+  // 더 많아진다**(경제 리뷰 n=24: 세율 5→30에서 인구 +5, 복지 지급 158→368).
+  // 그래서 "1인당 덜 받는데 총합은 더 크다"가 정상적으로 성립하고, 합계 비교는
+  // 레버가 아니라 궤적을 재고 있었다. 거절이 호감도를 움직이게 되면서 그 궤적이
+  // 조금 밀리자 바로 뒤집혔다. 이 테스트가 주장하는 것은 **원천징수가 걸려 있는가**이므로
+  // 건당 실수령으로 잰다 — 노동 건수가 몇 건이든 흔들리지 않는 양이다.
+  const netOf = (r) => {
+    const rows = r.ev.filter((e) => e.type === 'money_changed' && e.payload.action === 'work');
+    return { n: rows.length, per: rows.reduce((a, e) => a + e.payload.delta, 0) / rows.length };
+  };
+  const l = netOf(low); const h = netOf(high);
+  assert.ok(l.n > 0 && h.n > 0, '근로 소득 이벤트가 없다 — 표본이 성립하지 않는다');
+  assert.ok(h.per < l.per,
+    `세율 30%의 건당 실수령(${h.per.toFixed(1)}, ${h.n}건)이 5%(${l.per.toFixed(1)}, ${l.n}건)보다 크다 — 세율 레버가 안 걸린다`);
 });
 
 test('W-2. 복지 레버가 연결돼 있다 — 문턱을 올리면 수혜가 는다', () => {
