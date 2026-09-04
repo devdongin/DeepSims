@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 106,
+  "logicSchemaVersion": 107,
   "founding": {
     "petitionDays": 3,
     "minSettlers": 2
@@ -614,6 +614,7 @@
     "helpGratitudeAffinity": 300,
     "declineAffinity": 300,
     "declineEscalationCap": 5,
+    "argumentAffinity": 300,
     "helpMoodGiver": 40,
     "helpMoodTaker": 60,
     "rivalStatePenalty": 200000000000,

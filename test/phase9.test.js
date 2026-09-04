@@ -1955,10 +1955,41 @@ test('S-87. §22.6 말 걸기의 제약: 자는 사람·아이·라이벌은 대
     }
     return out.filter((e) => e.type === 'invited' || e.type === 'invite_declined').length;
   };
+  // §23.55 승낙과 거절을 나눠 세는 판 — "청은 하되 받아들여지지 않는다"를 구분해야 한다.
+  const runTyped = (setup) => {
+    const w = createWorld(SEED);
+    const cafe = w.map.facilities.find((f) => f.type === 'cafe');
+    const lonely = w.sims[0], other = w.sims[1];
+    idleAll(w, []);
+    lonely.state = { kind: 'performing', action: 'socialize', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 30, pairedTicks: 0 };
+    other.state = { kind: 'performing', action: 'eat', facilityId: cafe.id, resourceId: null, path: [], ticksLeft: 20, pairedTicks: 0 };
+    other.needs.social = 0;
+    setup(lonely, other, w);
+    const out = [];
+    for (let d = 0; d < 40; d++) {
+      other.invitedTo = undefined;
+      maybeApproachRef(w, d * 1440, d, (type, simId, payload) => out.push({ type, simId, payload }));
+    }
+    return { invited: out.filter((e) => e.type === 'invited').length,
+      declined: out.filter((e) => e.type === 'invite_declined').length };
+  };
   assert.ok(run(() => {}) > 0, '평소에는 말을 건다');
   assert.equal(run((l, o) => { o.state.action = 'sleep'; }), 0, '자는 사람은 깨우지 않는다');
   assert.equal(run((l, o) => { o.traits.occupation = 'child'; }), 0, '아이는 대상이 아니다');
-  assert.equal(run((l, o) => { o.relTiers[l.id] = 'rival'; }), 0, '사이가 나쁘면 말을 걸지 않는다');
+
+  // §23.55 **여기서 계약이 바뀌었다.** 예전에는 "상대가 나를 앙숙으로 보면 청하지 않는다"
+  // 였다. 그런데 그 검사가 보는 것은 `target.relTiers[sim.id]` — **상대의 사적인 감정**이고,
+  // 그것으로 내 행동을 막는 것은 내가 알 수 없는 것을 아는 셈이었다.
+  // 더 큰 문제는 결과였다: 청이 없으니 거절도 없고, 그래서 **상대가 나를 싫어한다는 사실이
+  // 나에게 도달할 길이 없었다.** 상호 앙숙이 세 리뷰어의 측정에서 각각 0/22 · 0/17 · 0/24로
+  // 나온 원인 중 하나다. 나는 모르니까 청하고, 상대가 거절한다.
+  const askedByDisliked = runTyped((l, o) => { o.relTiers[l.id] = 'rival'; });
+  assert.ok(askedByDisliked.declined > 0, '나를 앙숙으로 보는 사람에게도 청은 한다 — 모르니까');
+  assert.equal(askedByDisliked.invited, 0, '다만 그 청은 절대 받아들여지지 않는다');
+
+  // 반대 방향은 그대로다 — 내가 앙숙으로 여기는 사람에게는 청하지 않는다. 그건 내 감정이다.
+  assert.equal(run((l, o) => { l.relTiers[o.id] = 'rival'; }), 0,
+    '내가 앙숙으로 여기는 사람에게는 말을 걸지 않는다');
 });
 
 test('S-88. §22.6 말 걸기는 rngSim을 소비하지 않고, 초대는 점수만 기울인다', () => {

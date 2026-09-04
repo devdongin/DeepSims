@@ -1195,6 +1195,13 @@ export function tick(world, inputsForThisTick = []) {
         const thr = Math.max(argumentThreshold(a, L), argumentThreshold(b, L));
         const crossed = (beforeAB >= thr && afterAB < thr) || (beforeBA >= thr && afterBA < thr);
         if (crossed) {
+          // §23.55 싸움은 쌍방이다 — 거절 경로와 **같은 규칙**을 쓴다.
+          // 여기서는 대화 델타가 이미 양쪽을 움직였지만, 문턱을 넘은 그 순간
+          // 자체가 사건이므로 그 값을 따로 얹는다.
+          world.affinity[a.id][b.id] = clamp(
+            world.affinity[a.id][b.id] - L.social.argumentAffinity, AFFINITY_MIN, AFFINITY_MAX);
+          world.affinity[b.id][a.id] = clamp(
+            world.affinity[b.id][a.id] - L.social.argumentAffinity, AFFINITY_MIN, AFFINITY_MAX);
           pushRecentConflict(world, a.id, b.id, t, 'argument'); // §23.52
           emit('argument', a.id, { withSimId: b.id });
           applyMood(a, L.mood.argument); applyMood(b, L.mood.argument); // 사실 발생 지점 (PLAN §12.1)
