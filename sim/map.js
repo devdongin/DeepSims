@@ -421,12 +421,22 @@ export function zoneFootprint(type, dir) {
   return rotatedSize(w0, h0, dir);
 }
 
+export function airportSiteBuildable(map,plot,dir=0){
+  const {x,y}=plot;
+  if(!Number.isInteger(dir)||dir<0||dir>3||!Number.isSafeInteger(x)||!Number.isSafeInteger(y)||x<0||y<0)return false;
+  const shape=zoneFootprint('airport',dir);
+  return plotBuildable(map,plot,shape.w,shape.h)&&!map.facilities.some(f=>
+    x<f.x+f.w&&x+shape.w>f.x&&y<f.y+f.h&&y+shape.h>f.y
+    ||f.door&&f.door.x>=x&&f.door.x<x+shape.w&&f.door.y>=y&&f.door.y<y+shape.h);
+}
+
 export function addBuilding(map, type, plot, dir = 0) {
   const { x, y } = plot;
   const count = map.facilities.filter((f) => f.type === type).length;
   let id = `${type}${count}`;
   let airportSequence;
   if(type==='airport'){
+    if(!airportSiteBuildable(map,plot,dir))throw new RangeError('airport site blocked');
     if(!Number.isInteger(dir)||dir<0||dir>3)throw new RangeError('airport direction');
     if(!Number.isSafeInteger(x)||!Number.isSafeInteger(y)||x<0||y<0)throw new RangeError('airport coordinates');
     const shape=zoneFootprint(type,dir);

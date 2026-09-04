@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 76; // Persist physical employer and failed-search retry state.
+export const SCHEMA_VERSION = 77; // Persist paid airports, aircraft and recovery clocks.
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -119,6 +119,7 @@ export const EVENT_TYPES = [
   'flight_holding', 'flight_diverted', 'flight_diversion_landed',
   'flight_service_resumed',
   'flight_service_suspended', 'flight_route_unavailable',
+  'airport_opened',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

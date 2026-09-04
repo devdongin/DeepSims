@@ -6,6 +6,9 @@ import {
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
+import {commissionAirport} from './air-network.js';
+import {advanceAirService} from './air-service.js';
+import {airportSiteBuildable} from './map.js';
 import { updateEmployment, employerAllows } from './employer-assignment.js';
 import { applyWorldEvent, expireWorldEvents, worldEventMood, wakeEventMood } from './world-events.js';
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isAvailableResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
@@ -871,6 +874,7 @@ function applyZone(world, inp, t, emit) {
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
   else if (foundingSiteReserved(world,plot,p.type,p.dir)) reason='site_reserved';
   else if (campusSiteReserved(world,plot,p.type,p.dir)) reason='site_reserved';
+  else if(p.type==='airport'&&!airportSiteBuildable(world.map,plot,p.dir))reason='not_buildable';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionTiles = () => { const fp = zoneFootprint(p.type, p.dir); let n = 0;
     for (let y = plot.y; y < plot.y + fp.h; y++) for (let x = plot.x; x < plot.x + fp.w; x++) {
@@ -879,6 +883,7 @@ function applyZone(world, inp, t, emit) {
       if (tile === TILE.ROAD || tile === TILE.SIDEWALK) n++; else if (tile !== TILE.GRASS) return -1;
     } return n; };
   const demolished = plot ? demolitionTiles() : 0;
+  if(p.type==='airport'&&demolished>0)reason='not_buildable';
   if (reason === null && !(() => { const fp = zoneFootprint(p.type, p.dir); return plotBuildable(world.map, plot, fp.w, fp.h) || demolished > 0; })()) reason = 'not_buildable';
   else if (reason === null && government.treasury < cost + Math.max(0, demolished) * (L.zone.demolitionCostPerTile ?? 0)) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
@@ -896,7 +901,8 @@ function applyZone(world, inp, t, emit) {
   // §22.4 (93차 ②) 건설비는 마을 밖 시공사에게 나간다 — 경계 **유출**로 명시한다.
   // 안 세면 '내부에서 돈이 사라지는' 회계가 되어 G1 폐쇄 회계가 성립하지 않는다.
   world.externalOutflow = (world.externalOutflow ?? 0) + cost + demolitionCost;
-  world.zoneOrders.push({ plotId: p.plotId, type: p.type, dir: p.dir });
+  world.zoneOrders.push({ plotId: p.plotId, type: p.type, dir: p.dir,
+    ...(p.type==='airport'?{orderedTick:t,fundedCost:cost}:{}) });
   emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, tileChanges, treasury: government.treasury });
 }
 
@@ -1028,6 +1034,7 @@ export function tick(world, inputsForThisTick = []) {
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
   syncRailNetwork(world,t,emit);
+  advanceAirService(world.air,world.sims,world.map.facilities,world.incidents,t,L.transport.airTransferTicks,emit);
   fundFoundingPlans(world,t,emit);
   updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
@@ -1560,6 +1567,12 @@ export function tick(world, inputsForThisTick = []) {
       const fac = addBuilding(world.map, pr.type, plot, pr.dir ?? 0); // §18.T2 회전
       recordFoundingHome(world,pr,fac,t,emit);
       openSupplyMarket(world, fac, emit);
+      if(pr.type==='airport'){
+        const A=L.transport;
+        const opened=commissionAirport(world.air,fac,`airport:${pr.plotId}:${pr.orderedTick}`,t,
+          {speed:A.airSpeedTiles,dwellTicks:A.airDwellTicks,capacity:A.airCapacity},world.transportStats);
+        emit('airport_opened',null,{...opened,villageId:fac.villageId,fundedCost:pr.fundedCost});
+      }
       plot.used = true;
       world.projects.splice(world.projects.indexOf(pr), 1);
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
@@ -1687,6 +1700,7 @@ export function tick(world, inputsForThisTick = []) {
       const plot = world.plots.find((p) => p.plotId === order.plotId);
       const fp2 = plot ? zoneFootprint(order.type, order.dir) : null;
       if (!plot || plot.used || !plotBuildable(world.map, plot, fp2.w, fp2.h)
+        ||order.type==='airport'&&!airportSiteBuildable(world.map,plot,order.dir)
         ||foundingSiteReserved(world,plot,order.type,order.dir,order.foundingPetitionId??null)) { // 착공 재검증
         if(order.foundingPetitionId!==undefined){
           if(cancelFoundingConstruction(world,order.foundingPetitionId,'stale_order',t,emit))continue;
@@ -1702,6 +1716,7 @@ export function tick(world, inputsForThisTick = []) {
         ? floorDiv(base4 * L.election.mayorLaborPct, 100)
         : base4;
       world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true,
+        ...(order.type==='airport'?{orderedTick:order.orderedTick,fundedCost:order.fundedCost}:{}),
         ...(order.foundingPetitionId===undefined?{}:{foundingPetitionId:order.foundingPetitionId,fundedCost:order.fundedCost}) });
       emit('project_started', null, { plotId: order.plotId, type: order.type, dir: order.dir, x: plot.x, y: plot.y, required, zoned: true });
     }

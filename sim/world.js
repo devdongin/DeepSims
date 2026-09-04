@@ -12,6 +12,7 @@ import { newFoundingState } from './founding.js';
 import { buildMap, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng, rngNext, rngInt } from './prng.js';
 import { initializeRail } from './rail.js';
+import {makeAirNetwork} from './air-network.js';
 import { generateTraits } from './traits.js';
 import { DEFAULT_LOGIC } from './logic.js';
 
@@ -178,5 +179,6 @@ export function createWorld(seed) {
   world.founding = newFoundingState();
   world.season = seasonAt(world, 0);
   initializeRail(world);
+  world.air=makeAirNetwork();
   return world;
 }

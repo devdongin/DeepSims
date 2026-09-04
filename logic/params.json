@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 99,
+  "logicSchemaVersion": 100,
   "founding": {
     "petitionDays": 3,
     "minSettlers": 2
@@ -715,7 +715,8 @@
       "workshop": 10000,
       "lab": 16000,
       "warehouse": 14000,
-      "train_station": 20000
+      "train_station": 20000,
+      "airport": 60000
     },
     "deficit": 4000,
     "persJDiv": 4,
@@ -823,7 +824,12 @@
     "stationDistBoostPct": 25,
     "railSpeedTiles": 4,
     "railDwellTicks": 10,
-    "railCapacity": 8
+    "railCapacity": 8,
+    "airportTripsMin": 12,
+    "airSpeedTiles": 8,
+    "airDwellTicks": 10,
+    "airTransferTicks": 10,
+    "airCapacity": 8
   },
   "patrol": {
     "targets": [
@@ -870,6 +876,7 @@
       "lab": 9000,
       "warehouse": 8000,
       "train_station": 8000,
+      "airport": 30000,
       "primary_school": 4000,
       "middle_school": 5000,
       "high_school": 6000

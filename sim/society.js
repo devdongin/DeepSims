@@ -1,5 +1,6 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
+import {airportConstructionEvidence} from './airport-construction.js';
 import { worldEventPercent } from './world-events.js';
 import { syncResidenceVillage } from './villages.js';
 import { publicPostAvailable, demotePublicIfOverQuota, fillPublicPosts, trimOverQuotaPosts } from './publicposts.js';
@@ -785,6 +786,7 @@ export function zoneAllowedTypes(world, villageId) {
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**로 언락된다 (이슈 #52).
   // Unlock permits an ordinary paid zone order, not instant construction or trains.
   if (world.transit?.stationUnlocked) out.push('train_station');
+  if(airportConstructionEvidence(world,villageId??'village:0').eligible)out.push('airport');
   for (const id of world.unlockedIndustries ?? []) if (!out.includes(id)) out.push(id);
   return out;
 }
