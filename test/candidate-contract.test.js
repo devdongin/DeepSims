@@ -56,6 +56,7 @@ import { collectCandidates } from '../sim/tick.js';
 //   logic92: 지역 구직 부족분의 유료 사무실 계획. 초기 세 행동 벡터 동일.
 //   schema75/logic93: 빈 worldEvents 저장 필드 추가. 사건 없는 3시드×4320틱의
 //     이벤트/전체 상태가 버전과 빈 목록 제외 부모e1ae1ed와 동일함을 검증했다.
+//   §23.44~46 통합: 일대기 눈금·아파트 증축 계산·커밋 주기·기본 배속.
 for (const [pop, expected] of [
   // logic98: general visit gravity preserves single-town vectors; version hash only.
   [10, ['272da7d7', '32b2391b', 'ddff0557', '7cc31ba2']],
