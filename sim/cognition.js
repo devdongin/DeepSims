@@ -155,11 +155,31 @@ export function memoryModFor(shortlist, candTags, t, L) {
 }
 
 // 현재 상태 유래 보정: 그 시설에서 수행 중인 친구/라이벌 (PLAN §2.5.C 분리 원칙)
-export function stateModFor(world, sim, facilityId, L) {
+// §23.56 (#99) 시설 → 그 시설에서 performing 중인 심 목록. world.sims 순서 그대로.
+// stateModFor는 후보 시설마다 불리는데 예전에는 **그때마다 전 인구를 훑었다** —
+// 인구 200·시설 112·결정 1,875건/일이면 하루 4,240만 회 순회였고, 3회차 성능 리뷰가
+// 틱의 12.8%·pop² 항으로 지목했다. 결정 한 번에 이 인덱스를 한 번 만들면 O(인구)로 끝난다.
+// 한 심의 결정 안에서는 아무 상태도 안 바뀌므로 그 심이 처음 훑었을 값과 **정확히 같다**
+// — 결과 불변이 계약이다(#99). 틱 단위 스냅샷으로 만들면 앞 순번이 방금 앉은 것을
+// 뒷 순번이 못 보게 되어 의미가 바뀌므로, 심 단위로만 만든다.
+export function performingIndex(world) {
+  const m = new Map();
+  for (const o of world.sims) {
+    const st = o.state;
+    if (st.kind !== 'performing' || st.facilityId === null) continue;
+    let list = m.get(st.facilityId);
+    if (list === undefined) { list = []; m.set(st.facilityId, list); }
+    list.push(o);
+  }
+  return m;
+}
+
+export function stateModFor(world, sim, facilityId, L, performing = null) {
   let mod = 0;
-  for (const other of world.sims) {
+  const others = performing ? (performing.get(facilityId) ?? []) : world.sims;
+  for (const other of others) {
     if (other.id === sim.id) continue;
-    if (other.state.kind !== 'performing' || other.state.facilityId !== facilityId) continue;
+    if (!performing && (other.state.kind !== 'performing' || other.state.facilityId !== facilityId)) continue;
     const tier = sim.relTiers[other.id];
     if (tier === 'friend') mod += L.social.friendStateBonus;
     else if (tier === 'rival') mod -= L.social.rivalStatePenalty;

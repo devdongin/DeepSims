@@ -59,7 +59,7 @@ import { makeSim, emptyState } from './simfactory.js';
 import { recordIndustryDemand, recordCapacityShortfall, recordIndustryWant, maybeUnlockIndustries, neededIndustryFacility } from './industry.js';
 import { makeAbilities } from './abilities.js';
 import { surnameFor, surnameHash } from './surnames.js';
-import { argumentThreshold, pushRecentConflict, recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
+import { argumentThreshold, pushRecentConflict, recordFact, shortlistMemories, memoryModFor, stateModFor, performingIndex, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
@@ -395,7 +395,8 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
   const L = world.logic;
   const out = [];
   const byType = facilitiesByType(world.map);
-  const stateModCache = new Map(); // 같은 결정 내 시설별 캐시 (심 상태 불변 구간 — 결과 동일)
+  const stateModCache = new Map();
+  let performing = null; // §23.56 (#99) // 같은 결정 내 시설별 캐시 (심 상태 불변 구간 — 결과 동일)
   let presence = null;             // §20.3 사교 후보가 처음 나올 때 한 번만 만든다
   let occupancy = null;            // §23.8 보드게임 후보가 처음 나올 때 한 번만 만든다
   const memoCache = new Map(); // (action|facility) → {mm, pl} — 자원들이 공유 (결과 동일, §17.22)
@@ -573,7 +574,10 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
             cand.memoryMod = mm.mod;
             cand.cited = mm.cited;
             let sm = stateModCache.get(fac.id);
-            if (sm === undefined) { sm = stateModFor(world, sim, fac.id, L); stateModCache.set(fac.id, sm); }
+            if (sm === undefined) {
+              performing ??= performingIndex(world); // §23.56 (#99) 심당 한 번
+              sm = stateModFor(world, sim, fac.id, L, performing); stateModCache.set(fac.id, sm);
+            }
             // §20.3 사교 후보에만 사회적 중력을 더한다 (먹기·놀기는 붐빈다고 끌리지 않는다).
             // 기존 stateMod 클램프(±2.5e11) 안에서 합산한다.
             cand.stateMod = sm;

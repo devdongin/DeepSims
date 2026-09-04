@@ -629,9 +629,20 @@ export function sameRegion(map, ax, ay, bx, by) {
   return comp[ay * map.w + ax] === comp[by * map.w + bx];
 }
 
+// §23.56 (#98 ②) 타일 종류 → 통행 가능 표. BFS 안쪽 루프에서 방문 칸마다 Set.has를
+// 부르던 것을 배열 조회로 바꾼다. 표에 없는 값(정의 밖 타일)은 예전 술어로 떨어져
+// **같은 답**을 낸다 — 결과 불변이 계약이다.
+const WALKABLE_BY_TILE = (() => {
+  const vals = Object.values(TILE).filter((v) => Number.isInteger(v));
+  const arr = new Uint8Array(Math.max(...vals) + 1);
+  for (const v of vals) arr[v] = (!BLOCKING_TILES.has(v) && v !== TILE.TREE) ? 1 : 0;
+  return arr;
+})();
 export function isWalkable(map, x, y) {
   if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
   const t = map.tiles[y * map.w + x];
+  const w = WALKABLE_BY_TILE[t];
+  if (w !== undefined) return w === 1;
   // §19 R-A: 강·산·물·벽만 막는다 (다리·모래·언덕·강가는 통행 가능 — 지형이 도시 형태를 만든다)
   return !BLOCKING_TILES.has(t) && t !== TILE.TREE;
 }
