@@ -1600,7 +1600,13 @@ export function tick(world, inputsForThisTick = []) {
         maybeImmigration(world, t, day, emit);
         maybeEmigration(world, t, day, emit);
         for(const local of governmentViews(world))maybePromotion(local, t, governmentEmitter(local,emit)); // 이민 직후·새해 전
-        const resetStudent = sim => { releaseReservation(world,sim); sim.state=emptyState(); };
+        const resetStudent = sim => {
+          releaseReservation(world,sim);
+          // Enrollment/employment changes now, but a passenger cannot leave a
+          // moving train. Persist cancellation through saves until alighting.
+          if(sim.state.kind==='riding_train'&&sim.state.rail)sim.state.rail.cancelOnAlight=true;
+          else sim.state=emptyState();
+        };
         const aged = maybeNewYear(world, t, day, emit, resetStudent);
         if(!aged) updateEducation(world, t, emit, resetStudent);
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착

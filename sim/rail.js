@@ -109,6 +109,9 @@ function abandon(world,sim,t,emit,arrive,reason){
   const f=world.map.facilities.find(f=>f.id===state.facilityId),r=f?.resources.find(r=>r.id===state.resourceId);
   const path=r?bfsPath(world.map,sim.x,sim.y,r.x,r.y):null;
   world.rail.stats.cancelledRides++;emit('rail_cancelled',sim.id,{linkId:state.rail?.linkId,reason});
+  if(state.rail?.cancelOnAlight){
+    sim.state=emptyState();emit('action_failed',sim.id,{action,reason:'lifecycle_changed'});return;
+  }
   delete state.rail;
   if(path){state.path=path;state.kind='walking';if(!path.length)arrive(sim);}
   else{delete world.reservations[`${state.facilityId}:${state.resourceId}`];sim.state=emptyState();emit('action_failed',sim.id,{action,reason:'no_path'});}
@@ -147,6 +150,9 @@ export function advanceRail(world,t,emit,arrive){
       if(s.index===destinationIndex){
         train.passengers=train.passengers.filter(pid=>pid!==id);rail.stats.alightings++;
         emit('rail_alighted',id,{linkId:link.id,stationId:journey.to,rideTicks:t-journey.boardedTick});
+        if(journey.cancelOnAlight){
+          sim.state=emptyState();emit('action_failed',id,{action:state.action,reason:'lifecycle_changed'});continue;
+        }
         // Do not alias the saved itinerary with the consumable walking queue:
         // JSON resume copies them separately, so shifting an alias breaks replay.
         state.path=journey.egress.map(p=>({...p}));journey.phase='egress';state.kind='walking';

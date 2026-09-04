@@ -135,7 +135,7 @@ NPC 시장은 재정 리뷰 때 이미 주민이 모여 사는 외곽을 보고 
   `stationDistBoostPct`(25). 관측: `world.transit`, `/api/industry`의 H(운수·창고업) `transit` 필드.
   건설값: `zone.costs.train_station`, `construct.requiredByType.train_station` (logic81).
   기존 세이브는 비용/노동량 기본값만 보충하고 이미 시작한 프로젝트 노동량은 유지한다.
-  최신 통합본은 schema74/logic88이며, 양쪽 저장 버전68 충돌을 구분해 개척 필드와
+  최신 통합본은 schema74/logic90이며, 양쪽 저장 버전68 충돌을 구분해 개척 필드와
   관계·습관 집계를 함께 복원한다. 역 건설 규칙은 logic81 도입 시점과 같다.
   `railSpeedTiles`4·`railDwellTicks`10·`railCapacity`8은 노선 개통 시 고정한다.
   열차/선로는 역 건설에 포함된 무료 공공 기반시설로 취급한다. 운임·운영비·직원·연료·

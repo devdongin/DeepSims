@@ -25,6 +25,38 @@ function fixture(capacity=8){
 }
 const assign=id=>({sequence:id,command:'assign',payload:{simId:id,actionType:'eat'}});
 
+for(const transition of ['school','public-post'])test(`${transition} transition preserves a moving passenger until station arrival, including resume`,()=>{
+  const {w}=fixture(),s=w.sims[0];w.sims=[s];
+  s.traits.age=12;s.traits.occupation='student';s.education.lastStage='primary_school';
+  if(transition==='public-post'){s.traits.age=30;s.traits.occupation='police';s.education.lastStage=null;}
+  s.needs={hunger:9000,energy:9000,social:9000,fun:9000};
+  const boundary=w.logic.society.yearDays*1440;
+  w.worldTick=boundary-16;w.lastDailyDay=w.logic.society.yearDays-1;w.lastPlanDay=w.lastDailyDay;
+  w.rail=makeRailState();syncRailNetwork(w,w.worldTick,()=>{});
+  tick(w,[assign(s.id)]);
+  while(w.worldTick<boundary-1)tick(w);
+  assert.equal(s.state.kind,'riding_train');
+  const reservationKey=`${s.state.facilityId}:${s.state.resourceId}`;
+  let replay=deserialize(serialize(w));
+  const ev=tick(w);assert.deepEqual(ev,tick(replay));
+  if(transition==='school'){
+    assert.ok(ev.some(e=>e.type==='school_enrolled'&&e.simId===s.id));
+    assert.equal(s.traits.age,13);assert.equal(s.traits.occupation,'student');
+  }else assert.notEqual(s.traits.occupation,'police');
+  assert.equal(s.state.kind,'riding_train','birthday must not eject passenger');
+  assert.equal(s.state.rail.cancelOnAlight,true);
+  assert.notEqual(w.reservations[reservationKey],s.id,'release stale activity reservation immediately');
+  replay=deserialize(serialize(w));
+  let alighted=false;
+  for(let i=0;i<100&&!alighted;i++){
+    const events=tick(w);assert.deepEqual(events,tick(replay));assert.equal(hashWorld(w),hashWorld(replay));
+    alighted=events.some(e=>e.type==='rail_alighted'&&e.simId===s.id);
+    if(!alighted)assert.equal(s.state.kind,'riding_train');
+    else assert.ok(events.some(e=>e.type==='action_failed'&&e.simId===s.id&&e.payload.reason==='lifecycle_changed'));
+  }
+  assert.ok(alighted);assert.equal(w.rail.stats.boardings,w.rail.stats.alightings);
+});
+
 test('rail corridors are adjacent, preserve underlying terrain and avoid facilities and reserved land',()=>{
   const {w,link}=fixture();
   for(let i=1;i<link.path.length;i++){
