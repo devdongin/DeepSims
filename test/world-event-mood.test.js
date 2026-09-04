@@ -54,3 +54,30 @@ test('mood shock changes an actual autonomous action from volunteering to coping
   for(let i=0;i<200;i++)assert.deepEqual(tick(replay),tick(affected));
   assert.equal(serialize(replay),serialize(affected));
 });
+
+test('durable same-tick mood replacements survive reconstruction and multi-tick batching',async()=>{
+  const {Storage}=await import('../db/storage.js');
+  const {Engine}=await import('../server/engine.js');
+  const db=new Storage(':memory:');
+  try{
+    const engine=new Engine(db,{seed:32,now:()=>1000});
+    const expected=deserialize(serialize(engine.world));
+    for(const [i,delta] of [-2000,1000].entries()){
+      const input={clientInputId:`mood-${i}`,command:'world_event',payload:event(delta,10)};
+      assert.equal((await engine.submitInput(input)).duplicate,false);
+      assert.equal((await engine.submitInput(input)).duplicate,true);
+    }
+    const restored=new Engine(db,{seed:32,now:()=>1000});
+    const actual=restored.runLive(25).events;
+    const wanted=[];
+    for(let i=0;i<25;i++)wanted.push(...tick(expected,i===0?[-2000,1000].map((delta,sequence)=>({
+      sequence,command:'world_event',payload:event(delta,10),
+    })):[]));
+    assert.deepEqual(actual,wanted);
+    assert.equal(serialize(restored.world),serialize(expected));
+    const saved=new Engine(db,{seed:32,now:()=>1000});
+    assert.equal(serialize(saved.world),serialize(expected));
+    assert.equal(actual.filter(e=>e.type==='world_event_started').length,2);
+    assert.equal(actual.filter(e=>e.type==='world_event_expired').length,1);
+  }finally{db.close();}
+});
