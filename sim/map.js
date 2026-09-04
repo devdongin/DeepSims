@@ -362,6 +362,7 @@ export function plotBuildable(map, plot, w = 7, h = 5) {
   for (let j = plot.y; j < plot.y + h; j++) {
     for (let i = plot.x; i < plot.x + w; i++) {
       if (i < 0 || j < 0 || i >= map.w || j >= map.h) return false;
+      if (map.railTracks?.[j*map.w+i]) return false;
       if (map.tiles[j * map.w + i] !== TILE.GRASS) return false;
     }
   }
@@ -518,6 +519,7 @@ export function addBuilding(map, type, plot, dir = 0) {
     fac.w = sz.w; fac.h = sz.h;
   }
   fac.dir = dir;
+  if(type==='train_station')map.stationVersion=(map.stationVersion??0)+1;
   fac.villageId = plot.villageId ?? PRIMARY_VILLAGE_ID;
   fac.revenue ??= 0; // §20.2 매출 원장 — 신축 시설도 0에서 시작 (이슈 #43)
   if(isResidence(fac))fac.ownerSimId??=null; // #93 소유자 없는 신축 주택의 임대료는 국고 귀속

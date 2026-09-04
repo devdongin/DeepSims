@@ -353,6 +353,7 @@ function sendSnapshot(ws) {
   send(ws, { type: 'snapshot', world: {
     worldTick: engine.world.worldTick,
     map: engine.world.map,
+    rail: engine.world.rail,
     sims: simsView(engine.world.sims), // §22.8 화면이 쓰는 필드만
     affinity: engine.world.affinity,
     weather: engine.world.weather,
@@ -402,7 +403,7 @@ engine.onBatch((msg) => {
     // 그 클라이언트만 전송을 쉬고, 보일 때 최신 스냅샷 하나로 따라잡는다. 엔진과 다른
     // 클라이언트는 계속 진행하며 send를 안 했으므로 해당 소켓의 seq에도 틈이 생기지 않는다.
     if (ws.clientHidden) continue;
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, publicTreasury:msg.publicTreasury, villages:msg.villages, policyDefaults:msg.policyDefaults, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost, zoneCosts: engine.world.logic.zone.costs });
+    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, publicTreasury:msg.publicTreasury, villages:msg.villages, policyDefaults:msg.policyDefaults, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, rail:msg.rail, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost, zoneCosts: engine.world.logic.zone.costs });
     else send(ws, msg);
   }
 });

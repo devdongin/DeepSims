@@ -53,3 +53,9 @@ export function simsView(sims) {
   for (let i = 0; i < sims.length; i++) out[i] = simView(sims[i]);
   return out;
 }
+
+// Static corridor paths travel in snapshots, not every live batch.
+export function railView(rail){
+  return {stats:{...rail.stats},links:rail.links.map(l=>({id:l.id,from:l.from,to:l.to,blocked:l.blocked,
+    capacity:l.capacity,speed:l.speed,train:{x:l.train.x,y:l.train.y,passengers:[...l.train.passengers]}}))};
+}

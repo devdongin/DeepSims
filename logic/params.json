@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 82,
+  "logicSchemaVersion": 83,
   "founding": { "petitionDays": 3, "minSettlers": 2 },
   "needsTiers": {
     "fulfilledMin": 4000,
@@ -815,7 +815,10 @@
     "stationDemand": 300,
     "stationCarOwnerPct": 50,
     "stationDistBoostMin": 60,
-    "stationDistBoostPct": 25
+    "stationDistBoostPct": 25,
+    "railSpeedTiles": 4,
+    "railDwellTicks": 10,
+    "railCapacity": 8
   },
   "patrol": {
     "targets": [

@@ -820,7 +820,33 @@ class TownScene extends Phaser.Scene {
     return this.textures.exists(`walk${arch}_0`) ? `walk${arch}_0` : null;
   }
 
+  syncRail() {
+    const links=world?.rail?.links??[];
+    this.railMarkers??=new Map();
+    this.railGraphics??=this.add.graphics().setDepth(20);
+    if(!this.railGeometry||links.length!==this.railGeometry.length||links.some((l,i)=>l.path!==this.railGeometry[i].path||l.blocked!==this.railGeometry[i].blocked)){
+      this.railGraphics.clear();
+      for(const l of links){
+        this.railGraphics.lineStyle(3,l.blocked?0xb35b53:0xa6bec9,0.9);this.railGraphics.beginPath();
+        for(const [i,p] of (l.path??[]).entries()){
+          const x=isoX(p.x,p.y),y=isoY(p.x,p.y);
+          if(i===0)this.railGraphics.moveTo(x,y);else this.railGraphics.lineTo(x,y);
+        }
+        this.railGraphics.strokePath();
+      }
+      this.railGeometry=links.map(l=>({path:l.path,blocked:l.blocked}));
+    }
+    for(const l of links){
+      let marker=this.railMarkers.get(l.id);const x=isoX(l.train.x,l.train.y),y=isoY(l.train.x,l.train.y)-8;
+      if(!marker){marker=this.add.text(x,y,'',{fontSize:'16px',color:'#ffffff',backgroundColor:'#203441',padding:{x:3,y:2}}).setOrigin(0.5,1).setDepth(6000);this.railMarkers.set(l.id,marker);}
+      marker.setText(`${l.blocked?'⏸':'🚆'} ${l.train.passengers.length}/${l.capacity}`);
+      this.tweens.killTweensOf(marker);this.tweens.add({targets:marker,x,y,duration:200});
+    }
+    for(const [id,marker] of this.railMarkers)if(!links.some(l=>l.id===id)){marker.destroy();this.railMarkers.delete(id);}
+  }
+
   syncSims() {
+    this.syncRail();
     for (const sim of world.sims) {
       let sp = simSprites.get(sim.id);
       const tx = isoX(sim.x, sim.y), ty = isoY(sim.x, sim.y) - 8;
@@ -861,7 +887,8 @@ class TownScene extends Phaser.Scene {
       // §22.87 차를 타면 **차만 보인다** (사용자 지시: "자동차를 타면 자동차만 보여야지
       // 사람이랑 같이 보이지 않게 한다"). 예전에는 차 아이콘이 걸어가는 사람 위에 겹쳐서
       // 사람과 차가 한 몸처럼 붙어 다녔다. 이동 중에는 몸·이름표를 숨기고 차만 남긴다.
-      const driving = sim.hasCar && sim.state?.kind === 'walking';
+      sp.setVisible(sim.state?.kind!=='riding_train'); // Aboard a train, show the train rather than overlapping bodies/cars.
+      const driving = sim.hasCar && !sim.state?.rail && sim.state?.kind === 'walking';
       if (sp.carIcon) {
         sp.carIcon.setVisible(driving);
         if (driving && tx - sp.x !== 0) sp.carIcon.setFlipX(tx - sp.x > 0); // 가는 쪽을 본다
@@ -1096,7 +1123,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
 }
 
 const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', workshop:'공방',lab:'연구소',warehouse:'창고', site: '공사장' };
-Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교',train_station:'기차역 (운행 미지원)'});
+Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교',train_station:'기차역'});
 // §22.12 한국어 조사 — 종성(받침)으로 고른다.
 // 예전에는 이름 뒤에 조사를 하드코딩해 "수아이(가)", "은지이(가)", "수아과(와)"가
 // 나왔다. 이벤트 피드는 가상 플레이어 3인이 모두 이 게임 최고의 자산으로 꼽은
@@ -1198,7 +1225,7 @@ const PLACE_FALLBACK = {
   house: '집', apartment: '아파트', office: '직장', cafe: '카페', park: '공원', bar: '술집',
   library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청',
   school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', mall: '쇼핑몰',
-  police_station: '파출소', fire_station: '소방서', train_station:'기차역 (운행 미지원)',
+  police_station: '파출소', fire_station: '소방서', train_station:'기차역',
 };
 // 해시로 고르면 카페 9곳에 이름 8개라 반드시 겹친다. 그래서 **같은 종류 안에서 몇 번째인가**로
 // 고른다 — 이름이 동나면 "2호점"이 붙는다. id 정렬이라 목록 순서가 바뀌어도 이름은 그대로다.
@@ -2629,6 +2656,12 @@ function eventText(e) {
     }
     case 'car_bought': return `🚗 ${ga(n)} 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
     case 'station_unlocked': return `🚉 장거리 이동 수요가 문턱을 넘었다 — 기차역 언락! (수요 ${e.payload.demand}/${e.payload.threshold} · 충족도 ${e.payload.fulfillmentPct}% · 장거리 ${e.payload.totalLongTrips}회 · 차 ${e.payload.carsOwned}대)`;
+    case 'rail_opened': return `🚆 두 역을 잇는 무료 공공 셔틀이 개통됐습니다 (${e.payload.tiles}칸 · 정원 ${e.payload.capacity}명)`;
+    case 'rail_boarded': return `🚆 ${ga(n)} 열차에 탔습니다 (대기 ${e.payload.waitTicks}틱)`;
+    case 'rail_alighted': return `🚉 ${ga(n)} 열차에서 내려 목적지로 갑니다`;
+    case 'rail_suspended': return '⏸ 선로 또는 역을 사용할 수 없어 셔틀 운행을 멈췄습니다';
+    case 'rail_resumed': return '🚆 셔틀 운행을 재개했습니다';
+    case 'rail_cancelled': return `${ga(n)} 철도 여정을 중단하고 목적지까지의 경로를 다시 찾습니다`;
     case 'industry_unlocked': return `🏭 ${PLACE_KO[e.payload.facility]} 산업이 실제 수요로 열렸습니다 (${e.payload.evidence}/${e.payload.threshold})`;
     case 'city_promoted': return `🏙️ ${ro((world?.villages?.find(v => v.id === e.payload.villageId)?.name ?? '해솔') + e.payload.nameKo)} 승격했습니다! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원${e.payload.demolished ? ` + 도로 ${e.payload.demolished}칸 철거 ${e.payload.demolitionCost}원` : ''}, 국고 ${e.payload.treasury}원)`;
@@ -2795,6 +2828,7 @@ const FEED_STORY = new Set([
   'grew_up', 'died', 'emigrated', 'immigrated', 'bereaved', 'retired_now', 'moved_home',
   'joined_club', 'genius_born', 'heroic_save', 'festival', 'new_year', 'election',
   'city_promoted', 'station_unlocked', 'facility_built', 'argument', 'petition',
+  'rail_opened','rail_suspended','rail_resumed',
   'public_posts_filled', 'job_changed',
   'founding_petition_created', 'founding_petition_withdrawn',
   'founding_approved', 'founding_rejected',
@@ -3648,6 +3682,10 @@ function connect() {
         if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.transit) world.transit = msg.transit; // §19.12 역 수요 관측·언락 (zone 모달 게이트)
+        if(msg.rail){
+          const old=new Map((world.rail?.links??[]).map(l=>[l.id,l]));
+          world.rail={...world.rail,...msg.rail,links:msg.rail.links.map(l=>({...old.get(l.id),...l}))};
+        }
         if (msg.unlockedIndustries) world.unlockedIndustries = msg.unlockedIndustries;
         if (msg.housingMarket) world.housingMarket = msg.housingMarket;
         if (msg.householdDaily) world.householdDaily = msg.householdDaily;
@@ -3748,7 +3786,7 @@ function connect() {
             world.lostItems.push({ itemId: e.payload.itemId, x: e.payload.x, y: e.payload.y });
           } else if (e.type === 'item_found' && world?.lostItems) {
             world.lostItems = world.lostItems.filter((it) => it.itemId !== e.payload.itemId);
-          } else if (e.type === 'facility_built' || e.type === 'project_started') {
+          } else if (e.type === 'facility_built' || e.type === 'project_started' || e.type === 'rail_opened') {
             wsRef?.send(JSON.stringify({ type: 'resync' })); // 맵 대변형 — 새 스냅샷으로 재동기화
           } else if (e.type === 'weather_changed' && world) {
             world.weather = { day: e.payload.day, kind: e.payload.kind };
@@ -3894,7 +3932,7 @@ setInterval(pushSpark, 5000);
   const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school:4000,middle_school:5000,high_school:6000, workshop:6000,lab:9000,warehouse:8000,train_station:8000 };
   const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**가 언락한다 (world.transit, 이슈 #52).
-  // Paid construction is available after unlock; this does not claim train service.
+  // A reachable pair of completed stations enables the fare-free public shuttle.
   const stationLocked = () => !(world?.transit?.stationUnlocked);
   const jurisdiction = () => {
     const id=cur?.villageId??'village:0';
@@ -3912,7 +3950,7 @@ setInterval(pushSpark, 5000);
     const info = isStation
       ? `공터 ${cur.plotId} · ${type} · ` + (stationLocked()
         ? `🔒 이동 수요 ${pct}% — 100%에 언락`
-        : `🚉 언락됨 (수요 ${pct}%) · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원 · 역 건설만 지원, 열차 운행 미지원`)
+        : `🚉 언락됨 (수요 ${pct}%) · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원 · 연결 가능한 역 2곳부터 무료 셔틀 운행`)
       : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원` + (locked ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
     document.getElementById('zone-info').textContent = `${local.name} · 국고 ${local.government?.treasury??'?'}원 · ${info}`;
     for (const b of modal.querySelectorAll('[data-zt]')) {

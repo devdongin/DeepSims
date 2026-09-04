@@ -40,6 +40,7 @@ import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chron
 import { validateLogic, logicHash, ZONEABLE } from './logic.js';
 import { applyPolicyCommand } from './policy-command.js';
 import { refreshMoodCounts } from './mood-counts.js';
+import { syncRailNetwork, chooseRailJourney, advanceRail } from './rail.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor, developFromActivity } from './abilities.js'; // §21.1 / #96
 import { makeSim, emptyState } from './simfactory.js';
@@ -90,7 +91,7 @@ export function socialPresence(world, selfId) {
     if (o.id === selfId) continue;
     const st = o.state;
     if (st.action !== 'socialize' || st.facilityId === null) continue;
-    if (st.kind !== 'performing' && st.kind !== 'walking') continue;
+    if (!['performing','walking','waiting_train','riding_train'].includes(st.kind)) continue;
     let e = m.get(st.facilityId);
     if (e === undefined) { e = { here: 0, coming: 0 }; m.set(st.facilityId, e); }
     if (st.kind === 'performing') e.here++; else e.coming++;
@@ -288,6 +289,7 @@ export function facilityShortfallKind(world, sim, action, t) {
 }
 
 export function actionBlockReason(world, sim, action, t) {
+  if(sim.state.kind==='riding_train')return 'rail_in_transit';
   if(isSettlementInTransit(world,sim.id)&&action!==SETTLE_ACTION)return 'household_in_transit';
   if(action===SETTLE_ACTION)return settlementGatherTarget(world,sim)?null:'not_needed';
   const L = world.logic;
@@ -629,6 +631,7 @@ function payToFacility(world, facilityId, amount) {
 
 // 예약 + walking/performing 전이 (원자적). reason은 판단 사유 (PLAN §14.1).
 function startAction(world, sim, cand, t, emit, reason) {
+  if(sim.state.kind==='riding_train')return false;
   releaseReservation(world, sim);
   world.reservations[resKey(cand.facilityId, cand.resourceId)] = sim.id;
   const path = bfsPath(world.map, sim.x, sim.y, cand.res.x, cand.res.y);
@@ -655,17 +658,19 @@ function startAction(world, sim, cand, t, emit, reason) {
   // §22.16 emptyState를 펼쳐서 만든다. 예전에는 여기서 필드를 손으로 나열해
   // sideTalkTicks가 빠졌고(§22.14), 읽는 쪽의 `?? 0` 가드 덕에 우연히 버티고 있었다.
   // 필드를 하나 늘릴 때마다 이런 자리를 찾아다녀야 하는 구조는 언젠가 반드시 어긋난다.
+  const railTrip=chooseRailJourney(world,sim,cand,path,t);
   sim.state = {
     ...emptyState(),
-    kind: path.length === 0 ? 'performing' : 'walking',
+    kind: railTrip&&!railTrip.access.length?'waiting_train':path.length === 0 ? 'performing' : 'walking',
     action: cand.action,
     facilityId: cand.facilityId,
     resourceId: cand.resourceId,
-    path,
-    journey: path.length ? { x: sim.x, y: sim.y, walked: 0 } : null,
+    path:railTrip?railTrip.access:path,
+    journey: path.length ? { x: sim.x, y: sim.y, walked: 0,...(railTrip?{mode:'rail'}:{}) } : null,
+    ...(railTrip?{rail:railTrip.rail}:{}),
     ticksLeft: actionDuration(cand.action, world.logic),
   };
-  recordTransportDeparture(world, sim, path, t);
+  recordTransportDeparture(world, sim, railTrip?railTrip.fullPath:path, t);
   emit('action_started', sim.id, {
     action: cand.action, facilityId: cand.facilityId, resourceId: cand.resourceId, reason,
   });
@@ -676,6 +681,19 @@ function startAction(world, sim, cand, t, emit, reason) {
     collectComplaints(world, sim, world.worldTick + 1, emit); // §19.5
   }
   return true;
+}
+
+function finishJourney(world,sim,t,emit){
+  const s=sim.state;
+  recordTransportArrival(world,sim);
+  if(s.journey?.mode!=='rail')recordRoadTrip(world,sim,s.journey,t,emit);
+  s.journey=null;delete s.rail;s.kind='performing';
+  if(s.action===ESCORT_ACTION&&s.escortPhase===null){
+    if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
+    else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
+    return;
+  }
+  if(s.action==='sleep'){runReflection(world,sim,t,emit);maybeBuyCar(world,sim,t,emit);collectComplaints(world,sim,t,emit);}
 }
 
 
@@ -846,6 +864,7 @@ function applyZone(world, inp, t, emit) {
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionTiles = () => { const fp = zoneFootprint(p.type, p.dir); let n = 0;
     for (let y = plot.y; y < plot.y + fp.h; y++) for (let x = plot.x; x < plot.x + fp.w; x++) {
+      if(world.map.railTracks?.[y*world.map.w+x])return -1;
       const tile = world.map.tiles[y * world.map.w + x];
       if (tile === TILE.ROAD || tile === TILE.SIDEWALK) n++; else if (tile !== TILE.GRASS) return -1;
     } return n; };
@@ -977,6 +996,7 @@ export function tick(world, inputsForThisTick = []) {
 
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
+  syncRailNetwork(world,t,emit);
   fundFoundingPlans(world,t,emit);
   updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
@@ -1004,7 +1024,7 @@ export function tick(world, inputsForThisTick = []) {
     if(s.action===ESCORT_ACTION&&s.escortPhase==='travel'&&!syncEscortStep(world,sim)){
       cancelEscort(world,sim);emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'child_unavailable'});continue;
     }
-    const steps = sim.hasCar&&s.action!==SETTLE_ACTION ? world.logic.transport.carSpeedTiles : 1;
+    const steps = sim.hasCar&&!s.rail&&s.action!==SETTLE_ACTION ? world.logic.transport.carSpeedTiles : 1;
     let pickedThisTick = false; // §16.C 습득은 틱당 1회 — 차량이 습득률을 배로 늘리지 않도록 (65차 대비)
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
@@ -1054,21 +1074,13 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
     if (s.path.length === 0) {
-      recordTransportArrival(world, sim);
-      recordRoadTrip(world, sim, s.journey, t, emit);
-      s.journey = null;
-      s.kind = 'performing';
-      if(s.action===ESCORT_ACTION&&s.escortPhase===null){
-        if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
-        else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
-        continue;
-      }
-      // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
-      if (s.action === 'sleep') { runReflection(world, sim, t, emit); maybeBuyCar(world, sim, t, emit); collectComplaints(world, sim, t, emit); } // §19 R-B/§19.5
+      if(s.rail?.phase==='access'){s.rail.phase='waiting';s.rail.waitingSince=t;s.kind='waiting_train';}
+      else finishJourney(world,sim,t,emit);
     }
     }
   }
 
+  advanceRail(world,t,emit,sim=>finishJourney(world,sim,t,emit));
   completeSettlementArrivals(world,t,emit);
   completeHouseholdMigrations(world,t,emit);
   // 2a-2) 스쳐 지나가는 인사 (D9) — 전파(2b)보다 먼저: 같은 틱 전파는 인사 후 호감도를 본다
@@ -1763,6 +1775,7 @@ export function tick(world, inputsForThisTick = []) {
   }
 
   // 5) idle 심 결정 (id 오름차순, world.reservations = 틱-로컬 원장)
+  syncRailNetwork(world,t,emit);
   // §23.10 재실 인원은 **결정을 시작하기 전에 한 번** 찍는다 (Codex 지적).
   // 심마다 그때그때 세면, 앞 순번이 방금 카페에 앉은 것이 뒷 순번에게 보인다.
   // 결과는 재현되지만 **id 순서가 세계의 의미를 바꾼다** — 같은 상황에서 1번이 먼저

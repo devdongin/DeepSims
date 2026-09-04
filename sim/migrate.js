@@ -21,6 +21,7 @@ import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단�
 import { isWalkable, isResidence } from './map.js';
 import { emptyState } from './simfactory.js';
 import { refreshMoodCounts } from './mood-counts.js';
+import { initializeRail } from './rail.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -444,6 +445,7 @@ export function migrateWorld(world) {
   // Both main68 and branch68..72 can arrive here; rebuild once from their actual
   // dictionaries. Never require a per-tick scan in moodBaseline.
   if (from < 73) for (const sim of world.sims) refreshMoodCounts(sim,world.logic);
+  if (from < 74) initializeRail(world);
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }

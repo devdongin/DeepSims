@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 82, // Merge main mood counters; preserve dynamic habit thresholds.
+  logicSchemaVersion: 83, // Scheduled public rail with walking access, waiting and capacity.
   founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
@@ -392,6 +392,7 @@ export const DEFAULT_LOGIC = {
     stationCarOwnerPct: 50,   // 차 보유 심의 longTrips 반영률 %
     stationDistBoostMin: 60,  // 평균 장거리 칸수가 이 이상이면 수요 가중
     stationDistBoostPct: 25,  // 그때 가중 % (100 + 이 값이 계수가 된다)
+    railSpeedTiles: 4, railDwellTicks: 10, railCapacity: 8,
   },
   // §17.24 순찰·정직 (56차 합의): p(신고) = honesty.base + floorDiv(TF, honesty.tfDiv) — 정수식 고정
   patrol: { targets: ['cafe', 'park', 'market', 'bar', 'mall'], repPerPatrol: 1 },
@@ -909,6 +910,9 @@ function checkRanges(p, errors) {
   inRange('transport.stationCarOwnerPct', p.transport.stationCarOwnerPct, 0, 100);
   inRange('transport.stationDistBoostMin', p.transport.stationDistBoostMin, 1, 10000);
   inRange('transport.stationDistBoostPct', p.transport.stationDistBoostPct, 0, 1000);
+  inRange('transport.railSpeedTiles', p.transport.railSpeedTiles, 1, 8);
+  inRange('transport.railDwellTicks', p.transport.railDwellTicks, 1, 120);
+  inRange('transport.railCapacity', p.transport.railCapacity, 1, 64);
   inRange('patrol.repPerPatrol', p.patrol.repPerPatrol, 0, 1000);
   inRange('honesty.base', p.honesty.base, 0, 100);
   if (p.honesty.base + Math.floor(100 / p.honesty.tfDiv) > 100) {

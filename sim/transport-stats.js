@@ -45,6 +45,8 @@ export function recordTransportDeparture(world, sim, path, t, known = true) {
   const s = sim.state, destination = path[path.length - 1], purpose = purposeOf(s.action);
   stats.pending[sim.id] = { action: s.action, facilityId: s.facilityId,
     resourceId: s.resourceId, known, walkingTicks: 0, lastWalkTick: -1 };
+  const mode=s.rail?'rail':sim.hasCar?'car':'walk';
+  if(mode==='rail')Object.assign(stats.pending[sim.id],{mode,departedTick:t,railTicks:0,railTiles:0,waitingTicks:0,lastRailTick:-1});
   if (!known) return; // Old saves have no observed departure.
   // Residence-to-service visits, not guessed border crossings. Snapshot both
   // identities at departure; a later move or municipal reassignment is not a visit.
@@ -60,9 +62,10 @@ export function recordTransportDeparture(world, sim, path, t, known = true) {
   today.pathTiles += path.length;
   today.maxPathTiles = Math.max(today.maxPathTiles, path.length);
   if (path.length >= world.logic.transport.longTripMin) today.longTrips++;
-  if (sim.hasCar) today.carTrips++;
+  if (mode==='car') today.carTrips++;
+  if (mode==='rail') today.railTrips=(today.railTrips??0)+1;
   today.byPurpose[purpose] = (today.byPurpose[purpose] ?? 0) + 1;
-  const key = `${purpose}|${cell(sim.x, sim.y)}>${cell(destination.x, destination.y)}|${sim.hasCar ? 'car' : 'walk'}`;
+  const key = `${purpose}|${cell(sim.x, sim.y)}>${cell(destination.x, destination.y)}|${mode}`;
   today.od[key] = (today.od[key] ?? 0) + 1;
 }
 
@@ -77,6 +80,16 @@ export function recordTransportStep(world, sim, t, tile) {
   if (tile === TILE.SIDEWALK) today.sidewalkTiles++;
 }
 
+export function recordRailStep(world,sim,t){
+  const pending=world.transportStats.pending[sim.id],today=world.transportStats.today;if(!pending)return;
+  if(pending.lastRailTick!==t){pending.lastRailTick=t;pending.railTicks=(pending.railTicks??0)+1;today.railTicks=(today.railTicks??0)+1;}
+  pending.railTiles=(pending.railTiles??0)+1;today.railTiles=(today.railTiles??0)+1;
+}
+export function recordRailWait(world,sim){
+  const pending=world.transportStats.pending[sim.id],today=world.transportStats.today;if(!pending)return;
+  pending.waitingTicks=(pending.waitingTicks??0)+1;today.railWaitingTicks=(today.railWaitingTicks??0)+1;
+}
+
 export function recordTransportArrival(world, sim) {
   const stats = world.transportStats, pending = stats.pending[sim.id];
   if (!pending) return;
@@ -84,6 +97,10 @@ export function recordTransportArrival(world, sim) {
     stats.today.arrivals++;
     stats.today.completedWalkingTicks += pending.walkingTicks;
     stats.today.maxWalkingTicks = Math.max(stats.today.maxWalkingTicks, pending.walkingTicks);
+    if(pending.mode==='rail'){
+      stats.today.railArrivals=(stats.today.railArrivals??0)+1;
+      stats.today.completedRailJourneyTicks=(stats.today.completedRailJourneyTicks??0)+world.worldTick+1-pending.departedTick;
+    }
     const visit=pending.municipalVisit;
     if (visit && sim.villageId===visit.from) {
       const facility=world.map.facilities.find(f=>f.id===pending.facilityId);
@@ -107,7 +124,7 @@ export function pruneTransportTrips(world) {
     if (!trip) continue;
     live.add(sim.id);
     const state = sim.state;
-    if (state?.kind === 'walking' && state.action === trip.action
+    if (['walking','waiting_train','riding_train'].includes(state?.kind) && state.action === trip.action
       && state.facilityId === trip.facilityId && state.resourceId === trip.resourceId) continue;
     stats.today.cancelledTrips++; delete stats.pending[sim.id];
   }
