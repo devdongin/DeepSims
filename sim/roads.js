@@ -71,7 +71,8 @@ function connector(world, report, horizontalFirst) {
     else y += Math.sign(ty - y);
     if (isWalkable(map, x, y)) continue;
     const index = y * map.w + x, tile = map.tiles[index];
-    if (isRoadProtected(map, x, y) || (tile !== TILE.TREE && tile !== TILE.RIVER)) return null;
+    if (isRoadProtected(map, x, y, true, world.plots, world.projects, world.zoneOrders)
+      || (tile !== TILE.TREE && tile !== TILE.RIVER)) return null;
     changes.push({ index, tile: tile === TILE.RIVER ? TILE.BRIDGE : TILE.SIDEWALK });
   }
   if (!changes.length || changes.length > world.logic.publicWorks.paveMaxPerDay) return null;

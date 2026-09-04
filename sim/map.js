@@ -18,8 +18,32 @@ export const TILE = { GRASS: 0, ROAD: 1, FLOOR: 2, WALL: 3, TREE: 4, WATER: 5,
 // 통행 가능 여부의 단일 권위 확장: 강·산은 막고, 다리·모래·언덕·강가는 통행 가능
 export const BLOCKING_TILES = new Set([TILE.WATER, TILE.WALL, TILE.RIVER, TILE.MOUNTAIN]);
 
-// 시설 대지·출입구는 공공 차도에서 보호한다. 보행 인도는 공원/연못의 열린 공간에 허용한다.
-export function isRoadProtected(map, x, y, includeOpenAreas = true) {
+// §23.33 **아직 짓지 않은 공터도 보호한다.** 여태 이 함수는 세워진 시설만 봤다. 그래서
+// 마을이 자기가 지을 자리를 스스로 포장해 없앴다 — 마모로 인도가 깔리고(tick.js), 시장의
+// 공공사업이 도로를 놨다(society.js). plotBuildable은 발자국 전체가 GRASS여야 통과하는데
+// ROAD/SIDEWALK가 GRASS로 되돌아가는 경로는 코드에 없다. **단조 감소다.**
+//
+// 라이브 마을 실측(경제 리뷰): 미사용 공터 24곳 중 건축 가능 **0곳**, 막는 타일 24/24가
+// 전부 ROAD였다(맵에 GRASS는 221,639칸이 남아 있는데도). 그 결과 400게임일 동안
+// facility_built 0건 · project_started 0건. 국고 334만·건설 슬롯 6개를 쥐고도 못 지었다.
+// 인과 실험: 공터 타일만 GRASS로 되돌리자 같은 10일에 착공 13건·완공 5채.
+//
+// Ordinary unused parcels keep8×6; larger/rotated projects and orders reserve
+// their actual recipe footprint. Completed facilities protect themselves.
+const PARCEL_W = 8, PARCEL_H = 6;
+export function isRoadProtected(map, x, y, includeOpenAreas = true, plots = null, projects = [], orders = []) {
+  if(map.railTracks?.[y*map.w+x])return true;
+  if (plots) {
+    for (const p of plots) {
+      if (p.used) continue;
+      if (x >= p.x && x < p.x + PARCEL_W && y >= p.y && y < p.y + PARCEL_H) return true;
+    }
+    for(const reservations of [projects,orders])for(const q of reservations){
+      const p=plots.find(p=>p.plotId===q.plotId);if(!p||!ZONE_DIMS[q.type])continue;
+      const fp=zoneFootprint(q.type,q.dir??0);
+      if(x>=p.x&&x<p.x+fp.w&&y>=p.y&&y<p.y+fp.h)return true;
+    }
+  }
   return map.facilities.some((f) => {
     if (f.door && Math.abs(x - f.door.x) + Math.abs(y - f.door.y) <= 1) return true;
     if (!includeOpenAreas && ['park', 'pond'].includes(f.type)) return false;

@@ -43,10 +43,11 @@ import { collectCandidates } from '../sim/tick.js';
 //   #32 logic81: 역 비용/노동량과 버전만 추가. 역 주문 없는240틱 후보·선택·이벤트는 동일.
 //   §23.32 통합(schema73/logic82): main 카운터와 이관 충돌 해결. 전체 상태 해시 재검증.
 //   #32 schema74/logic83: 철도 상태/파라미터 추가. 역 없는 후보·선택·이벤트 동일 확인.
+//   §23.33 통합 logic84: 공터 포장 보호. 초기240틱 후보·선택·이벤트는 동일.
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', 'd57b75dd']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '761bc8e4']],
-  [200, ['91f50dd7', 'a23787ba', '2179523f', '222b2aeb']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', '77f083d0']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '936285f1']],
+  [200, ['91f50dd7', 'a23787ba', '2179523f', 'a58e6d90']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, tick, hashWorld, serialize, deserialize, migrateWorld } from '../sim/index.js';
-import { TILE, plotBuildable } from '../sim/map.js';
+import { TILE, plotBuildable, isRoadProtected, zoneFootprint } from '../sim/map.js';
 import { bfsPath } from '../sim/pathfind.js';
 import { maybePublicWorks } from '../sim/society.js';
 import { newGovernment, governmentViews, governmentEmitter, publicBalance } from '../sim/government.js';
@@ -17,6 +17,43 @@ function fixture(tile = TILE.RIVER) {
   const sim = w.sims[1]; sim.x = 8; sim.y = 8;
   return w;
 }
+
+test('parcel protection covers actual rotated reservations, rails and only unused ordinary parcels',()=>{
+  const w=fixture();w.map.tiles.fill(TILE.GRASS);
+  const p={plotId:1000,x:2,y:2,used:false};w.plots=[p];
+  assert.ok(isRoadProtected(w.map,9,7,false,w.plots));
+  assert.equal(isRoadProtected(w.map,10,7,false,w.plots),false);
+  p.used=true;assert.equal(isRoadProtected(w.map,9,7,false,w.plots),false);
+  for(const dir of [0,1,2,3]){
+    const fp=zoneFootprint('university',dir),q={plotId:p.plotId,type:'university',dir};
+    for(const [projects,orders] of [[[q],[]],[[],[q]]]){
+      assert.ok(isRoadProtected(w.map,p.x+fp.w-1,p.y+fp.h-1,false,w.plots,projects,orders));
+      assert.equal(isRoadProtected(w.map,p.x+fp.w,p.y+fp.h-1,false,w.plots,projects,orders),false);
+    }
+  }
+  w.map.railTracks={[20*w.map.w+20]:true};
+  assert.ok(isRoadProtected(w.map,20,20,false,w.plots));
+});
+
+test('actual foot wear cannot pave unused land, reserved campus edges or rails',()=>{
+  for(const kind of ['parcel','campus','rail','unprotected']){
+    const w=fixture(),s=w.sims[1];w.map.tiles.fill(TILE.GRASS);
+    w.plots=[];w.projects=[];w.zoneOrders=[];s.hasCar=false;s.x=14;s.y=12;
+    if(kind==='parcel')w.plots=[{plotId:1000,x:15,y:12,used:false}];
+    if(kind==='campus'){
+      w.plots=[{plotId:1000,x:6,y:1,used:false}];
+      w.zoneOrders=[{plotId:1000,type:'university',dir:1}];
+    }
+    const ti=12*w.map.w+15;
+    if(kind==='rail')w.map.railTracks={[ti]:true};
+    w.wear={[ti]:w.logic.build.wearThreshold-1};
+    s.state={...s.state,kind:'walking',path:[{x:15,y:12}],journey:null};
+    const saved=deserialize(serialize(w)),events=tick(w);
+    assert.deepEqual(events,tick(saved));assert.equal(hashWorld(w),hashWorld(saved));
+    assert.equal(w.map.tiles[ti],kind==='unprotected'?TILE.SIDEWALK:TILE.GRASS,kind);
+    assert.equal(events.some(e=>e.type==='sidewalk_formed'),kind==='unprotected',kind);
+  }
+});
 
 function walk(w, toX, events) {
   const s = w.sims[1], path = bfsPath(w.map, s.x, s.y, toX, 8);
@@ -72,10 +109,11 @@ test('#118 actual repeated walks cause a phased bridge that shortens travel, wit
 });
 
 test('#118 facilities, mountains, stale reports, poor/player mayors are not construction targets', () => {
-  for (const condition of ['facility', 'mountain', 'stale', 'poor', 'player']) {
+  for (const condition of ['facility', 'parcel', 'mountain', 'stale', 'poor', 'player']) {
     const w = fixture(condition === 'mountain' ? TILE.MOUNTAIN : TILE.TREE);
     report(w);
     if (condition === 'facility') w.map.facilities.push({ id:'park', type:'park', x:10,y:8,w:1,h:1,door:{x:10,y:8} });
+    if (condition === 'parcel') w.plots=[{plotId:1000,x:10,y:8,used:false}];
     if (condition === 'poor') w.treasury = 0;
     if (condition === 'player') w.sims[0].isPlayer = true;
     const before = [...w.map.tiles], money = w.treasury, events = [];
@@ -205,6 +243,23 @@ test('#32 maintenance uses nearest founded center, independent guards and full-w
   assert.equal(w.map.tiles[protectedIndex], TILE.GRASS);
   assert.equal(events.length, 2); assert.equal(events[1].payload.villageId, 'village:1');
   assert.equal(g.lastPublicWorksDay, 5); assert.equal(w.lastPublicWorksDay, 5);
+});
+
+test('municipal paving preserves a neighbor-owned campus reservation and pays only for unprotected tiles',()=>{
+  const w=municipalFixture();w.map.tiles.fill(TILE.GRASS);
+  w.plots=[{plotId:1000,x:10,y:1,used:false,villageId:'village:0'}];
+  w.projects=[];w.zoneOrders=[{plotId:1000,type:'university',dir:1}];
+  const edge=12*24+19,free=14*24+21,track=15*24+21;
+  w.map.railTracks={[track]:true};w.wear={[edge]:399,[free]:399,[track]:399};
+  assert.equal(roadMaintenanceVillage(w,edge),'village:1');
+  const cash=w.treasury,local=w.villages[1].government.treasury,out=w.externalOutflow;
+  const replay=deserialize(serialize(w)),events=[],resumedEvents=[];
+  localReview(w,5,events);localReview(replay,5,resumedEvents);
+  assert.deepEqual(events,resumedEvents);assert.equal(hashWorld(w),hashWorld(replay));
+  assert.equal(w.map.tiles[edge],TILE.GRASS);assert.equal(w.map.tiles[track],TILE.GRASS);
+  assert.equal(w.map.tiles[free],TILE.ROAD);assert.equal(w.treasury,cash);
+  assert.equal(w.villages[1].government.treasury,local-w.logic.publicWorks.paveCostPerTile);
+  assert.equal(w.externalOutflow,out+w.logic.publicWorks.paveCostPerTile);
 });
 
 test('#32 student or unfinished-degree mayors cannot spend, and old road plans keep original authority', () => {
