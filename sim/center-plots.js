@@ -28,16 +28,24 @@ export function repairCenterPlots(world, emit) {
     if (plot.used || busy.has(plot.plotId) || plotBuildable(world.map, plot)
       || foundingSiteReserved(world, plot, 'university')) continue;
     const villageId = plot.villageId ?? 'village:0';
-    if (!(world.centers ?? []).some(c => (c.villageId ?? 'village:0') === villageId
-      && Math.abs(c.x-plot.x)+Math.abs(c.y-plot.y) < world.logic.zone.centerRadius)) continue;
+    const nearCenter = p => (world.centers ?? []).some(c => (c.villageId ?? 'village:0') === villageId
+      && Math.abs(c.x-p.x)+Math.abs(c.y-p.y) < world.logic.zone.centerRadius);
+    if (!nearCenter(plot)) continue;
     const tiles = Array.from({length:35}, (_,i) => world.map.tiles[(plot.y+Math.floor(i/7))*world.map.w+plot.x+i%7]);
     if (!tiles.includes(TILE.ROAD) || tiles.some(t => t !== TILE.ROAD && t !== TILE.GRASS)) continue;
     const {w,h} = zoneFootprint('university',0);
+    // A road plus a crossing sidewalk can require displacement on both axes.
+    // The old fixed radius8 could never fit the enlarged12x10 campus there.
+    // Bound search by the protected footprint, and keep the parcel in its
+    // invested center's catchment. Never clear roads/sidewalks to make it fit.
+    const radius=w+h;
     const options = [];
-    for (let dy=-8;dy<=8;dy++) for (let dx=-8;dx<=8;dx++) {
-      if (Math.abs(dx)+Math.abs(dy)>8) continue;
+    for (let dy=-radius;dy<=radius;dy++) for (let dx=-radius;dx<=radius;dx++) {
+      if (Math.abs(dx)+Math.abs(dy)>radius) continue;
       const candidate = {...plot,x:plot.x+dx,y:plot.y+dy};
-      if (!plotBuildable(world.map,candidate,w,h) || foundingSiteReserved(world,candidate,'university')) continue;
+      if (!nearCenter(candidate)) continue;
+      if (!plotBuildable(world.map,candidate,w,h) || foundingSiteReserved(world,candidate,'university')
+        || campusSiteReserved(world,candidate,'university')) continue;
       if (world.plots.some(p => p !== plot && overlaps(candidate,w,h,p,w,h))) continue;
       if (world.map.facilities.some(f => overlaps(candidate,w,h,f,f.w??1,f.h??1)
         || overlaps(candidate,w,h,f.door,1,1))) continue;

@@ -63,3 +63,17 @@ test('fire target order, self reservations and historical lack of cooldown filte
   assert.deepEqual(candidates.map(c=>[c.facilityId,c.resourceId]),[['firesite','fire:target']]);
   assert.equal(serialize(w),before);
 });
+
+test('fire shortfall observation uses the same responder-reachable spots as candidates',()=>{
+  const {w,s}=fixture();s.traits.occupation='firefighter';s.x=1;s.y=1;
+  w.incidents=[{facilityId:'target',sinceTick:0}];
+  for(const [x,y] of [[8,7],[8,9],[9,8],[7,8],[8,8]])w.map.tiles[y*16+x]=TILE.WALL;
+  assert.equal(fireResponseShortfallKind(w,s),'unreachable');
+  assert.equal(collectCandidates(w,s,['respond_fire'],600,true).length,0);
+  w.map.tiles[9*16+8]=TILE.GRASS;w.map.reachVersion++;
+  assert.equal(fireResponseShortfallKind(w,s),null);
+  assert.equal(collectCandidates(w,s,['respond_fire'],600,true).length,1);
+  w.reservations['firesite:fire:target']=s.id+1;
+  assert.equal(fireResponseShortfallKind(w,s),'reserved');
+  assert.equal(collectCandidates(w,s,['respond_fire'],600,true).length,0);
+});

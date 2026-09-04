@@ -42,9 +42,11 @@ export function patrolShortfallKind(world,sim,t){
 }
 
 export function fireResponseShortfallKind(world,sim){
-  const targets=fireTargets(world);
+  const targets=fireTargets(world,sim);
   if(!targets.length)return 'no_target';
-  return targets.every(({res})=>{
+  const reachable=targets.filter(({res})=>res);
+  if(!reachable.length)return 'unreachable';
+  return reachable.every(({res})=>{
     const holder=world.reservations[`firesite:${res.id}`];
     return holder!==undefined&&holder!==sim.id;
   })?'reserved':null;
