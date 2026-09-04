@@ -43,6 +43,7 @@ import { applyPolicyCommand } from './policy-command.js';
 import { refreshMoodCounts } from './mood-counts.js';
 import { syncRailNetwork, chooseRailJourney, advanceRail } from './rail.js';
 import { officeConstructionDemand } from './employment.js';
+import { chooseVisit, visitContext } from './visit-choice.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor, developFromActivity } from './abilities.js'; // §21.1 / #96
 import { makeSim, emptyState } from './simfactory.js';
@@ -633,11 +634,11 @@ function payToFacility(world, facilityId, amount) {
 }
 
 // 예약 + walking/performing 전이 (원자적). reason은 판단 사유 (PLAN §14.1).
-function startAction(world, sim, cand, t, emit, reason) {
+function startAction(world, sim, cand, t, emit, reason, selectedPath = null) {
   if(sim.state.kind==='riding_train')return false;
   releaseReservation(world, sim);
   world.reservations[resKey(cand.facilityId, cand.resourceId)] = sim.id;
-  const path = bfsPath(world.map, sim.x, sim.y, cand.res.x, cand.res.y);
+  const path = selectedPath ?? bfsPath(world.map, sim.x, sim.y, cand.res.x, cand.res.y);
   if (path === null) {
     delete world.reservations[resKey(cand.facilityId, cand.resourceId)];
     sim.state = emptyState();
@@ -1803,6 +1804,7 @@ export function tick(world, inputsForThisTick = []) {
   // 결정했느냐 2번이 먼저 결정했느냐로 보드게임이 열리기도 하고 안 열리기도 한다.
   // 모두가 같은 세계를 보고 결정해야 한다. 자기 자신은 읽는 쪽에서 뺀다.
   const occSnapshot = occupancyAt(world, null);
+  let visitSnapshot=null;
   for (const sim of world.sims) {
     if (sim.state.kind !== 'idle') continue;
     const shortlist = shortlistMemories(sim, t, L); // D1: 심당 1회 계산
@@ -1859,7 +1861,9 @@ export function tick(world, inputsForThisTick = []) {
       if(isSettlementInTransit(world,sim.id)){startIdle(sim,L,emit);continue;}
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false, occ: occSnapshot });
-    const best = pickBest(cands);
+    if(world.villages.length>1)visitSnapshot??=visitContext(world);
+    const visit = chooseVisit(world,sim,cands,pickBest(cands),pickBest,urgency,visitSnapshot);
+    const best = visit.candidate;
 
     // §22.19 일상 수요 (이슈 #87). §22.18 원장은 **위급한 필요**에만 걸려서, 진료·독서·여가처럼
     // 굶어 죽지는 않지만 하고 싶은 일은 영원히 잡히지 않았다 — 실측으로 병원의 진료 자리를
@@ -1923,7 +1927,8 @@ export function tick(world, inputsForThisTick = []) {
         habitMod: best.habitMod,
         citedMemorySeqs: best.cited,
         urgencyOverride: urgency,
-      });
+        ...(visit.evidence?{visitChoice:visit.evidence}:{}),
+      },visit.path);
     } else startIdle(sim, L, emit);
   }
 
