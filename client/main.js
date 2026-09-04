@@ -3,6 +3,7 @@
 import Phaser from 'phaser';
 import {resetSimCache,mergeSimBatch} from './sim-stream.js';
 import {mountWorldEvents} from './world-events-ui.js';
+import {aircraftLabel,airportConstructionLabel,travelStateLabel} from './air-ui.js';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c,
@@ -10,6 +11,7 @@ const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2
 const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a, restaurant: 0xd4885a, gym: 0x5ad4a8, cinema: 0x6a5ad4, police_station: 0x4a5ad4, fire_station: 0xd44a3a, apartment: 0xb08a5a, factory: 0x8a8a92, mall: 0xd49ad4, university: 0x5ab0d4 };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
 FACILITY_COLORS.train_station = 0x739da8; // Dedicated tile-render fallback until station art exists.
+FACILITY_COLORS.airport = 0x668fae;
 
 let world = null;
 let worldStreamFresh=false;
@@ -852,8 +854,36 @@ class TownScene extends Phaser.Scene {
     for(const [id,marker] of this.railMarkers)if(!links.some(l=>l.id===id)){marker.destroy();this.railMarkers.delete(id);}
   }
 
+  syncAir() {
+    const links=world?.air?.links??[];
+    this.airMarkers??=new Map();this.airGraphics??=this.add.graphics().setDepth(21);
+    const geometry=JSON.stringify(links.map(l=>[l.id,l.fromPoint,l.toPoint,l.blocked]));
+    if(geometry!==this.airGeometry){
+      this.airGraphics.clear();
+      for(const l of links){
+        this.airGraphics.lineStyle(1,l.blocked?0xb35b53:0x8fcbe5,0.4);
+        this.airGraphics.lineBetween(isoX(l.fromPoint.x,l.fromPoint.y),isoY(l.fromPoint.x,l.fromPoint.y),
+          isoX(l.toPoint.x,l.toPoint.y),isoY(l.toPoint.x,l.toPoint.y));
+      }
+      this.airGeometry=geometry;
+    }
+    for(const l of links){
+      const x=isoX(l.aircraft.x,l.aircraft.y),y=isoY(l.aircraft.x,l.aircraft.y)-18;
+      let marker=this.airMarkers.get(l.id);
+      if(!marker){
+        marker=this.add.text(x,y,'',{fontSize:'11px',color:'#ffffff',backgroundColor:'#203441',
+          padding:{x:4,y:3},wordWrap:{width:180}}).setOrigin(0.5,1).setDepth(6001);
+        this.airMarkers.set(l.id,marker);
+      }
+      marker.setText(aircraftLabel(l));
+      this.tweens.killTweensOf(marker);this.tweens.add({targets:marker,x,y,duration:200});
+    }
+    for(const [id,marker] of this.airMarkers)if(!links.some(l=>l.id===id)){marker.destroy();this.airMarkers.delete(id);}
+  }
+
   syncSims() {
     this.syncRail();
+    this.syncAir();
     // §23.38 **화면 밖 사람은 스프라이트를 갖지 않는다.** 여태 전원에게 컨테이너(그림자 +
     // 몸 + 이름표, 차가 있으면 아이콘까지)를 만들었다. 인구 249면 오브젝트 1,000개, 그리고
     // 배치마다 전원에게 트윈을 만들고 죽였다(초당 약 1,000회). 지도가 다 보일 일은 없는데
@@ -911,8 +941,8 @@ class TownScene extends Phaser.Scene {
       // §22.87 차를 타면 **차만 보인다** (사용자 지시: "자동차를 타면 자동차만 보여야지
       // 사람이랑 같이 보이지 않게 한다"). 예전에는 차 아이콘이 걸어가는 사람 위에 겹쳐서
       // 사람과 차가 한 몸처럼 붙어 다녔다. 이동 중에는 몸·이름표를 숨기고 차만 남긴다.
-      sp.setVisible(sim.state?.kind!=='riding_train'); // Aboard a train, show the train rather than overlapping bodies/cars.
-      const driving = sim.hasCar && !sim.state?.rail && sim.state?.kind === 'walking';
+      sp.setVisible(!['riding_train','flying'].includes(sim.state?.kind)); // Show the vehicle, not overlapping bodies/cars.
+      const driving = sim.hasCar && !sim.state?.rail && !sim.state?.air && sim.state?.kind === 'walking';
       if (sp.carIcon) {
         sp.carIcon.setVisible(driving);
         if (driving && tx - sp.x !== 0) sp.carIcon.setFlipX(tx - sp.x > 0); // 가는 쪽을 본다
@@ -1147,7 +1177,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
 }
 
 const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', workshop:'공방',lab:'연구소',warehouse:'창고', site: '공사장' };
-Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교',train_station:'기차역'});
+Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교',train_station:'기차역',airport:'공항'});
 // §22.12 한국어 조사 — 종성(받침)으로 고른다.
 // 예전에는 이름 뒤에 조사를 하드코딩해 "수아이(가)", "은지이(가)", "수아과(와)"가
 // 나왔다. 이벤트 피드는 가상 플레이어 3인이 모두 이 게임 최고의 자산으로 꼽은
@@ -1249,7 +1279,7 @@ const PLACE_FALLBACK = {
   house: '집', apartment: '아파트', office: '직장', cafe: '카페', park: '공원', bar: '술집',
   library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청',
   school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', mall: '쇼핑몰',
-  police_station: '파출소', fire_station: '소방서', train_station: '기차역',
+  police_station: '파출소', fire_station: '소방서', train_station: '기차역', airport: '공항',
   // §23.44 학교 3종·대학·산업 시설이 빠져 있었다. 그래서 "새 새 건물이 완공됐습니다"와
   // 연대기의 "university가 새로 문을 열었다"가 나왔다 — undefined를 영문 id로 바꾼 것뿐이다.
   primary_school: '초등학교', middle_school: '중학교', high_school: '고등학교',
@@ -3552,7 +3582,7 @@ function renderPanel() {
       entry.textContent = `${label} ${sim.abilities?.[key] ?? '—'} / ${sim.potential?.[key] ?? '—'}`;
       return entry;
     }));
-  $('action').textContent = `현재: ${actionKo(sim.state.action, '대기')} ${sim.state.kind === 'walking' ? '(이동 중)' : ''}`;
+  $('action').textContent = `현재: ${actionKo(sim.state.action, '대기')} ${travelStateLabel(sim.state)}`;
 }
 
 // §23.19 피드 필터 배선. 필터를 바꾸면 쌓인 줄을 지운다 — 섞여 있으면 무엇을 보고
@@ -3789,6 +3819,7 @@ function connect() {
         break;
       case 'snapshot':
         world = msg.world;
+        window.refreshZoneModal?.();
         worldStreamFresh=true;
         refreshWorldEvents();
         updatePolicySummary();
@@ -3818,6 +3849,7 @@ function connect() {
         sparkHist.length = 0; // 재접속 시 이전 세션 잔존 제거 (Codex 48차 P3)
         applyWeather();
         updateStats();
+        scene?.syncSims(); // Reconnect with unchanged terrain must still refresh aircraft/passengers.
         window.__publishDiag?.(); // #143 ?diag=1 초기 snapshot 직후의 안정된 기준값
         break;
       case 'tickBatch': {
@@ -3840,6 +3872,7 @@ function connect() {
           const old=new Map((world.rail?.links??[]).map(l=>[l.id,l]));
           world.rail={...world.rail,...msg.rail,links:msg.rail.links.map(l=>({...old.get(l.id),...l}))};
         }
+        if(msg.air)world.air=msg.air;
         if (msg.unlockedIndustries) world.unlockedIndustries = msg.unlockedIndustries;
         if (msg.housingMarket) world.housingMarket = msg.housingMarket;
         if (msg.householdDaily) world.householdDaily = msg.householdDaily;
@@ -3848,6 +3881,7 @@ function connect() {
         updatePolicySummary();
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
         if (msg.zoneCosts !== undefined) world.zoneCosts = msg.zoneCosts;
+        window.refreshZoneModal?.();
         for (const e of msg.events ?? []) {
           if(e.type==='household_migration_gathering'){
             const home=world.map.facilities.find(f=>f.id===e.payload.targetHomeId);
@@ -4087,7 +4121,8 @@ setInterval(pushSpark, 5000);
   if (!modal) return;
   let cur = null; let dir = 0; let type = 'house';
   const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school:4000,middle_school:5000,high_school:6000, workshop:6000,lab:9000,warehouse:8000,train_station:8000 };
-  const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
+  COST.airport=30000;
+  const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3, airport:3 };
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**가 언락한다 (world.transit, 이슈 #52).
   // A reachable pair of completed stations enables the fare-free public shuttle.
   const stationLocked = () => !(world?.transit?.stationUnlocked);
@@ -4099,20 +4134,24 @@ setInterval(pushSpark, 5000);
   const render = () => {
     const local=jurisdiction();
     const isStation = type === 'train_station';
+    const airportEvidence=world?.air?.construction?.[local.id];
     const need = TIER_NEED[type] ?? 0;
     const industryLocked = ['workshop','lab','warehouse'].includes(type) && !world?.unlockedIndustries?.includes(type);
-    const locked = !local.government || (local.government.cityTier ?? 0) < need || industryLocked || (isStation && stationLocked());
+    const locked = !local.government || (local.government.cityTier ?? 0) < need || industryLocked || (isStation && stationLocked())
+      ||type==='airport'&&!airportEvidence?.eligible;
     const cost = world?.zoneCosts?.[type] ?? COST[type];
     const pct = world?.transit?.fulfillmentPct ?? 0;
     const info = isStation
       ? `공터 ${cur.plotId} · ${type} · ` + (stationLocked()
         ? `🔒 이동 수요 ${pct}% — 100%에 언락`
         : `🚉 언락됨 (수요 ${pct}%) · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원 · 연결 가능한 역 2곳부터 무료 셔틀 운행`)
-      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원` + (locked ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
-    document.getElementById('zone-info').textContent = `${local.name} · 국고 ${local.government?.treasury??'?'}원 · ${info}`;
+      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원` + (locked&&type!=='airport' ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
+    document.getElementById('zone-info').textContent = `${local.name} · 국고 ${local.government?.treasury??'?'}원 · ${info}`
+      +(type==='airport'?` · ${airportConstructionLabel(airportEvidence)} · 부지20×12 · 유상 공사 완료 후 운항 · 첫 공항은 기체 없음`:'');
     for (const b of modal.querySelectorAll('[data-zt]')) {
       const zt = b.dataset.zt;
-      const dim = !local.government || (zt === 'train_station' ? stationLocked() : (local.government.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt)));
+      const dim = !local.government || (zt === 'train_station' ? stationLocked() : (local.government.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt)))
+        ||zt==='airport'&&!airportEvidence?.eligible;
       b.style.opacity = dim ? 0.4 : 1;
       b.style.borderColor = zt === type ? '#ffcf6a' : '#6b5638';
     }
@@ -4127,6 +4166,7 @@ setInterval(pushSpark, 5000);
   const plotsAvailable = () => (world?.plots ?? []).filter((p) => !p.used && p.foundingPetitionId==null
     && !world.projects?.some((pr) => pr.plotId === p.plotId)
     && !world.zoneOrders?.some((pr) => pr.plotId === p.plotId));
+  window.refreshZoneModal=()=>{if(cur&&modal.style.display==='flex')render();};
   window.openZoneModal = (plot) => {
     cur = plot; dir = 0; type = 'house';
     const select = document.getElementById('zone-plot');
