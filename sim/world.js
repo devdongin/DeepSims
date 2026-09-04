@@ -88,6 +88,11 @@ export function createWorld(seed) {
 
   const affinity = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
   const interactions = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
+  // §23.47 접촉 횟수 — 마주 앉은 대화 **그리고 거절**. 앙숙 판정만 이걸 쓴다.
+  // interactions(대화만)와 나눠 둔 이유는 Codex 리뷰가 재현한 사고 때문이다:
+  // 하나로 합치면 거절이 연애·결혼의 상호작용 문턱을 넘겨 버린다
+  // (상호작용 39→40, 호감 5000/5000에서 거절 한 번에 started_dating).
+  const contacts = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(0));
   const lastGreetDay = Array.from({ length: SIM_COUNT }, () => new Array(SIM_COUNT).fill(-1));
 
   const world = {
@@ -133,6 +138,7 @@ export function createWorld(seed) {
     sims,
     affinity,
     interactions, // 페어링 틱 카운트 (대칭, PLAN §12.1 D3)
+    contacts,     // §23.47 접촉 카운트 (대화+거절, 대칭) — 앙숙 판정 전용
     lastGreetDay, // 인사 하루 1회 가드 (대칭, D9)
     wear: {}, // 경로 마모 → 도로화 — 희소 객체 (§17.0 성능 계약)
     roadReports: [],

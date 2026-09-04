@@ -446,6 +446,11 @@ export function migrateWorld(world) {
   // dictionaries. Never require a per-tick scan in moodBaseline.
   if (from < 73) for (const sim of world.sims) refreshMoodCounts(sim,world.logic);
   if (from < 74) initializeRail(world);
+
+  // §23.47 접촉 행렬. 이 변경 전의 접촉은 전부 대화였으므로 interactions를 그대로
+  // 옮겨 담는 것이 정확한 초기값이다 — 0으로 두면 옛 세계의 오래된 사이가
+  // 하루아침에 '처음 만난 사이'가 되어 앙숙 판정이 리셋된다. 이미 있으면 건드리지 않는다.
+  world.contacts ??= (world.interactions ?? []).map((row) => row.slice());
   world.worldEvents ??= []; // Also repair absent/null optional state in current-version saves.
   for(const sim of world.sims){sim.employment??=null;sim.employmentSearch??=null;}
   world.schemaVersion = SCHEMA_VERSION;

@@ -175,9 +175,14 @@ export function argumentThreshold(sim, L) {
   return Math.max(L.affinity.argClampMin, Math.min(L.affinity.argClampMax, v));
 }
 
-export function computeTier(affinityVal, interactionCount, L) {
+// §23.47 앙숙만 `contactCount`(대화 + 거절)를 쓴다. 나머지는 종전대로 대화 수다.
+// 나눠 둔 이유: 하나로 합치면 거절이 연애·결혼의 상호작용 문턱을 넘겨 버린다
+// (Codex 재현: 상호작용 39→40, 호감 5000/5000에서 거절 한 번에 started_dating).
+// 반대로 앙숙에 대화 수만 쓰면 **원수가 될 수가 없다** — 미워하는 사이는 대화를
+// 하지 않으므로 `호감 <= -2000` AND `대화 >= 30`이 서로 배타적이기 때문이다.
+export function computeTier(affinityVal, interactionCount, L, contactCount = interactionCount) {
   if (affinityVal >= L.social.friendAffinity && interactionCount >= L.social.friendInteractions) return 'friend';
-  if (affinityVal <= L.social.rivalAffinity && interactionCount >= L.social.rivalInteractions) return 'rival';
+  if (affinityVal <= L.social.rivalAffinity && contactCount >= L.social.rivalInteractions) return 'rival';
   if (interactionCount >= L.social.acquaintanceInteractions) return 'acquaintance';
   return 'stranger';
 }
@@ -206,7 +211,8 @@ export function runReflection(world, sim, t, emit) {
   for (const other of world.sims) {
     if (other.id === sim.id) continue;
     const tier = computeTier(world.affinity[sim.id]?.[other.id] ?? 0,
-      world.interactions[sim.id]?.[other.id] ?? 0, L);
+      world.interactions[sim.id]?.[other.id] ?? 0, L,
+      world.contacts?.[sim.id]?.[other.id] ?? world.interactions[sim.id]?.[other.id] ?? 0);
     const prev = sim.relTiers[other.id] ?? 'stranger';
     if (tier !== prev) {
       // §23.32 카운터는 티어를 **쓰는 이 자리**에서만 움직인다 — 세는 곳이 없어야 싸다.

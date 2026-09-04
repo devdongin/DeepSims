@@ -1270,6 +1270,7 @@ export function growIdMatrices(world) {
   };
   fit(world.affinity, 0);
   fit(world.interactions, 0);
+  fit(world.contacts, 0);
   fit(world.lastGreetDay, -1);
 }
 
@@ -1554,11 +1555,15 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
       // 앙숙은 태어날 수가 없었다** — 호감이 -2250까지 간 쌍이 나와도 앙숙은 0명이었다.
       // 마흔 번 청하고 마흔 번 거절당한 사이를 '서로 모르는 사이'로 세는 것이 틀렸다.
       // 연애·결혼 게이트는 호감 하한(datingMin·marryMin)이 따로 있어 이 증가로 열리지 않는다.
+      // 다만 `interactions`(대화 카운터)에 섞지 않는다. Codex 리뷰가 재현한 사고:
+      // 하나로 합치면 이미 서로 좋아하는 두 사람이 문턱 직전일 때 **거절 한 번이
+      // 연애를 시작시킨다**(상호작용 39→40, 호감 5000/5000 → started_dating).
+      // 호감 하한은 그 자리에서 안전장치가 되지 못한다. 그래서 접촉은 따로 센다.
       const IC_MAX = 1000000; // tick.js의 대화 경로와 같은 상한
-      world.interactions[sim.id][target.id] =
-        Math.min(IC_MAX, (world.interactions[sim.id][target.id] ?? 0) + 1);
-      world.interactions[target.id][sim.id] =
-        Math.min(IC_MAX, (world.interactions[target.id][sim.id] ?? 0) + 1);
+      world.contacts[sim.id][target.id] =
+        Math.min(IC_MAX, (world.contacts[sim.id][target.id] ?? 0) + 1);
+      world.contacts[target.id][sim.id] =
+        Math.min(IC_MAX, (world.contacts[target.id][sim.id] ?? 0) + 1);
 
       // ② 같은 사람에게 거듭 거절당하면 더 아프다. 한 번은 사정이고 다섯 번은 사이다.
       // 기억이 밀려 나가면 앙금도 옅어진다 — 오래된 서운함을 잊는 것은 버그가 아니다.

@@ -1154,6 +1154,9 @@ export function tick(world, inputsForThisTick = []) {
         const IC = 1000000;
         world.interactions[a.id][b.id] = Math.min(IC, world.interactions[a.id][b.id] + 1);
         world.interactions[b.id][a.id] = Math.min(IC, world.interactions[b.id][a.id] + 1);
+        // §23.47 대화는 접촉이기도 하다 — contacts는 대화 + 거절이고 앙숙 판정만 쓴다.
+        world.contacts[a.id][b.id] = Math.min(IC, world.contacts[a.id][b.id] + 1);
+        world.contacts[b.id][a.id] = Math.min(IC, world.contacts[b.id][a.id] + 1);
         const delta = rngInt(world.rngSim, L.affinity.deltaSpan) + L.affinity.deltaMin // [-20, 40]
           + pairDeltaBonus(world, a, b); // §17: 연인·동아리 동료 보너스
         const fA = L.affinity.tfScaleBase + a.traits.mbti.TF;
