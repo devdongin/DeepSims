@@ -1,5 +1,6 @@
 // 영속화 테스트 (PLAN §7 5, 7, 8, 16)
 import { test } from 'node:test';
+import { TICK_DURATION_MS } from '../sim/constants.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -165,7 +166,7 @@ test('16c. 라이브 프루닝(§22.12): 긴 세션에서 events가 30일 상한
   // ① 따라잡기 경로: 32일치를 일 배치로 따라잡는다 → 31일차부터 매 배치 프루닝
   let nowMs = 1000; // 생성 시점이 epoch가 된다 — 그 뒤 시계를 32일 밀어 따라잡게 한다
   const engine = new Engine(st, { seed: SEED, now: () => nowMs });
-  nowMs += 32 * DAY * 1000; // TICK_DURATION_MS = 1000
+  nowMs += 32 * DAY * TICK_DURATION_MS; // §23.42 틱 길이는 상수에서 (하루 10분으로 바뀜)
   await engine.catchUp();
   const cutoff1 = engine.world.worldTick - 30 * DAY;
   const min1 = st.db.prepare('SELECT MIN(tick) AS t FROM events').get().t;
