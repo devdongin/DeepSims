@@ -1,5 +1,12 @@
 # DeepSims 기획서 v3.0 — 2D 쿼터뷰 심즈라이크 (오프라인 진행 세계)
 
+## 진행 중: 기분 충격 외부 사건 (schema75/logic95)
+
+codex/32-event-mood에서 signed delta/최초 충격/기간 내 회복 기준점/만료를 연결한다.
+동일 채널 교체는 차액만 적용하며 pendingMood도 함께 반영해 기상 시 충격이 유실되지
+않도록 한다. 저장 재개/경계/중복 갱신2개 테스트 통과. 실제 행동 영향/전체 회귀/리뷰
+미완료이며 localhost:3000/root/saves는 수정하지 않았다.
+
 ## 진행 중: 대화 주제 외부 사건 (schema75/logic94)
 
 PR166 검증 브랜치와 별도인 codex/32-event-topics에서 허용 주제10종의 가중치를
