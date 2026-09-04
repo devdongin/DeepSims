@@ -11,6 +11,7 @@ for(const f of w.map.facilities)if(f.x<20)f.villageId='village:1';
 for(const s of w.sims)s.villageId=w.map.facilities.find(f=>f.id===s.homeId).villageId;
 const initialPopulation=w.sims.length,visits={},residenceMoves=[];
 const migration={gathered:0,departed:0,completed:0,failed:0},migrationIds=new Set();
+const migrationByKind={},migrationKinds=new Map();
 let observedDay=0,noPath=0;
 const collect=day=>{
   for(const [key,row] of Object.entries(day?.municipalVisits??{})){
@@ -24,11 +25,16 @@ for(let i=0;i<days*1440;i++){
   noPath+=events.filter(e=>e.type==='action_failed'&&e.payload.reason==='no_path').length;
   for(const e of events)if(e.type==='moved_home')residenceMoves.push(e);
   for(const e of events){
-    if(e.type==='household_migration_gathering'){migration.gathered++;migrationIds.add(e.payload.intentId);}
-    if(e.type==='household_migration_departed')migration.departed++;
+    if(e.type==='household_migration_gathering'){
+      migration.gathered++;migrationIds.add(e.payload.intentId);migrationKinds.set(e.payload.intentId,e.payload.kind);
+      (migrationByKind[e.payload.kind]??={gathered:0,departed:0,completed:0,failed:0}).gathered++;
+    }
+    if(e.type==='household_migration_departed'){
+      migration.departed++;migrationByKind[migrationKinds.get(e.payload.intentId)].departed++;
+    }
     if(migrationIds.has(e.payload?.intentId)){
-      if(e.type==='household_intent_applied')migration.completed++;
-      if(e.type==='household_intent_failed')migration.failed++;
+      if(e.type==='household_intent_applied'){migration.completed++;migrationByKind[migrationKinds.get(e.payload.intentId)].completed++;}
+      if(e.type==='household_intent_failed'){migration.failed++;migrationByKind[migrationKinds.get(e.payload.intentId)].failed++;}
     }
   }
   if(w.transportStats.today.day!==observedDay){
@@ -38,4 +44,4 @@ for(let i=0;i<days*1440;i++){
 collect(w.transportStats.today);
 console.log(JSON.stringify({fixture:'existing-town jurisdiction split, not natural settlement',days,
   initialPopulation,finalPopulation:w.sims.length,noPath,visits:Object.values(visits),
-  residenceMoves:residenceMoves.length,migration,hash:hashWorld(w)},null,2));
+  residenceMoves:residenceMoves.length,migration,migrationByKind,hash:hashWorld(w)},null,2));

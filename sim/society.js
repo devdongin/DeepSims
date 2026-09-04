@@ -14,6 +14,7 @@ import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js
 import { TILE, isRoadProtected, sameRegion } from './map.js';
 import { isResidence, isAvailableResidence } from './map.js';
 import { isSettlementInTransit } from './settlement.js';
+import { queueMarriageMigration } from './marriage-household.js';
 import { learnToken as learnTokenRef } from './planning.js';
 import { maybeRoadWorks, roadMaintenanceVillage } from './roads.js';
 import { applyBirthTalent } from './genius.js';
@@ -511,9 +512,10 @@ export function applyRomance(world, sim, t, emit) {
     if (other.homeId !== sim.homeId) {
       const [lo, hi] = sim.id < partner ? [sim, other] : [other, sim];
       lo.householdId = hi.householdId = `household:marriage:${lo.id}:${hi.id}`;
+      if(queueMarriageMigration(world,lo,hi,t,emit,true))return;
       const loHome = world.map.facilities.find((f) => f.id === lo.homeId);
       const residents = world.sims.filter((s2) => s2.homeId === lo.homeId).length;
-      if (loHome.resources.length > residents) {
+      if (isAvailableResidence(loHome) && loHome.resources.length > residents) {
         const from = hi.homeId;
         hi.homeId = lo.homeId;
         syncResidenceVillage(world, hi.id);
@@ -568,9 +570,10 @@ export function applyRomance(world, sim, t, emit) {
       // 이주: id 높은 쪽이 낮은 쪽 집으로 (빈 침대 있을 때만 — 없으면 건설 수요로 해소될 때까지 대기)
       const [lo, hi] = sim.id < partner ? [sim, other] : [other, sim];
       lo.householdId = hi.householdId = `household:marriage:${lo.id}:${hi.id}`;
+      if(queueMarriageMigration(world,lo,hi,t,emit,false))return;
       const loHome = world.map.facilities.find((f) => f.id === lo.homeId);
       const residents = world.sims.filter((s) => s.homeId === lo.homeId).length;
-      if (hi.homeId !== lo.homeId && loHome.resources.length > residents) {
+      if (hi.homeId !== lo.homeId && isAvailableResidence(loHome) && loHome.resources.length > residents) {
         const from = hi.homeId;
         hi.homeId = lo.homeId;
         syncResidenceVillage(world, hi.id);

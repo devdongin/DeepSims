@@ -33,6 +33,14 @@ export function applyHouseholdIntents(world, t, emit) {
     if((intent.memberIds??[intent.simId]).some(id=>isSettlementInTransit(world,id)))continue;
     const sim = world.sims.find(s => s.id === intent.simId);
     let reason = null;
+    if(intent.kind==='marriage_move'){
+      const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isAvailableResidence(f));
+      reason=target?beginHouseholdMigration(world,intent,target,t,emit):'target_unavailable';
+      if(!reason)continue;
+      world.householdDaily.failures[reason]=(world.householdDaily.failures[reason]??0)+1;
+      emit('household_intent_failed',intent.simId,{intentId:intent.intentId,kind:intent.kind,reason});
+      world.householdIntents.splice(world.householdIntents.indexOf(intent),1);continue;
+    }
     if(intent.kind==='rent_move'){
       const members=(intent.memberIds??[]).map(id=>world.sims.find(s=>s.id===id));
       const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isAvailableResidence(f));

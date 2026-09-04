@@ -45,6 +45,14 @@ test('#32 local housing deficit and committed capacity do not borrow beds or ove
   assert.equal(plan(w).length,0,'pending capacity covers the deficit');
 });
 
+test('#32 reserving an occupied spouse home does not erase the beds already serving its residents',()=>{
+  const w=fixture(),home=w.map.facilities.find(f=>f.type==='house'&&f.villageId==='village:1');
+  home.migrationIntentId=99;
+  assert.deepEqual(plan(w),[],'an incoming-family reservation does not make current residents homeless');
+  home.resources.length=1;
+  assert.equal(plan(w).filter(e=>e.type==='project_started').length,1,'real occupied-bed shortages still trigger construction');
+});
+
 test('#32 school demand, current students and school funding belong to the resident municipality',()=>{
   const w=fixture(),g=w.villages[1].government;
   w.sims[2].traits.age=12;w.sims[2].traits.occupation='student';

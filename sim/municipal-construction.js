@@ -1,5 +1,5 @@
 import { governmentFor, governmentViews, governmentEmitter, PRIMARY_GOVERNMENT } from './government.js';
-import { isAvailableResidence, plotBuildable, zoneFootprint, addBuilding } from './map.js';
+import { isResidence, isAvailableResidence, plotBuildable, zoneFootprint, addBuilding } from './map.js';
 import { canWork, neededSchool, SCHOOL_TYPES } from './education.js';
 import { foundingSiteReserved } from './founding.js';
 import { INDUSTRY_DEVELOPMENTS, industryDevelopmentEvidence, neededIndustryFacility } from './industry.js';
@@ -62,7 +62,11 @@ export function planMunicipalConstruction(world,t,limits,emit){
       const capacity=(types,filter=f=>types.includes(f.type))=>local.map.facilities.filter(filter)
         .reduce((n,f)=>n+f.resources.length,0)+pending.filter(p=>types.includes(p.type))
         .reduce((n,p)=>n+plannedCapacity(p.type),0);
-      const beds=capacity(['house','apartment'],isAvailableResidence);
+      // A spouse home can be reserved while already occupied. Hold its spare
+      // capacity for arrival, but do not erase beds serving current residents.
+      const occupiedHeldBeds=local.map.facilities.filter(f=>isResidence(f)&&f.migrationIntentId!=null)
+        .reduce((n,f)=>n+Math.min(f.resources.length,local.sims.filter(s=>s.homeId===f.id).length),0);
+      const beds=capacity(['house','apartment'],isAvailableResidence)+occupiedHeldBeds;
       const recent=(local.statsHistory??[]).slice(-7);
       const growth=recent.length>=2?Math.max(0,(recent.at(-1).pop-recent[0].pop)/(recent.length-1)):0;
       const headroom=Math.min(20,L.growth.headroomBeds+Math.ceil(growth*3));
