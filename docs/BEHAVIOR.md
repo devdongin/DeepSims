@@ -3,7 +3,7 @@
 > **이 문서의 규칙**: 모든 행동 로직 변경은 PR에서 이 파일을 함께 갱신해야 한다.
 > PLAN.md가 설계 권위(정확한 수식·순서 계약)라면, 이 문서는 "심들이 왜 그렇게 사는가"를
 > 사람이 읽을 수 있게 쌓아두는 카탈로그다. 항목마다 근거 논문/섹션과 튜너블 파라미터
-> (`logic/params.json` 키)를 밝힌다. **마지막 갱신: 2026-09-04, 세이브 v75 · 로직 v93.**
+> (`logic/params.json` 키)를 밝힌다. **마지막 갱신: 2026-09-04, 세이브 v75 · 로직 v94.**
 > (버전은 `sim/constants.js`의 `SCHEMA_VERSION`, `sim/logic.js`의 `logicSchemaVersion`이 단일 권위)
 
 ## 0.5 관람 속도 (§20 · §22.1)
@@ -881,3 +881,10 @@ disease는 기존 일일 발병 위험(기아·비·피로 보너스 포함)과 
 활성 목록 worldEvents는 세이브·접속 스냅샷·tickBatch에 포함된다. 기존 세이브는
 빈 목록으로 마이그레이션하며 기존 기본 로직 값은 덮어쓰지 않는다.
 world_event_started/expired가 적용·교체·만료를 기록한다. 전용 UI는 아직 없다.
+
+후속 logic94는 `topic_` 접두 효과를 제공한다: couple_news, family_talk, food,
+gossip, memory_share, politics, weather, work_gripe, sweet_talk, club_talk.
+실제 문맥에서 가능한 주제만 백분율 가중 조정하며 최근 주제 반복 방지와 초대 우선은
+그대로다. 모든 후보가 사라지면 기존 weather 발화로 폴백하므로 weather0은 침묵 명령이
+아니다. 활성 사건이 후보를 모두 제거한 경우에는 기존 빈 후보 분기의 무추첨이 적용된다.
+검증 중인 후속 변경이며 기분 충격과 전용 UI는 남아 있다.

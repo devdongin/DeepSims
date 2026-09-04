@@ -1,6 +1,9 @@
 // R-D: bounded, durable modifiers; no mutation of the saved base logic.
 // One active event per channel. A later input replaces that channel only.
-export const WORLD_EVENT_EFFECTS = Object.freeze(['disease', 'immigration']);
+export const WORLD_EVENT_TOPICS = Object.freeze(['couple_news', 'family_talk', 'food',
+  'gossip', 'memory_share', 'politics', 'weather', 'work_gripe', 'sweet_talk', 'club_talk']);
+export const WORLD_EVENT_EFFECTS = Object.freeze(['disease', 'immigration',
+  ...WORLD_EVENT_TOPICS.map(topic => `topic_${topic}`)]);
 export const MAX_WORLD_EVENT_TICKS = 1440 * 30;
 
 export function validateWorldEvent(payload) {
