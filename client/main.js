@@ -2910,6 +2910,7 @@ const FEED_STORY = new Set([
   'city_promoted', 'station_unlocked', 'facility_built', 'argument', 'petition',
   'rail_opened','rail_suspended','rail_resumed',
   'public_posts_filled', 'job_changed',
+  'employment_started', 'employment_ended',
   'founding_petition_created', 'founding_petition_withdrawn',
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
