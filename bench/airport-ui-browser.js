@@ -90,7 +90,13 @@ try{
   await page.locator('#public-services').filter({hasText:'시설 신축 수요/필요 인원과 별개'}).waitFor();
   assert.ok((await page.locator('#public-services').innerText()).includes('주민·서비스·사유별 하루 1회'));
   await page.screenshot({path:'/tmp/deepsims-public-service-ui.png'});
+  await page.setViewportSize({width:420,height:720});
+  const dashboard=await page.locator('#dash-modal .box').boundingBox();
+  assert.ok(dashboard.x>=0&&dashboard.x+dashboard.width<=420);
+  assert.ok(dashboard.y>=0&&dashboard.y+dashboard.height<=720);
+  await page.screenshot({path:'/tmp/deepsims-public-service-ui-narrow.png'});
   await page.locator('#dash-close').click();
+  await page.setViewportSize({width:1440,height:1000});
   await page.evaluate(()=>{
     const scene=window.__game.scene.scenes[0],marker=[...scene.airMarkers.values()][0];
     scene.cameras.main.centerOn(marker.x,marker.y);scene.cameras.main.setZoom(1);

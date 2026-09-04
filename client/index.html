@@ -214,11 +214,11 @@
     </div>
   </div>
   <div id="dash-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:11">
-    <div class="box" style="width:520px;background:#241d14;border:2px solid #c9a86a;border-radius:12px;padding:20px">
+    <div class="box" style="box-sizing:border-box;width:520px;max-width:calc(100vw - 32px);max-height:calc(100vh - 48px);overflow:auto;background:#241d14;border:2px solid #c9a86a;border-radius:12px;padding:20px">
       <h2 style="color:#ffcf6a;font-size:16px;margin-bottom:8px">📊 해솔 지표 <span style="font-size:11px;color:#9c8a6a">— 인구(초록)·국고(금)·평판(파랑), 최근 180일</span></h2>
-      <canvas id="dash-canvas" width="480" height="180" style="background:#14100b;border-radius:8px"></canvas>
+      <canvas id="dash-canvas" width="480" height="180" style="max-width:100%;height:auto;background:#14100b;border-radius:8px"></canvas>
       <div id="dash-cards" style="font-size:13px;color:#ead9b0;margin-top:10px"></div>
-      <details style="margin-top:10px"><summary>경찰·소방 관측 (최근 14일)</summary><pre id="public-services" style="white-space:pre-wrap;font-size:12px"></pre></details>
+      <details style="margin-top:10px"><summary>경찰·소방 관측 (최근 14일)</summary><pre id="public-services" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;font-size:12px"></pre></details>
       <!-- §23.11 마을 연대기 — 지표가 '지금 어떤가'라면 이건 '어떻게 여기까지 왔나'다 -->
       <h3 style="color:#ffcf6a;font-size:13px;margin:14px 0 4px">📜 마을 연대기</h3>
       <div id="dash-chron" style="max-height:170px;overflow-y:auto;font-size:11px;color:#cdc4d6;border-left:2px solid #6b5638;padding-left:10px"></div>
