@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 66, // §23.29 기분 바닥선에 돈(현금 여력·체납)
+  logicSchemaVersion: 68, // §23.36 yearDays 120 → 40
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
   seasons: { winterHarvestPct: 50, winterFishPct: 50, winterOutdoorEnergy: 1,
@@ -319,7 +319,21 @@ export const DEFAULT_LOGIC = {
   // §17 사회 (logicSchemaVersion 9)
   society: {
     immigrationIntervalDays: 3,
-    yearDays: 120,           // §17.9 새해 주기 (전원 age+1) — 실시간 관람 페이싱(v0.9.1)
+    // §23.36 한 해를 120일 → 40일로. 사용자 지적: "1년이 너무 길어서 마을 성장이나 변화가
+    // 느리다." 맞았다. 90일을 굴려도 **은퇴가 한 번도 안 일어나고** 졸업이 0.9회였다 —
+    // 관측 창 안에서 생애가 한 칸도 못 움직인다.
+    //
+    // 8시드 × 90일 스윕 (생애사건 = 졸업+결혼+출생+은퇴+사망+성장, 100일당):
+    //   120일  26.2 ± 2.8   졸업 0.9  은퇴  0.0   ← 지금까지
+    //    60일  36.3 ± 3.6   졸업 1.5  은퇴  8.6
+    //    40일  41.9 ± 4.6   졸업 2.0  은퇴 11.1   ← 채택 (+60%)
+    //    30일  48.5 ± 5.6   졸업 5.5  은퇴 13.5   (+85%지만 졸업이 6배 — 직업이 너무 자주 바뀐다)
+    //    20일  42.1 ± 5.6
+    // 인구는 103~110으로 **전부 표본 편차 안**이고 평균 나이도 41.8~43.9로 평평하다 —
+    // 성장을 깎지 않고 변화만 늘린다. 30일이 수치는 높지만 졸업이 6배로 뛰어 경력이
+    // 의미를 잃는다. 40일은 계절이 10일이라 사계가 한눈에 돌고, 19→65세 한 경력이
+    // 1,840일이라 한 세대가 관측 가능한 시간 안에 완결된다.
+    yearDays: 40,            // §17.9 새해 주기 (전원 age+1)
     schoolAge: 7,
     graduateAge: 23,
     retireAge: 65,           // → retired
@@ -530,6 +544,12 @@ export const DEFAULT_LOGIC = {
     retroCap: 40,            // 회고 점수 상한 — 인기 요소를 완전히 지워버리지 않는다
   },
   romance: {
+    // §23.34 나이 조건. 여태 한 줄도 없어서 **15세가 65세와 결혼했다** (시드1 실측 커플:
+    // [15,65,married] [15,43] [16,50] [27,85], 10시드 192커플 중앙 나이차 12~22세, 최대 69세).
+    // 사람은 그렇게 짝을 짓지 않는다. 하한은 성인, 격차는 "젊은 쪽 나이의 절반 + 7" —
+    // 통용되는 어림이고, 20세에 17세, 40세에 27세, 60세에 37세까지를 허용한다.
+    minRomanceAge: 19,
+    ageGapBase: 7,     // 허용 격차 = 젊은 쪽/2 + 이 값
     datingMin: 4500, datingInteractions: 40,
     marryMin: 7500, marryInteractions: 120,
     breakup: 2000, breakupMood: 1500,
@@ -1043,6 +1063,8 @@ function checkRanges(p, errors) {
   inRange('mood.baseline.dailyNeed', p.mood.baseline.dailyNeed, 1, 1000000);
   inRange('mood.baseline.secure', p.mood.baseline.secure, 0, 5000);
   inRange('mood.baseline.span', p.mood.baseline.span, 0, 5000);
+  inRange('romance.minRomanceAge', p.romance.minRomanceAge, 15, 60);
+  inRange('romance.ageGapBase', p.romance.ageGapBase, 0, 60);
   inRange('disease.decayFactorNum', p.disease.decayFactorNum, 0, 100);
   inRange('disease.decayFactorDen', p.disease.decayFactorDen, 1, 100);
   inRange('disease.doctorDeficit', p.disease.doctorDeficit, 0, 10000);

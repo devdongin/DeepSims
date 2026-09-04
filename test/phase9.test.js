@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } from '../sim/index.js';
+import { romanceAgeOk } from '../sim/society.js';
 import { sameRegion, TILE } from '../sim/map.js';
 import { validateLogic as validateLogicRef } from '../sim/logic.js';
 import { actionBlockReason as actionBlockReasonRef } from '../sim/tick.js';
@@ -155,6 +156,11 @@ test('S-5. 이민: 빈 침대가 있어야 오고, 인구가 늘고, 이웃 기�
 test('S-6. 연애 수명주기: 교제 → 결혼(+이주) → (별도) 파혼', () => {
   const w = createWorld(SEED);
   const [a, b] = w.sims;
+  // §23.34 이 시드의 두 사람은 37세와 16세다. 나이 조건이 생기기 전에는 그대로 사귀었고,
+  // 이 테스트가 그걸 계약으로 굳히고 있었다. 검사하려는 것은 **수명주기**이지 나이 규칙이
+  // 아니므로 나이를 명시해 조건을 통과시킨다 (나이 규칙 자체는 아래 S-6b가 본다).
+  a.traits.age = 30; b.traits.age = 28;
+  b.traits.occupation = 'office_worker';
   // 교제 조건 충족
   w.affinity[0][1] = 7000; w.affinity[1][0] = 7000;
   w.interactions[0][1] = 150; w.interactions[1][0] = 150;
@@ -194,6 +200,21 @@ test('S-6. 연애 수명주기: 교제 → 결혼(+이주) → (별도) 파혼',
   const evs3 = tick(w2, []);
   assert.ok(evs3.some((e) => e.type === 'broke_up'), '파혼');
   assert.equal(w2.partners[2], undefined);
+});
+
+test('S-6b. §23.34 연애 나이 조건 — 미성년과 큰 나이차는 짝이 되지 않는다', () => {
+  // 이 조건이 없던 동안 15세가 65세와 결혼했다(장르 리뷰 실측: [15,65,married] [16,50] [27,85]).
+  const w = createWorld(SEED);
+  const R = w.logic.romance;
+  const mk = (age) => ({ traits: { age } });
+  assert.equal(romanceAgeOk(mk(18), mk(30), R), false, '미성년은 짝이 되지 않는다');
+  assert.equal(romanceAgeOk(mk(30), mk(18), R), false, '순서를 바꿔도 같다 (대칭)');
+  assert.equal(romanceAgeOk(mk(15), mk(65), R), false, '실측에서 나온 그 커플');
+  // 허용 격차 = 젊은 쪽/2 + 7. 20세면 17이므로 37세까지가 경계다.
+  assert.equal(romanceAgeOk(mk(20), mk(37), R), true, '경계 안 (격차 17 = 허용 17)');
+  assert.equal(romanceAgeOk(mk(20), mk(38), R), false, '한 살 넘으면 안 된다');
+  assert.equal(romanceAgeOk(mk(60), mk(37), R), true, '나이가 들면 폭이 넓어진다');
+  assert.equal(romanceAgeOk(mk(40), mk(40), R), true, '동갑');
 });
 
 test('S-7. 동아리: 습관 임계 가입 + 주간 모임 토큰(멤버 즉시 인지)', () => {

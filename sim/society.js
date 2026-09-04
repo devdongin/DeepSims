@@ -567,6 +567,7 @@ export function applyRomance(world, sim, t, emit) {
     for (const other of world.sims) {
       if (other.id === sim.id || world.partners[other.id] !== undefined) continue;
       if (other.traits.occupation === 'child') continue; // §22.2 아이는 상대가 되지 않는다
+      if (!romanceAgeOk(sim, other, R)) continue; // §23.34 나이 조건
       const mutual = Math.min(world.affinity[sim.id][other.id], world.affinity[other.id][sim.id]);
       if (mutual >= R.datingMin && world.interactions[sim.id][other.id] >= R.datingInteractions
         && (mutual > bestMutual || (mutual === bestMutual && best !== null && other.id < best.id))) {
@@ -582,6 +583,16 @@ export function applyRomance(world, sim, t, emit) {
       recordFact(best, t, world.logic, 'love', { subjectSimId: sim.id, tags: [`sim:${sim.id}`, 'love'] });
     }
   }
+}
+
+// §23.34 짝이 될 수 있는 나이인가. 둘 다 성인이어야 하고, 나이 차가 젊은 쪽을 기준으로
+// 한 한계 안에 있어야 한다 — "젊은 쪽/2 + 7"은 통용되는 어림이다.
+// 이 조건이 없던 동안 15세가 65세와 결혼했다(실측). 조건은 대칭이라 누가 먼저 회고하든 같다.
+export function romanceAgeOk(a, b, R) {
+  const ya = a.traits.age, yb = b.traits.age;
+  if (ya < R.minRomanceAge || yb < R.minRomanceAge) return false;
+  const young = Math.min(ya, yb);
+  return Math.abs(ya - yb) <= Math.floor(young / 2) + R.ageGapBase;
 }
 
 // ---- §17.6 동아리 ----

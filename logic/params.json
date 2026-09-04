@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 66,
+  "logicSchemaVersion": 68,
   "needsTiers": {
     "fulfilledMin": 4000,
     "deprivedMax": 1000,
@@ -717,7 +717,7 @@
   },
   "society": {
     "immigrationIntervalDays": 3,
-    "yearDays": 120,
+    "yearDays": 40,
     "schoolAge": 7,
     "graduateAge": 23,
     "retireAge": 65,
@@ -1023,7 +1023,9 @@
     "breakup": 2000,
     "breakupMood": 1500,
     "partnerSocialPct": 150,
-    "sweetTalkDelta": 8
+    "sweetTalkDelta": 8,
+    "minRomanceAge": 19,
+    "ageGapBase": 7
   },
   "club": {
     "habitMin": 10000000000,

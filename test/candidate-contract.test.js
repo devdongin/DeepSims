@@ -42,10 +42,11 @@ import { collectCandidates } from '../sim/tick.js';
 //   §23.32  (카운터) : **world 해시만** 움직인다 — 후보·선택·이벤트 셋이 세 크기 모두
 //     그대로다. 기분 바닥선 최적화가 값을 한 비트도 안 바꿨다는 증거다 (심에 필드 3개가
 //     늘어서 세계 상태만 달라진다).
+//   §23.33~36 (공터 보호·연애 나이·발자국 필터·1년 40일) : 세계의 규칙이 여러 개 바뀌었다.
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', 'f996adef']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '3a47c0a1']],
-  [200, ['91f50dd7', 'a23787ba', '2179523f', 'a43a2aee']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', '27e865b7']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '0fed4769']],
+  [200, ['91f50dd7', 'a23787ba', '2179523f', 'bfe664e2']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
