@@ -501,7 +501,7 @@ class TownScene extends Phaser.Scene {
   // 화면 밖으로 걸어 나가면 그걸로 끝이었다. 카메라를 스프라이트에 붙인다 —
   // 서버 좌표가 아니라 눈에 보이는 자리를 따라가야 그림이 튀지 않는다(§23.3과 같은 이유).
   followSelected() {
-    if (!followSimId || !world) return;
+    if (followSimId == null || !world) return;
     const sp = simSprites.get(followSimId);
     const cam = this.cameras.main;
     let tx, ty;
