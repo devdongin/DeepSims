@@ -140,6 +140,7 @@
       <button id="planning-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">📍 도시계획</button>
       <button id="world-events-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🌐 세계 사건</button>
       <canvas id="spark" width="120" height="30" title="인구(초록)·국고(금색) 추이" style="border:1px solid #3a2e1d;border-radius:4px;background:#14100b"></canvas>
+      <button id="guide-btn" title="이 마을 안내 (단축키 ?)" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:4px;cursor:pointer">❔</button>
       <div id="status">접속 중…</div>
     </div>
     <div id="game">
@@ -293,6 +294,43 @@
     <div class="content" id="report"></div>
     <button onclick="document.getElementById('modal').style.display='none'">확인</button>
   </div></div>
+  <!-- §23.50 첫 방문 안내. 리뷰 5인이 공통으로 지적한 "무엇을 보고 있는지 아무도
+       말해주지 않는다"에 대한 답이다. 캐릭터 생성(#onboard)은 이름만 물었고, 그 뒤
+       화면에는 설명이 한 줄도 없었다. 한 번 보고 닫히며(localStorage), ❔ 로 다시 연다. -->
+  <div id="guide" style="position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:19">
+    <div class="box" style="width:460px;max-height:82vh;overflow-y:auto;background:#1e1a26;border:2px solid #ffd97a;border-radius:10px;padding:20px">
+      <h2 style="color:#ffd97a;font-size:16px;margin-bottom:10px">이 마을에 대해</h2>
+      <div style="font-size:12.5px;color:#ded7ea;line-height:1.75">
+        <p style="margin-bottom:12px"><b style="color:#ffd97a">당신은 이 마을을 조종하지 않습니다.</b>
+        심들은 배고픔·수면·사교·재미와 자기 기억·관계·성격으로 <i>스스로</i> 판단합니다.
+        당신은 이웃 한 명이고, 정책과 공사와 모임 공지로 <b>거들 수 있을 뿐</b>입니다.</p>
+
+        <p style="margin-bottom:6px"><b style="color:#ffd97a">지금 보고 있는 것</b></p>
+        <ul style="margin:0 0 12px 16px">
+          <li>심을 <b>클릭</b>하면 그 사람의 욕구·능력·관계·지금 하는 일이 왼쪽에 열립니다.</li>
+          <li><b>📖 일대기</b>는 태어나서 지금까지 그 사람에게 일어난 일 전부입니다.</li>
+          <li>오른쪽 피드가 마을에서 방금 일어난 일입니다. <b>이야기 / 살림 / 이 사람</b>으로 걸러 보세요.</li>
+        </ul>
+
+        <p style="margin-bottom:6px"><b style="color:#ffd97a">할 수 있는 것</b></p>
+        <ul style="margin:0 0 12px 16px">
+          <li><b>🏛️ 정책</b> — 세율·복지·진료 자기부담. 올리고 내린 결과는 며칠 뒤에 옵니다.</li>
+          <li><b>🏗️ 계획</b> — 빈 땅에 무엇을 지을지 정합니다. 국고에서 돈이 나갑니다.</li>
+          <li><b>📢 공지</b> — 모임을 열면 소문이 <i>입에서 입으로만</i> 퍼집니다. 아무도 못 들으면 아무도 안 옵니다.</li>
+          <li><b>🏆 목표 · 👥 사람 · 📊 현황</b> — 마을이 어디까지 왔는지.</li>
+        </ul>
+
+        <p style="margin-bottom:6px"><b style="color:#ffd97a">시간</b></p>
+        <p style="margin-bottom:12px">1틱 = 게임 속 1분. ×1배속에서 <b>하루가 실제 10분</b>, 1년은 40일입니다.
+        급하면 ×4·×10·×20으로 올리세요(×20이면 하루 30초).
+        <b>창을 닫아도 세계는 흘러갑니다</b> — 다시 오면 그동안의 일을 요약으로 받습니다.</p>
+
+        <p style="color:#a89fbb;font-size:11.5px;margin-bottom:2px">처음이라면: 아무나 한 명 클릭해서 하루를 따라가 보세요.
+        왜 그 사람이 지금 그 자리에 있는지가 이 게임의 전부입니다.</p>
+      </div>
+      <button id="guide-close" style="margin-top:14px;padding:7px 16px;background:#ffd97a;color:#14121a;border:0;border-radius:5px;cursor:pointer;font-weight:bold">알겠습니다</button>
+    </div>
+  </div>
   <div id="onboard" style="position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:20">
     <div class="box" style="width:380px;background:#1e1a26;border:2px solid #ffd97a;border-radius:10px;padding:20px">
       <h2 style="color:#ffd97a;font-size:16px;margin-bottom:6px">이 마을에 이사 왔습니다</h2>

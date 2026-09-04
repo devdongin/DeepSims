@@ -108,6 +108,7 @@ export const EVENT_TYPES = [
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
   'founding_gathering', 'founding_departed', 'village_founded',
+  // §23.48 / #173: shared registry fix, registered once at its original append position.
   'plot_relocated', 'construction_relocation_deferred',
   'household_migration_gathering', 'household_migration_departed',
   'employment_construction_planned', 'village_land_assigned',
