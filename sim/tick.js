@@ -463,7 +463,11 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
     }
     // §17.20: respond_fire — 불타는 시설 문 앞 가상 스팟 (위급 승격은 아래 소방관 분기)
     if (action === 'respond_fire') {
-      for (const {res} of fireTargets(world)) {
+      for (const {res} of fireTargets(world, sim)) { // §23.59 응답자 기준 도달 가능한 스팟
+        if (!res) continue; // 갈 수 없는 불에는 달려가지 않는다
+        // §17.23의 no_path 쿨다운을 화재에도 존중한다 — 실패한 응답자가 매 틱 같은 불을 다시 고르지 않게.
+        const cool = sim.noPathCool[`firesite:${res.id}`];
+        if (cool !== undefined && t < cool) continue;
         const holder = world.reservations[resKey('firesite', res.id)];
         if (holder !== undefined && holder !== sim.id) continue;
         const sc = scoreCandidate(sim, action, res, L);

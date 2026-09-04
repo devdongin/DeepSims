@@ -5,7 +5,7 @@ import { createWorld, advance, tick, hashWorld, socialPresence, socialPullPct } 
 import { romanceAgeOk } from '../sim/society.js';
 import { sameRegion, TILE } from '../sim/map.js';
 import { validateLogic as validateLogicRef } from '../sim/logic.js';
-import { actionBlockReason as actionBlockReasonRef } from '../sim/tick.js';
+import { actionBlockReason as actionBlockReasonRef, collectCandidates} from '../sim/tick.js';
 import { SWITCH_ONLY_OCCUPATIONS as SWITCH_ONLY_REF } from '../sim/traits.js';
 import { aptitudeFor, makeAbilities, ABILITIES, FALLBACK_SEED } from '../sim/abilities.js';
 
@@ -2022,4 +2022,38 @@ test('S-89. §22.7 시드가 다르면 다른 마을, 같으면 같은 마을 (#
     '같은 이름 열 개를 순서만 바꾼다');
   // 이름 섞기가 rngSim/rngWorldgen을 건드리지 않는다 — 전용 임시 rng
   assert.equal(a.sims.length, b.sims.length);
+});
+
+// §23.59 화재 지점 고착 수리 — 순찰(§19.4)과 같은 규칙. 철도 70일 픽스처에서 firesite:fire:school에
+// no_path가 642번 반복됐다: 문 북쪽 한 칸이 못박혀 있어, 나중에 그 칸에 무언가 지어지자
+// 영원히 같은 실패였다(실측: 문은 걸을 수 있는데 북쪽 칸은 walkable=false·sameRegion=false).
+test('S-89. §23.59 화재 지점은 도달 가능한 칸이고, 갈 수 없는 불에는 달려가지 않는다', () => {
+  const build = () => {
+    const w = createWorld(SEED);
+    const ff = w.sims[0];
+    ff.traits = { ...ff.traits, age: 30, occupation: 'firefighter' };
+    const target = w.map.facilities.find((f) => f.type === 'cafe');
+    w.incidents = [{ type: 'fire', facilityId: target.id, sinceTick: 0 }];
+    idleAll(w, []); resetIdle(ff); w.reservations = {};
+    ff.needs = { hunger: 9000, energy: 9000, social: 9000, fun: 9000 }; ff.money = 100;
+    w.worldTick = 600;
+    return { w, ff, target };
+  };
+  // ① 평소: 문 북쪽 칸이 지점이고 걸을 수 있다
+  const a = build();
+  const fire = collectCandidates(a.w, a.ff, ['respond_fire'], 600, true).find((c) => c.facilityId === 'firesite');
+  assert.ok(fire, '불이 났으면 소방관 후보에 화재 지점이 있다');
+  assert.ok(isWalkableRef(a.w.map, fire.res.x, fire.res.y), '고른 칸은 걸을 수 있다');
+  assert.deepEqual([fire.res.x, fire.res.y], [a.target.door.x, a.target.door.y - 1]);
+  // ② 문 북쪽이 막히면 — 이 문은 북쪽으로만 바깥과 통하므로 건물이 봉쇄된다 —
+  //    응답자 지역에서 닿는 칸이 없다. 예전 규칙은 여기서 매 틱 no_path를 냈다.
+  const b = build();
+  b.w.map.tiles[(b.target.door.y - 1) * b.w.map.w + b.target.door.x] = 4; // TREE
+  const none = collectCandidates(b.w, b.ff, ['respond_fire'], 600, true).find((c) => c.facilityId === 'firesite');
+  assert.equal(none, undefined, '도달 불가 화재는 후보에서 빠진다 — no_path를 영원히 반복하지 않는다');
+  // ③ 응답자가 최근 그 불에 no_path를 겪었으면 쿨다운 동안 다시 고르지 않는다
+  const c = build();
+  c.ff.noPathCool[`firesite:fire:${c.target.id}`] = 600 + 10;
+  const cooled = collectCandidates(c.w, c.ff, ['respond_fire'], 600, true).find((x) => x.facilityId === 'firesite');
+  assert.equal(cooled, undefined, '쿨다운 중에는 같은 불을 다시 고르지 않는다');
 });
