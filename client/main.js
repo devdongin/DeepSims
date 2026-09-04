@@ -1965,6 +1965,15 @@ function conversationLine(e) {
           ? pick([`${rang(about)} 요즘 사이가 달라진 것 같아`, `${wa(about)} 예전 같지가 않네`,
             `${about} 생각하면 마음이 좀 복잡해`], t)
           : pick([`요즘 인간관계가 좀 변했어`, `사람 사이라는 게 참 알 수가 없어`], t);
+        // §23.47 거절 — 이 세계에서 호감이 내려가는 유일한 사건이다. 말로도 남는다.
+        case 'rejected': return about
+          ? pick([`${eul(about)} 불렀는데 거절당했어. 좀 머쓱하네`,
+            `${ga(about)} 오늘은 됐다고 하더라`,
+            `같이 가자고 했는데 ${eun(about)} 싫대`,
+            `${rang(about)} 어울려보려고 했는데 잘 안 됐어`], t)
+          : pick([`오늘 ${place}에서 같이 하자고 했다가 거절당했어`,
+            `먼저 말 붙이는 게 점점 어려워진다`,
+            `괜히 말 꺼냈나 싶어`], t);
         // ── 여기부터는 세계가 기록하는데 클라가 할 말이 없던 25종이다.
         // 라이브 4000건 중 memory_share 635건이었고 그 **59%가 아래 종류라
         // "별일이 다 있었어"로 뭉개지고 있었다**. sick 138·unmet 85·was_helped 32처럼
@@ -2383,6 +2392,9 @@ function replyLine(e) {
       was_helped: ['나도 그런 도움 받은 적 있어', '나도 그때 누가 챙겨줘서 넘겼어',
         '그런 사람 만나면 오래 기억에 남더라'],
       helped: ['나도 그럴 때 그냥 지나쳐지지가 않더라', '나도 거들어 본 적 있어'],
+      // §23.47 거절 — 위로가 성립하는 자리다. 듣는 쪽도 겪어본 일이다.
+      rejected: ['나도 그런 적 있어. 그때 좀 서운하더라', '거절당하면 아무렇지 않기가 어렵지',
+        '너 잘못이 아니야. 그냥 타이밍이었을걸'],
       new_neighbor: ['나도 처음 왔을 때 막막했어', '나도 아직 인사는 못 했어'],
       welfare: ['나도 그거로 이번 달 넘겼어', '나도 없었으면 힘들었을 거야',
         '나도 빠듯한 건 마찬가지야'],
@@ -2706,6 +2718,28 @@ function eventText(e) {
       const town=e.payload.villageId?(world?.villages?.find(v=>v.id===e.payload.villageId)?.name??e.payload.villageId):'';
       return `🏛️ ${town?town+' ':''}시정 발표: ${parts.join(', ')}`;
     }
+    // §23.49 **세계가 하는 일인데 화면이 한 마디도 하지 않던 자리들.** 등록된 이벤트
+    // 120종 중 17종이 eventText에 분기가 없어 피드에서 통째로 사라지고 있었다 —
+    // QA-13(기억 대사)·QA-14(직업 대사)에서 두 번 배운 "배선 없는 키는 조용히 죽는다"가
+    // 이벤트 문장에서 세 번째로 반복된 것이다. 배관(supply_*·goods_*·household_intent_*·
+    // storyteller_decision)은 일부러 말이 없어야 하지만, 아래는 사람이 볼 일이다.
+    case 'world_event_started': {
+      const days = Math.max(1, Math.round(((e.payload.expiresAt ?? 0) - (e.payload.startsAt ?? 0)) / 1440));
+      const again = e.payload.replaced ? ' (이전 기운을 밀어냅니다)' : '';
+      return `\u{1f30d} ${worldEffectKo(e.payload.effect)} 마을에 돌기 시작했습니다 — ${days}일간${again}`;
+    }
+    case 'world_event_expired': return `\u{1f30d} ${worldEffectKo(e.payload.effect)} 걷혔습니다`;
+    case 'invite_expired': return `⏳ ${eun(n)} 청을 받고도 ${placeKo(e.payload.facilityId)}에 가지 못했습니다`;
+    case 'item_reported': return `\u{1f4ee} ${ga(n)} 잃어버린 ${e.payload.amount}원을 신고했습니다`;
+    case 'item_returned': return `\u{1f932} ${ga(n)} 주운 ${e.payload.amount}원을 주인에게 돌려줬습니다`;
+    case 'village_land_assigned':
+      return `\u{1f5fa}️ ${townKo(e.payload.villageId)}에 땅 ${e.payload.plotIds?.length ?? 0}칸이 배정됐습니다`;
+    case 'employment_construction_planned':
+      return `\u{1f3d7}️ 일자리를 못 구한 ${e.payload.unmet}명 때문에 사무실을 짓기로 했습니다 (${e.payload.cost}원)`;
+    case 'employment_started': return `💼 ${n}: ${placeKo(e.payload.facilityId)}에 고용됐습니다`;
+    case 'employment_ended': return `💼 ${n}: ${placeKo(e.payload.facilityId)}에서의 고용이 종료됐습니다`;
+    case 'plot_relocated':
+      return `\u{1f4d0} ${townKo(e.payload.villageId)} 공사 자리를 (${e.payload.x}, ${e.payload.y})로 옮겼습니다`;
     case 'starving': return `⚠️ ${ga(n)} 굶고 있습니다!`;
     case 'medical_visit_paid': return `🏥 ${n} 진료 완료: 환자 측 ${e.payload.patientCost}원 · 공공 부담 ${e.payload.subsidy}원`;
     case 'child_allowance_paid': return `🧒 ${n} 가구에 아이 #${e.payload.childId} 지원 ${e.payload.amount}원`;
@@ -2757,7 +2791,7 @@ function eventText(e) {
     case 'public_revenue_remitted': return `🏛️ ${placeKo(e.payload.facilityId)}의 수입 ${e.payload.amount.toLocaleString()}원이 국고로 들어왔습니다`;
     // 초대와 거절 — 60일에 1,100건. 누가 누구를 불렀고 거절당했다는 드라마가 무성이었다.
     case 'invited': return `🙋 ${ga(n)} ${simName(e.payload.toSimId)}에게 같이 가자고 했습니다`;
-    case 'invite_declined': return `🙅 ${simName(e.payload.toSimId)}${hasJong(simName(e.payload.toSimId)) ? '이' : '가'} ${ne(n)} 청을 거절했습니다`;
+    case 'invite_declined': return `🙅 ${ga(simName(e.payload.toSimId))} ${ne(n)} 청을 거절했습니다`; // §23.47 조사는 헬퍼로
     case 'invite_fulfilled': return `🤝 ${ga(n)} ${simName(e.payload.toSimId)}와 약속한 자리에 함께 왔습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
@@ -2783,6 +2817,20 @@ function eventText(e) {
     // 말이 없으면 없는 일이다.
     case 'relationship_changed': {
       const who = simName(e.payload.withSimId);
+      // §23.47 전에는 **도착한 티어만** 보고 문장을 골랐다. 그래서 친구였던 사이가
+      // 식어서 아는 사이로 내려와도 '아는 사이가 되었습니다'가 찍혔다 — 관계가
+      // 나빠진 순간을 좋아진 순간과 같은 문장으로 말한 것이다. 거절이 호감도를
+      // 실제로 내리기 시작한 이상 이 방향은 자주 일어난다. 어디서 왔는지도 본다.
+      const prev = e.payload.prevTier;
+      if (e.payload.tier === 'acquaintance' && prev === 'friend') {
+        return `💔 ${wa(n)} ${ga(who)} 예전만큼 가깝지 않습니다`;
+      }
+      if (e.payload.tier === 'acquaintance' && prev === 'rival') {
+        return `🕊️ ${wa(n)} ${ga(who)} 앙금이 풀렸습니다`;
+      }
+      if (e.payload.tier === 'stranger' && prev === 'friend') {
+        return `🍃 ${wa(n)} ${ga(who)} 남처럼 멀어졌습니다`;
+      }
       const TIER = { friend: `🤝 ${wa(n)} ${ga(who)} 친구가 되었습니다`,
         rival: `💢 ${wa(n)} ${ga(who)} 사이가 틀어졌습니다`,
         acquaintance: `🙂 ${wa(n)} ${ga(who)} 아는 사이가 되었습니다`,
@@ -2867,6 +2915,11 @@ const FEED_STORY = new Set([
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
   'founding_gathering', 'founding_departed', 'village_founded',
   'household_migration_gathering', 'household_migration_departed',
+  // §23.49 새로 문장이 생긴 것 중 **드물고 사람이 볼 일인 것**만 이야기에 올린다.
+  // invite_expired(하루 수십 건)와 plot_relocated는 바탕음이라 전체 피드에만 둔다.
+  'item_reported', 'item_returned',
+  'world_event_started', 'world_event_expired',
+  'village_land_assigned', 'employment_construction_planned',
 ]);
 // conversation·greeting·gathering·invited는 뺐다. 실측에서 '이야기' 80줄이 전부 잡담(💬)이라
 // 결혼도 출생도 그 사이에 묻혔다 — 수다는 이 마을의 **바탕음**이지 사건이 아니다.
@@ -2877,14 +2930,31 @@ const FEED_MONEY = new Set([
   'policy_changed', 'fish_caught', 'medical_visit_paid', 'child_allowance_paid',
 ]);
 let feedFilter = 'story'; // §23.43 처음 보이는 화면은 '이야기'다 (index.html의 on과 짝)
+// §23.49 세계 이벤트 효과 이름. sim/world-events.js의 WORLD_EVENT_EFFECTS와 짝이다
+// (disease·immigration·mood + topic_<대화주제> 10종). 모르는 값은 그대로 보여준다.
+const WORLD_EFFECT_KO = {
+  disease: '돌림병이', immigration: '이사 오는 기운이', mood: '분위기가',
+  topic_couple_news: '연애 소식 이야기가', topic_family_talk: '가족 이야기가',
+  topic_food: '먹는 이야기가', topic_gossip: '뒷말이', topic_memory_share: '옛날 이야기가',
+  topic_politics: '정치 이야기가', topic_weather: '날씨 이야기가',
+  topic_work_gripe: '일 푸념이', topic_sweet_talk: '달콤한 말이', topic_club_talk: '동아리 이야기가',
+};
+const worldEffectKo = (eff) => WORLD_EFFECT_KO[eff] ?? `${eff}가`;
+const townKo = (villageId) => (villageId
+  ? (world?.villages?.find((v) => v.id === villageId)?.name ?? villageId) : '마을');
+
 function feedPasses(e) {
   if (feedFilter === 'all') return true;
   // §23.43 '아는 사이가 되었습니다'는 이야기가 아니라 바탕음이다. 실측: 라이브 마을에서
   // relationship_changed 4,526건 중 4,183건(92%)이 acquaintance였고, 그래서 '이야기'
   // 필터를 켜도 화면의 92%가 그 한 줄이었다. 잡음을 피해 온 사람에게 다른 잡음을 줬다.
   // 친구가 되거나 사이가 틀어지는 것만 남긴다.
+  // §23.47 단, **내려온** 아는 사이는 이야기다. 위 92%는 전부 stranger → acquaintance
+  // 였다 — 친구였다가 식은 것을 같은 이유로 숨기면 관계가 나빠지는 과정만 화면에서
+  // 통째로 사라진다. 올라온 것만 숨긴다.
   if (feedFilter === 'story' && e.type === 'relationship_changed'
-      && e.payload?.tier === 'acquaintance') return false;
+      && e.payload?.tier === 'acquaintance'
+      && e.payload?.prevTier !== 'friend' && e.payload?.prevTier !== 'rival') return false;
   if (feedFilter === 'mine') return selectedSimId !== null && e.simId === selectedSimId;
   if (feedFilter === 'story') return FEED_STORY.has(e.type);
   if (feedFilter === 'money') return FEED_MONEY.has(e.type);
@@ -3485,6 +3555,21 @@ for (const b of document.querySelectorAll('#feed-filter button')) {
 }
 
 // §23.23 목표 배선
+// §23.50 첫 방문 안내. lsGet/lsSet은 비공개 창에서 던질 수 있어 이미 try/catch로 싸여 있다 —
+// 저장이 안 되면 매번 뜨는 쪽이 한 번도 안 뜨는 쪽보다 낫다(설명은 없는 것보다 반복이 낫다).
+function openGuide() { $('guide').style.display = 'flex'; }
+function closeGuide() { $('guide').style.display = 'none'; lsSet('deepsims.guideSeen', '1'); }
+$('guide-btn').addEventListener('click', openGuide);
+$('guide-close').addEventListener('click', closeGuide);
+$('guide').addEventListener('click', (ev) => { if (ev.target === $('guide')) closeGuide(); });
+// '?'로도 연다. 입력란에 타이핑 중이면 가로채지 않는다.
+window.addEventListener('keydown', (ev) => {
+  if (ev.key !== '?' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const el = document.activeElement;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return;
+  if ($('guide').style.display === 'flex') closeGuide(); else openGuide();
+});
+
 $('goals-btn').addEventListener('click', () => { $('goals-modal').style.display = 'flex'; renderGoals(); });
 $('goals-close').addEventListener('click', () => { $('goals-modal').style.display = 'none'; });
 
@@ -3539,6 +3624,9 @@ function maybeShowOnboarding() {
   const hasPlayer = world?.sims.some((s) => s.isPlayer);
   $('onboard').style.display = hasPlayer ? 'none' : 'flex';
   $('announce').style.display = hasPlayer ? 'flex' : 'none'; // 모임 공지는 플레이어가 있어야 (PLAN D7)
+  // §23.50 이미 살고 있던 사람은 이사 오기 창을 지나지 않는다 — 그 경로로만 안내를 걸면
+  // 기존 플레이어는 영영 못 본다. 아직 안 본 사람에게 한 번 띄운다.
+  if (hasPlayer && !lsGet('deepsims.guideSeen') && $('onboard').style.display === 'none') openGuide();
 }
 
 $('an-btn').addEventListener('click', async () => {
@@ -3570,6 +3658,7 @@ $('ob-submit').addEventListener('click', async () => {
   }).then((r) => r.json());
   if (res.error) { $('ob-error').textContent = res.error; return; }
   $('onboard').style.display = 'none'; // 생성 결과는 다음 tickBatch로 도착 (거부 시 피드에 표시)
+  if (!lsGet('deepsims.guideSeen')) openGuide(); // §23.50 이사 온 사람에게 마을을 한 번 설명한다
 });
 
 // ---- 부재중 리포트 ----

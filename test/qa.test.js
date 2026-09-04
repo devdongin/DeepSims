@@ -600,3 +600,43 @@ return { occKo, actionKo };`)();
   // 호출자가 준 폴백이 우선한다 (주민 패널의 '대기')
   assert.equal(api.actionKo(undefined, '대기'), '대기');
 });
+
+// §23.49 이벤트 문장 배선 누락 방지 — QA-13(기억 종류)·QA-14(직업)의 **이벤트판**이다.
+//
+// 이 테스트가 없어서 생긴 일: 등록된 이벤트 120종 중 17종이 eventText에 분기가 없어
+// 피드에서 통째로 사라지고 있었다. 세계는 잃어버린 돈을 신고하고 돌려주고, 세계
+// 이벤트가 시작하고 끝나고, 일자리를 못 구한 사람 때문에 사무실을 짓기로 하는데
+// **화면은 그 중 어느 것도 말하지 않았다.** 같은 사고를 기억 대사(§22.28)와 직업
+// 대사(§22.33)에서 이미 두 번 겪었다 — 배선 없는 키는 조용히 죽는다(§22.10).
+//
+// 이벤트를 하나 늘리면 이 테스트가 먼저 깨지게 둔다. 정말 말이 없어야 하는 배관은
+// 아래 목록에 **이유와 함께** 올린다 — 침묵은 기본값이 아니라 선택이어야 한다.
+const SILENT_BY_DESIGN = new Map([
+  ['storyteller_decision', '스토리텔러 내부 판단 기록 — 결과 이벤트가 따로 말한다'],
+  ['supply_ordered', '공급망 배관 — 하루 수십 건, 결품(stockout)이 대신 말한다'],
+  ['supply_capitalized', '공급망 배관 — 위와 같다'],
+  ['goods_purchased', '소비 원장 배관 — money_changed가 사람 쪽에서 말한다'],
+  ['goods_produced', '생산 원장 배관 — 위와 같다'],
+  ['household_intent_created', '가구 이주 의사 기록 — gathering/departed가 말한다'],
+  ['household_intent_applied', '가구 이주 의사 반영 — 위와 같다'],
+  ['household_intent_failed', '가구 이주 의사 실패 — 위와 같다'],
+  ['construction_relocation_deferred', '자리 못 찾아 미룸 — plot_relocated가 성공 쪽을 말한다'],
+]);
+
+test('QA-20. §23.49 등록된 모든 이벤트가 피드 문장을 갖거나 침묵이 명시돼 있다', async () => {
+  const { EVENT_TYPES } = await import('../sim/constants.js');
+  assert.ok(EVENT_TYPES.length > 100, `이벤트 종류를 못 읽었다 (${EVENT_TYPES.length}종)`);
+
+  const start = CLIENT.indexOf('function eventText');
+  assert.ok(start > 0, 'eventText를 찾지 못했다');
+  const body = CLIENT.slice(start);
+  const handled = new Set([...body.matchAll(/case '([a-z_]+)':/g)].map((m) => m[1]));
+
+  const missing = EVENT_TYPES.filter((t) => !handled.has(t) && !SILENT_BY_DESIGN.has(t));
+  assert.deepEqual(missing, [],
+    `피드에서 조용히 사라지는 이벤트: ${missing.join(', ')} — 문장을 주거나 SILENT_BY_DESIGN에 이유를 적어라`);
+
+  // 반대 방향도 잠근다: 배관이라고 올려놓고 실제로는 사라진 타입이 목록에 남지 않게.
+  const stale = [...SILENT_BY_DESIGN.keys()].filter((t) => !EVENT_TYPES.includes(t));
+  assert.deepEqual(stale, [], `등록되지 않은 타입이 침묵 목록에 남아 있다: ${stale.join(', ')}`);
+});
