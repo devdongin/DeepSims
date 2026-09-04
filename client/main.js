@@ -3459,7 +3459,9 @@ function renderPanel() {
     if (sim.education?.universityGraduated) extra += ' · 🎓대졸';
     if (sim.education?.course) extra += ` · ${{university:'학부',masters:'석사',doctorate:'박사'}[sim.education.course]} ${sim.education.universityEnrolled?'재학':'등록 보류'}`;
     if (sim.education?.highestDegree && sim.education.highestDegree !== 'bachelor') extra += ` · 🎓${{masters:'석사',doctorate:'박사'}[sim.education.highestDegree]}`;
-    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${sim.isPlayer ? ' · ◆나' : ''}${sim.isGenius ? ' · ⭐천재' : ''}${extra}`;
+    const employer=sim.employment&&world?.map?.facilities?.find(f=>f.id===sim.employment.facilityId);
+    const employmentLabel=employer?` · 근무지: ${PLACE_KO[employer.type]??employer.type} (${employer.id})`:'';
+    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${employmentLabel}${sim.isPlayer ? ' · ◆나' : ''}${sim.isGenius ? ' · ⭐천재' : ''}${extra}`;
   }
   renderRelations(sim.id); // §23.15 관계 (열려 있는 동안 사람이 바뀔 때만 다시 읽는다)
   $('money').textContent = `💰 ${sim.money}원`;

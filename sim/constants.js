@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 75; // Durable, expiring world-event modifiers.
+export const SCHEMA_VERSION = 76; // Persist physical employer and failed-search retry state.
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -108,6 +108,7 @@ export const EVENT_TYPES = [
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
   'founding_gathering', 'founding_departed', 'village_founded',
+  'employment_started', 'employment_ended',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];
