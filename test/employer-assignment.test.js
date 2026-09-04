@@ -140,3 +140,13 @@ test('many candidate employers retain all choices while keeping real stored even
     assert.equal(st.db.prepare('SELECT count(*) AS n FROM events').get().n,events.length);
   }finally{st.close();}
 });
+
+test('same-tick work commands assign only their targets in authoritative input sequence order',()=>{
+  const {w,s}=fixture();w.worldTick=539;w.lastDailyDay=0;w.lastPlanDay=0;s.x=1;s.y=4;
+  const other=structuredClone(s);other.id=99;w.sims.push(other);
+  const inputs=[{sequence:2,command:'assign',payload:{simId:s.id,actionType:'work'}},
+    {sequence:1,command:'assign',payload:{simId:other.id,actionType:'work'}}];
+  const saved=deserialize(serialize(w)),events=tick(w,inputs);
+  assert.deepEqual(events,tick(saved,inputs.toReversed()));assert.equal(serialize(w),serialize(saved));
+  assert.deepEqual(events.filter(e=>e.type==='employment_started').map(e=>e.simId),[other.id,s.id]);
+});
