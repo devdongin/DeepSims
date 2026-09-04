@@ -85,9 +85,10 @@ for (const [pop, expected] of [
   // logic106 adds main efbeb2d argumentAffinity. In this 240-tick fixture,
   // candidate/choice/event vectors still match; only parameter/world hashes move.
   // logic107 observation leaves these behavior vectors unchanged.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', 'a675a335']],
-  [50, ['8f96407c', '31c608eb', '413a3388', 'b10968cc']],
-  [200, ['23a3029f', 'df690287', '6a7a0043', '64c0694b']],
+  // logic108 changes only center repair; these fixtures have no planned centers.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '74d12bb8']],
+  [50, ['8f96407c', '31c608eb', '413a3388', '7f5858c5']],
+  [200, ['23a3029f', 'df690287', '6a7a0043', '3ce6c72a']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

@@ -35,6 +35,41 @@ test('live center regression: repair road-overlapped parcel without touching roa
   assert.equal(plotBuildable(w.map,w.plots[0],12,10),true);
   const repeated=[];repairCenterPlots(w,(...e)=>repeated.push(e));assert.deepEqual(repeated,[]);
 });
+
+test('archived center road/sidewalk crossing needs more than radius8 for a12x10 campus',()=>{
+  const w=fixture();
+  // Minimal terrain from archive1113: roads x192/y115, sidewalk y125. The previous
+  // regression omitted the sidewalk, so its radius6 repair hid this failure.
+  for(let x=0;x<256;x++){
+    w.map.tiles[115*256+x]=TILE.ROAD;
+    if(x!==192)w.map.tiles[125*256+x]=TILE.SIDEWALK;
+  }
+  const tiles=[...w.map.tiles],copy=deserialize(serialize(w));
+  const events=tick(w);assert.deepEqual(events,tick(copy));
+  assert.equal(serialize(w),serialize(copy));
+  const p=w.plots.find(p=>p.plotId===73);
+  assert.deepEqual({x:p.x,y:p.y},{x:180,y:126});
+  assert.ok(Math.abs(p.x-186)+Math.abs(p.y-120)>8);
+  assert.ok(plotBuildable(w.map,p,12,10));assert.deepEqual(w.map.tiles,tiles);
+  assert.ok(events.some(e=>e.type==='plot_relocated'&&e.payload.plotId===73));
+  assert.ok(events.some(e=>e.type==='project_started'&&e.payload.plotId===73));
+});
+
+test('expanded repair cannot move a parcel outside the invested center catchment',()=>{
+  const w=fixture();w.logic.zone.centerRadius=6;
+  const before=serialize(w),events=[];repairCenterPlots(w,(...e)=>events.push(e));
+  assert.equal(serialize(w),before);assert.deepEqual(events,[]);
+});
+
+test('repair respects full paid airport footprint rather than a generic plot width',()=>{
+  const w=fixture();w.plots.push({plotId:74,x:165,y:120,used:false});
+  w.zoneOrders=[{plotId:74,type:'airport',dir:0}];
+  const orders=serialize(w.zoneOrders),airport=serialize(w.plots[1]);
+  repairCenterPlots(w,()=>{});
+  assert.ok(plotBuildable(w.map,w.plots[0],12,10));
+  assert.equal(campusSiteReserved(w,w.plots[0],'university'),false);
+  assert.equal(serialize(w.zoneOrders),orders);assert.equal(serialize(w.plots[1]),airport);
+});
 test('repair preserves paid/active/used parcels, foreign jurisdiction and non-road obstacles',()=>{
   for(const kind of ['paid','active','approved','used','foreign','water','neighbor']){
     const w=fixture();
