@@ -7,6 +7,30 @@ import {applyWorldEvent,validateWorldEvent} from '../sim/world-events.js';
 import {emptyState} from '../sim/simfactory.js';
 const event=(delta,durationTicks=10)=>({effect:'mood',delta,durationTicks});
 
+test('same-tick autonomous sleep reflection retains the active mood shock',()=>{
+  const base=createWorld(32),s=base.sims[0];
+  base.worldTick=1380;base.lastDailyDay=0;base.lastPlanDay=0;
+  s.traits.age=30;s.traits.occupation='office_worker';s.education.course=null;
+  s.mood=0;s.state=emptyState();s.needs={hunger:9000,energy:0,social:9000,fun:9000};
+  const bed=base.map.facilities.find(f=>f.id===s.homeId).resources[0];
+  s.x=bed.x;s.y=bed.y;
+  const shocked=deserialize(serialize(base));
+  for(const [w,delta] of [[base,0],[shocked,-1000]]){
+    const events=tick(w,[{sequence:0,command:'world_event',payload:event(delta,1000)}]);
+    assert.ok(events.some(e=>e.type==='action_started'&&e.simId===s.id&&e.payload.action==='sleep'));
+    assert.equal(w.sims[0].state.kind,'performing');
+  }
+  assert.equal(shocked.sims[0].pendingMood,base.sims[0].pendingMood-1000);
+  const resumed=deserialize(serialize(shocked));
+  let woke=false;
+  for(let i=0;i<600;i++){
+    assert.deepEqual(tick(resumed),tick(shocked));
+    if(shocked.sims[0].pendingMood===null){woke=true;break;}
+  }
+  assert.ok(woke,'sleep must really finish and apply the pending mood');
+  assert.equal(serialize(resumed),serialize(shocked));
+});
+
 test('mood shock uses a bounded signed value and same-channel replacement applies only the difference',()=>{
   for(const p of [event(3001),event(-3001),event(NaN),event(1.5),{...event(1),percent:100}])
     assert.equal(validateWorldEvent(p).ok,false);

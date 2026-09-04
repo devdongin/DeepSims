@@ -1,6 +1,7 @@
 // Phase 3 인지: 기억 스트림·검색·회고 (PLAN §2.5 B/C/E, 델타 D1~D3).
 // 전부 정수 연산, rng 미사용 — 결정적. LLM 없음.
 import { NEGATIVE_MEMORY_KINDS } from './logic.js';
+import { worldEventMood } from './world-events.js';
 
 // 순환 import 회피: society가 cognition.recordFact를 쓰므로 훅은 지연 바인딩
 let romanceHook = () => {};
@@ -218,7 +219,7 @@ export function runReflection(world, sim, t, emit) {
     const sign = NEGATIVE_MEMORY_KINDS.includes(m.kind) ? -1 : 1;
     moodSum += sign * m.importance * L.social.reflectionMoodScale;
   }
-  sim.pendingMood = clamp(moodSum, -10000, 10000);
+  sim.pendingMood = clamp(moodSum + worldEventMood(world, t), -10000, 10000);
 
   // 3) 습관 — 같은 행동×시설 반복 ≥ 임계 → 보너스 누적 (캡·일일 증가 상한, §G)
   const counts = new Map();
