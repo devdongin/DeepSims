@@ -930,6 +930,8 @@ stock_food, visit_culture)에만 같은 행동의 가능한 마을별 목적지�
 않으며, 선택한 경로를 startAction에 재사용하고 기존 철도 수단 선택/실제 이동을 거친다.
 action_started.reason.visitChoice에 좌표·거리·인구·선택 근거를 기록한다. 실제 도착만
 기존 municipalVisits 통계에 집계된다. 세이브 상태 필드 추가는 없어 schema75를 유지한다.
+마을 인구/시설 조회표는 idle 결정 단계에서 한 번 관측하며 다음 tick까지 캐시하지 않는다.
+선택된 경로는 재탐색하지 않고 즉시 기존 이동 시작에 전달한다.
 
 ## 세계 사건 입력 화면
 
