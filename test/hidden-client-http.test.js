@@ -42,6 +42,7 @@ test('#143 hidden client receives no tick batches and resumes with one current s
       throw new Error('message timeout');
     };
     const initial = await waitFor((m) => m.type === 'snapshot');
+    assert.ok(initial.world.transportStats.today);assert.ok(Array.isArray(initial.world.transportStats.history));
     assert.equal(initial.world.zoneCosts.train_station,8000,'station UI receives authoritative construction price');
     const legacy=await waitFor(m=>m.type==='tickBatch');
     assert.ok(legacy.sims[0].traits,'an already-loaded legacy client receives full resident views');
@@ -58,7 +59,7 @@ test('#143 hidden client receives no tick batches and resumes with one current s
     }
     assert.ok(observerMessages.some((m) => m.type === 'snapshot'));
     await fetch(`http://127.0.0.1:${port}/api/speed`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speed: 48 }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speed: 20 }),
     });
     await new Promise((resolve) => setTimeout(resolve, 1100));
     assert.equal(messages.some((m) => m.type === 'tickBatch'), false);

@@ -7,6 +7,7 @@ import {resetSimCache,mergeSimBatch} from '../client/sim-stream.js';
 test('static keys cover education, potential, personality and municipality changes',()=>{
   const sim=createWorld(32).sims[0],projection=simStatic(sim),key=staticKey(sim);
   const fields=[['villageId','village:other'],['potential',{...sim.potential,intellect:999}],
+    ['homeId','other-home'],['householdId','other-household'],
     ['traits',{...sim.traits,mbti:'INFP'}],
     ...['universityEnrolled','universityGraduated','lastStage','tuitionPaid','course','highestDegree','completed']
       .map(k=>['education',{...sim.education,[k]:typeof sim.education[k]==='boolean'?!sim.education[k]:'changed'}])];
@@ -16,6 +17,18 @@ test('static keys cover education, potential, personality and municipality chang
     assert.notEqual(staticKey(changed),key,field+':'+JSON.stringify(value));
   }
   assert.equal(staticKey({...sim,x:sim.x+1,money:sim.money+1}),key,'volatile changes do not resend static data');
+});
+
+test('compact illness and need-tier views retain household statics without exposing internal counters',()=>{
+  const sim=createWorld(32).sims[0];sim.sick={kind:'cold',untilTick:999};
+  sim.needsTier={level:2,fulfilledTicks:100,deprivedTicks:20,culture:55,visits:{cafe:1}};
+  sim.homeId='home-test';sim.householdId='household-test';
+  for(const view of [simView(sim),simVolatile(sim)]){
+    assert.equal(view.sick,true);assert.deepEqual(view.needsTier,{level:2});
+  }
+  const statics=simStatic(sim);assert.equal(statics.homeId,'home-test');assert.equal(statics.householdId,'household-test');
+  assert.equal(simVolatile(sim).homeId,undefined);assert.equal(simVolatile(sim).householdId,undefined);
+  assert.equal(sim.sick.untilTick,999);assert.equal(sim.needsTier.culture,55);
 });
 
 test('snapshot plus static/volatile batches reconstruct the full wire view through changes and departures',()=>{

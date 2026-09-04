@@ -79,10 +79,19 @@ test('#51/§23.39 투영에는 화면이 읽는 필드만 있다 (죽은 payload
   // 그 둘을 한 번도 읽지 않는다(전수 확인) — 아무도 안 보는 것을 250ms마다 보내는 계약을
   // 굳히고 있었던 셈이다. 성능 리뷰가 같은 부류로 affinity 1.27MB가 스냅샷에 실려 나가는
   // 것을 잡았다. 그래서 계약을 뒤집는다: **투영의 모든 필드는 클라이언트가 읽어야 한다.**
+  // §23.41 다만 "안 쓴다"와 "필요 없다"는 다르다. 로드맵에 있는 필드는 남긴다 —
+  // 대신 **왜 남기는지를 여기 적게** 해서, 아무도 안 보는 payload가 조용히 쌓이지 않게 한다.
+  const ROADMAP = {
+    homeId: 'PLAN §125~126 가구 개념 · #51/#32 진행 중 — 정적 쪽에 있어 배치 비용 없음',
+    householdId: 'PLAN §125~126 가구 개념 · #51/#32 진행 중 — 정적 쪽에 있어 배치 비용 없음',
+  };
   const client = fs.readFileSync(new URL('../client/main.js', import.meta.url), 'utf8');
   const { child } = fixture();
-  const dead = Object.keys(simView(child)).filter((k) => !new RegExp(`\\b${k}\\b`).test(client));
-  assert.deepEqual(dead, [], `화면이 안 읽는 필드가 투영에 있다: ${dead.join(', ')}`);
+  const dead = Object.keys(simView(child))
+    .filter((k) => !ROADMAP[k] && !new RegExp(`\\b${k}\\b`).test(client));
+  assert.deepEqual(dead, [],
+    `화면이 안 읽고 로드맵 근거도 없는 필드가 투영에 있다: ${dead.join(', ')}\n`
+    + '읽게 하거나, 빼거나, ROADMAP에 이유를 적어라.');
 });
 
 test('#51 v58 migration derives households deterministically and preserves married households across homes',()=>{

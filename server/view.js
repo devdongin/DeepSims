@@ -26,9 +26,13 @@ export function simVolatile(sim) {
     needs: sim.needs,
     mood: sim.mood,
     money: sim.money,
-    sick: sim.sick,
+    // §23.40 화면은 아픈지 **여부**만 본다 (전수 확인: sim.sick의 참·거짓만 읽는다).
+    // {kind, untilTick} 객체를 보낼 이유가 없다.
+    sick: sim.sick ? true : null,
     hasCar: sim.hasCar,
-    needsTier: sim.needsTier ? { ...sim.needsTier } : null,
+    // 화면이 읽는 것은 level 하나다 ("시민"/"정착민" 표시). 나머지 넷(fulfilledTicks·
+    // deprivedTicks·culture·visits)은 시뮬 내부 값인데 배치마다 249명분이 나갔다 — 22KB.
+    needsTier: sim.needsTier ? { level: sim.needsTier.level } : null,
   };
 }
 
@@ -64,14 +68,18 @@ export function simView(sim) {
     needs: sim.needs,
     mood: sim.mood,
     money: sim.money,
-    sick: sim.sick,
+    sick: sim.sick ? true : null,   // §23.40 화면은 여부만 본다
     hasCar: sim.hasCar,
     isPlayer: sim.isPlayer,
     isGenius: sim.isGenius,
     villageId: sim.villageId,
-    // §23.37 homeId·householdId는 화면이 한 번도 읽지 않는다 (전수 확인). 14.6KB/배치.
-    // 다시 필요해지면 여기 두 줄을 되살리면 된다 — 지우는 게 아니라 안 보내는 것이다.
-    needsTier: sim.needsTier ? { ...sim.needsTier } : null,
+    // §23.41 homeId·householdId는 지금 화면이 안 읽지만 **로드맵에 있다** —
+    // PLAN §125~126이 가구를 핵심 개념으로 두고 #51(가구)·#32(마을 귀속)이 진행 중이다.
+    // 안 쓴다고 빼는 게 아니라, 배치마다 보내지 않고 **정적 쪽에 둔다**: 이사·혼인 때만
+    // 바뀌므로 실질 비용이 0에 수렴하고, 화면이 필요해지는 날 그대로 쓸 수 있다.
+    homeId: sim.homeId,
+    householdId: sim.householdId,
+    needsTier: sim.needsTier ? { level: sim.needsTier.level } : null, // §23.40 level만 읽는다
     education: sim.education ? { universityEnrolled: sim.education.universityEnrolled,
       universityGraduated: sim.education.universityGraduated, stage: sim.education.lastStage,
       tuitionPaid: sim.education.tuitionPaid, course: sim.education.course,
