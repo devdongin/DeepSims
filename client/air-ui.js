@@ -6,7 +6,7 @@ export function aircraftLabel(link){
 }
 export function airportConstructionLabel(evidence){
   if(!evidence)return '공항 건설 조건 확인 중';
-  return `${evidence.eligible?'건설 가능':REASON[evidence.reason]??'건설 불가'} · 최근14일 완료 방문 ${evidence.completedTrips}/${evidence.threshold}회`;
+  return `${evidence.eligible?'건설 가능':REASON[evidence.reason]??'건설 불가'} · 최근14일 완료 방문 ${evidence.completedTrips}/${evidence.threshold}회 · 길이 없어 못 간 주민·일 ${evidence.unservedIntents??0}/${evidence.threshold}건 (합산 안 함)`;
 }
 export function travelStateLabel(state){
   if(state?.kind==='flying')return '(항공기 탑승 중)';

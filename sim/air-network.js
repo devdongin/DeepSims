@@ -1,4 +1,5 @@
 import {airDistance, flightServiceAt} from './flight-schedule.js';
+import {recentUnservedAirDemand} from './unserved-air-demand.js';
 
 const idOrder=(a,b)=>a<b?-1:a>b?1:0;
 const nonnegative=(n,name)=>{
@@ -63,7 +64,8 @@ export function commissionAirport(network,facility,projectId,tick,config,transpo
   const airport={id:facility.id,villageId:facility.villageId,projectId,openedTick:tick,
     door:{...facility.door},removed:false};
   const candidates=network.airports.filter(a=>!a.removed).map(a=>({airport:a,
-    demand:recentAirportDemand(transportStats,airport.villageId,a.villageId,Math.floor(tick/1440)),
+    demand:Math.max(recentAirportDemand(transportStats,airport.villageId,a.villageId,Math.floor(tick/1440)),
+      recentUnservedAirDemand(transportStats,airport.villageId,a.villageId,Math.floor(tick/1440))),
     distance:airDistance(airport.door,a.door)})).filter(a=>a.distance>0)
     .sort((a,b)=>b.demand-a.demand||a.distance-b.distance||idOrder(a.airport.id,b.airport.id));
   let link=null;

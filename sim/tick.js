@@ -42,6 +42,7 @@ import { rollTransportDay, recordTransportDeparture, recordAirDeparture, recordT
 import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
+import {recordUnservedAirTrip} from './unserved-air-demand.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, ZONEABLE } from './logic.js';
 import { applyPolicyCommand } from './policy-command.js';
@@ -662,6 +663,7 @@ function startAction(world, sim, cand, t, emit, reason, selectedPath = null, sel
   let airTrip=selectedAir??chooseAirJourney(world,sim,cand,t,path);
   if(airTrip&&railTrip&&airTrip.estimatedTicks>=railTrip.rail.estimatedTicks)airTrip=null;
   if (path === null&&!airTrip) {
+    recordUnservedAirTrip(world,sim,cand,emit);
     delete world.reservations[resKey(cand.facilityId, cand.resourceId)];
     sim.state = emptyState();
     emit('action_failed', sim.id, { action: cand.action, reason: 'no_path' });

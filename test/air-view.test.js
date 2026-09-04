@@ -45,6 +45,8 @@ test('UI text distinguishes holding/diversion/repositioning, actual seats and ob
   assert.match(aircraftLabel(link),/0\/8명.*게이트 대기 1명/);
   assert.match(airportConstructionLabel(undefined),/확인 중/);
   assert.match(airportConstructionLabel({eligible:false,reason:'airport_demand_short',completedTrips:4,threshold:12}),/수요 부족.*4\/12회/);
+  assert.match(airportConstructionLabel({eligible:true,completedTrips:0,unservedIntents:12,threshold:12}),
+    /건설 가능.*완료 방문 0\/12회.*주민·일 12\/12건.*합산 안 함/);
   assert.equal(travelStateLabel({kind:'flying'}),'(항공기 탑승 중)');
   assert.equal(travelStateLabel({kind:'waiting_flight'}),'(공항 게이트 대기)');
 });

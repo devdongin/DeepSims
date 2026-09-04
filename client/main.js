@@ -2801,6 +2801,7 @@ function eventText(e) {
     case 'flight_route_unavailable': return `✈️ ${n}: 항공 경로를 다시 확인해야 합니다`;
     case 'airport_opened': return `✈️ 공항 공사가 완료됐습니다`;
     case 'airport_removed': return `공항이 사라져 기존 운항 연결을 폐지했습니다`;
+    case 'air_trip_unserved': return `다른 마을에 가려 했지만 연결된 길이 없습니다 (완료 방문에는 포함하지 않음)`;
     case 'employment_ended': return `💼 ${n}: ${placeKo(e.payload.facilityId)}에서의 고용이 종료됐습니다`;
     case 'plot_relocated':
       return `\u{1f4d0} ${townKo(e.payload.villageId)} 공사 자리를 (${e.payload.x}, ${e.payload.y})로 옮겼습니다`;

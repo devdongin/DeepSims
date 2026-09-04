@@ -80,9 +80,11 @@ for (const [pop, expected] of [
   //     참조하지 않으므로 rngSim 소비가 그대로고, 바뀐 것은 새 상태 필드(recentConflicts)뿐이다.
   // schema78/logic104 integrates both branches: all three behavior vectors
   // match main1572cf2, retaining rejection/conflict behavior. World hashes add air.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '06ca8790']],
-  [50, ['8f96407c', '31c608eb', '1a80ff90', 'dd76bfab']],
-  [200, ['23a3029f', 'df690287', 'd6564dc2', '84c281c8']],
+  // logic105 records only actual disconnected intermunicipal failures. These
+  // single-town behavior vectors remain identical; only the version hash moves.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '8ed747a9']],
+  [50, ['8f96407c', '31c608eb', '1a80ff90', 'd4dc56fa']],
+  [200, ['23a3029f', 'df690287', 'd6564dc2', 'eaac06b1']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

@@ -125,7 +125,7 @@ export const EVENT_TYPES = [
   'flight_holding', 'flight_diverted', 'flight_diversion_landed',
   'flight_service_resumed',
   'flight_service_suspended', 'flight_route_unavailable',
-  'airport_opened','airport_removed',
+  'airport_opened','airport_removed','air_trip_unserved',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

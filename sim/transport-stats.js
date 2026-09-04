@@ -1,5 +1,7 @@
-// #48 Observation only. Never used by route selection, behavior, or RNG.
+// #48 Physical movement observations. Airport investment reads bounded municipal
+// evidence; recording itself never chooses routes or consumes RNG.
 import { TILE } from './map.js';
+import {unservedAirSummary} from './unserved-air-demand.js';
 
 const cell = (x, y) => `${Math.floor(x / 32)},${Math.floor(y / 32)}`;
 const purposeOf = action => action === 'work' ? 'work'
@@ -24,8 +26,9 @@ export function makeTransportStats(day = 0) {
 }
 
 export function transportSummary(day) {
-  const { od, ...summary } = day;
+  const { od, unservedAirTrips, ...summary } = day;
   return { ...summary,
+    ...(unservedAirTrips?{unservedAirTrips:unservedAirSummary(unservedAirTrips)}:{}),
     avgPathTiles: day.departures ? Math.floor(day.pathTiles / day.departures) : 0,
     avgWalkingTicks: day.arrivals ? Math.floor(day.completedWalkingTicks / day.arrivals) : 0 };
 }
