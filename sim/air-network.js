@@ -11,6 +11,19 @@ const identifier=(id,name)=>{
 
 export function makeAirNetwork(){return {airports:[],links:[],nextId:0};}
 
+// Permanent loss is not a temporary incident. Preserve the funded identity and
+// its old aircraft, but do not let it monopolize the municipality forever.
+// Run even before a second airport/first aircraft exists. Never resurrect an ID.
+export function retireMissingAirports(network,facilities,emit){
+  if(!network.airports.length)return;
+  const live=new Set(facilities.filter(f=>f.type==='airport').map(f=>f.id));
+  for(const airport of network.airports){
+    if(airport.removed||live.has(airport.id))continue;
+    airport.removed=true;
+    emit('airport_removed',null,{airportId:airport.id,villageId:airport.villageId});
+  }
+}
+
 // Completed residence-to-service visits only; attempts/cancellations and airport
 // transfers are not arrivals. Includes today + previous13 days, not14 + today.
 export function recentAirportDemand(transportStats,from,to,day){

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {makeAirNetwork,commissionAirport,recentAirportDemand,unavailableAirports} from '../sim/air-network.js';
+import {makeAirNetwork,commissionAirport,recentAirportDemand,unavailableAirports,retireMissingAirports} from '../sim/air-network.js';
 
 const cfg={speed:4,dwellTicks:10,capacity:8};
 const airport=(id,x,villageId=id)=>({id,type:'airport',villageId,door:{x,y:10}});
@@ -52,6 +52,19 @@ test('temporary closure/reopening does not create aircraft, change topology or m
   assert.deepEqual(unavailableAirports(n,[a],[]),['b']);
   assert.deepEqual(unavailableAirports(n,[a,b],[]),[]);
   assert.equal(JSON.stringify(n),before);
+});
+
+test('permanent retirement preserves old aircraft and IDs while a new completion funds only its own link',()=>{
+  const n=makeAirNetwork(),a=airport('a',10),b=airport('b',90);add(n,a);add(n,b);
+  n.links[0].aircraft={x:45,y:10,passengers:[7]};
+  const old=JSON.stringify(n.links[0]),events=[];
+  retireMissingAirports(n,[a],(...e)=>events.push(e));
+  assert.equal(n.airports[1].removed,true);assert.equal(JSON.stringify(n.links[0]),old);
+  retireMissingAirports(n,[a],(...e)=>events.push(e));assert.equal(events.length,1);
+  retireMissingAirports(n,[a,b],(...e)=>events.push(e));assert.equal(n.airports[1].removed,true,'retired IDs never resurrect');
+  const c=airport('replacement',90,'b');add(n,c,1);
+  assert.equal(n.links.length,2);assert.equal(n.links[1].id,'air:1');assert.equal(n.links[1].to,'replacement');
+  assert.equal(JSON.stringify(n.links[0]),old);assert.deepEqual(n.links[1].aircraft.passengers,[]);
 });
 
 test('invalid commissioning cannot partially append airports or issue replacement aircraft',()=>{

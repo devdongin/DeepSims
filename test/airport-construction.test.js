@@ -5,6 +5,7 @@ import {TILE,addBuilding} from '../sim/map.js';
 import {newGovernment,publicBalance} from '../sim/government.js';
 import {airportConstructionEvidence as evidence} from '../sim/airport-construction.js';
 import {migrateWorld} from '../sim/migrate.js';
+import {Storage} from '../db/storage.js';
 
 function fixture(){
   const w=createWorld(32);w.map={w:128,h:128,tiles:Array(16384).fill(TILE.GRASS),facilities:[],reachVersion:0};
@@ -119,4 +120,29 @@ test('two paid airports complete with default labor and create one actual schedu
   const first={...w.air.links[0].aircraft};for(let i=0;i<20;i++)assert.deepEqual(tick(w),tick(copy));
   assert.notDeepEqual({x:w.air.links[0].aircraft.x,y:w.air.links[0].aircraft.y},{x:first.x,y:first.y});
   assert.equal(hashWorld(w),hashWorld(copy));
+});
+
+test('removing the only airport retires its identity and allows a separately paid replacement',()=>{
+  const w=fixture();w.villages[1].government.treasury=60000;w.logic.construct.requiredByType.airport=1;
+  const before=money(w),events=tick(w,order);
+  for(let i=0;i<1000&&!w.air.airports.length;i++)events.push(...tick(w));
+  assert.equal(w.air.airports.length,1);const old=w.air.airports[0].id;
+  w.map.facilities=w.map.facilities.filter(f=>f.id!==old);
+  w.plots.push({plotId:501,x:15,y:45,villageId:'village:1',used:false});
+  events.push(...tick(w,[{sequence:1,command:'zone',payload:{plotId:501,type:'airport',dir:0}}]));
+  assert.equal(w.air.airports[0].removed,true,'even an airport with no aircraft must be retired');
+  const copy=deserialize(serialize(w));migrateWorld(copy);
+  for(let i=0;i<1000&&w.air.airports.length<2;i++){
+    const next=tick(w);events.push(...next);assert.deepEqual(next,tick(copy));
+  }
+  assert.equal(w.air.airports.length,2);assert.notEqual(w.air.airports[1].id,old);
+  assert.equal(w.air.airports[1].removed,false);assert.equal(w.air.links.length,0);
+  assert.equal(events.filter(e=>e.type==='airport_removed').length,1);
+  assert.equal(events.filter(e=>e.type==='airport_opened').length,2);
+  assert.equal(money(w),before);assert.equal(hashWorld(w),hashWorld(copy));
+  const storage=new Storage(':memory:');try{
+    storage.loadOrCreate({seed:32,nowUtcMs:1000});
+    storage.commitBatch({world:w,events,appliedInputIds:[],epochUtcMs:1000});
+    assert.equal(storage.db.prepare("SELECT count(*) AS n FROM events WHERE type='airport_removed'").get().n,1);
+  }finally{storage.close();}
 });

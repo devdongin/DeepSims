@@ -6,7 +6,7 @@ import {
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
-import {commissionAirport} from './air-network.js';
+import {commissionAirport,retireMissingAirports} from './air-network.js';
 import {advanceAirTravel} from './air-travel.js';
 import {chooseAirJourney} from './air-journey.js';
 import {airportSiteBuildable} from './map.js';
@@ -1053,6 +1053,7 @@ export function tick(world, inputsForThisTick = []) {
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
   syncRailNetwork(world,t,emit);
+  retireMissingAirports(world.air,world.map.facilities,emit);
   fundFoundingPlans(world,t,emit);
   updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증

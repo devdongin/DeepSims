@@ -185,3 +185,19 @@ test('a suspended air-only campus does not collect enrollment tuition',()=>{
   w.air.links[0].blocked=true;const cash=s.money;
   considerUniversity(w,s,540,()=>{});assert.equal(s.education.universityEnrolled,false);assert.equal(s.money,cash);
 });
+
+test('airport removal during an actual flight retires the gate and diverts before releasing the traveller',()=>{
+  const {w,s}=fixture(),events=tick(w,assign('eat'));until(w,()=>s.state.kind==='flying',events);
+  w.map.facilities=w.map.facilities.filter(f=>f.id!=='airport1');
+  const before={x:s.x,y:s.y};events.push(...tick(w));
+  assert.equal(w.air.airports[1].removed,true);assert.equal(w.air.links[0].blocked,true);
+  assert.equal(s.state.kind,'flying');assert.deepEqual({x:s.x,y:s.y},before);
+  const copy=deserialize(serialize(w));migrateWorld(copy);
+  for(let i=0;i<15;i++){const next=tick(w);events.push(...next);assert.deepEqual(next,tick(copy));}
+  assert.equal(serialize(w),serialize(copy));assert.equal(w.air.links.length,1);
+  assert.equal(w.air.links[0].blocked,true);assert.equal(w.air.links[0].aircraft.passengers.length,0);
+  assert.equal(events.filter(e=>e.type==='airport_removed').length,1);
+  assert.ok(events.some(e=>e.type==='flight_diversion_landed'&&e.payload.airportId==='airport0'));
+  assert.equal(w.reservations['cafe:cafe:seat'],undefined);
+  assert.equal(w.transportStats.today.airArrivals??0,0);
+});
