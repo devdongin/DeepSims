@@ -29,5 +29,8 @@ if(process.argv[2]==='--worker'){
   }
   const invariant=({ms,variant,...row})=>row;
   for(const row of rows)assert.deepEqual(invariant(row),invariant(rows[0]),'full world/events and BFS work must match');
-  console.log(JSON.stringify({pass:true,scope:'synthetic200; 1 warmup day + 2 measured days; no live save writes',rows}));
+  const mean=variant=>rows.filter(r=>r.variant===variant).reduce((sum,r)=>sum+r.ms,0)/2;
+  console.log(JSON.stringify({equivalencePass:true,performanceClaim:'none; inspect ABBA timings, not a speedup gate',
+    candidateToBaseMeanRatio:mean('candidate')/mean('base'),
+    scope:'synthetic200; 1 warmup day + 2 measured days; no live save writes',rows}));
 }
