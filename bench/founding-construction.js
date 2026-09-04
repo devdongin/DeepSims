@@ -8,10 +8,13 @@ import { canWork } from '../sim/education.js';
 import { TILE } from '../sim/map.js';
 import { findNonFinite, serialize, deserialize } from '../sim/serialize.js';
 import { publicBalance } from '../sim/government.js';
+import { observeSettlementTraffic } from './settlement-traffic.js';
 
-const w=createWorld(Number(process.argv[2]??32));
+let w=createWorld(Number(process.argv[2]??32));
 const settle=process.argv.includes('--settle');
 const family=process.argv.includes('--family');
+const retainNativePlots=process.argv.includes('--retain-native-plots');
+const nativePlots=w.plots.map(p=>({...p}));
 w.plots=[];w.projects=[];w.zoneOrders=[];
 if(family){
   const [a,b,child]=w.sims;
@@ -26,6 +29,9 @@ if(family){w.sims[2].traits.age=12;w.sims[2].traits.occupation='student';}
 for(const t of [0,1440,2880])evaluateFoundingPetitions(w,t,()=>{});
 w.map.tiles.fill(TILE.GRASS);w.map.reachVersion=(w.map.reachVersion??0)+1;
 w.villages[0].center={x:20,y:20};w.plots=[{plotId:1,x:80,y:80,used:false}];
+// Optional comparison retains seed-generated uncommitted land. Plot 1 is the
+// controlled founding site, so its original slot must not duplicate that ID.
+if(retainNativePlots)w.plots.push(...nativePlots.filter(p=>p.plotId!==1));
 w.treasury=100000;w.worldTick=3000;w.lastDailyDay=2;w.lastPlanDay=2;
 const population=w.sims.length,homes=w.sims.map(s=>s.homeId),startTick=w.worldTick;
 assert.deepEqual(findNonFinite(w),[]);
@@ -93,6 +99,13 @@ if(process.argv.includes('--government')){
     mayorId:village.government.mayorId,
     treasury:village.government.treasury,totalPublicBalance:publicBalance(w),closedMoney:before};
 }
-console.log(JSON.stringify({fixture:'controlled capacity and terrain',seed:w.seed,startTick,endTick:w.worldTick,
+let traffic;
+if(process.argv.includes('--traffic')){
+  assert.ok(settle,'--traffic requires --settle');
+  const observed=observeSettlementTraffic(w,{resume:process.argv.includes('--resume-traffic')});
+  w=observed.world;traffic=observed.report;
+}
+console.log(JSON.stringify({fixture:'controlled capacity and terrain',
+  ...(retainNativePlots?{retainedNativePlots:nativePlots.filter(p=>p.plotId!==1).length}:{}),seed:w.seed,startTick,endTick:w.worldTick,
   elapsedDays:(w.worldTick-startTick)/1440,status:w.founding.petitions[0].status,starts,built,founded,ineligibleWork,
-  population:w.sims.length,workers:w.founding.petitions[0].plan.settlerIds,hash:hashWorld(w),governmentCheck},null,2));
+  population:w.sims.length,workers:w.founding.petitions[0].plan.settlerIds,hash:hashWorld(w),governmentCheck,traffic},null,2));
