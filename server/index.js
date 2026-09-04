@@ -17,6 +17,7 @@ import { PROTOCOL_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC, POLICY_FIELDS } from '../sim/logic.js';
 import { validatePolicyCommand } from '../sim/policy-command.js';
 import { industryStatus, purchasingPowerGap } from '../sim/industry.js';
+import { employmentStatus } from '../sim/employment.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -189,6 +190,7 @@ app.get('/api/industry', (_req, res) => {
     population: engine.world.sims.length,
     sections: industryStatus(engine.world),
     purchasingPowerGap: purchasingPowerGap(engine.world),
+    employment: employmentStatus(engine.world),
   });
 });
 
