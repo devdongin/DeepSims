@@ -7,6 +7,7 @@ import { DEFAULT_LOGIC, mergeLogicDefaults } from './logic.js';
 import { addBarTo, addVenuesTo, addSocietyVenuesTo, addLeisureVenuesTo, addCivicVenuesTo, expandMapTo64, expandMapTo128, expandMapTo512, defaultPlots, extraPlots128, extraPlots512, generateTerrain } from './map.js';
 import { makeRng } from './prng.js'; // §19 R-A 지형 전용 스트림
 import { SCHEMA_VERSION } from './constants.js';
+import {restoreAirNetwork} from './air-save.js';
 import { makeTransportStats } from './transport-stats.js';
 import { makeStoryteller } from './storyteller.js';
 import { initializeFoodSupply } from './food-supply.js';
@@ -24,6 +25,7 @@ import { refreshMoodCounts } from './mood-counts.js';
 import { initializeRail } from './rail.js';
 
 export function migrateWorld(world) {
+  const restoredAir=restoreAirNetwork(world.air,world.sims,world.worldTick);
   const from = world.schemaVersion ?? 1;
   if (from < 2) {
     for (const sim of world.sims) {
@@ -453,6 +455,7 @@ export function migrateWorld(world) {
   world.contacts ??= (world.interactions ?? []).map((row) => row.slice());
   world.recentConflicts ??= []; // §23.52
   world.worldEvents ??= []; // Also repair absent/null optional state in current-version saves.
+  world.air=restoredAir;
   for(const sim of world.sims){sim.employment??=null;sim.employmentSearch??=null;}
   world.schemaVersion = SCHEMA_VERSION;
   return world;

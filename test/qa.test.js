@@ -8,6 +8,17 @@ import fs from 'node:fs';
 // 규칙을 베껴 오면 동어반복이 되고, 소스가 바뀌어도 테스트가 안 깨진다.
 const CLIENT = fs.readFileSync(new URL('../client/main.js', import.meta.url), 'utf8');
 
+test('repeated decline feed renders a real emoji and the prior count', () => {
+  const source = CLIENT.slice(CLIENT.indexOf('function eventText'), CLIENT.indexOf('const FEED_STORY'));
+  const render = new Function('simName', 'ga', 'ne', `${source}; return eventText;`)(
+    id => `주민${id}`, name => name, name => name);
+  for (const priors of [undefined, 0, 2]) {
+    const text = render({type:'invite_declined', simId:0, payload:{toSimId:1, priors}});
+    assert.ok(text.startsWith('🙅 '));
+    assert.equal(text.includes('(3번째)'), priors === 2);
+  }
+});
+
 test('#112 employer changes appear in the default story feed', () => {
   const source = CLIENT.match(/const FEED_STORY = new Set\(\[[\s\S]*?\]\);/);
   assert.ok(source, 'story filter must exist');

@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {airportConstructionLabel} from '../client/air-ui.js';
 
 function setup(){
   const elements=new Map();
@@ -11,7 +12,7 @@ function setup(){
       appendChild(child){this.children.push(child);},querySelectorAll(){return buttons;}});
     return elements.get(id);
   };
-  const buttons=['house','apartment','university','train_station'].map(type=>{
+  const buttons=['house','apartment','university','train_station','airport'].map(type=>{
     const b=element(type);b.dataset.zt=type;return b;
   });
   const world={cityTier:3,treasury:100000,villages:[{id:'village:0',name:'본마을'},
@@ -24,7 +25,7 @@ function setup(){
   const source=readFileSync(new URL('../client/main.js',import.meta.url),'utf8');
   const start=source.indexOf('// ---- §18.T2 건설 지정 모달 ----');
   const end=source.indexOf('// ---- §18.T5 시정 대시보드 ----',start);
-  vm.runInNewContext(source.slice(start,end),{world,window,
+  vm.runInNewContext(source.slice(start,end),{world,window,airportConstructionLabel,
     document:{getElementById:element,createElement:()=>({})},
     crypto:{randomUUID:()=> 'fixture'},setTimeout:()=>{},
     fetch:async(url,options)=>{requests.push(JSON.parse(options.body));return {ok:true,json:async()=>({})};}});
@@ -39,6 +40,22 @@ test('construction modal uses selected municipality tier and treasury, not prima
   element('university').handlers.click();assert.equal(element('zone-go').disabled,false);
   window.openZoneModal(world.plots[0]);element('university').handlers.click();
   assert.equal(element('zone-go').disabled,true);
+});
+
+test('airport modal uses authoritative local demand, live refresh, current price and plot ownership',async()=>{
+  const {world,window,element,requests}=setup();
+  world.villages[1].government.cityTier=3;world.zoneCosts={airport:31234};
+  world.air={construction:{'village:0':{eligible:true,completedTrips:50,threshold:12},
+    'village:1':{eligible:false,reason:'airport_demand_short',completedTrips:11,threshold:12}}};
+  window.openZoneModal(world.plots[1]);element('airport').handlers.click();
+  assert.equal(element('zone-go').disabled,true);assert.match(element('zone-info').textContent,/11\/12회/);
+  await element('zone-go').handlers.click();assert.equal(requests.length,0);
+  world.air.construction['village:1']={eligible:true,reason:null,completedTrips:12,threshold:12};
+  window.refreshZoneModal();assert.equal(element('zone-go').disabled,false);
+  assert.match(element('zone-info').textContent,/비용 31234원/);assert.match(element('zone-info').textContent,/첫 공항은 기체 없음/);
+  await element('zone-go').handlers.click();assert.deepEqual(requests[0].payload,{plotId:2,type:'airport',dir:0});
+  delete world.air;window.openZoneModal(world.plots[1]);element('airport').handlers.click();
+  assert.equal(element('zone-go').disabled,true);assert.match(element('zone-info').textContent,/조건 확인 중/);
 });
 test('center command is charged to selected plot municipality, and reserved plots are omitted',async()=>{
   const {world,window,element,requests}=setup();window.openZoneModal(world.plots[1]);

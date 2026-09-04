@@ -6,6 +6,7 @@ import { aptitudeFor } from './abilities.js';
 import { occupationAllowed } from './traits.js';
 import { sameRegion } from './map.js';
 import { governmentFor } from './government.js';
+import {chooseAirJourney} from './air-journey.js';
 
 export const SCHOOL_TYPES = ['primary_school', 'middle_school', 'high_school', 'university'];
 export function newEducation() {
@@ -58,7 +59,9 @@ export function considerUniversity(world, sim, t, emit) {
   }
   // Do not collect tuition for a campus the student cannot physically attend.
   const campuses = world.map.facilities.filter(f => f.type === 'university');
-  const campus = campuses.find(f => f.resources.some(r => sameRegion(world.map, sim.x, sim.y, r.x, r.y)));
+  const origin=sim.state?.kind==='flying'?(world.map.facilities.find(f=>f.id===sim.homeId)?.door??sim):sim;
+  const campus = campuses.find(f => f.resources.some(r => sameRegion(world.map, origin.x, origin.y, r.x, r.y)
+    ||chooseAirJourney(world,origin,{action:'study',facilityId:f.id,res:r},t,null)));
   const fee = world.logic.education.annualTuition;
   const payers = tuitionPayers(world, sim);
   const available = payers.reduce((sum,s) => sum + Math.max(0,s.money), 0);

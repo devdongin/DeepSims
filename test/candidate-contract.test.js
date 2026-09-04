@@ -62,6 +62,13 @@ for (const [pop, expected] of [
   // behavior; snapshots retain all employment fields/events, without normalization.
   // Followup excludes retired residents, uses physical employer planning counts
   // and bounds event evidence; retain those intentional effects in the vectors.
+  // schema77/logic100: empty air network and airport parameters change only
+  // world hashes. All three candidate/choice/event vectors remain identical.
+  // logic101 passenger integration: all three behavior vectors stay identical
+  // in airport-free worlds; only the logic-version world hashes change.
+  // logic102: retirement observation is inert without airports; same behavior vectors.
+  // logic103: critical survival priority; these initial 240-tick behavior vectors
+  // remain identical. Longer deficient-world behavior intentionally changes (#176).
   //   schema77/logic100 (§23.47 거절이 호감도·기억에 닿는다 + contacts 행렬):
   //     거절 감산은 rngSim을 소비하지 않으므로 드로우 순서가 보존된다. 그 증거가 인구10이다
   //     — 후보(272da7d7)·선택(4ae751f3)·이벤트(9bcc9d00) **세 해시가 부모와 한 글자도 다르지
@@ -71,15 +78,15 @@ for (const [pop, expected] of [
   //     logic101 (§23.52 갈등 소식 채널): 후보·선택·이벤트 세 해시가 위와 **또 동일**하고
   //     세계 해시만 움직였다. 초기 240틱에는 대화 자체가 없어 topicWeights를 한 번도
   //     참조하지 않으므로 rngSim 소비가 그대로고, 바뀐 것은 새 상태 필드(recentConflicts)뿐이다.
-  //     §23.54 (거절 payload에 priors 추가): **이벤트 해시만** 움직였다(인구 50·200).
-  //     후보·선택·세계는 그대로다 — 세계 상태도 결정도 안 바뀌고 이벤트가 사실을 하나
-  //     더 싣기만 했다는 뜻이다. 인구 10은 240틱 안에 반복 거절이 없어 그대로다.
-  //     §23.55 (말다툼 양방향 + 앙숙의 거절을 관측 가능하게): **세계 해시만** 움직였다.
-  //     후보·선택·이벤트가 셋 다 그대로인 것은 240틱 안에 앙숙이 없어 두 변경이
-  //     한 번도 발동하지 않았다는 뜻이다 — rng 소비도 그대로다.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '1c2b05ff']],
-  [50, ['8f96407c', '31c608eb', '413a3388', '013df0a8']],
-  [200, ['23a3029f', 'df690287', '6a7a0043', 'a9f8f9bf']],
+  // schema78/logic104 integrates both branches: all three behavior vectors
+  // match main1572cf2, retaining rejection/conflict behavior. World hashes add air.
+  // logic105 records only actual disconnected intermunicipal failures. These
+  // single-town behavior vectors remain identical; only the version hash moves.
+  // logic106 adds main efbeb2d argumentAffinity. In this 240-tick fixture,
+  // candidate/choice/event vectors still match; only parameter/world hashes move.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', 'd398fe46']],
+  [50, ['8f96407c', '31c608eb', '413a3388', '9ba72077']],
+  [200, ['23a3029f', 'df690287', '6a7a0043', '5716716c']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

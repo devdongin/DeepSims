@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { Storage } from '../db/storage.js';
 import { Engine, MAX_SPEED } from './engine.js';
-import { simsView, simStatic } from './view.js'; // §22.8 전송용 투영 · §23.39 정적 분리
+import { simsView, simStatic, airView } from './view.js'; // §22.8 전송용 투영 · §23.39 정적 분리
 import { PROTOCOL_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC, POLICY_FIELDS } from '../sim/logic.js';
 import { validatePolicyCommand } from '../sim/policy-command.js';
@@ -363,6 +363,7 @@ function sendSnapshot(ws) {
     worldTick: engine.world.worldTick,
     map: engine.world.map,
     rail: engine.world.rail,
+    air: airView(engine.world),
     sims: simsView(engine.world.sims), // §22.8 화면이 쓰는 필드만
     // §23.37 affinity는 화면이 한 번도 읽지 않는데 접속마다 **1.27MB**를 보냈다.
     // 게다가 ever-sim 수의 제곱으로 자란다(667×667). 관계는 /api/relations가 한 사람분만
@@ -435,7 +436,7 @@ engine.onBatch((msg) => {
         const live = new Set(msg.simRefs.map((x) => x.id));
         for (const id of sent.keys()) if (!live.has(id)) sent.delete(id);
       }
-      send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: split ? msg.sims : simsView(msg.simRefs), statics: split ? statics : undefined, treasury: msg.treasury, publicTreasury:msg.publicTreasury, villages:msg.villages, policyDefaults:msg.policyDefaults, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, rail:msg.rail, worldEvents:msg.worldEvents, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost, zoneCosts: engine.world.logic.zone.costs });
+      send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: split ? msg.sims : simsView(msg.simRefs), statics: split ? statics : undefined, treasury: msg.treasury, publicTreasury:msg.publicTreasury, villages:msg.villages, policyDefaults:msg.policyDefaults, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, rail:msg.rail, air:msg.air, worldEvents:msg.worldEvents, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost, zoneCosts: engine.world.logic.zone.costs });
     }
     else send(ws, msg);
   }

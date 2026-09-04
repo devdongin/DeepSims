@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { advance } from '../sim/tick.js';
 import { computeTarget, TICK_DURATION_MS } from '../sim/time.js';
 import { TICKS_PER_DAY } from '../sim/constants.js';
-import { simVolatile, staticKey, railView } from './view.js'; // 전송 투영·정적 변경 감지
+import { simVolatile, staticKey, railView, airView } from './view.js'; // 전송 투영·정적 변경 감지
 import { validateLogic, logicHash, POLICY_FIELDS } from '../sim/logic.js';
 import { publicBalance } from '../sim/government.js';
 
@@ -223,6 +223,7 @@ export class Engine {
       const batch = this.runLive(n);
       batch.publicTreasury=publicBalance(this.world);
       batch.rail=railView(this.world.rail);
+      batch.air=airView(this.world);
       batch.worldEvents=this.world.worldEvents;
       batch.policyDefaults=Object.fromEntries(Object.keys(POLICY_FIELDS).map(key=>[key,this.world.logic.economy[key]]));
       // §22.8 sims는 **화면이 쓰는 필드만** 투영해 보낸다 (라이브 실측 71배 절감).

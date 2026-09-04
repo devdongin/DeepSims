@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 77; // §23.47 접촉 행렬(contacts) — 앙숙 판정 전용.
+export const SCHEMA_VERSION = 78; // Combine paid air/recovery state with contacts and conflict history.
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -121,6 +121,11 @@ export const EVENT_TYPES = [
   'rail_opened', 'rail_cancelled', 'rail_suspended', 'rail_resumed',
   'rail_alighted', 'rail_boarded',
   'employment_started', 'employment_ended',
+  'flight_boarded', 'flight_alighted', 'flight_transfer',
+  'flight_holding', 'flight_diverted', 'flight_diversion_landed',
+  'flight_service_resumed',
+  'flight_service_suspended', 'flight_route_unavailable',
+  'airport_opened','airport_removed','air_trip_unserved',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

@@ -1,6 +1,7 @@
 import {bfsPath} from './pathfind.js';
 import {sameRegion} from './map.js';
 import {rngNext} from './prng.js';
+import {chooseAirJourney} from './air-journey.js';
 
 // Free destination choice, not work/school assignment, an emergency, freight,
 // childcare, a construction site or a household's private resources.
@@ -17,6 +18,7 @@ export function visitContext(world){
 }
 
 export function chooseVisit(world,sim,candidates,best,pickBest,urgent=false,context=null){
+  const t=world.worldTick+1;
   if(!best||urgent||world.villages.length<2||!VISITS.has(best.action)||best.partyPull)
     return {candidate:best};
   const {villages,facilities,populations}=context??visitContext(world);
@@ -33,11 +35,12 @@ export function chooseVisit(world,sim,candidates,best,pickBest,urgent=false,cont
   for(const [villageId,group] of [...groups].sort((a,b)=>cmp(a[0],b[0]))){
     while(group.length){
       const c=pickBest(group);group.splice(group.indexOf(c),1);
-      if(!sameRegion(world.map,sim.x,sim.y,c.res.x,c.res.y))continue;
-      const path=bfsPath(world.map,sim.x,sim.y,c.res.x,c.res.y);
-      if(path===null)continue;
-      const population=populations.get(villageId)??0,distance=Math.max(1,path.length);
-      options.push({candidate:c,path,villageId,population,distance,
+      const path=sameRegion(world.map,sim.x,sim.y,c.res.x,c.res.y)
+        ?bfsPath(world.map,sim.x,sim.y,c.res.x,c.res.y):null;
+      const air=path===null?chooseAirJourney(world,sim,c,t,null):null;
+      if(path===null&&!air)continue;
+      const population=populations.get(villageId)??0,distance=Math.max(1,path?.length??air.physicalDistance);
+      options.push({candidate:c,path,air,villageId,population,distance,
         weight:BigInt(population)*1000000n/BigInt(distance)});
       break;
     }
@@ -52,7 +55,7 @@ export function chooseVisit(world,sim,candidates,best,pickBest,urgent=false,cont
     draw=rngNext(world.rngSim);let sum=0n;
     for(const o of options){sum+=o.weight;if(BigInt(draw)*total<sum*4294967296n){selected=o;break;}}
   }
-  return {candidate:selected.candidate,path:selected.path,evidence:{model:'conditional_gravity',
+  return {candidate:selected.candidate,path:selected.path,...(selected.air?{air:selected.air}:{}),evidence:{model:'conditional_gravity',
     action:best.action,fromVillageId:sim.villageId,origin:{x:sim.x,y:sim.y},draw,
     selectedVillageId:selected.villageId,candidates:options.map(o=>({villageId:o.villageId,
       facilityId:o.candidate.facilityId,resourceId:o.candidate.resourceId,population:o.population,

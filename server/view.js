@@ -17,12 +17,16 @@
 // 배치 payload 185KB 중 이름·성·특성·능력치·잠재치·학력이 약 110KB(59%)인데, 이것들은
 // 나이 먹는 날이나 전직할 때만 바뀐다. 클라이언트마다 마지막으로 보낸 정적 부분의 키를
 // 기억해 두고 **달라진 사람 것만** 실어 보낸다. 스냅샷은 언제나 전체를 보낸다.
+import {unavailableAirports} from '../sim/air-network.js';
+import {flightServiceAt} from '../sim/flight-schedule.js';
+import {airportConstructionEvidence} from '../sim/airport-construction.js';
+
 export function simVolatile(sim) {
   return {
     id: sim.id,
     x: sim.x,
     y: sim.y,
-    state: { kind: sim.state.kind, action: sim.state.action, facilityId: sim.state.facilityId, rail: !!sim.state.rail },
+    state: { kind: sim.state.kind, action: sim.state.action, facilityId: sim.state.facilityId, rail: !!sim.state.rail, air: !!sim.state.flight },
     needs: sim.needs,
     mood: sim.mood,
     money: sim.money,
@@ -64,6 +68,7 @@ export function simView(sim) {
       action: sim.state.action,
       facilityId: sim.state.facilityId,
       rail: !!sim.state.rail,
+      air: !!sim.state.flight,
     },
     needs: sim.needs,
     mood: sim.mood,
@@ -107,4 +112,26 @@ export function simsView(sims) {
 export function railView(rail){
   return {stats:{...rail.stats},links:rail.links.map(l=>({id:l.id,from:l.from,to:l.to,blocked:l.blocked,
     capacity:l.capacity,speed:l.speed,train:{x:l.train.x,y:l.train.y,passengers:[...l.train.passengers]}}))};
+}
+
+// The same bounded projection is sent on connection and in live batches.
+// Never send passenger itineraries, paid project metadata or walking arrays.
+export function airView(world){
+  const network=world.air,closed=new Set(unavailableAirports(network,world.map.facilities,world.incidents));
+  const residents=new Map(world.sims.map(s=>[s.id,s])),waiting=new Map();
+  for(const sim of world.sims)if(sim.state.kind==='waiting_flight'){
+    const j=sim.state.flight,id=j.legs[j.legIndex].linkId;waiting.set(id,(waiting.get(id)??0)+1);
+  }
+  const today=world.transportStats.today;
+  return {airports:network.airports.map(a=>({id:a.id,villageId:a.villageId,door:{...a.door},closed:closed.has(a.id)})),
+    links:network.links.map(l=>({id:l.id,from:l.from,to:l.to,fromPoint:{...l.fromPoint},toPoint:{...l.toPoint},
+      blocked:l.blocked||closed.has(l.from)||closed.has(l.to),capacity:l.capacity,waiting:waiting.get(l.id)??0,
+      aircraft:{x:l.aircraft.x,y:l.aircraft.y,phase:l.aircraft.disruption?.kind??flightServiceAt(l,world.worldTick)?.kind??'docked',
+        passengers:l.aircraft.passengers.filter(id=>{
+          const s=residents.get(id),j=s?.state.flight;
+          return s?.state.kind==='flying'&&j?.legs[j.legIndex]?.linkId===l.id;
+        }).length}})),
+    construction:Object.fromEntries(world.villages.map(v=>[v.id,airportConstructionEvidence(world,v.id)])),
+    today:{day:today.day,departures:today.airTrips??0,arrivals:today.airArrivals??0,
+      waitingTicks:today.airWaitingTicks??0,flightTicks:today.airTicks??0,distance:today.airDistance??0}};
 }
