@@ -2,6 +2,7 @@
 // 이벤트 문장화는 클라이언트 몫 (구조화 payload → 한국어).
 import Phaser from 'phaser';
 import {resetSimCache,mergeSimBatch} from './sim-stream.js';
+import {mountWorldEvents} from './world-events-ui.js';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c,
@@ -11,6 +12,7 @@ const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 
 FACILITY_COLORS.train_station = 0x739da8; // Dedicated tile-render fallback until station art exists.
 
 let world = null;
+const refreshWorldEvents=mountWorldEvents(()=>world);
 let updatePolicySummary=()=>{};
 let selectedSimId = null;
 let simSprites = new Map();
@@ -3665,6 +3667,7 @@ function connect() {
         break;
       case 'snapshot':
         world = msg.world;
+        refreshWorldEvents();
         updatePolicySummary();
         // §23.39 스냅샷은 전체를 주므로 정적 지도를 여기서 새로 채운다.
         resetSimCache(simStatic,world.sims);
@@ -3708,6 +3711,8 @@ function connect() {
         if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.transit) world.transit = msg.transit; // §19.12 역 수요 관측·언락 (zone 모달 게이트)
+        if (msg.worldEvents) world.worldEvents=msg.worldEvents;
+        refreshWorldEvents();
         if(msg.rail){
           const old=new Map((world.rail?.links??[]).map(l=>[l.id,l]));
           world.rail={...world.rail,...msg.rail,links:msg.rail.links.map(l=>({...old.get(l.id),...l}))};
