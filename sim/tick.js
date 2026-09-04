@@ -6,7 +6,7 @@ import {
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
-import { applyWorldEvent, expireWorldEvents } from './world-events.js';
+import { applyWorldEvent, expireWorldEvents, worldEventMood, wakeEventMood } from './world-events.js';
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isAvailableResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
@@ -146,7 +146,7 @@ function needValueFor(sim, action, L) {
 // MBTI → 행동별 persFactor (PLAN §12.1). floorDiv 곱 후 [50,200] 클램프 1회.
 // §23.25 기분의 바닥선. 삶의 조건을 작은 가산으로 더한다 — 어느 하나가 지배하지 않게
 // 각 항이 작고, 합은 clamp로 묶는다. rng를 쓰지 않으므로 결정성에 관여하지 않는다.
-export function moodBaseline(sim, world, L) {
+export function moodBaseline(sim, world, L, t = world.worldTick) {
   const B = L.mood.baseline;
   let v = 0;
   if (world.partners?.[sim.id] !== undefined) {
@@ -168,7 +168,7 @@ export function moodBaseline(sim, world, L) {
   if ((sim.unpaidDays ?? 0) >= 3) v += B.unpaid; // 일했는데 못 받은 날이 사흘 넘는다
   // 즐겨 하는 일이 있는 삶 — 습관이 붙은 여가 하나당 조금씩 (§17.6 클럽과 같은 신호)
   v += Math.min(B.habitCap, (sim.habitCount ?? 0) * B.perHabit);
-  return clamp(v, -B.span, B.span);
+  return clamp(clamp(v, -B.span, B.span) + worldEventMood(world, t), -10000, 10000);
 }
 
 function persFactorFor(sim, action, L) {
@@ -1431,6 +1431,7 @@ export function tick(world, inputsForThisTick = []) {
       if (s.action === 'sleep') {
         if (sim.pendingMood !== null) {
           sim.mood = sim.pendingMood;
+          wakeEventMood(world,sim,t);
           sim.pendingMood = null;
         }
         const day = floorDiv(t, 1440); // 틱 내부 날짜 규약
@@ -1476,7 +1477,7 @@ export function tick(world, inputsForThisTick = []) {
     // 기분이 단기 완충일 뿐 **상태가 아니었다.**
     // 이제 바닥선은 그 사람이 살아온 결과다: 짝이 있는가, 친구가 몇인가, 누울 집이 있는가,
     // 즐겨 하는 일이 있는가. 사건이 주는 진폭은 그대로이고, 가라앉는 자리만 달라진다.
-    const base = moodBaseline(sim, world, L);
+    const base = moodBaseline(sim, world, L, t);
     const dm = L.mood.decayPerTick;
     if (sim.mood > base) sim.mood = Math.max(base, sim.mood - dm);
     else if (sim.mood < base) sim.mood = Math.min(base, sim.mood + dm);
