@@ -1,5 +1,6 @@
 // §17 사회 시스템: 이민·질병·선거·연애·동아리 — 전부 결정적 (서브순서는 PLAN §17.8).
 import { rngInt } from './prng.js';
+import { worldEventPercent } from './world-events.js';
 import { syncResidenceVillage } from './villages.js';
 import { publicPostAvailable, demotePublicIfOverQuota, fillPublicPosts, trimOverQuotaPosts } from './publicposts.js';
 import { recordFact } from './cognition.js';
@@ -50,6 +51,7 @@ export function dailyDiseaseDraws(world, t, emit, offer = null) {
     if (sim.needs.hunger === 0) p += D.starvingBonus;
     if (world.weather.kind === 'rain') p += D.rainBonus;
     if (sim.needs.energy < 2000) p += D.lowEnergyBonus;
+    p = Math.min(1000, Math.floor(p * worldEventPercent(world, 'disease', t) / 100));
     if (roll < p) {
       if (offer) offer({ kind: 'illness', targetId: sim.id, apply: () => infect(world, sim, t, emit) });
       else infect(world, sim, t, emit);
@@ -70,7 +72,8 @@ export function contagionDraw(world, a, b, t, emit) {
   const roll = rngInt(world.rngSim, 1000);
   const target = aSick ? b : a;
   if (t < (target.immuneUntil ?? 0)) return; // §23.24 드로우 뒤에 거른다 — 순서 보존
-  if (roll < world.logic.disease.contagionPermille) {
+  if (roll < Math.min(1000, Math.floor(world.logic.disease.contagionPermille
+    * worldEventPercent(world, 'disease', t) / 100))) {
     infect(world, target, t, emit);
   }
 }
@@ -421,8 +424,9 @@ export function maybeImmigration(world, t, day, emit) {
   // §17.21 평판 웨이브: 활기찬 마을일수록 여러 명이 온다 (각자 빈 침대 필요, 결정적)
   for (const village of world.villages) {
     const government = governmentFor(world, village.id);
-    const wave = Math.min(G.immigWaveMax + government.cityTier,
+    const baseWave = Math.min(G.immigWaveMax + government.cityTier,
       1 + Math.floor(government.reputation / G.immigPerExtra));
+    const wave = Math.floor(baseWave * worldEventPercent(world, 'immigration', t) / 100);
     const localEmit = village.id === PRIMARY_GOVERNMENT ? emit
       : (type, id, payload) => emit(type, id, { ...payload, villageId: village.id });
     for (let wv = 0; wv < wave; wv++) immigrateOne(world, t, localEmit, village.id);

@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 74; // Rail corridors, trains and passenger journeys.
+export const SCHEMA_VERSION = 75; // Durable, expiring world-event modifiers.
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -71,6 +71,7 @@ export const AFFINITY_MIN = -10000;
 export const AFFINITY_MAX = 10000;
 
 export const EVENT_TYPES = [
+  'world_event_started', 'world_event_expired',
   'action_started', 'action_completed', 'action_failed', 'input_rejected',
   'starving', 'lonely', 'argument', 'money_changed', 'welfare_paid', 'wage_shortfall', 'money_shared', 'job_changed', 'died', 'emigrated', 'bereaved', 'grew_up', 'public_revenue_remitted', 'invited', 'invite_declined', 'invite_fulfilled', 'invite_expired', 'side_talk', 'helped', 'treasury_debt', 'insolvent', 'public_works', 'station_unlocked', 'fire_started', 'fire_out', 'heroic_save', 'policy_changed', 'zoned', 'city_promoted', 'item_reported', 'item_returned', 'car_bought', 'petition',
   'player_created', 'logic_changed', 'relationship_changed',

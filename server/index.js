@@ -3,6 +3,7 @@ import express from 'express';
 import { villageSummary } from '../sim/villages.js';
 import { publicBalance } from '../sim/government.js';
 import { validateFoundingDecision } from '../sim/founding.js';
+import { validateWorldEvent } from '../sim/world-events.js';
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -310,7 +311,7 @@ app.post('/api/input', async (req, res) => {
     || payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
     return res.status(400).json({ error: 'clientInputId(문자열), command(문자열), payload(객체)가 필요합니다' });
   }
-  if (!['assign', 'create_player', 'announce', 'policy', 'zone', 'plan_center', 'found_village'].includes(command)) {
+  if (!['assign', 'create_player', 'announce', 'policy', 'zone', 'plan_center', 'found_village', 'world_event'].includes(command)) {
     return res.status(400).json({ error: '허용되지 않은 명령입니다' }); // logic_update는 서버 내부 전용
   }
   if (command === 'assign'
@@ -324,6 +325,10 @@ app.post('/api/input', async (req, res) => {
   if(command==='found_village'){
     const v=validateFoundingDecision(payload);
     if(!v.ok)return res.status(400).json({error:`found_village: ${v.error}`});
+  }
+  if(command==='world_event'){
+    const v=validateWorldEvent(payload);
+    if(!v.ok)return res.status(400).json({error:`world_event: ${v.error}`});
   }
   const result = await engine.submitInput({ clientInputId, command, payload });
   res.json(result); // insert 커밋 후에만 응답 (PLAN §3)
@@ -399,6 +404,7 @@ function sendSnapshot(ws) {
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,
+    worldEvents: engine.world.worldEvents,
     transit: engine.world.transit ?? null, // §19.12 역 수요 관측·언락 (zone 메뉴 게이트)
     unlockedIndustries: engine.world.unlockedIndustries ?? [],
     householdDaily: engine.world.householdDaily ?? { day:-1, households:[], failures:{} },
@@ -428,7 +434,7 @@ engine.onBatch((msg) => {
         const live = new Set(msg.simRefs.map((x) => x.id));
         for (const id of sent.keys()) if (!live.has(id)) sent.delete(id);
       }
-      send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: split ? msg.sims : simsView(msg.simRefs), statics: split ? statics : undefined, treasury: msg.treasury, publicTreasury:msg.publicTreasury, villages:msg.villages, policyDefaults:msg.policyDefaults, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, rail:msg.rail, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost, zoneCosts: engine.world.logic.zone.costs });
+      send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: split ? msg.sims : simsView(msg.simRefs), statics: split ? statics : undefined, treasury: msg.treasury, publicTreasury:msg.publicTreasury, villages:msg.villages, policyDefaults:msg.policyDefaults, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, rail:msg.rail, worldEvents:msg.worldEvents, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost, zoneCosts: engine.world.logic.zone.costs });
     }
     else send(ws, msg);
   }

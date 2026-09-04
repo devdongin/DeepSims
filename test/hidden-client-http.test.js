@@ -42,6 +42,17 @@ test('#143 hidden client receives no tick batches and resumes with one current s
       throw new Error('message timeout');
     };
     const initial = await waitFor((m) => m.type === 'snapshot');
+    assert.deepEqual(initial.world.worldEvents,[]);
+    const submitEvent=payload=>fetch(`http://127.0.0.1:${port}/api/input`,{
+      method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({clientInputId:'world-event-http',command:'world_event',payload})});
+    assert.equal((await submitEvent({effect:'money',percent:200,durationTicks:20})).status,400);
+    const eventPayload={effect:'disease',percent:100,durationTicks:20};
+    const accepted=await submitEvent(eventPayload);assert.equal(accepted.status,200);
+    assert.equal((await accepted.json()).duplicate,false);
+    assert.equal((await (await submitEvent(eventPayload)).json()).duplicate,true);
+    const started=await waitFor(m=>m.type==='tickBatch'&&m.events.some(e=>e.type==='world_event_started'));
+    assert.equal(started.worldEvents[0].effect,'disease');
     const industry=await (await fetch(`http://127.0.0.1:${port}/api/industry`)).json();
     assert.ok(Array.isArray(industry.employment));
     assert.ok(industry.employment.some(row=>row.villageId==='village:0'));
@@ -69,6 +80,7 @@ test('#143 hidden client receives no tick batches and resumes with one current s
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     assert.ok(observerMessages.some((m) => m.type === 'snapshot'));
+    assert.equal(observerMessages.find(m=>m.type==='snapshot').world.worldEvents[0].effect,'disease');
     await fetch(`http://127.0.0.1:${port}/api/speed`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speed: 20 }),
     });
@@ -94,6 +106,7 @@ test('#143 hidden client receives no tick batches and resumes with one current s
 
     ws.send(JSON.stringify({ type: 'visibility', hidden: false }));
     const resumed = await waitFor((m) => m.type === 'snapshot');
+    assert.deepEqual(resumed.world.worldEvents,[],'expired event is absent on reconnect');
     assert.ok(resumed.world.worldTick > initial.world.worldTick);
     assert.equal(resumed.seq, messages.find((m) => m.type === 'visibility' && m.hidden === false).seq + 1);
   } finally {

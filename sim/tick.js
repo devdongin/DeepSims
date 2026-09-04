@@ -6,6 +6,7 @@ import {
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
+import { applyWorldEvent, expireWorldEvents } from './world-events.js';
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isAvailableResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
@@ -986,6 +987,7 @@ export function tick(world, inputsForThisTick = []) {
   };
 
   // 1) 입력 적용 — logic_update 먼저(sequence 순), 그 다음 나머지(sequence 순) (PLAN §14.1)
+  expireWorldEvents(world, t, emit);
   const sorted = [...inputsForThisTick].sort((a, b) => a.sequence - b.sequence);
   for (const inp of sorted.filter((i) => i.command === 'logic_update')) applyLogicUpdate(world, inp, emit);
   for (const inp of sorted.filter((i) => i.command !== 'logic_update')) {
@@ -996,6 +998,7 @@ export function tick(world, inputsForThisTick = []) {
     else if (inp.command === 'zone') applyZone(world, inp, t, emit);
     else if (inp.command === 'plan_center') applyPlanCenter(world, inp, t, emit);
     else if (inp.command === 'found_village') applyFoundingDecision(world, inp.payload, t, emit);
+    else if (inp.command === 'world_event') applyWorldEvent(world, inp.payload, t, emit);
     else emit('input_rejected', null, { reason: 'unknown_command', inputId: inp.id ?? null });
   }
 
