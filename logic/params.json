@@ -1,6 +1,9 @@
 {
-  "logicSchemaVersion": 95,
-  "founding": { "petitionDays": 3, "minSettlers": 2 },
+  "logicSchemaVersion": 96,
+  "founding": {
+    "petitionDays": 3,
+    "minSettlers": 2
+  },
   "needsTiers": {
     "fulfilledMin": 4000,
     "deprivedMax": 1000,
@@ -103,7 +106,9 @@
     "oldEnergyAdd": 2
   },
   "actions": {
-    "settle_village": { "duration": 1 },
+    "settle_village": {
+      "duration": 1
+    },
     "supply_groceries": {
       "duration": 30,
       "cost": 0
