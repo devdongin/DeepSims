@@ -158,7 +158,9 @@ test('#32 actual family settlement sustains its own government and conserved fin
   // contain an immigration wave. Count observed arrivals, not an invented fourth resident.
   assert.equal(result.governmentCheck.residents,3+result.governmentCheck.immigrants.length);
   assert.ok(result.governmentCheck.immigrants.every(Number.isSafeInteger));
-  assert.ok(result.governmentCheck.treasury>0);assert.equal(result.governmentCheck.mayorId,0);
+  // Preserving existing walls moves founding to tick26961; this seed elects
+  // resident1, not resident0 from the former structure-erasing fixture.
+  assert.ok(result.governmentCheck.treasury>0);assert.equal(result.governmentCheck.mayorId,1);
 });
 
 test('#32 actual volunteer completion and neglected fire change only the served facility municipality',()=>{

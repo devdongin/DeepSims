@@ -39,6 +39,8 @@ test('actual family founding with seed-native plots supports local construction 
   assert.deepEqual(traffic.initialMunicipalities[1].facilities,{apartment:1});
   assert.ok(traffic.initialMunicipalities[1].buildableUnusedPlots>0);
   assert.ok(traffic.construction.some(f=>f.villageId==='village:1'&&f.type!=='apartment'));
+  assert.deepEqual(traffic.noPath,{},'preserved facilities must not be overwritten by native-plot construction');
+  assert.deepEqual(traffic.noPathSamples,[]);
   for(const [from,to] of [['village:0','village:1'],['village:1','village:0']])
     assert.ok(traffic.arrivals.some(v=>v.from===from&&v.to===to&&v.arrivals>0));
 });

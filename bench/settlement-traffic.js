@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {tick,hashWorld} from '../sim/index.js';
 import {serialize,deserialize,findNonFinite} from '../sim/serialize.js';
 import {governmentFor,publicBalance} from '../sim/government.js';
-import {plotBuildable} from '../sim/map.js';
+import {plotBuildable,isWalkable} from '../sim/map.js';
 
 // A window may start partway through a day. Count only new arrivals, not the
 // pre-window part of today's counters; retain totals beyond the 14-day ring.
@@ -42,13 +42,25 @@ export function observeSettlementTraffic(initial,{days=30,resume=false}={}){
   assert.ok(Number.isInteger(days)&&days>0&&days<=365);
   let w=initial;
   const startTick=w.worldTick,initialMunicipalities=municipalities(w),money=closedMoney(w);
-  const arrivals=arrivalObserver(w.transportStats.today),noPath={},started={},construction=[],migration={};
+  const arrivals=arrivalObserver(w.transportStats.today),noPath={},noPathSamples=[],started={},construction=[],migration={};
   for(let n=0;n<days*1440;n++){
     if(resume&&n===Math.floor(days*1440/2))w=deserialize(serialize(w));
     const events=tick(w);arrivals.collect(w.transportStats.today);
     for(const e of events){
       const villageId=w.sims.find(s=>s.id===e.simId)?.villageId??'unknown';
-      if(e.type==='action_failed'&&e.payload.reason==='no_path')noPath[villageId]=(noPath[villageId]??0)+1;
+      if(e.type==='action_failed'&&e.payload.reason==='no_path'){
+        noPath[villageId]=(noPath[villageId]??0)+1;
+        if(noPathSamples.length<50){
+          const s=w.sims.find(s=>s.id===e.simId);
+          const targets=Object.entries(s?.noPathCool??{}).filter(([,until])=>until===e.tick+w.logic.construct.noPathCoolTicks)
+            .map(([key])=>{
+              const f=w.map.facilities.find(f=>key.startsWith(`${f.id}:`)),r=f?.resources.find(r=>`${f.id}:${r.id}`===key);
+              return {key,...(r?{x:r.x,y:r.y,walkable:isWalkable(w.map,r.x,r.y)}:{})};
+            });
+          noPathSamples.push({tick:e.tick,simId:e.simId,action:e.payload.action,villageId,
+            source:s?{x:s.x,y:s.y,walkable:isWalkable(w.map,s.x,s.y)}:null,targets});
+        }
+      }
       if(e.type==='action_started'){
         const actions=started[villageId]??={};actions[e.payload.action]=(actions[e.payload.action]??0)+1;
       }
@@ -69,7 +81,7 @@ export function observeSettlementTraffic(initial,{days=30,resume=false}={}){
   }
   assert.deepEqual(findNonFinite(w),[]);
   return {world:w,report:{days,startTick,endTick:w.worldTick,initialMunicipalities,finalMunicipalities:municipalities(w),
-    arrivals:arrivals.rows(),noPath,started,construction,migrations:Object.values(migration),
+    arrivals:arrivals.rows(),noPath,noPathSamples,started,construction,migrations:Object.values(migration),
     transport:{cars:w.sims.filter(s=>s.hasCar).length,stationUnlocked:w.transit.stationUnlocked,demand:w.transit.demand,
       stations:w.map.facilities.filter(f=>f.type==='train_station').map(f=>({id:f.id,villageId:f.villageId}))},
     closedMoney:money,hash:hashWorld(w)}};

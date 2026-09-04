@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createWorld, tick, hashWorld } from '../sim/index.js';
 import { evaluateFoundingPetitions, applyFoundingDecision } from '../sim/founding.js';
 import { canWork } from '../sim/education.js';
-import { TILE } from '../sim/map.js';
+import { clearTerrainKeepingFacilities } from './founding-fixture.js';
 import { findNonFinite, serialize, deserialize } from '../sim/serialize.js';
 import { publicBalance } from '../sim/government.js';
 import { observeSettlementTraffic } from './settlement-traffic.js';
@@ -27,7 +27,7 @@ for(const f of w.map.facilities)if(['house','apartment'].includes(f.type)){
 for(const s of w.sims){s.traits.age=25;s.traits.occupation='office_worker';s.education.course=null;}
 if(family){w.sims[2].traits.age=12;w.sims[2].traits.occupation='student';}
 for(const t of [0,1440,2880])evaluateFoundingPetitions(w,t,()=>{});
-w.map.tiles.fill(TILE.GRASS);w.map.reachVersion=(w.map.reachVersion??0)+1;
+clearTerrainKeepingFacilities(w.map);
 w.villages[0].center={x:20,y:20};w.plots=[{plotId:1,x:80,y:80,used:false}];
 // Optional comparison retains seed-generated uncommitted land. Plot 1 is the
 // controlled founding site, so its original slot must not duplicate that ID.
