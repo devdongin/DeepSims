@@ -7,6 +7,43 @@ import {sameRegion} from './map.js';
 import {aptitudeFor} from './abilities.js';
 import {dayHash} from './chrono.js';
 
+// Existing office construction creates four resources. Pending seats prevent
+// duplicate orders, but are never usable recruitment capacity before completion.
+export const PLANNED_OFFICE_SEATS=4;
+export function officeConstructionDemand(world,villageId=world.municipalityId??PRIMARY_GOVERNMENT,evidence=null){
+  const root=world.rootWorld??world,L=root.logic;
+  const rows=employmentStatus(root),row=evidence??rows.find(r=>r.villageId===villageId);
+  if(!row)return {workers:0,jobseekers:0,servicePlacements:0,capacity:0,pendingCapacity:0,unmet:0};
+  const office=row.sectors.find(s=>s.type==='office');
+  const allSeekers=office.hiringPath?root.sims.filter(s=>s.traits.occupation==='jobless'&&canWork(s)&&s.traits.age<L.society.retireAge
+    &&occupationAllowed('office_worker',s.traits.age)).sort((a,b)=>a.id-b.id):[];
+  const seekers=allSeekers.filter(s=>(s.villageId??PRIMARY_GOVERNMENT)===villageId);
+  const remaining=new Set(allSeekers.map(s=>s.id));
+  // Recruitment counts service workers globally. Reserve each real global slot
+  // and seeker only once, even when workers live outside the facility's town.
+  // Recompute the same deterministic allocation for every municipality view.
+  for(const sector of row.sectors.filter(s=>s.type!=='office')){
+    let vacancies=Math.max(0,root.map.facilities.filter(f=>f.type===sector.type).length*L.industry.workersPerFacility
+      -root.sims.filter(s=>s.traits.occupation===sector.occupation).length);
+    const localVacancies=new Map(rows.map(r=>[r.villageId,r.sectors.find(s=>s.type===sector.type).recruitmentVacancies]));
+    const candidates=[...allSeekers].sort((a,b)=>aptitudeFor(b,sector.occupation,L)-aptitudeFor(a,sector.occupation,L)||a.id-b.id);
+    for(const s of candidates){
+      if(!vacancies)break;
+      if(!remaining.has(s.id)||!occupationAllowed(sector.occupation,s.traits.age))continue;
+      const id=s.villageId??PRIMARY_GOVERNMENT,local=localVacancies.get(id)??0;
+      const pct=Math.min(L.industry.switchMaxPct,Math.floor(aptitudeFor(s,sector.occupation,L)*L.industry.switchPctPerApt/100));
+      if(local<=0||pct<=0)continue;
+      localVacancies.set(id,local-1);
+      remaining.delete(s.id);vacancies--;
+    }
+  }
+  const pendingCapacity=office.pendingFacilities*PLANNED_OFFICE_SEATS;
+  const unplaced=seekers.filter(s=>remaining.has(s.id)).length;
+  return {workers:office.workers,jobseekers:seekers.length,servicePlacements:seekers.length-unplaced,
+    capacity:office.capacity,pendingCapacity,
+    unmet:Math.max(0,office.workers+unplaced-office.capacity-pendingCapacity)};
+}
+
 // Offices already belong to the export/base-wage economy. Hiring only grants
 // the occupation: wages still require actual work through the existing ledger.
 export function recruitOfficeWorkers(world,t,day,emit){

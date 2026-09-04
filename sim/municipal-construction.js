@@ -1,10 +1,11 @@
 import { governmentFor, governmentViews, governmentEmitter, PRIMARY_GOVERNMENT } from './government.js';
 import { isResidence, isAvailableResidence, plotBuildable, zoneFootprint, addBuilding } from './map.js';
-import { canWork, neededSchool, SCHOOL_TYPES } from './education.js';
+import { neededSchool, SCHOOL_TYPES } from './education.js';
 import { foundingSiteReserved } from './founding.js';
 import { INDUSTRY_DEVELOPMENTS, industryDevelopmentEvidence, neededIndustryFacility } from './industry.js';
 import { evalStationDemand, zoneAllowedTypes } from './society.js';
 import { campusSiteReserved } from './center-plots.js';
+import { officeConstructionDemand } from './employment.js';
 
 export function projectMunicipality(world,project){
   if(project.foundingPetitionId!==undefined){
@@ -85,9 +86,8 @@ export function planMunicipalConstruction(world,t,limits,emit){
       }))type=null;
       if(!type)type=neededIndustryFacility(local);
       if(!type&&local.sims.length+separated+headroom>beds)type=local.cityTier>=1?'apartment':'house';
-      const workers=local.sims.filter(s=>canWork(s)&&L.workplace[s.traits.occupation]==='office'
-        &&L.occupations[s.traits.occupation].wagePct>0).length;
-      if(!type&&workers>capacity(['office']))type='office';
+      const employmentDemand=officeConstructionDemand(world,id);
+      if(!type&&employmentDemand.unmet>0)type='office';
       if(!type&&local.sims.length>capacity(['cafe'])*L.construct.cafeRatio)type='cafe';
       if(!type&&local.sims.length>capacity(['park'])*L.construct.parkRatio)type='park';
       if(!type)break;
@@ -99,10 +99,11 @@ export function planMunicipalConstruction(world,t,limits,emit){
       if(!plot&&type==='apartment'){type='house';plot=fits(type);}
       if(!plot)break;
       const localEmit=governmentEmitter(local,emit),g=governmentFor(world,id);
-      if(SCHOOL_TYPES.includes(type)||['workshop','lab','warehouse'].includes(type)){
+      if(SCHOOL_TYPES.includes(type)||['office','workshop','lab','warehouse'].includes(type)){
         const cost=L.zone.costs[type];if(g.treasury<cost)break;
         g.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
         if(SCHOOL_TYPES.includes(type))localEmit('school_planned',null,{type,plotId:plot.plotId,cost,treasury:g.treasury});
+        if(type==='office')localEmit('employment_construction_planned',null,{plotId:plot.plotId,cost,treasury:g.treasury,...employmentDemand});
       }
       const base=L.construct.requiredByType?.[type]??L.construct.laborRequired;
       const required=g.mayorId!==null?Math.floor(base*L.election.mayorLaborPct/100):base;
