@@ -137,13 +137,11 @@ export function moodBaseline(sim, world, L) {
   if (world.partners?.[sim.id] !== undefined) {
     v += world.partnerStage?.[sim.id] === 'married' ? B.married : B.dating;
   }
-  let friends = 0, rivals = 0;
-  for (const tier of Object.values(sim.relTiers ?? {})) {
-    if (tier === 'friend') friends++;
-    else if (tier === 'rival') rivals++;
-  }
-  v += Math.min(B.friendCap, friends * B.perFriend);
-  v -= Math.min(B.rivalCap, rivals * B.perRival);
+  // §23.32 세지 않는다 — 카운터는 relTiers를 쓰는 자리(cognition.js)에서 갱신된다.
+  // 이 함수는 심마다 매 틱 불린다: 인구 242면 하루 348,480번, 그때마다 260칸을 훑고
+  // 임시 배열을 만들고 있었다. 프로파일에서 시뮬 시간의 23.4%.
+  v += Math.min(B.friendCap, (sim.friendCount ?? 0) * B.perFriend);
+  v -= Math.min(B.rivalCap, (sim.rivalCount ?? 0) * B.perRival);
   if (sim.homeId) v += B.home;
   if (sim.sick) v += B.sick;              // 아프면 바닥이 내려간다
   if (sim.traits.occupation === 'jobless') v += B.jobless;
@@ -154,11 +152,7 @@ export function moodBaseline(sim, world, L) {
   else if (daysCovered >= 10) v += B.secure;
   if ((sim.unpaidDays ?? 0) >= 3) v += B.unpaid; // 일했는데 못 받은 날이 사흘 넘는다
   // 즐겨 하는 일이 있는 삶 — 습관이 붙은 여가 하나당 조금씩 (§17.6 클럽과 같은 신호)
-  let habits = 0;
-  for (const [k, n] of Object.entries(sim.habit ?? {})) {
-    if (n >= L.club.habitMin && !k.startsWith('work:')) habits++;
-  }
-  v += Math.min(B.habitCap, habits * B.perHabit);
+  v += Math.min(B.habitCap, (sim.habitCount ?? 0) * B.perHabit);
   return clamp(v, -B.span, B.span);
 }
 

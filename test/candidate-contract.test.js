@@ -39,10 +39,13 @@ import { collectCandidates } from '../sim/tick.js';
 //     1개라 240틱 지평에서는 아무것도 안 바뀌어야 하는데, world 해시는 로직 파라미터를
 //     포함하므로 그 값만 움직인다.
 //   §23.29  (기분에 돈) : 현금 여력이 바닥선에 들어가 첫 틱부터 기분이 갈린다.
+//   §23.32  (카운터) : **world 해시만** 움직인다 — 후보·선택·이벤트 셋이 세 크기 모두
+//     그대로다. 기분 바닥선 최적화가 값을 한 비트도 안 바꿨다는 증거다 (심에 필드 3개가
+//     늘어서 세계 상태만 달라진다).
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', 'b7a13ce0']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', 'ed702a2c']],
-  [200, ['91f50dd7', 'a23787ba', '2179523f', '5447fa72']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', 'f996adef']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '3a47c0a1']],
+  [200, ['91f50dd7', 'a23787ba', '2179523f', 'a43a2aee']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

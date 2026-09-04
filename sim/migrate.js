@@ -431,6 +431,20 @@ export function migrateWorld(world) {
   if (from < 66) initializeVillages(world);
   // §23.24 면역은 세이브에 없던 필드다. 0이면 '면역 없음'이라 옛 세계의 행동이 그대로 이어진다.
   if (from < 67) for (const sim of world.sims) sim.immuneUntil ??= 0;
+  // §23.32 카운터는 이제 쓸 때 갱신되지만, 옛 세이브에는 필드가 없다. 한 번만 세어 채운다.
+  if (from < 68) {
+    for (const sim of world.sims) {
+      let f = 0, r = 0;
+      for (const tier of Object.values(sim.relTiers ?? {})) {
+        if (tier === 'friend') f++; else if (tier === 'rival') r++;
+      }
+      let h = 0;
+      for (const [k, n] of Object.entries(sim.habit ?? {})) {
+        if (n >= world.logic.club.habitMin && !k.startsWith('work:')) h++;
+      }
+      sim.friendCount = f; sim.rivalCount = r; sim.habitCount = h;
+    }
+  }
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }

@@ -2608,10 +2608,10 @@ function eventText(e) {
     case 'action_failed': return `${n}: 행동 실패 (${e.payload.reason})`;
     case 'money_changed': return `${n}: ${e.payload.delta > 0 ? '+' : ''}${e.payload.delta}원${e.payload.tax ? ` (세금 ${e.payload.tax}원)` : ''} (잔액 ${e.payload.balance})`;
     case 'welfare_paid': return `🏛️ 정부가 ${n}에게 생계 지원 +${e.payload.amount}원 (국고 ${e.payload.treasury}원)`;
-    case 'fire_started': return `🔥 ${PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId}에 불이 났다!`;
+    case 'fire_started': return `🔥 ${placeKo(e.payload.facilityId)}에 불이 났다!`; // house8이 새던 자리
     // QA #C: fire_started는 시설 종류를 한국어로 보여주는데 fire_out만 원시 id가 새고 있었다
     case 'fire_out': {
-      const fp = PLACE_KO[facTypeOf(e.payload.facilityId)] ?? e.payload.facilityId;
+      const fp = placeKo(e.payload.facilityId);
       return e.payload.by === 'self'
         ? `💨 ${fp}의 불이 겨우 잦아들었다… (아무도 안 왔다)`
         : `🚒 ${ga(simName(e.payload.by))} ${fp} 화재를 진압했다!`;
@@ -2624,7 +2624,7 @@ function eventText(e) {
     case 'car_bought': return `🚗 ${ga(n)} 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
     case 'station_unlocked': return `🚉 장거리 이동 수요가 문턱을 넘었다 — 기차역 언락! (수요 ${e.payload.demand}/${e.payload.threshold} · 충족도 ${e.payload.fulfillmentPct}% · 장거리 ${e.payload.totalLongTrips}회 · 차 ${e.payload.carsOwned}대)`;
     case 'industry_unlocked': return `🏭 ${PLACE_KO[e.payload.facility]} 산업이 실제 수요로 열렸습니다 (${e.payload.evidence}/${e.payload.threshold})`;
-    case 'city_promoted': return `🏙️ 해솔${e.payload.nameKo}(으)로 승격! (인구 ${e.payload.pop}명) 🎆`;
+    case 'city_promoted': return `🏙️ ${ro('해솔' + e.payload.nameKo)} 승격했습니다! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원${e.payload.demolished ? ` + 도로 ${e.payload.demolished}칸 철거 ${e.payload.demolitionCost}원` : ''}, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준', healthCopayPct: '진료 자기부담', childAllowance: '아이당 일일 지원' };
@@ -2666,14 +2666,28 @@ function eventText(e) {
     case 'season_changed': return `🍂 ${ {spring:'봄',summer:'여름',autumn:'가을',winter:'겨울'}[e.payload.to] }이 시작됐습니다`;
     case 'needs_tier_changed': return `${simName(e.simId)}의 생활 단계가 ${e.payload.to === 1 ? '시민' : '정착민'}으로 바뀌었습니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
+    // §23.31 '살림' 필터가 보여주겠다고 약속했는데 문장이 없어 화면이 비던 여섯 가지.
+    // money_shared는 60일에 159건 — 이 게임에서 가장 다정한 사건이 통째로 침묵했다.
+    case 'money_shared': return `💝 ${ga(n)} 곤경에 처한 ${simName(e.payload.toSimId)}에게 ${e.payload.amount}원을 건넸습니다`;
+    case 'wage_shortfall': return `💸 ${ga(n)} 임금을 다 못 받았습니다 (${e.payload.paid}/${e.payload.asked}원)`;
+    case 'insolvent': return `🏛️ 국고가 비어 ${ga(n)} 임금을 다 못 받았습니다 (${e.payload.paid}/${e.payload.asked}원)`;
+    case 'treasury_debt': return `📉 국고가 빚으로 내려갔습니다 (${e.payload.treasury.toLocaleString()}원)`;
+    case 'mayor_stipend': return `🏛️ 시장 수당이 지급됐습니다`;
+    case 'public_revenue_remitted': return `🏛️ ${placeKo(e.payload.facilityId)}의 수입 ${e.payload.amount.toLocaleString()}원이 국고로 들어왔습니다`;
+    // 초대와 거절 — 60일에 1,100건. 누가 누구를 불렀고 거절당했다는 드라마가 무성이었다.
+    case 'invited': return `🙋 ${ga(n)} ${simName(e.payload.toSimId)}에게 같이 가자고 했습니다`;
+    case 'invite_declined': return `🙅 ${simName(e.payload.toSimId)}${hasJong(simName(e.payload.toSimId)) ? '이' : '가'} ${ne(n)} 청을 거절했습니다`;
+    case 'invite_fulfilled': return `🤝 ${ga(n)} ${simName(e.payload.toSimId)}와 약속한 자리에 함께 왔습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
+    // 인라인 맵에 세 종류만 있어서 lab·warehouse·apartment·학교가 전부 undefined였다.
+    // 시설 이름의 권위는 PLACE_FALLBACK 하나다 (§23.7에서 이미 만들어 뒀다).
     case 'project_started': {
-      const tp = { house: '새 집', cafe: '새 카페', park: '새 공원' }[e.payload.type];
-      return `🏗️ 마을에 ${tp} 공사가 시작됐습니다! 심들이 힘을 보탭니다`;
+      const tp = PLACE_FALLBACK[e.payload.type] ?? '새 건물';
+      return `🏗️ 마을에 새 ${tp} 공사가 시작됐습니다! 심들이 힘을 보탭니다`;
     }
     case 'facility_built': {
-      const tp = { house: '집', cafe: '카페', park: '공원' }[e.payload.type];
+      const tp = PLACE_FALLBACK[e.payload.type] ?? '새 건물';
       return `🎊 ${ga(tp)} 완공됐습니다! 마을이 넓어졌어요`;
     }
     case 'moved_home': return `📦 ${ga(n)} 새 집으로 이사했습니다`;
@@ -2700,7 +2714,7 @@ function eventText(e) {
       if (e.payload.to === 'jobless') return `📄 ${ga(n)} 일자리를 잃었습니다`;
       const why = { public_post: ' (공공 자리를 채웠습니다)', over_quota: ' (정원이 줄었습니다)',
         immigration_quota: '', player_quota: '' }[e.payload.reason] ?? '';
-      return `💼 ${ga(n)} ${to}${'가 되었습니다'}${why}`;
+      return `💼 ${ga(n)} ${ga(to)} 되었습니다${why}`; // 조사는 헬퍼로 — '회사원가'가 찍혔다
     }
     case 'grew_up': return `🌱 ${ga(n)} ${e.payload.age}살이 되어 학교에 갑니다`;
     case 'bereaved': return `🕯️ ${ga(n)} 가까운 사람을 떠나보냈습니다`;
@@ -2910,7 +2924,12 @@ function lifeLine(r, ctx) {
     case 'joined_club': return `${CLUB_KO[p.clubId] ?? '모임'}에 들었다`;
     case 'heroic_save': return '불길에서 사람을 구했다';
     case 'genius_born': return '남다른 재능을 가지고 태어났다';
-    case 'ability_changed': return `${ga(ABIL_KO[p.ability] ?? p.ability)} ${p.value}까지 늘었다`;
+    case 'ability_changed': {
+      // 나이가 들면 깎이기도 한다 — 사실과 반대로 쓰면 안 된다.
+      const nm = ABIL_KO[p.ability] ?? p.ability;
+      if (p.from != null && p.value < p.from) return `${ga(nm)} ${p.value}로 떨어졌다`;
+      return `${ga(nm)} ${p.value}까지 늘었다`;
+    }
     case 'died': return '세상을 떠났다';
     case 'emigrated': return '마을을 떠났다';
     default: return null;

@@ -200,6 +200,11 @@ export function runReflection(world, sim, t, emit) {
       world.interactions[sim.id]?.[other.id] ?? 0, L);
     const prev = sim.relTiers[other.id] ?? 'stranger';
     if (tier !== prev) {
+      // §23.32 카운터는 티어를 **쓰는 이 자리**에서만 움직인다 — 세는 곳이 없어야 싸다.
+      if (prev === 'friend') sim.friendCount--;
+      else if (prev === 'rival') sim.rivalCount--;
+      if (tier === 'friend') sim.friendCount++;
+      else if (tier === 'rival') sim.rivalCount++;
       if (tier === 'stranger') delete sim.relTiers[other.id];
       else sim.relTiers[other.id] = tier;
       emit('relationship_changed', sim.id, { withSimId: other.id, tier, prevTier: prev });
@@ -225,7 +230,12 @@ export function runReflection(world, sim, t, emit) {
   }
   for (const [key, n] of [...counts.entries()].sort()) {
     if (n < L.social.habitMinRepeats) continue;
-    sim.habit[key] = Math.min(L.social.habitCap, (sim.habit[key] ?? 0) + L.social.habitIncrement);
+    const before = sim.habit[key] ?? 0;
+    sim.habit[key] = Math.min(L.social.habitCap, before + L.social.habitIncrement);
+    // §23.32 '즐겨 하는 일'의 문턱을 넘는 순간만 센다 (근무는 취미가 아니다)
+    if (before < L.club.habitMin && sim.habit[key] >= L.club.habitMin && !key.startsWith('work:')) {
+      sim.habitCount = (sim.habitCount ?? 0) + 1;
+    }
   }
 
   // 3.5) §17.5/§17.6: 연애 전이(파혼→결혼→탐색, 먼저 회고하는 쪽이 실행) + 동아리 가입

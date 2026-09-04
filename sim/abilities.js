@@ -67,7 +67,9 @@ export function developFromActivity(world, sim, t, emit) {
   if (D.progress[key] < G.ticksPerPoint) return;
   D.progress[key] -= G.ticksPerPoint;
   sim.abilities[key]++;
-  emit('ability_changed', sim.id, { ability: key, value: sim.abilities[key], potential: sim.potential[key], source });
+  // §23.31 from을 함께 보낸다 — 노화로 **깎이기도** 하는데 payload에 이전 값이 없어
+  // 화면이 늘 "늘었다"라고 썼다 (실측: 체력 30 → 29인데 '29까지 늘었다').
+  emit('ability_changed', sim.id, { ability: key, from: sim.abilities[key] - 1, value: sim.abilities[key], potential: sim.potential[key], source });
 }
 
 function abilityCap(sim, key, G) {
@@ -90,7 +92,7 @@ export function developWithAge(world, sim, t, emit) {
     const loss = lossAt(sim.traits.age) - lossAt(D.lastAge);
     sim.abilities[key] = Math.max(0, Math.min(abilityCap(sim, key, G), before + delta - loss));
     if (sim.abilities[key] !== before) emit('ability_changed', sim.id,
-      { ability: key, value: sim.abilities[key], potential: sim.potential[key], source: 'age' });
+      { ability: key, from: before, value: sim.abilities[key], potential: sim.potential[key], source: 'age' });
   }
   D.lastAge = sim.traits.age;
 }
