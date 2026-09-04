@@ -6,7 +6,7 @@ import {
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
-import { applyWorldEvent, expireWorldEvents, worldEventMood } from './world-events.js';
+import { applyWorldEvent, expireWorldEvents, worldEventMood, wakeEventMood } from './world-events.js';
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isAvailableResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
@@ -1431,6 +1431,7 @@ export function tick(world, inputsForThisTick = []) {
       if (s.action === 'sleep') {
         if (sim.pendingMood !== null) {
           sim.mood = sim.pendingMood;
+          wakeEventMood(world,sim,t);
           sim.pendingMood = null;
         }
         const day = floorDiv(t, 1440); // 틱 내부 날짜 규약
