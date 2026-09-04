@@ -40,3 +40,13 @@ test('#182 rebuilding after wall edits preserves tie order without cached stale 
   assert.deepEqual(distanceFieldPath(map,0,2,4,2),bfsPath(map,0,2,4,2));
   assert.throws(()=>distanceFieldPath(map,-1,0,4,2),/proof domain/);
 });
+
+test('#182 every tile kind and unknown values retain the actual walkability predicate',()=>{
+  for(const value of [...Object.values(TILE),-1,999]){
+    const map={w:3,h:3,tiles:Array(9).fill(TILE.GRASS)};map.tiles[4]=value;
+    for(let start=0;start<9;start++)for(let goal=0;goal<9;goal++){
+      const points=[start%3,Math.floor(start/3),goal%3,Math.floor(goal/3)];
+      assert.deepEqual(distanceFieldPath(map,...points),bfsPath(map,...points),`tile${value}: ${start}->${goal}`);
+    }
+  }
+});

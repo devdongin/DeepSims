@@ -31,12 +31,15 @@ fall back to the original BFS for inputs outside the proved domain.
 
 ## Executable checks
 
-`node --test test/distance-field-proof.test.js`: 3/3 passed. All41472 start/goal
+`node --test test/distance-field-proof.test.js`: 4/4 passed. All41472 start/goal
 pairs over all512 three-by-three obstacle masks matched actual BFS exactly,
 including blocked starts. All7 frozen pre-optimization coordinate SHA fixtures
 were parsed as literal data from the existing regression file and matched. Wall
 edits followed by full rebuilding also matched. This is finite counterexample
 search supporting the argument, not a proof of an unimplemented cache.
+All declared tile kinds and two unknown values were additionally compared at
+every3x3 endpoint pair. Independent Codex review found no counterexample in the
+stated domain; this is not Claude agreement or production-cache approval.
 
 ## Gates still open before production
 
