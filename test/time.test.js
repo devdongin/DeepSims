@@ -71,6 +71,7 @@ test('T-9. §20 따라잡기 중 배속 변경: 완료 후 재기준화되어 �
   const st = new Storage(path.join(dir, 't.db'));
   let nowMs = 10_000_000;
   const engine = new Engine(st, { seed: 4242, now: () => nowMs });
+  engine.setSpeed(1); // This scenario deliberately changes x1 to x3 mid-catch-up.
   // BATCH_TICKS(1440)보다 훨씬 많이 밀려 있어야 배치가 여러 번 돌고, 배속 변경 시점과
   // 따라잡기 종료 시점의 worldTick이 갈라진다 — 그 간극이 바로 이 회귀가 사는 곳이다.
   engine.epochUtcMs = nowMs - 5000 * TICK;
@@ -203,6 +204,7 @@ test('T-15. §22.11 setSpeed 직후 커밋 전에 죽어도 (epoch, speed) 짝�
   const e1 = new Engine(st1, { seed: 4242, now: () => nowMs });
   // 창이 열리려면 worldTick > 0 이어야 한다 — 재기준화 값이 speed로 나뉘기 때문이다.
   // 먼저 ×1로 600틱 따라잡아 epoch를 커밋시킨 뒤 배속을 바꾼다.
+  e1.setSpeed(1);
   e1.epochUtcMs = nowMs - 600 * TICK;
   await e1.catchUp();
   assert.equal(e1.world.worldTick, 600);
