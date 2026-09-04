@@ -50,3 +50,25 @@ test('#182 every tile kind and unknown values retain the actual walkability pred
     }
   }
 });
+
+test('#182 revision-only cache key is insufficient for supported direct tile edits',()=>{
+  const map={w:3,h:3,tiles:Array(9).fill(TILE.GRASS),reachVersion:7};
+  const identity=map.tiles,oldVersion=map.reachVersion,oldPath=distanceFieldPath(map,0,1,2,1);
+  map.tiles[4]=TILE.WALL;
+  assert.equal(map.tiles,identity);assert.equal(map.reachVersion,oldVersion);
+  const fresh=distanceFieldPath(map,0,1,2,1);
+  assert.notDeepEqual(fresh,oldPath,'same array and revision can have a different exact path');
+  assert.deepEqual(fresh,bfsPath(map,0,1,2,1));
+});
+
+test('#182 dimensions and copied corridor tile identity belong to the cache domain',()=>{
+  const tiles=Array(9).fill(TILE.GRASS);tiles[1]=TILE.WALL;
+  const square={w:3,h:3,tiles,reachVersion:0},line={w:9,h:1,tiles,reachVersion:0};
+  assert.ok(distanceFieldPath(square,0,0,2,0));
+  assert.equal(distanceFieldPath(line,0,0,2,0),null,'same tiles/revision with another stride is a different graph');
+  const ground={w:5,h:3,tiles:Array(15).fill(TILE.GRASS),reachVersion:8};
+  const corridor={...ground,tiles:ground.tiles.slice()};
+  for(let y=0;y<3;y++)corridor.tiles[y*5+2]=TILE.WALL;
+  assert.ok(distanceFieldPath(ground,0,1,4,1));
+  assert.equal(distanceFieldPath(corridor,0,1,4,1),null,'rail corridor copies must not use the original map field');
+});
