@@ -5,6 +5,38 @@ import {createWorld,advance,serialize,deserialize} from '../sim/index.js';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const row=(arrivals,walkingTicks)=>({from:'village:0',to:'village:1',purpose:'shopping',arrivals,walkingTicks});
+
+test('founded municipalities build paid stations and sustain reciprocal rail for 30 service days across saves',()=>{
+  // Controlled initial saturation/terrain/approval; ordinary paid commands and
+  // real construction thereafter. This does not test natural founding frequency.
+  const run=(extra=[])=>JSON.parse(execFileSync(process.execPath,[
+    fileURLToPath(new URL('../bench/founding-construction.js',import.meta.url)),
+    '32','--settle','--family','--traffic','--retain-native-plots',
+    '--station-orders','--expand-centers','--traffic-days=70',...extra,
+  ],{encoding:'utf8',timeout:360000}));
+  const a=run(),b=run(['--resume-traffic','--audit-traffic']);
+  assert.deepEqual(a,b,'all observations and final world hash must survive a midpoint save');
+  assert.equal(a.founded,1);assert.equal(a.ineligibleWork,0);
+  const t=a.traffic,r=t.railObservation,window=r.serviceWindow;
+  assert.equal(t.initialMunicipalities.length,2);
+  assert.equal(r.centerOrders.length,1);assert.equal(r.centerOrders[0].cost,5000);
+  assert.equal(r.stationOrders.length,2);
+  assert.deepEqual(new Set(r.stationOrders.map(o=>o.villageId)),new Set(['village:0','village:1']));
+  for(const order of r.stationOrders){
+    assert.equal(order.cost,8000);assert.ok(order.treasury>=0);
+    assert.ok(t.construction.some(c=>c.type==='train_station'&&c.villageId===order.villageId&&c.tick>order.tick));
+  }
+  assert.ok(window?.complete,'must observe 30 full days after intermunicipal service actually opens');
+  assert.equal(window.endTick-window.startTick,30*1440);
+  assert.equal(window.observedUntil,window.endTick);
+  for(const [from,to] of [['village:0','village:1'],['village:1','village:0']]){
+    assert.ok(window.directions[`${from}>${to}`]>0,'actual boardings, not planned trips');
+    assert.ok(window.arrivals.some(row=>row.from===from&&row.to===to&&row.arrivals>0));
+  }
+  assert.ok(r.stats.alightings>0);assert.ok(r.stats.passengerTiles>0);
+  assert.equal(r.stats.cancelledRides,0);assert.deepEqual(t.noPath,{});
+  assert.equal(t.closedMoney,115063,'observer also checks the closed ledger every tick');
+});
 test('post-founding arrival observation excludes pre-window traffic even when today is mutated in place',()=>{
   const today={day:18,municipalVisits:{route:row(4,100)}},observer=arrivalObserver(today);
   today.municipalVisits.route.arrivals++;today.municipalVisits.route.walkingTicks+=30;

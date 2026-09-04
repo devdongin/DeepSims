@@ -126,6 +126,11 @@ node bench/founding-construction.js 32 --family --retain-native-plots --settle -
 입증한다. 자연 개척 빈도, 무입력 자동 역 투자, 다중 시드 일반성 또는 인구 증가의
 교통 인과효과를 입증하지 않는다. G3 전체 승인과 #32 완료는 별도 리뷰 대상으로 남긴다.
 
+`test/settlement-traffic.test.js`는 같은 경로를70일 관측하는 자동 회귀도 실행한다.
+개통 후30일 창이 완전히 끝나야 통과하며, 마을별 유료 역 지시 뒤 실제 완공, 양방향
+실제 승차/목적지 도착, 정상 회계와 중간 재개 보고서 전체 동일성을 요구한다.
+초기 통제 fixture의 한계는 그대로다. 단독 통합 회귀는73.2초에 통과했다.
+
 ## 기존 계측 도입 이력
 
 관측 전용 schema61, 로직 v57 유지. `transportStats.today`는 진행 중인 날,
