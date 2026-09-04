@@ -17,6 +17,7 @@ import { PROTOCOL_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC, POLICY_FIELDS } from '../sim/logic.js';
 import { validatePolicyCommand } from '../sim/policy-command.js';
 import { industryStatus, purchasingPowerGap } from '../sim/industry.js';
+import { employmentStatus, officeConstructionDemand } from '../sim/employment.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -184,11 +185,13 @@ app.post('/api/screenshot', (req, res) => {
 // §22.18 산업 현황 — 21개 대분류가 지금 이 마을에서 어떤 상태인지.
 // 건물을 세우기 전에 **무엇이 없어서 아쉬운지**를 먼저 보여준다.
 app.get('/api/industry', (_req, res) => {
+  const employment=employmentStatus(engine.world);
   res.json({
     day: Math.floor(engine.world.worldTick / 1440),
     population: engine.world.sims.length,
     sections: industryStatus(engine.world),
     purchasingPowerGap: purchasingPowerGap(engine.world),
+    employment: employment.map(row=>({...row,officeConstruction:officeConstructionDemand(engine.world,row.villageId,row)})),
   });
 });
 

@@ -15,7 +15,10 @@ function fixture(){
   for(const [i,v] of w.villages.entries()){
     const x=i?80:5;
     const home=addBuilding(w.map,'house',{x,y:5},0);
-    const facs=[home,addBuilding(w.map,'cafe',{x,y:15},0),addBuilding(w.map,'park',{x,y:25},0)];
+    // Keep this housing/school fixture's labor demand satisfied. Employment
+    // shortage construction is covered independently in employment-construction.
+    const facs=[home,addBuilding(w.map,'cafe',{x,y:15},0),addBuilding(w.map,'park',{x,y:25},0),
+      addBuilding(w.map,'office',{x,y:35},0)];
     for(const f of facs)f.villageId=v.id;
     for(const s of w.sims.slice(i*2,i*2+2)){
       s.villageId=v.id;s.homeId=home.id;s.traits.age=25;s.traits.occupation='jobless';s.education.course=null;

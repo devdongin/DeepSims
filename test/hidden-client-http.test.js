@@ -42,6 +42,17 @@ test('#143 hidden client receives no tick batches and resumes with one current s
       throw new Error('message timeout');
     };
     const initial = await waitFor((m) => m.type === 'snapshot');
+    const industry=await (await fetch(`http://127.0.0.1:${port}/api/industry`)).json();
+    assert.ok(Array.isArray(industry.employment));
+    assert.ok(industry.employment.some(row=>row.villageId==='village:0'));
+    for(const row of industry.employment){
+      assert.equal(row.jobless,row.eligibleJobless+row.ineligibleJobless);
+      assert.equal(row.scope,'resident-local-capacity-proxy');
+      assert.equal(row.sectors.find(s=>s.type==='office').hiringPath,true);
+      assert.ok(Number.isSafeInteger(row.officeConstruction.unmet)&&row.officeConstruction.unmet>=0);
+      assert.ok(Number.isSafeInteger(row.officeConstruction.pendingCapacity));
+    }
+
     assert.ok(initial.world.transportStats.today);assert.ok(Array.isArray(initial.world.transportStats.history));
     assert.equal(initial.world.zoneCosts.train_station,8000,'station UI receives authoritative construction price');
     const legacy=await waitFor(m=>m.type==='tickBatch');

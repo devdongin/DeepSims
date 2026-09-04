@@ -41,6 +41,7 @@ import { validateLogic, logicHash, ZONEABLE } from './logic.js';
 import { applyPolicyCommand } from './policy-command.js';
 import { refreshMoodCounts } from './mood-counts.js';
 import { syncRailNetwork, chooseRailJourney, advanceRail } from './rail.js';
+import { officeConstructionDemand } from './employment.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor, developFromActivity } from './abilities.js'; // §21.1 / #96
 import { makeSim, emptyState } from './simfactory.js';
@@ -240,6 +241,7 @@ const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'pa
 //   no_facility   — 이 행동을 제공하는 시설이 세계에 하나도 없다
 //   capacity_full — 시설은 있는데 자리가 전부 예약돼 있다
 //   unreachable   — 자리는 있는데 길이 막혀 있다 (§17.23 no_path 쿨다운)
+//   unavailable   — 시설은 있지만 사건으로 일시 사용 불가 (신축 수요가 아님)
 // rng 미소비, 세계를 바꾸지 않는다.
 export function facilityShortfallKind(world, sim, action, t) {
   const L = world.logic;
@@ -264,12 +266,12 @@ export function facilityShortfallKind(world, sim, action, t) {
     ? [].concat(L.workplace[sim.traits.occupation] ?? [])
     : action === 'study' ? [schoolFor(sim)] : (ACTION_FACILITY[action] ?? []);
   if (ftypes.length === 0) return null; // 시설을 쓰지 않는 행동
-  let anyFacility = false, anyFree = false;
+  let anyFacility = false, anyFree = false, anyUnavailable = false;
   for (const ftype of ftypes) {
     for (const fac of world.map.facilities) {
       if (fac.type !== ftype) continue;
       if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue;
-      if (world.incidents.some((inc) => inc.facilityId === fac.id)) continue;
+      if (world.incidents.some((inc) => inc.facilityId === fac.id)) { anyUnavailable=true; continue; }
       anyFacility = true;
       for (const res of fac.resources) {
         if (fac.type === 'mall'
@@ -283,7 +285,7 @@ export function facilityShortfallKind(world, sim, action, t) {
       }
     }
   }
-  if (!anyFacility) return 'no_facility';
+  if (!anyFacility) return anyUnavailable?'unavailable':'no_facility';
   if (!anyFree) return 'capacity_full';
   return 'unreachable'; // 자리는 있는데 전부 길이 막혀 있다 (§17.23 쿨다운)
 }
@@ -1739,12 +1741,7 @@ export function tick(world, inputsForThisTick = []) {
           }
         }
         // §17.21 일자리 수요: office 근무 직업 심 수 vs 책상 슬롯 합
-        const officeWorkers = world.sims.filter((s2) => canWork(s2) && L.workplace[s2.traits.occupation] === 'office'
-          && L.occupations[s2.traits.occupation].wagePct > 0).length;
-        const PLANNED_DESKS = 4; // office 자원 수와 같은 값 — 착공 중인 사무실도 센다
-        const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
-          .reduce((n, f) => n + f.resources.length, 0)
-          + world.projects.filter((p2) => p2.type === 'office').length * PLANNED_DESKS;
+        const employmentDemand=officeConstructionDemand(world);
         let type = neededSchool(world);
         if (type === 'university' && !candidates.some(p => zoneAllowedTypes(world,p.villageId).includes(type))) type = null;
         if (type === 'university' && !candidates.some(p => {
@@ -1758,7 +1755,7 @@ export function tick(world, inputsForThisTick = []) {
           // tier는 관측된 세계 상태이고, 타입 선택은 결정적이다.
           type = governmentFor(world,freePlot.villageId).cityTier >= 1 ? 'apartment' : 'house';
         } // 선제 주택 (§17.21)
-        if (!type && officeWorkers > officeDesks) type = 'office';
+        if (!type && employmentDemand.unmet > 0) type = 'office';
         else if (!type && pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (!type && pop > parkSpots * L.construct.parkRatio) type = 'park';
         if (!type) break;
@@ -1771,12 +1768,13 @@ export function tick(world, inputsForThisTick = []) {
         if(!fit&&type==='apartment'){type='house';fit=fits(type);}
         if(!fit)break;
         freePlot=fit; // Validate before charging school/industry funds.
-        if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
+        if (SCHOOL_TYPES.includes(type) || ['office','workshop','lab','warehouse'].includes(type)) {
           const cost=L.zone.costs[type];
           const government=governmentFor(world,freePlot.villageId);
           if(government.treasury<cost)break;
           government.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
           if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:government.treasury});
+          if(type==='office')emit('employment_construction_planned',null,{plotId:freePlot.plotId,cost,treasury:government.treasury,...employmentDemand});
         }
         {
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
