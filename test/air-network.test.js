@@ -62,6 +62,7 @@ test('invalid commissioning cannot partially append airports or issue replacemen
   }
   const n=makeAirNetwork();add(n,airport('a',10));const before=JSON.stringify(n);
   assert.throws(()=>commissionAirport(n,airport('b',40),'project:a',0,cfg),RangeError);
+  assert.throws(()=>commissionAirport(n,airport('a',10),'different-project',1,cfg),RangeError);
   assert.throws(()=>commissionAirport(n,airport('b',40),'project:b',0,{...cfg,capacity:0}),RangeError);
   assert.equal(JSON.stringify(n),before);
 });

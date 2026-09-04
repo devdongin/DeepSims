@@ -34,7 +34,11 @@ export function commissionAirport(network,facility,projectId,tick,config,transpo
   identifier(facility?.id,'airport ID');identifier(facility?.villageId,'municipality');
   identifier(projectId,'completed project ID');nonnegative(tick,'tick');
   if(facility.type!=='airport')throw new RangeError('completed airport required');
-  if(network.airports.some(a=>a.id===facility.id))return null;
+  const existing=network.airports.find(a=>a.id===facility.id);
+  if(existing){
+    if(existing.projectId!==projectId)throw new RangeError('airport belongs to another completed project');
+    return null;
+  }
   if(network.airports.some(a=>a.projectId===projectId))throw new RangeError('project already commissioned');
   if(network.airports.some(a=>a.villageId===facility.villageId&&!a.removed))
     throw new RangeError('municipality already has an airport');
