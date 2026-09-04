@@ -8,6 +8,7 @@ import { migrateWorld } from '../sim/migrate.js';
 import { dailyDiseaseDraws, contagionDraw, maybeImmigration } from '../sim/society.js';
 import { publicBalance } from '../sim/government.js';
 import { addBuilding, plotBuildable } from '../sim/map.js';
+import { SCHEMA_VERSION } from '../sim/constants.js';
 
 const payload = { effect: 'disease', percent: 200, durationTicks: 10 };
 test('world event allowlist rejects malformed and unbounded inputs without mutation', () => {
@@ -105,7 +106,7 @@ test('tick applies sequence order, restores at expiry and resumes exactly throug
   assert.deepEqual(world.worldEvents,[]);
   const old=createWorld(32);old.schemaVersion=74;delete old.worldEvents;
   const before=serialize(old);migrateWorld(old);
-  const expected=deserialize(before);expected.schemaVersion=75;expected.worldEvents=[];
+  const expected=deserialize(before);expected.schemaVersion=SCHEMA_VERSION;expected.worldEvents=[];
   assert.equal(serialize(old),serialize(expected));
   for(const missing of [undefined,null]){
     const current=deserialize(serialize(old));current.worldEvents=missing;

@@ -974,6 +974,9 @@ function applyAssign(world, inp, t, emit) {
     emit('input_rejected', typeof simId === 'number' ? simId : null, { reason: 'invalid', inputId: inp.id ?? null });
     return;
   }
+  // A fresh/migrated resident may receive their first work command now. Only
+  // this command's target is assigned here; unrelated inputs keep stage priority.
+  if(actionType==='work')updateEmployment(world,t,emit,sim.id);
   const cands = collectCandidates(world, sim, [actionType], t, true); // assign은 효용 무시 (PLAN §2)
   const best = pickBest(cands);
   if (!best) {
@@ -1010,9 +1013,6 @@ export function tick(world, inputsForThisTick = []) {
   expireWorldEvents(world, t, emit);
   const sorted = [...inputsForThisTick].sort((a, b) => a.sequence - b.sequence);
   for (const inp of sorted.filter((i) => i.command === 'logic_update')) applyLogicUpdate(world, inp, emit);
-  // Fresh/migrated worlds must have employers before a first-tick work command.
-  // A second validation below handles household moves, without re-drawing valid jobs.
-  updateEmployment(world,t,emit);
   for (const inp of sorted.filter((i) => i.command !== 'logic_update')) {
     if (inp.command === 'assign') applyAssign(world, inp, t, emit);
     else if (inp.command === 'create_player') applyCreatePlayer(world, inp, t, emit);

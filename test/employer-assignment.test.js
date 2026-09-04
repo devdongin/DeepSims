@@ -6,6 +6,7 @@ import {updateEmployment,employerAllows} from '../sim/employer-assignment.js';
 import {TILE} from '../sim/map.js';
 import {makeRng} from '../sim/prng.js';
 import {pfStats} from '../sim/pathfind.js';
+import {Storage} from '../db/storage.js';
 
 function fixture(){
   const w=createWorld(32),s=w.sims[0];w.sims=[s];
@@ -20,7 +21,9 @@ test('employment uses one inverse home-distance draw per facility and then stays
   const {w,s}=fixture(),events=[];
   updateEmployment(w,1,(...e)=>events.push(e));
   const row=events[0][2];
-  assert.deepEqual(row.candidates,[{facilityId:'far',distance:29,weight:33333},{facilityId:'near',distance:3,weight:250000}]);
+  assert.equal(row.candidateCount,2);assert.equal(row.totalWeight,283333);
+  assert.equal(row.weight,row.facilityId==='far'?33333:250000);
+  assert.equal(row.distance,row.facilityId==='far'?29:3);
   assert.equal(typeof row.draw,'number');
   const employer=s.employment.facilityId,rng={...w.rngSim};
   s.x=30;s.y=4;w.map.facilities.find(f=>f.id!==employer&&f.type==='cafe').revenue=1000000;
@@ -116,4 +119,24 @@ test('shared-home assignment measures each destination once and retained jobs ne
   w.map.reachVersion++;
   updateEmployment(w,1440,()=>{});updateEmployment(w,2880,()=>{});
   assert.equal(pfStats.calls-before,2,'a day/network version change does not rerun valid-employer searches');
+});
+
+test('retired residents never receive a fictional paid employer',()=>{
+  const {w,s}=fixture();s.traits.occupation='retired';
+  const rng={...w.rngSim};updateEmployment(w,1,()=>assert.fail('no employer for retirement'));
+  assert.equal(s.employment,null);assert.deepEqual(w.rngSim,rng);
+});
+
+test('many candidate employers retain all choices while keeping real stored event payloads below 1KB',()=>{
+  const {w}=fixture(),template=w.map.facilities.find(f=>f.id==='near');
+  for(let i=0;i<100;i++)w.map.facilities.push({...template,id:`extra${i}`});
+  const events=[];updateEmployment(w,1,(type,simId,payload)=>events.push({tick:1,ordinal:events.length,type,simId,payload}));
+  assert.equal(events[0].payload.candidateCount,102);
+  assert.ok(Buffer.byteLength(JSON.stringify(events[0].payload),'utf8')<=1024);
+  w.worldTick=1;const st=new Storage(':memory:');
+  try{
+    st.loadOrCreate({seed:32,nowUtcMs:1000});
+    st.commitBatch({world:w,events,appliedInputIds:[],epochUtcMs:1000});
+    assert.equal(st.db.prepare('SELECT count(*) AS n FROM events').get().n,events.length);
+  }finally{st.close();}
 });

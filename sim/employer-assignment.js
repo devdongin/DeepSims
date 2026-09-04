@@ -14,14 +14,16 @@ function reachable(world,home,facility){
 // Employment is a lasting relationship, not a daily choice of the richest seat.
 // No wages, revenue, population or positions are created here. Existing occupation
 // hiring/quota logic remains authoritative; this assigns its physical employer.
-export function updateEmployment(world,t,emit){
+export function updateEmployment(world,t,emit,onlySimId=null){
   const facilities=new Map(world.map.facilities.map(f=>[f.id,f]));
   // Siblings sharing a home need the same synchronous distance observation.
   // Discard at return: no invalidation contract or stale cross-tick distance cache.
   const distances=new Map();
   for(const sim of [...world.sims].sort((a,b)=>a.id-b.id)){
+    if(onlySimId!==null&&sim.id!==onlySimId)continue;
     sim.employment??=null;sim.employmentSearch??=null;
-    const types=workplaceTypes(world,sim),eligible=canWork(sim)&&types.length>0;
+    const types=workplaceTypes(world,sim),eligible=canWork(sim)&&types.length>0
+      &&world.logic.occupations[sim.traits.occupation]?.wagePct>0;
     const home=facilities.get(sim.homeId),previous=sim.employment;
     const facility=previous&&facilities.get(previous.facilityId);
     if(previous&&eligible&&previous.occupation===sim.traits.occupation
@@ -52,17 +54,20 @@ export function updateEmployment(world,t,emit){
       if(weight>0n)options.push({facilityId:f.id,distance,weight});
     }
     if(!options.length)continue;
+    const total=options.reduce((n,o)=>n+o.weight,0n);
     let selected=options[0],draw=null;
     if(options.length>1){
       draw=rngNext(world.rngSim);
-      const total=options.reduce((n,o)=>n+o.weight,0n);let sum=0n;
+      let sum=0n;
       for(const o of options){sum+=o.weight;if(BigInt(draw)*total<sum*4294967296n){selected=o;break;}}
     }
     sim.employment={facilityId:selected.facilityId,occupation:sim.traits.occupation,
       assignedTick:t,homeId:sim.homeId};
     sim.employmentSearch=null;
+    // Event payloads have a hard 1KB persistence limit. Keep sufficient selected
+    // draw evidence, not an unbounded list of every facility in a mature world.
     emit('employment_started',sim.id,{...sim.employment,draw,model:'inverse_home_path_distance',
-      candidates:options.map(o=>({...o,weight:Number(o.weight)}))});
+      candidateCount:options.length,totalWeight:Number(total),distance:selected.distance,weight:Number(selected.weight)});
   }
 }
 

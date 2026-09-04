@@ -36,6 +36,7 @@ test('unfunded service capacity, occupied jobs and founding projects are not new
   let sector=employmentStatus(w)[0].sectors.find(s=>s.type==='restaurant');
   assert.equal(sector.vacantCapacity,1);assert.equal(sector.recruitmentVacancies,0);
   w.sims[0].traits.occupation='chef';w.map.facilities.find(f=>f.type==='restaurant').revenue=5000;
+  w.sims[0].employment={facilityId:'restaurant',occupation:'chef'};
   sector=employmentStatus(w)[0].sectors.find(s=>s.type==='restaurant');
   assert.equal(sector.workers,1);assert.equal(sector.recruitmentVacancies,0);
   w.projects[0].foundingPetitionId=1;w.zoneOrders=[];
