@@ -20,6 +20,7 @@ import { surnameFor } from './surnames.js';
 import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단일 정의 공유
 import { isWalkable, isResidence } from './map.js';
 import { emptyState } from './simfactory.js';
+import { refreshMoodCounts } from './mood-counts.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -433,11 +434,16 @@ export function migrateWorld(world) {
   if (from < 66) initializeVillages(world);
   // §23.24 면역은 세이브에 없던 필드다. 0이면 '면역 없음'이라 옛 세계의 행동이 그대로 이어진다.
   if (from < 67) for (const sim of world.sims) sim.immuneUntil ??= 0;
-  if (from < 68) world.founding ??= newFoundingState();
+  // Main also used schema68, but for counters rather than founding. Its saves
+  // need the missing branch field even when their numeric version is already68.
+  world.founding ??= newFoundingState();
   if (from < 69) initializeGovernments(world);
   if (from < 70) initializeMunicipalHistory(world);
   if (from < 71) initializeMunicipalWorks(world);
   if (from < 72) initializeMunicipalGrowth(world);
+  // Both main68 and branch68..72 can arrive here; rebuild once from their actual
+  // dictionaries. Never require a per-tick scan in moodBaseline.
+  if (from < 73) for (const sim of world.sims) refreshMoodCounts(sim,world.logic);
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }

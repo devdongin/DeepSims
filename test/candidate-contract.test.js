@@ -41,10 +41,11 @@ import { collectCandidates } from '../sim/tick.js';
 //   §23.29  (기분에 돈) : 현금 여력이 바닥선에 들어가 첫 틱부터 기분이 갈린다.
 //   #32 schema72/logic80: main의 기분/건설 변경 보존, 신축 배정 이주 저장 계약 반영.
 //   #32 logic81: 역 비용/노동량과 버전만 추가. 역 주문 없는240틱 후보·선택·이벤트는 동일.
+//   §23.32 통합(schema73/logic82): main 카운터와 이관 충돌 해결. 전체 상태 해시 재검증.
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', 'e1177a84']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '0eff605d']],
-  [200, ['91f50dd7', 'a23787ba', '2179523f', '9c20fc94']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', '1a0811fe']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '088102e3']],
+  [200, ['91f50dd7', 'a23787ba', '2179523f', '8734b22d']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

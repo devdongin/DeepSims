@@ -119,6 +119,8 @@ NPC 시장은 재정 리뷰 때 이미 주민이 모여 사는 외곽을 보고 
   `stationDistBoostPct`(25). 관측: `world.transit`, `/api/industry`의 H(운수·창고업) `transit` 필드.
   건설값: `zone.costs.train_station`, `construct.requiredByType.train_station` (logic81).
   기존 세이브는 비용/노동량 기본값만 보충하고 이미 시작한 프로젝트 노동량은 유지한다.
+  최신 main 통합본은 schema73/logic82이며, 양쪽 저장 버전68 충돌을 구분해 개척 필드와
+  관계·습관 집계를 함께 복원한다. 역 건설 규칙은 logic81 도입 시점과 같다.
 
 ## 1.4 혼자 있으면 먼저 말을 건다 (§22.6)
 - 사교하러 갔는데 아무도 없으면, 같은 자리에서 **다른 일을 하고 있는 사람에게 먼저 다가가 청한다.**

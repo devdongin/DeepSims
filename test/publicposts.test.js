@@ -2,6 +2,7 @@
 // 공무원수도 설계되어야지." 여기서 못 박는 것은 **정원이 인구를 따라가는가**다.
 import { test } from 'node:test';
 import { moodBaseline } from '../sim/tick.js';
+import { refreshMoodCounts } from '../sim/mood-counts.js';
 import assert from 'node:assert/strict';
 import { createWorld, advance, hashWorld, serialize, deserialize } from '../sim/index.js';
 import { publicQuota, publicHeadcount, publicPostAvailable, fillPublicPosts, trimOverQuotaPosts } from '../sim/publicposts.js';
@@ -212,6 +213,7 @@ test('M-1. 삶의 조건이 다르면 기분의 바닥이 다르다', () => {
   a.homeId = null; a.traits.occupation = 'jobless'; a.sick = { kind: 'cold', untilTick: 9e9 };
   b.homeId = w.map.facilities.find((f) => f.type === 'house').id;
   b.relTiers = { 2: 'friend', 3: 'friend', 4: 'friend' };
+  refreshMoodCounts(a,L);refreshMoodCounts(b,L); // Direct fixture dictionaries bypass normal transition writers.
   w.partners[b.id] = 5; w.partnerStage[b.id] = 'married';
   assert.ok(moodBaseline(b, w, L) > moodBaseline(a, w, L) + 1000,
     `가진 것이 많은 쪽의 바닥이 안 높다 (${moodBaseline(a, w, L)} vs ${moodBaseline(b, w, L)})`);
@@ -232,6 +234,7 @@ test('M-3. 기분은 바닥선으로 수렴한다 (0이 아니라)', () => {
   const w = createWorld(4242);
   const s = w.sims.find((x) => x.homeId) ?? w.sims[0];
   s.relTiers = { 2: 'friend', 3: 'friend' };
+  refreshMoodCounts(s,w.logic);
   const base = moodBaseline(s, w, w.logic);
   s.mood = 9000;
   advance(w, {}, 1440 * 3);

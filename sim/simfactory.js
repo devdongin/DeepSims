@@ -83,6 +83,9 @@ export function makeSim({
     groceries: 0,
     sick: null,
     immuneUntil: 0,   // §23.24 앓고 난 뒤 이 틱까지는 다시 안 걸린다
+    // §23.32 기분 바닥선(§23.25)이 매 틱 relTiers 260칸과 habit을 다시 세느라 시뮬 시간의
+    // **23.4%**를 먹고 있었다(프로파일 실측). 세는 대신 **쓸 때 갱신한다.**
+    friendCount: 0, rivalCount: 0, habitCount: 0,
     noPathCool: {},
     patrolIdx: 0,
     hasCar: false,
