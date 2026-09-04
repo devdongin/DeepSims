@@ -2740,6 +2740,9 @@ function eventText(e) {
     case 'flight_boarded': return `✈️ ${n}: 항공편에 탑승했습니다 (대기 ${e.payload.waitTicks}틱)`;
     case 'flight_alighted': return `✈️ ${n}: 공항에 도착해 내렸습니다`;
     case 'flight_transfer': return `✈️ ${n}: 다음 항공편으로 환승합니다`;
+    case 'flight_holding': return `✈️ 착륙 가능한 공항이 없어 항공편이 기내 대기 중입니다`;
+    case 'flight_diverted': return `✈️ 항공편이 착륙 가능한 공항으로 이동합니다`;
+    case 'flight_diversion_landed': return `✈️ ${n}: 운항 중단 후 공항에 안전하게 내렸습니다`;
     case 'employment_ended': return `💼 ${n}: ${placeKo(e.payload.facilityId)}에서의 고용이 종료됐습니다`;
     case 'plot_relocated':
       return `\u{1f4d0} ${townKo(e.payload.villageId)} 공사 자리를 (${e.payload.x}, ${e.payload.y})로 옮겼습니다`;

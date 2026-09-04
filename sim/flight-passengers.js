@@ -1,4 +1,5 @@
 import {flightServiceAt} from './flight-schedule.js';
+import {validateFlightPassengers} from './flight-validation.js';
 
 // Normal-service passenger executor. World integration must process access-walk
 // arrivals before this function, and handle unavailable/diverting aircraft in a
@@ -9,6 +10,7 @@ export function advanceScheduledFlights(links,sims,tick,transferTicks,emit){
   const ordered=[...links].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);
   const byId=new Map(sims.map(s=>[s.id,s]));
   const operations=[];
+  const occupancy=validateFlightPassengers(ordered,sims,tick);
   // Validate the entire batch first; a closure cannot silently freeze airborne
   // passengers under this normal-service executor.
   for(const link of ordered){
@@ -24,10 +26,7 @@ export function advanceScheduledFlights(links,sims,tick,transferTicks,emit){
   for(const {link,service} of operations){
     const aircraft=link.aircraft;
     aircraft.x=service.position.x;aircraft.y=service.position.y;
-    aircraft.passengers=aircraft.passengers.filter(id=>{
-      const sim=byId.get(id),j=sim?.state?.flight;
-      return sim?.state.kind==='flying'&&j?.legs[j.legIndex]?.linkId===link.id;
-    });
+    aircraft.passengers=occupancy.get(link.id);
     for(const id of [...aircraft.passengers]){
       const sim=byId.get(id),j=sim.state.flight,leg=j.legs[j.legIndex];
       sim.x=aircraft.x;sim.y=aircraft.y;

@@ -100,3 +100,26 @@ test('actual boarding, transfer and alighting events pass the registered 1KB sto
     assert.deepEqual(storage.db.prepare('SELECT type FROM events ORDER BY tick,ordinal').all().map(e=>e.type),events.map(e=>e.type));
   }finally{storage.close();}
 });
+
+test('duplicate saved occupancy is cleaned before a single successful alighting',()=>{
+  const links=[link('AB','A','B',0)],sims=[passenger(1,links,'A','B')];run(links,sims,0,2);
+  links[0].aircraft.passengers.push(1,999);
+  const events=run(links,sims,3,12);
+  assert.equal(events.filter(e=>e.type==='flight_alighted').length,1);
+  assert.equal(sims[0].state.kind,'flight_arrived');assert.deepEqual(links[0].aircraft.passengers,[]);
+});
+
+test('malformed saved itinerary, resident IDs and capacity reject before mutation or events',()=>{
+  for(const kind of ['noncontiguous','duplicate_sim','direction','timing','missing_occupancy','over_capacity']){
+    const links=[link('AB','A','B',0)],sims=[passenger(1,links,'A','B')];run(links,sims,0,2);
+    if(kind==='noncontiguous')sims[0].state.flight.legs.push({linkId:'BC',from:'wrong',to:'C'});
+    if(kind==='duplicate_sim')sims.push(JSON.parse(JSON.stringify(sims[0])));
+    if(kind==='direction')sims[0].state.flight.legs[0].to='wrong';
+    if(kind==='timing')sims[0].state.flight.boardedTick=999;
+    if(kind==='missing_occupancy')links[0].aircraft.passengers=[];
+    if(kind==='over_capacity'){const second=JSON.parse(JSON.stringify(sims[0]));second.id=2;sims.push(second);links[0].aircraft.passengers.push(2);}
+    const before=JSON.stringify({links,sims}),events=[];
+    assert.throws(()=>advance(links,sims,12,3,(...e)=>events.push(e)),RangeError,kind);
+    assert.equal(JSON.stringify({links,sims}),before,kind);assert.deepEqual(events,[],kind);
+  }
+});
