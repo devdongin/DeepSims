@@ -2811,7 +2811,14 @@ function eventText(e) {
     case 'public_revenue_remitted': return `🏛️ ${placeKo(e.payload.facilityId)}의 수입 ${e.payload.amount.toLocaleString()}원이 국고로 들어왔습니다`;
     // 초대와 거절 — 60일에 1,100건. 누가 누구를 불렀고 거절당했다는 드라마가 무성이었다.
     case 'invited': return `🙋 ${ga(n)} ${simName(e.payload.toSimId)}에게 같이 가자고 했습니다`;
-    case 'invite_declined': return `🙅 ${ga(simName(e.payload.toSimId))} ${ne(n)} 청을 거절했습니다`; // §23.47 조사는 헬퍼로
+    case 'invite_declined': {
+      // §23.54 몇 번째인지를 말한다. 거절은 하루 20건 넘게 나는 바탕음이지만,
+      // **같은 사람에게 거듭 거절당하는 것**은 며칠 뒤 말다툼의 예고다.
+      // 그 상승이 화면에 없으면 💢가 아무 맥락 없이 떨어진다.
+      const again = (e.payload.priors ?? 0) >= 1
+        ? ` (${(e.payload.priors ?? 0) + 1}번째)` : '';
+      return `\U0001f645 ${ga(simName(e.payload.toSimId))} ${ne(n)} 청을 거절했습니다${again}`;
+    }
     case 'invite_fulfilled': return `🤝 ${ga(n)} ${simName(e.payload.toSimId)}와 약속한 자리에 함께 왔습니다`;
     case 'item_found': return `✨ ${ga(n)} 길에서 ${e.payload.amount}원을 주웠습니다!`;
     case 'fish_caught': return `🎣 ${ga(n)} ${e.payload.amount}원짜리 물고기를 낚았습니다!`;
@@ -2980,6 +2987,14 @@ function feedPasses(e) {
   // §23.47 단, **내려온** 아는 사이는 이야기다. 위 92%는 전부 stranger → acquaintance
   // 였다 — 친구였다가 식은 것을 같은 이유로 숨기면 관계가 나빠지는 과정만 화면에서
   // 통째로 사라진다. 올라온 것만 숨긴다.
+  // §23.54 **거듭된 거절은 이야기다.** 거절 자체는 하루 20건 넘는 바탕음이라
+  // FEED_STORY에 없다(옳다). 그런데 같은 사람에게 두 번째로 거절당하는 것은 60일에
+  // 125건, 하루 2건뿐이고 — 며칠 뒤 💢 말다툼의 **예고**다. 이게 없으면 말다툼이
+  // 아무 준비 없이 떨어진다(스토리 리뷰: "상승 없이 전환만 온다").
+  // 첫 거절은 사정이므로 여기 올리지 않는다.
+  if (feedFilter === 'story' && e.type === 'invite_declined') {
+    return (e.payload?.priors ?? 0) >= 1;
+  }
   if (feedFilter === 'story' && e.type === 'relationship_changed'
       && e.payload?.tier === 'acquaintance'
       && e.payload?.prevTier !== 'friend' && e.payload?.prevTier !== 'rival') return false;

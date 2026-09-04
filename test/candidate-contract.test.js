@@ -71,9 +71,12 @@ for (const [pop, expected] of [
   //     logic101 (§23.52 갈등 소식 채널): 후보·선택·이벤트 세 해시가 위와 **또 동일**하고
   //     세계 해시만 움직였다. 초기 240틱에는 대화 자체가 없어 topicWeights를 한 번도
   //     참조하지 않으므로 rngSim 소비가 그대로고, 바뀐 것은 새 상태 필드(recentConflicts)뿐이다.
+  //     §23.54 (거절 payload에 priors 추가): **이벤트 해시만** 움직였다(인구 50·200).
+  //     후보·선택·세계는 그대로다 — 세계 상태도 결정도 안 바뀌고 이벤트가 사실을 하나
+  //     더 싣기만 했다는 뜻이다. 인구 10은 240틱 안에 반복 거절이 없어 그대로다.
   [10, ['272da7d7', '4ae751f3', '9bcc9d00', '2e94771e']],
-  [50, ['8f96407c', '31c608eb', '1a80ff90', '61505467']],
-  [200, ['23a3029f', 'df690287', 'd6564dc2', 'b38229b8']],
+  [50, ['8f96407c', '31c608eb', '413a3388', '61505467']],
+  [200, ['23a3029f', 'df690287', '6a7a0043', 'b38229b8']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

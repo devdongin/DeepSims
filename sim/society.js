@@ -1589,7 +1589,12 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
         recordFact(target, t, world.logic, 'argument', { subjectSimId: sim.id, placeId: fidD,
           tags: ['argument', `facility:${fidD}`, `sim:${sim.id}`] });
       }
-      emit('invite_declined', sim.id, { toSimId: target.id, facilityId: fidD, relation: tier ?? 'stranger' });
+      // §23.54 몇 번째 거절인지를 함께 보낸다. 스토리 리뷰의 지적: payload에 이 정보가
+      // 없어서 클라가 **첫 번째 정중한 거절과 일곱 번째 거절을 구분할 수 없었다.**
+      // 그래서 화면에는 상승 없이 전환만 왔다 — 며칠 뒤의 💢 말다툼이 아무 준비 없이
+      // 떨어졌다. 세계는 그 횟수를 이미 세고 있었고(priors) 한 줄이 그걸 버리고 있었다.
+      emit('invite_declined', sim.id, { toSimId: target.id, facilityId: fidD,
+        relation: tier ?? 'stranger', priors });
     }
   }
   return sideTalked;
