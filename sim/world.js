@@ -92,6 +92,7 @@ export function createWorld(seed) {
 
   const world = {
     schemaVersion: SCHEMA_VERSION,
+    worldEvents: [],
     treasury: DEFAULT_LOGIC.economy.initialTreasury ?? 0, // §17.15 국고 · §22.78 종잣돈
     reputation: 0, // §17.21 마을 평판 — 행동 이벤트 누적, 이민 웨이브 규모 결정
     incidents: [], // §17.20 사건: { type:'fire', facilityId, sinceTick }

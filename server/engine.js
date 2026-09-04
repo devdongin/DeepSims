@@ -212,6 +212,7 @@ export class Engine {
       const batch = this.runLive(n);
       batch.publicTreasury=publicBalance(this.world);
       batch.rail=railView(this.world.rail);
+      batch.worldEvents=this.world.worldEvents;
       batch.policyDefaults=Object.fromEntries(Object.keys(POLICY_FIELDS).map(key=>[key,this.world.logic.economy[key]]));
       // §22.8 sims는 **화면이 쓰는 필드만** 투영해 보낸다 (라이브 실측 71배 절감).
       // §23.39 배치에는 **변동분만** 싣는다. 정적 부분(이름·특성·능력치·학력)은 클라이언트마다
