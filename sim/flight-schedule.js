@@ -32,6 +32,7 @@ export function flightPosition(from, to, elapsed, duration) {
 
 function timing(link) {
   integer(link.openedTick, 'openedTick');
+  integer(link.serviceEpochTick ?? link.openedTick, 'serviceEpochTick');
   integer(link.pausedTicks ?? 0, 'pausedTicks');
   integer(link.speed, 'speed', 1); integer(link.dwellTicks, 'dwellTicks', 1);
   if (link.from === link.to) throw new RangeError('distinct airports required');
@@ -48,7 +49,7 @@ function timing(link) {
 export function flightServiceAt(link, tick) {
   integer(tick, 'tick');
   const { rideTicks, dwell, period } = timing(link);
-  const clock = tick - link.openedTick - (link.pausedTicks ?? 0);
+  const clock = tick - (link.serviceEpochTick ?? link.openedTick) - (link.pausedTicks ?? 0);
   if (clock < 0) return null;
   const phase = clock % period;
   if (phase <= dwell) return { kind: 'docked', airportId: link.from,
@@ -69,7 +70,7 @@ export function nextFlight(link, from, readyTick) {
   const { rideTicks, dwell, period } = timing(link);
   if (link.blocked || (from !== link.from && from !== link.to)) return null;
   const reverse = from === link.to;
-  const first = integer(link.openedTick + (link.pausedTicks ?? 0)
+  const first = integer((link.serviceEpochTick ?? link.openedTick) + (link.pausedTicks ?? 0)
     + (reverse ? 2 * dwell + rideTicks : dwell), 'first departure');
   const cycles = Math.max(0, Math.ceil((readyTick - first) / period));
   const departureTick = integer(first + cycles * period, 'departureTick');

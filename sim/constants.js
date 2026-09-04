@@ -117,6 +117,7 @@ export const EVENT_TYPES = [
   'employment_started', 'employment_ended',
   'flight_boarded', 'flight_alighted', 'flight_transfer',
   'flight_holding', 'flight_diverted', 'flight_diversion_landed',
+  'flight_service_resumed',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];
