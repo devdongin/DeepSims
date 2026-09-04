@@ -6,8 +6,8 @@ import {rngNext} from './prng.js';
 const compare=(a,b)=>a<b?-1:a>b?1:0;
 const PRECISION=1000000n; // Fixed-point representation, not a behavioral multiplier.
 
-export function chooseMigrationHome(world,origin,options){
-  const ordered=[...options].sort((a,b)=>a.rent-b.rent||compare(a.home.id,b.home.id));
+export function chooseMigrationHome(world,origin,options,{preference='rent'}={}){
+  const ordered=[...options].sort((a,b)=>(preference==='id'?0:a.rent-b.rent)||compare(a.home.id,b.home.id));
   if(!ordered.length)return null;
   // Preserve the original single-town path, including its RNG consumption.
   if(world.villages.length<2)return {home:ordered[0].home};
@@ -16,7 +16,7 @@ export function chooseMigrationHome(world,origin,options){
     const home=option.home;
     if(!world.villages.some(v=>v.id===home.villageId)||groups.has(home.villageId))continue;
     if(!sameRegion(world.map,origin.door.x,origin.door.y,home.door.x,home.door.y))continue;
-    groups.set(home.villageId,option); // Cheapest reachable home, not one gravity ticket per home.
+    groups.set(home.villageId,option); // Preferred reachable home, not one gravity ticket per home.
   }
   const populations=new Map();
   for(const sim of world.sims)populations.set(sim.villageId,(populations.get(sim.villageId)??0)+1);
@@ -35,8 +35,8 @@ export function chooseMigrationHome(world,origin,options){
   if(candidates.length===1){selected=candidates[0];fallback='single_destination';}
   else if(positive.length===1){selected=positive[0];fallback='single_positive_destination';}
   else if(total===0n){
-    // No observed population to weight: retain economic choice, do not invent mass.
-    selected=[...candidates].sort((a,b)=>a.rent-b.rent||compare(a.homeId,b.homeId))[0];fallback='zero_population';
+    // No observed population to weight: retain the caller's home preference, not invented mass.
+    selected=[...candidates].sort((a,b)=>(preference==='id'?0:a.rent-b.rent)||compare(a.homeId,b.homeId))[0];fallback='zero_population';
   }else{
     draw=rngNext(world.rngSim);let cumulative=0n;
     for(const c of candidates){
@@ -45,6 +45,7 @@ export function chooseMigrationHome(world,origin,options){
     }
   }
   return {home:groups.get(selected.villageId).home,evidence:{model:'conditional_gravity',
+    ...(preference==='id'?{homePreference:'id'}:{}),
     fromVillageId:origin.villageId,sourcePopulation:populations.get(origin.villageId)??0,
     candidates,draw,fallback,selectedVillageId:selected.villageId}};
 }

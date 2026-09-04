@@ -39,7 +39,8 @@ export function beginHouseholdMigration(w,i,target,t,emit){
   i.relocation={phase:'gathering',assembly:{...origin.door},routeVersion:-1,distance:null,startedTick:null};
   target.migrationIntentId=i.intentId;
   emit('household_migration_gathering',i.simId,{intentId:i.intentId,kind:i.kind,memberIds:[...i.memberIds],
-    targetHomeId:target.id,fromVillageId:i.fromVillageId,toVillageId:i.toVillageId});
+    targetHomeId:target.id,fromVillageId:i.fromVillageId,toVillageId:i.toVillageId,
+    ...(i.kind==='separate'&&i.migrationChoice?{migrationChoice:i.migrationChoice}:{})});
   return null;
 }
 function cancel(w,i,reason,emit){

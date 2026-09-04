@@ -7,6 +7,7 @@ import {emptyState} from '../sim/simfactory.js';
 import {evaluateHouseholds,applyHouseholdIntents} from '../sim/household.js';
 import {advanceHouseholdMigrations,completeHouseholdMigrations} from '../sim/household-migration.js';
 import {planIndependentHousehold} from '../sim/independent-household.js';
+import {rngNext} from '../sim/prng.js';
 
 function fixture(){
   const w=createWorld(32);
@@ -31,6 +32,27 @@ function fixture(){
 const money=w=>publicBalance(w)+w.sims.reduce((n,s)=>n+s.money,0)
   +w.map.facilities.reduce((n,f)=>n+(f.revenue??0),0)+w.externalOutflow-w.externalInflow;
 function prepare(w){evaluateHouseholds(w,0,0,()=>{});assert.equal(w.householdIntents.length,1);}
+
+test('independence chooses populated municipalities once and persists its conditional weights across saves',()=>{
+  const {w,small,to,from}=fixture();
+  const far=addBuilding(w.map,'apartment',{x:60,y:40,villageId:'village:2'},0);
+  far.id='c-family';w.villages.push({id:'village:2',name:'세번째',center:{...far.door},government:newGovernment()});
+  w.sims[4].homeId=small.id;w.sims[4].villageId='village:1';
+  const resident=structuredClone(w.sims[4]);resident.id=5;resident.homeId=far.id;resident.villageId='village:2';
+  w.sims.push(resident);
+  const vacant=addBuilding(w.map,'apartment',{x:75,y:40,villageId:'village:2'},0);vacant.id='d-family';
+  prepare(w);const copy=deserialize(serialize(w)),rng={...w.rngSim},draw=rngNext(rng),events=[],replayed=[];
+  applyHouseholdIntents(w,1,(...e)=>events.push(e));applyHouseholdIntents(copy,1,(...e)=>replayed.push(e));
+  assert.deepEqual(events,replayed);assert.equal(serialize(w),serialize(copy));assert.deepEqual(w.rngSim,rng);
+  const intent=w.householdIntents[0],evidence=intent.migrationChoice;
+  assert.equal(evidence.draw,draw);assert.equal(evidence.model,'conditional_gravity');
+  assert.deepEqual(evidence.candidates.map(c=>c.villageId),['village:1','village:2']);
+  assert.ok(evidence.candidates.every(c=>c.population===1&&c.distance>0&&c.weight===Math.floor(1000000/c.distance)));
+  assert.ok([to.id,vacant.id].includes(intent.targetHomeId));assert.equal(w.sims[1].homeId,from.id);
+  assert.deepEqual(events[0][2].migrationChoice,evidence);
+  applyHouseholdIntents(w,2,()=>assert.fail('gathering must not redraw the destination'));
+  assert.deepEqual(w.rngSim,rng);assert.equal(serialize(deserialize(serialize(w))),serialize(w));
+});
 
 test('independence plans the adult spouse and cohabiting minor descendants, not parents or siblings',()=>{
   const {w}=fixture();

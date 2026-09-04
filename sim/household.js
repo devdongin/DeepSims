@@ -6,6 +6,7 @@ import { isSettlementInTransit } from './settlement.js';
 import { beginHouseholdMigration } from './household-migration.js';
 import { planIndependentHousehold } from './independent-household.js';
 import { canWork } from './education.js';
+import { chooseMigrationHome } from './migration-choice.js';
 
 const employed = (world, sim) => canWork(sim)
   && (world.logic.occupations[sim.traits.occupation]?.wagePct ?? 0) > 0;
@@ -67,9 +68,16 @@ export function applyHouseholdIntents(world, t, emit) {
     else if (sim.money < world.logic.household.reserveMoney) reason = 'reserve_short';
     const family=!reason&&world.villages.length>1?planIndependentHousehold(world,sim.id,sim.villageId):null;
     const origin=!reason?world.map.facilities.find(f=>f.id===sim.homeId):null;
-    const vacant = reason ? null : vacantResidences(world,sim.homeId).find(h=>h.villageId===sim.villageId
+    const options = reason ? [] : vacantResidences(world,sim.homeId).filter(h=>h.villageId===sim.villageId
       ||(family?.ok&&h.resources.length>=family.residents.length&&origin
         &&sameRegion(world.map,origin.door.x,origin.door.y,h.door.x,h.door.y)));
+    // Preserve within-town ID preference; only the municipality distribution
+    // changes. Separation eligibility remains independent of destination choice.
+    const choice=world.villages.length>1&&origin
+      ?chooseMigrationHome(world,origin,options.map(home=>({home,rent:askingRent(world,home)})),{preference:'id'})
+      :options.length?{home:options[0]}:null;
+    const vacant=choice?.home;
+    if(choice?.evidence)intent.migrationChoice=choice.evidence;
     if (!reason && !vacant) reason = 'no_vacant_home';
     if(!reason&&vacant.villageId!==sim.villageId){
       reason=beginHouseholdMigration(world,intent,vacant,t,emit);
@@ -85,7 +93,8 @@ export function applyHouseholdIntents(world, t, emit) {
       syncResidenceVillage(world, sim.id);
       sim.householdId = `household:${sim.id}:${intent.intentId}`;
       sim.independenceDays = 0;
-      emit('household_intent_applied', sim.id, { intentId:intent.intentId, from, to:vacant.id, householdId:sim.householdId });
+      emit('household_intent_applied', sim.id, { intentId:intent.intentId, from, to:vacant.id, householdId:sim.householdId,
+        ...(intent.migrationChoice?{migrationChoice:intent.migrationChoice}:{}) });
       emit('moved_home', sim.id, { from, to:vacant.id, reason:'independence' });
     }
     world.householdIntents.splice(world.householdIntents.indexOf(intent),1);

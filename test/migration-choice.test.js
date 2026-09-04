@@ -36,6 +36,18 @@ test('input order and additional houses do not multiply a municipality populatio
   const b=chooseMigrationHome(copy,origin,[{home:{id:'extra',villageId:'village:1',door:{x:15,y:2}},rent:20},...options].reverse());
   assert.deepEqual(a,b);assert.deepEqual(world.rngSim,copy.rngSim);
 });
+test('independence home-ID preference preserves real rent evidence and deterministic no-population fallback',()=>{
+  const {world,origin,options}=fixture();world.sims=[];
+  options[0].home.id='a-expensive';options[0].rent=100;
+  options[1].home.id='b-cheap';options[1].rent=1;
+  const before={...world.rngSim};
+  const choice=chooseMigrationHome(world,origin,options,{preference:'id'});
+  assert.equal(choice.home.id,'a-expensive');assert.equal(choice.evidence.homePreference,'id');
+  assert.equal(choice.evidence.candidates[0].rent,100);assert.deepEqual(world.rngSim,before);
+  world.villages=world.villages.slice(0,1);
+  assert.equal(chooseMigrationHome(world,origin,options,{preference:'id'}).home.id,'a-expensive');
+  assert.deepEqual(world.rngSim,before);
+});
 test('routing excludes disconnected homes and measures detours rather than straight-line distance',()=>{
   const a=fixture();for(let y=0;y<4;y++)a.world.map.tiles[y*64+7]=TILE.WATER;
   assert.equal(chooseMigrationHome(a.world,a.origin,a.options).evidence.candidates[0].distance,14);
