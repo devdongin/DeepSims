@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DeepSims — 해솔마을</title>
   <style>
+    .world-events-dialog { font-size:14px; }
+    .world-events-dialog::backdrop { background:rgba(0,0,0,.6); }
+    .world-events-dialog h2, .world-events-dialog h3 { color:#ffcf6a; margin-bottom:8px; }
+    .world-events-dialog p { margin:10px 0; }
+    .world-events-dialog input, .world-events-dialog select { padding:6px; background:#14100b; color:#ead9b0; border:1px solid #8a7048; border-radius:5px; max-width:100%; }
+    .world-events-dialog input { width:100px; }
+    .world-events-dialog button { padding:8px 12px; margin-top:8px; background:#ffcf6a; color:#171310; border:0; border-radius:6px; cursor:pointer; font-weight:bold; }
+    .world-events-dialog :disabled { opacity:.6; cursor:wait; }
+    .world-events-dialog :focus-visible { outline:2px solid #fff1ce; outline-offset:2px; }
+    .world-events-dialog [role=status] { min-height:2em; color:#ffdc91; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Apple SD Gothic Neo', Pretendard, sans-serif; background: #171310; color: #ead9b0; overflow: hidden; }
     #app { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: 52px 1fr; height: 100vh; }
@@ -128,6 +138,7 @@
       <button id="goals-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🏆 목표</button>
       <button id="policy-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🏛️ 시정</button>
       <button id="planning-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">📍 도시계획</button>
+      <button id="world-events-btn" style="padding:3px 10px;background:#3a2e1d;color:#ead9b0;border:1px solid #6b5638;border-radius:6px;cursor:pointer;font-size:12px">🌐 세계 사건</button>
       <canvas id="spark" width="120" height="30" title="인구(초록)·국고(금색) 추이" style="border:1px solid #3a2e1d;border-radius:4px;background:#14100b"></canvas>
       <div id="status">접속 중…</div>
     </div>
