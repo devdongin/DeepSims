@@ -108,6 +108,11 @@ export const EVENT_TYPES = [
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
   'founding_gathering', 'founding_departed', 'village_founded',
+  'plot_relocated', 'construction_relocation_deferred',
+  'household_migration_gathering', 'household_migration_departed',
+  'employment_construction_planned', 'village_land_assigned',
+  'rail_opened', 'rail_cancelled', 'rail_suspended', 'rail_resumed',
+  'rail_alighted', 'rail_boarded',
   'employment_started', 'employment_ended',
 ];
 
