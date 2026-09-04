@@ -649,3 +649,16 @@ test('QA-20. §23.49 등록된 모든 이벤트가 피드 문장을 갖거나 �
   const stale = [...SILENT_BY_DESIGN.keys()].filter((t) => !EVENT_TYPES.includes(t));
   assert.deepEqual(stale, [], `등록되지 않은 타입이 침묵 목록에 남아 있다: ${stale.join(', ')}`);
 });
+
+// §23.48 등록표에 같은 타입이 두 번 들어가는 것을 막는다.
+//
+// 이 테스트가 없어서 생긴 일: 미등록 이벤트 12종을 이쪽과 병렬 작업이 **각자 따로**
+// 고쳐서 EVENT_TYPES가 132개(유일 120개)가 됐다. `.includes` 검사라 동작은 멀쩡했고
+// 아무 테스트도 깨지지 않았다 — 그래서 붙잡아 두지 않으면 계속 쌓인다.
+// append-only 규약은 "끝에 붙인다"이지 "두 번 붙여도 된다"가 아니다.
+test('QA-21. §23.48 이벤트 등록표에 중복이 없다', async () => {
+  const { EVENT_TYPES } = await import('../sim/constants.js');
+  const seen = new Set(); const dup = [];
+  for (const t of EVENT_TYPES) { if (seen.has(t)) dup.push(t); seen.add(t); }
+  assert.deepEqual(dup, [], `EVENT_TYPES 중복 등록: ${dup.join(', ')}`);
+});

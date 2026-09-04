@@ -109,6 +109,12 @@ export const EVENT_TYPES = [
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
   'founding_gathering', 'founding_departed', 'village_founded',
   // §23.48 / #173: shared registry fix, registered once at its original append position.
+  // 아래 12종은 §117 이주·§118 철도·#151 고용유발 건설이 emit하는데 등록이 빠져 있었다.
+  // db/storage.js:153이 커밋 트랜잭션에서 던지므로 **라이브가 죽는 자리**였다 —
+  // 16c가 잡아주기 전까지 조용했던 것은 테스트 궤적이 거기 닿지 않았기 때문이지
+  // 안전해서가 아니었다. §22.91의 sidewalk_formed와 똑같은 사고가 반복됐고, 이번에는
+  // 병렬 작업과 이쪽이 **각자 따로** 같은 12종을 등록해 중복까지 났다. 등록은 여기 한 곳이고,
+  // QA-21이 중복을 깨뜨린다.
   'plot_relocated', 'construction_relocation_deferred',
   'household_migration_gathering', 'household_migration_departed',
   'employment_construction_planned', 'village_land_assigned',
