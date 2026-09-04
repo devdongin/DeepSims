@@ -1672,8 +1672,15 @@ export function tick(world, inputsForThisTick = []) {
       while (world.projects.length < maxProjects) {
       // §19.3: 이미 착공 중인 공터는 제외 (중복 배정 금지)
       const busy = new Set(world.projects.map((p) => p.plotId));
-      const candidates = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)
-        &&!foundingSiteReserved(world,p,'office')&&!campusSiteReserved(world,p,'office')); // 기본 후보 footprint 7×5
+      // §23.35 후보를 **가장 작은 구역 발자국**으로 거른다. 여태 plotBuildable의 기본값
+      // 7×5로 걸렀는데 집은 6×5다. 그래서 집이 들어가는 공터가 후보에서 통째로 빠졌고,
+      // candidates가 비면 무엇을 지을지 정하기도 전에 아래 `if (!freePlot) break`가
+      // 그날 계획을 끝냈다. **지을 건물과 상관없는 치수로 미리 거른 것이다.**
+      // 장르 리뷰 실측(400일): 남은 공터 26곳 중 7×5로는 0곳, 6×5로는 25곳이 통과.
+      // 국고 239만·빈 땅 25곳을 쥐고 250일간 한 채도 못 지었다.
+      const candidates = world.plots.filter((p) => !p.used && !busy.has(p.plotId)
+        && plotBuildable(world.map, p, 6, 5)
+        &&!foundingSiteReserved(world,p,'house')&&!campusSiteReserved(world,p,'house'));
       const centers = [
         ...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)),
         ...(world.centers ?? []),
@@ -1746,19 +1753,22 @@ export function tick(world, inputsForThisTick = []) {
         else if (!type && pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (!type && pop > parkSpots * L.construct.parkRatio) type = 'park';
         if (!type) break;
-        if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
+        const fits=type=>candidates.find(p=>{
           const fp=zoneFootprint(type,0);
-          freePlot=candidates.find(p=>zoneAllowedTypes(world,p.villageId).includes(type)
-            &&plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type)
-            &&!campusSiteReserved(world,p,type));
-          if(!freePlot) break;
+          return zoneAllowedTypes(world,p.villageId).includes(type)&&plotBuildable(world.map,p,fp.w,fp.h)
+            &&!foundingSiteReserved(world,p,type)&&!campusSiteReserved(world,p,type);
+        });
+        let fit=fits(type);
+        if(!fit&&type==='apartment'){type='house';fit=fits(type);}
+        if(!fit)break;
+        freePlot=fit; // Validate before charging school/industry funds.
+        if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
           const cost=L.zone.costs[type];
           const government=governmentFor(world,freePlot.villageId);
           if(government.treasury<cost)break;
           government.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
           if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:government.treasury});
         }
-        if (campusSiteReserved(world,freePlot,type)) break;
         {
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
           const base5 = L.construct.requiredByType?.[type] ?? L.construct.laborRequired;
