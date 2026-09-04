@@ -57,9 +57,10 @@ import { collectCandidates } from '../sim/tick.js';
 //   schema75/logic93: 빈 worldEvents 저장 필드 추가. 사건 없는 3시드×4320틱의
 //     이벤트/전체 상태가 버전과 빈 목록 제외 부모e1ae1ed와 동일함을 검증했다.
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', '07a1a631']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '676534d6']],
-  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', '145cfe66']],
+  // logic94: no-event3×4320 tick state/event equivalence; version-only hash change.
+  [10, ['272da7d7', '32b2391b', 'ddff0557', 'f486b566']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', 'a615b859']],
+  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', 'a7e8154b']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

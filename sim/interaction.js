@@ -2,6 +2,7 @@
 // payload 계약(확정): 코드베이스 관례를 따른다 — 이벤트 simId = 화자/발신자, payload.withSimId = 상대.
 // (argument·relationship_changed와 동일 형태. D8 초안의 aSimId/bSimId 표기는 이 관례로 대체.)
 import { rngInt } from './prng.js';
+import { worldEventPercent } from './world-events.js';
 import { AFFINITY_MIN, AFFINITY_MAX, CLUBS } from './constants.js';
 import { applyGossipInfluence } from './society.js';
 
@@ -122,6 +123,13 @@ export function maybeConverse(world, a, b, facId, t, transferHappened, emit) {
         candidates.push({ key: 'club_talk', w: 30, about: null, detail: { clubId: club.id } });
         break;
       }
+    }
+    // External events change weights only after real context eligibility.
+    // Zero-weight topics are removed; the existing weather fallback stays intact.
+    for (let i = candidates.length - 1; i >= 0; i--) {
+      const c = candidates[i];
+      c.w = Math.floor(c.w * worldEventPercent(world, `topic_${c.key}`, t) / 100);
+      if (c.w <= 0) candidates.splice(i, 1);
     }
     // 같은 상대에게 최근 주제를 연달아 반복하지 않는다. 모든 후보가 제외되면
     // weather로 폴백해 발화 자체는 보존한다.
