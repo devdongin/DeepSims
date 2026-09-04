@@ -465,9 +465,8 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
     if (action === 'respond_fire') {
       for (const {res} of fireTargets(world, sim)) { // §23.59 응답자 기준 도달 가능한 스팟
         if (!res) continue; // 갈 수 없는 불에는 달려가지 않는다
-        // §17.23의 no_path 쿨다운을 화재에도 존중한다 — 실패한 응답자가 매 틱 같은 불을 다시 고르지 않게.
-        const cool = sim.noPathCool[`firesite:${res.id}`];
-        if (cool !== undefined && t < cool) continue;
+        // (쿨다운 필터는 넣지 않는다 — 상류 계약 "historical lack of cooldown filtering":
+        //  불은 매 틱 다시 볼 일이다. 고착의 원인은 재선택이 아니라 도달 불가 스팟이었고 그건 위에서 막았다.)
         const holder = world.reservations[resKey('firesite', res.id)];
         if (holder !== undefined && holder !== sim.id) continue;
         const sc = scoreCandidate(sim, action, res, L);

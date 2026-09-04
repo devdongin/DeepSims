@@ -2051,9 +2051,4 @@ test('S-89. §23.59 화재 지점은 도달 가능한 칸이고, 갈 수 없는 
   b.w.map.tiles[(b.target.door.y - 1) * b.w.map.w + b.target.door.x] = 4; // TREE
   const none = collectCandidates(b.w, b.ff, ['respond_fire'], 600, true).find((c) => c.facilityId === 'firesite');
   assert.equal(none, undefined, '도달 불가 화재는 후보에서 빠진다 — no_path를 영원히 반복하지 않는다');
-  // ③ 응답자가 최근 그 불에 no_path를 겪었으면 쿨다운 동안 다시 고르지 않는다
-  const c = build();
-  c.ff.noPathCool[`firesite:fire:${c.target.id}`] = 600 + 10;
-  const cooled = collectCandidates(c.w, c.ff, ['respond_fire'], 600, true).find((x) => x.facilityId === 'firesite');
-  assert.equal(cooled, undefined, '쿨다운 중에는 같은 불을 다시 고르지 않는다');
 });
