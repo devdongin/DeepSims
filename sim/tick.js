@@ -18,7 +18,6 @@ import { settleHousing } from './housing.js';
 import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
-import { syncResidenceVillage } from './villages.js';
 import { allocateMunicipalLand } from './municipal-land.js';
 import { repairCenterPlots, campusSiteReserved } from './center-plots.js';
 import { projectMunicipality, municipalProjectLimit, planMunicipalConstruction } from './municipal-construction.js';
@@ -29,6 +28,7 @@ import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
 import { SETTLE_ACTION, isSettlementInTransit, settlementGatherTarget,
   advanceSettlementPlans, completeSettlementArrivals } from './settlement.js';
 import { advanceHouseholdMigrations, completeHouseholdMigrations } from './household-migration.js';
+import { assignCompletedResidence } from './construction-relocation.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -1501,7 +1501,7 @@ export function tick(world, inputsForThisTick = []) {
   }
 
   // 4c) §16.5: 완공 판정(매 틱) → 일일 도시계획 트리거 (서브순서 맨 끝).
-  // 의도된 순서: 완공 틱의 facility_built/moved_home은 잔여 노동자들의 action_completed보다
+  // 의도된 순서: 완공 틱의 facility_built/지역 내 moved_home은 잔여 노동자들의 action_completed보다
   // 먼저 나온다 (완공은 4단계, 노동 정산은 각자 스틴트가 끝나는 틱의 3단계 — Codex 24차 항목 2 문서화)
   // §19.3: plotId asc 순회 다중 완공 — 각 건물마다 축조→제거→이사→이벤트 (66차 ③)
   {
@@ -1515,26 +1515,7 @@ export function tick(world, inputsForThisTick = []) {
       plot.used = true;
       world.projects.splice(world.projects.indexOf(pr), 1);
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
-      if (isAvailableResidence(fac)) { // 개척 주택은 실제 도착 전 자동 이사하지 않는다
-        // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
-        let worst = null, worstOver = 0;
-        for (const h of world.map.facilities) {
-          if (!isResidence(h) || h.id === fac.id
-            ||!world.sims.some(s=>s.homeId===h.id&&!isSettlementInTransit(world,s.id))) continue;
-          const res = world.sims.filter((x) => x.homeId === h.id).length;
-          const over = res - h.resources.length;
-          if (over > worstOver || (over === worstOver && worst && h.id < worst.id)) {
-            if (over > 0) { worst = h; worstOver = over; }
-          }
-        }
-        if (worst) {
-          const mover = world.sims.filter((x) => x.homeId === worst.id&&!isSettlementInTransit(world,x.id)).sort((a, b) => b.id - a.id)[0];
-          mover.homeId = fac.id;
-          syncResidenceVillage(world, mover.id);
-          emit('moved_home', mover.id, { from: worst.id, to: fac.id });
-          recordFact(mover, t, L, 'built_bed', { placeId: fac.id, tags: ['home'] });
-        }
-      }
+      if (isAvailableResidence(fac)) assignCompletedResidence(world,fac,t,emit);
     }
     } // §19.3 완공 루프 종료 (일일 평가부터는 매 틱 실행)
     // §17.8 일일 평가: 질병 → 선거 → 시장 수당 → 이민 (도시계획 트리거보다 앞)

@@ -6,10 +6,11 @@ import {planSettlementHouseholds} from './settlement-households.js';
 import {planIndependentHousehold} from './independent-household.js';
 import {planMarriedHousehold,marriageHomeResidents} from './marriage-household.js';
 import {canWork} from './education.js';
+import {recordFact} from './cognition.js';
 import {serialize} from './serialize.js';
 import {governmentFor} from './government.js';
 import {relocationReady,relocationCandidate,stopRelocation,SETTLE_ACTION} from './settlement.js';
-const physical=i=>i.kind==='rent_move'||i.kind==='separate'||i.kind==='marriage_move';
+const physical=i=>i.kind==='rent_move'||i.kind==='separate'||i.kind==='marriage_move'||i.kind==='construction_move';
 const pending=w=>(w.householdIntents??[]).filter(i=>physical(i)&&i.relocation);
 const plan=(w,i,villageId)=>i.kind==='separate'?planIndependentHousehold(w,i.simId,villageId)
   :i.kind==='marriage_move'?planMarriedHousehold(w,i.coupleIds,i.targetHomeId):planSettlementHouseholds(w,[i.simId],villageId);
@@ -71,6 +72,10 @@ export function advanceHouseholdMigrations(w,t,emit,start){
     const founding=w.founding.petitions.some(p=>['building','awaiting_settlement'].includes(p.status)
       &&p.plan?.residents?.some(s=>(i.familyResidents??i.migrationResidents).some(r=>r.simId===s.simId)));
     let reason=changed?'household_changed':unavailable?'target_unavailable':founding?'founding_conflict':null;
+    if(!reason&&i.kind==='construction_move'&&r.phase==='gathering'){
+      const origin=w.map.facilities.find(f=>f.id===i.fromHomeId);
+      if(!origin||w.sims.filter(s=>s.homeId===origin.id).length<=origin.resources.length)reason='crowding_resolved';
+    }
     if(!reason&&i.kind==='separate'&&r.phase==='gathering'){
       const adult=sims.find(s=>s.id===i.simId);
       if(!canWork(adult)||(w.logic.occupations[adult.traits.occupation]?.wagePct??0)<=0)reason='income_unstable';
@@ -119,7 +124,9 @@ export function completeHouseholdMigrations(w,t,emit){
     }
     for(const s of sims){const from=s.homeId;s.homeId=home.id;syncResidenceVillage(w,s.id);stop(w,i,s);
       if(i.kind==='separate'){s.householdId=`household:${i.simId}:${i.intentId}`;s.independenceDays=0;}
-      emit('moved_home',s.id,{from,to:home.id,reason:i.kind==='separate'?'independence':i.kind==='marriage_move'?'marriage':'rent_pressure',villageId:i.toVillageId});}
+      emit('moved_home',s.id,{from,to:home.id,reason:i.kind==='separate'?'independence':i.kind==='marriage_move'?'marriage'
+        :i.kind==='construction_move'?'new_construction':'rent_pressure',villageId:i.toVillageId});
+      if(i.kind==='construction_move')recordFact(s,t,w.logic,'built_bed',{placeId:home.id,tags:['home']});}
     if(i.kind==='rent_move')w.rentPressure[i.pressureKey??i.fromHouseholdId]=0;
     emit('household_intent_applied',i.simId,{intentId:i.intentId,kind:i.kind,from:i.fromHomeId,to:home.id,villageId:i.toVillageId,
       ...(i.kind==='separate'?{householdId:`household:${i.simId}:${i.intentId}`}:i.kind==='marriage_move'

@@ -33,7 +33,7 @@ export function applyHouseholdIntents(world, t, emit) {
     if((intent.memberIds??[intent.simId]).some(id=>isSettlementInTransit(world,id)))continue;
     const sim = world.sims.find(s => s.id === intent.simId);
     let reason = null;
-    if(intent.kind==='marriage_move'){
+    if(intent.kind==='marriage_move'||intent.kind==='construction_move'){
       const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isAvailableResidence(f));
       reason=target?beginHouseholdMigration(world,intent,target,t,emit):'target_unavailable';
       if(!reason)continue;
