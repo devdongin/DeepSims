@@ -463,7 +463,10 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
     }
     // §17.20: respond_fire — 불타는 시설 문 앞 가상 스팟 (위급 승격은 아래 소방관 분기)
     if (action === 'respond_fire') {
-      for (const {res} of fireTargets(world)) {
+      for (const {res} of fireTargets(world, sim)) { // §23.59 응답자 기준 도달 가능한 스팟
+        if (!res) continue; // 갈 수 없는 불에는 달려가지 않는다
+        // (쿨다운 필터는 넣지 않는다 — 상류 계약 "historical lack of cooldown filtering":
+        //  불은 매 틱 다시 볼 일이다. 고착의 원인은 재선택이 아니라 도달 불가 스팟이었고 그건 위에서 막았다.)
         const holder = world.reservations[resKey('firesite', res.id)];
         if (holder !== undefined && holder !== sim.id) continue;
         const sc = scoreCandidate(sim, action, res, L);

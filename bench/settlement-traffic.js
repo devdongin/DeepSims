@@ -145,6 +145,13 @@ export function observeSettlementTraffic(initial,{days=30,resume=false,auditResu
           const s=w.sims.find(s=>s.id===e.simId);
           const targets=Object.entries(s?.noPathCool??{}).filter(([,until])=>until===e.tick+w.logic.construct.noPathCoolTicks)
             .map(([key])=>{
+              // §23.57 화재 가상 스팟(firesite:fire:<시설>)은 resources에 없다 — tick.js와 같은 규칙으로 좌표를 복원한다.
+              if(key.startsWith('firesite:fire:')){
+                const ff=w.map.facilities.find(f=>f.id===key.slice('firesite:fire:'.length));
+                if(ff){const x=ff.door.x,y=ff.door.y-1>=0?ff.door.y-1:ff.door.y;
+                  return {key,x,y,walkable:isWalkable(w.map,x,y),sameRegion:s?sameRegion(w.map,s.x,s.y,x,y):null,
+                    doorWalkable:isWalkable(w.map,ff.door.x,ff.door.y)};}
+              }
               const f=w.map.facilities.find(f=>key.startsWith(`${f.id}:`)),r=f?.resources.find(r=>`${f.id}:${r.id}`===key);
               return {key,...(r?{x:r.x,y:r.y,walkable:isWalkable(w.map,r.x,r.y)}:{})};
             });
