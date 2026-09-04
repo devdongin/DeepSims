@@ -2,6 +2,7 @@
 // 이벤트 문장화는 클라이언트 몫 (구조화 payload → 한국어).
 import Phaser from 'phaser';
 import {resetSimCache,mergeSimBatch} from './sim-stream.js';
+import {mountWorldEvents} from './world-events-ui.js';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c,
@@ -11,6 +12,8 @@ const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 
 FACILITY_COLORS.train_station = 0x739da8; // Dedicated tile-render fallback until station art exists.
 
 let world = null;
+let worldStreamFresh=false;
+const refreshWorldEvents=mountWorldEvents(()=>world,()=>worldStreamFresh);
 let updatePolicySummary=()=>{};
 let selectedSimId = null;
 let simSprites = new Map();
@@ -1246,7 +1249,12 @@ const PLACE_FALLBACK = {
   house: '집', apartment: '아파트', office: '직장', cafe: '카페', park: '공원', bar: '술집',
   library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청',
   school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', mall: '쇼핑몰',
-  police_station: '파출소', fire_station: '소방서', train_station:'기차역',
+  police_station: '파출소', fire_station: '소방서', train_station: '기차역',
+  // §23.44 학교 3종·대학·산업 시설이 빠져 있었다. 그래서 "새 새 건물이 완공됐습니다"와
+  // 연대기의 "university가 새로 문을 열었다"가 나왔다 — undefined를 영문 id로 바꾼 것뿐이다.
+  primary_school: '초등학교', middle_school: '중학교', high_school: '고등학교',
+  university: '대학교', workshop: '공방', lab: '연구소', warehouse: '창고',
+  factory: '공장', pond: '낚시터',
 };
 // 해시로 고르면 카페 9곳에 이름 8개라 반드시 겹친다. 그래서 **같은 종류 안에서 몇 번째인가**로
 // 고른다 — 이름이 동나면 "2호점"이 붙는다. id 정렬이라 목록 순서가 바뀌어도 이름은 그대로다.
@@ -2791,8 +2799,11 @@ function eventText(e) {
     }
     case 'grew_up': return `🌱 ${ga(n)} ${e.payload.age}살이 되어 학교에 갑니다`;
     case 'bereaved': return `🕯️ ${ga(n)} 가까운 사람을 떠나보냈습니다`;
-    case 'died': return `🕯️ ${ga(n)} 세상을 떠났습니다`;
-    case 'emigrated': return `🧳 ${ga(n)} 마을을 떠났습니다`;
+    // §23.44 배치 핸들러가 world.sims를 먼저 갈아 끼운 뒤 피드를 그리므로, 떠난 사람은
+    // 이미 목록에 없어 simName이 'sim{id}'를 만든다. **이 게임에서 가장 무거운 한 줄에
+    // 사람 이름 대신 id가 찍혔다.** payload에 name이 실려 있으니 그걸 쓴다.
+    case 'died': return `🕯️ ${ga(e.payload.name ?? n)} 세상을 떠났습니다`;
+    case 'emigrated': return `🧳 ${ga(e.payload.name ?? n)} 마을을 떠났습니다`;
     case 'married': return `💒 ${wa(n)} ${ga(simName(e.payload.withSimId))} 결혼했습니다! 🎉`;
     case 'broke_up': return `💔 ${wa(n)} ${ga(simName(e.payload.withSimId))} 헤어졌습니다…`;
     case 'new_year': return `🎆 해솔마을의 새해가 밝았습니다! (${e.payload.year}년차)`;
@@ -2865,9 +2876,15 @@ const FEED_MONEY = new Set([
   'insolvent', 'public_revenue_remitted', 'car_bought', 'mayor_stipend', 'public_works',
   'policy_changed', 'fish_caught', 'medical_visit_paid', 'child_allowance_paid',
 ]);
-let feedFilter = 'all';
+let feedFilter = 'story'; // §23.43 처음 보이는 화면은 '이야기'다 (index.html의 on과 짝)
 function feedPasses(e) {
   if (feedFilter === 'all') return true;
+  // §23.43 '아는 사이가 되었습니다'는 이야기가 아니라 바탕음이다. 실측: 라이브 마을에서
+  // relationship_changed 4,526건 중 4,183건(92%)이 acquaintance였고, 그래서 '이야기'
+  // 필터를 켜도 화면의 92%가 그 한 줄이었다. 잡음을 피해 온 사람에게 다른 잡음을 줬다.
+  // 친구가 되거나 사이가 틀어지는 것만 남긴다.
+  if (feedFilter === 'story' && e.type === 'relationship_changed'
+      && e.payload?.tier === 'acquaintance') return false;
   if (feedFilter === 'mine') return selectedSimId !== null && e.simId === selectedSimId;
   if (feedFilter === 'story') return FEED_STORY.has(e.type);
   if (feedFilter === 'money') return FEED_MONEY.has(e.type);
@@ -2972,7 +2989,10 @@ function pushFeed(e) {
 // §23.1 일대기. 같은 사건이라도 피드에서는 "방금 무슨 일이 있었나"이고, 여기서는
 // "이 사람이 어떻게 살아왔나"다. 그래서 문장을 따로 쓴다 — 시제도, 고르는 사건도 다르다.
 // 나이는 지금 나이에서 지난 햇수를 빼서 되짚는다 (한 해 = 1440틱 × 365).
-const TICKS_PER_YEAR = 1440 * 365;
+// §23.44 여기 365를 박아 둔 게 처음부터 틀렸다. 이 세계의 한 해는 society.yearDays이고
+// 지금은 40일이다 — 9.1배 어긋나 yearsAgo가 늘 0으로 떨어졌고, **일대기 전체가 나이 머리글
+// 하나 밑에 깔렸다**(93세 사람의 90~93살 사건이 전부 "93살"로). 세계에서 읽는다.
+const ticksPerYear = () => 1440 * (world?.logic?.society?.yearDays ?? 40);
 // 일대기는 **떠난 사람**을 자주 부른다 (사별·이별·옛 동료). 그 사람은 이미 world.sims에
 // 없으므로 simName이 'sim{id}'를 만들어 낸다. 없는 이름을 지어내느니 이름 없이 쓴다.
 function withName(id, withIt, without) {
@@ -3007,7 +3027,7 @@ function lifeLine(r, ctx) {
     case 'ability_changed': {
       // 나이가 들면 깎이기도 한다 — 사실과 반대로 쓰면 안 된다.
       const nm = ABIL_KO[p.ability] ?? p.ability;
-      if (p.from != null && p.value < p.from) return `${ga(nm)} ${p.value}로 떨어졌다`;
+      if (p.from != null && p.value < p.from) return `${ga(nm)} ${ro(String(p.value))} 떨어졌다`; // "60로" → "60으로"
       return `${ga(nm)} ${p.value}까지 늘었다`;
     }
     case 'died': return '세상을 떠났다';
@@ -3024,7 +3044,7 @@ function cityLine(r) {
   switch (r.type) {
     case 'festival': return '마을에 축제가 열렸다';
     case 'new_year': return '새해가 밝았다';
-    case 'city_promoted': return `마을이 ${p.tier ?? ''}단계로 올라섰다`;
+    case 'city_promoted': return p.nameKo ? `${ro('해솔' + p.nameKo)} 올라섰다` : '마을이 한 단계 올라섰다';
     case 'station_unlocked': return '역이 들어섰다';
     case 'election': {
       // 당선자는 표가 가장 많은 후보다 — payload에 winner가 따로 없다.
@@ -3384,7 +3404,7 @@ async function renderLifeLog(simId) {
     // 나이로 묶는다. 지금 나이에서 지난 햇수를 빼면 그때 몇 살이었는지가 나온다.
     let html = ''; let lastAge = null;
     for (const { r, text } of rows) {
-      const yearsAgo = Math.floor((d.nowTick - r.tick) / TICKS_PER_YEAR);
+      const yearsAgo = Math.floor((d.nowTick - r.tick) / ticksPerYear());
       const age = d.age != null ? Math.max(0, d.age - yearsAgo) : null;
       const head = age != null ? `${age}살` : `${Math.floor(r.tick / 1440)}일`;
       if (head !== lastAge) { html += `<div class="yr">${head}</div>`; lastAge = head; }
@@ -3648,6 +3668,7 @@ function connect() {
   ws.onmessage = (raw) => {
     const msg = JSON.parse(raw.data);
     if (msg.seq !== lastSeq + 1 && msg.type !== 'snapshot') {
+      worldStreamFresh=false;refreshWorldEvents();
       ws.send(JSON.stringify({ type: 'resync' })); // 갭 감지 (PLAN §5)
       lastSeq = msg.seq;
       return;
@@ -3658,6 +3679,7 @@ function connect() {
         $('status').textContent = '동기화 중…';
         break;
       case 'catchingUp':
+        worldStreamFresh=false;refreshWorldEvents();
         $('status').textContent = `세계 따라잡는 중… ${msg.progress.current}${msg.progress.target ? '/' + msg.progress.target : ''}`;
         break;
       case 'speed': // §20
@@ -3665,6 +3687,8 @@ function connect() {
         break;
       case 'snapshot':
         world = msg.world;
+        worldStreamFresh=true;
+        refreshWorldEvents();
         updatePolicySummary();
         // §23.39 스냅샷은 전체를 주므로 정적 지도를 여기서 새로 채운다.
         resetSimCache(simStatic,world.sims);
@@ -3708,6 +3732,8 @@ function connect() {
         if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.transit) world.transit = msg.transit; // §19.12 역 수요 관측·언락 (zone 모달 게이트)
+        if (msg.worldEvents) world.worldEvents=msg.worldEvents;
+        refreshWorldEvents();
         if(msg.rail){
           const old=new Map((world.rail?.links??[]).map(l=>[l.id,l]));
           world.rail={...world.rail,...msg.rail,links:msg.rail.links.map(l=>({...old.get(l.id),...l}))};
@@ -3834,6 +3860,7 @@ function connect() {
     }
   };
   ws.onclose = () => {
+    worldStreamFresh=false;refreshWorldEvents();
     $('status').textContent = '연결 끊김 — 재접속 중…';
     setTimeout(connect, 2000);
   };
@@ -3841,6 +3868,7 @@ function connect() {
 connect();
 
 document.addEventListener('visibilitychange', () => {
+  worldStreamFresh=false;refreshWorldEvents();
   if (wsRef?.readyState === WebSocket.OPEN) {
     wsRef.send(JSON.stringify({ type: 'visibility', hidden: !forceLiveStream && (document.hidden || forcePausedStream) }));
   }
