@@ -22,7 +22,7 @@ const construction=[];
 // Cross one planning-day boundary without injecting needs, money or inputs.
 const end=(Math.floor(world.worldTick/1440)+1)*1440+1;
 while(world.worldTick<end){
-  for(const e of tick(world))if(['project_started','construction_completed'].includes(e.type)
+  for(const e of tick(world))if(e.type==='project_started'
     &&repaired.has(e.payload.plotId))construction.push(e);
 }
 console.log(JSON.stringify({pass:true,scope:'readonly archive; only in-memory migration and forward simulation',
