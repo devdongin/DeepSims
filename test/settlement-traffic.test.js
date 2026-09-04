@@ -12,7 +12,7 @@ test('founded municipalities build paid stations and sustain reciprocal rail for
   const run=(extra=[])=>JSON.parse(execFileSync(process.execPath,[
     fileURLToPath(new URL('../bench/founding-construction.js',import.meta.url)),
     '32','--settle','--family','--traffic','--retain-native-plots',
-    '--station-orders','--expand-centers','--traffic-days=70',...extra,
+    '--station-orders','--expand-centers','--traffic-days=70','--complete-service-window',...extra,
   ],{encoding:'utf8',timeout:360000}));
   const a=run(),b=run(['--resume-traffic','--audit-traffic']);
   assert.deepEqual(a,b,'all observations and final world hash must survive a midpoint save');
@@ -24,9 +24,16 @@ test('founded municipalities build paid stations and sustain reciprocal rail for
   assert.deepEqual(new Set(r.stationOrders.map(o=>o.villageId)),new Set(['village:0','village:1']));
   for(const order of r.stationOrders){
     assert.equal(order.cost,8000);assert.ok(order.treasury>=0);
+    const labor=r.stationLabor.find(p=>p.plotId===order.plotId);
+    assert.ok(labor&&labor.startedTick>=order.tick,'paid order must start its real station project');
+    assert.ok(labor.required>0&&labor.labor>=labor.required,'completion must consume observed project labor');
+    assert.ok(labor.positiveLaborTicks>0&&labor.constructionStarts>0&&labor.walkingSteps>0);
+    assert.ok(labor.eligibleWorkers.length>0,'eligible residents must reach and work at each station site');
     assert.ok(t.construction.some(c=>c.type==='train_station'&&c.villageId===order.villageId&&c.tick>order.tick));
   }
   assert.ok(window?.complete,'must observe 30 full days after intermunicipal service actually opens');
+  assert.ok(window.startTick<=t.startTick+70*1440,'service must still open within the original70-day deadline');
+  assert.ok(t.endTick<=t.startTick+100*1440,'follow-through must never be an unbounded wait');
   assert.equal(window.endTick-window.startTick,30*1440);
   assert.equal(window.observedUntil,window.endTick);
   for(const [from,to] of [['village:0','village:1'],['village:1','village:0']]){
@@ -36,6 +43,14 @@ test('founded municipalities build paid stations and sustain reciprocal rail for
   assert.ok(r.stats.alightings>0);assert.ok(r.stats.passengerTiles>0);
   assert.equal(r.stats.cancelledRides,0);assert.deepEqual(t.noPath,{});
   assert.equal(t.closedMoney,115063,'observer also checks the closed ledger every tick');
+});
+test('rail service follow-through rejects unbounded or non-station observations',()=>{
+  const w=createWorld(32);
+  assert.throws(()=>observeSettlementTraffic(w,{days:336,stations:true,completeServiceWindow:true}));
+  assert.throws(()=>observeSettlementTraffic(w,{days:1,completeServiceWindow:true}));
+  const {report}=observeSettlementTraffic(w,{days:1,stations:true,completeServiceWindow:true});
+  assert.equal(report.endTick-report.startTick,1440,'no opening does not extend the deadline');
+  assert.equal(report.railObservation.serviceWindow,null);
 });
 test('post-founding arrival observation excludes pre-window traffic even when today is mutated in place',()=>{
   const today={day:18,municipalVisits:{route:row(4,100)}},observer=arrivalObserver(today);

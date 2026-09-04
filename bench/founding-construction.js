@@ -105,6 +105,7 @@ if(process.argv.includes('--traffic')){
   const daysArg=process.argv.find(a=>a.startsWith('--traffic-days='));
   const observed=observeSettlementTraffic(w,{resume:process.argv.includes('--resume-traffic'),auditResume:process.argv.includes('--audit-traffic'),
     stations:process.argv.includes('--station-orders'),expandCenters:process.argv.includes('--expand-centers'),
+    completeServiceWindow:process.argv.includes('--complete-service-window'),
     days:daysArg?Number(daysArg.split('=')[1]):30});
   w=observed.world;traffic=observed.report;
 }
