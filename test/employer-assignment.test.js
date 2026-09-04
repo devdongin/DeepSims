@@ -143,7 +143,9 @@ test('many candidate employers retain all choices while keeping real stored even
 
 test('same-tick work commands assign only their targets in authoritative input sequence order',()=>{
   const {w,s}=fixture();w.worldTick=539;w.lastDailyDay=0;w.lastPlanDay=0;s.x=1;s.y=4;
-  const other=structuredClone(s);other.id=99;w.sims.push(other);
+  // Use an existing matrix index from createWorld; this test is about command
+  // order, not dynamic population/matrix expansion.
+  const other=structuredClone(s);other.id=1;w.sims.push(other);
   const inputs=[{sequence:2,command:'assign',payload:{simId:s.id,actionType:'work'}},
     {sequence:1,command:'assign',payload:{simId:other.id,actionType:'work'}}];
   const saved=deserialize(serialize(w)),events=tick(w,inputs);
