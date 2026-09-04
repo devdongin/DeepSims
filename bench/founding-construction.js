@@ -102,7 +102,7 @@ if(process.argv.includes('--government')){
 let traffic;
 if(process.argv.includes('--traffic')){
   assert.ok(settle,'--traffic requires --settle');
-  const observed=observeSettlementTraffic(w,{resume:process.argv.includes('--resume-traffic')});
+  const observed=observeSettlementTraffic(w,{resume:process.argv.includes('--resume-traffic'),auditResume:process.argv.includes('--audit-traffic')});
   w=observed.world;traffic=observed.report;
 }
 console.log(JSON.stringify({fixture:'controlled capacity and terrain',

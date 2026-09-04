@@ -1289,6 +1289,10 @@ export function deathRiskPer100k(world, sim, L) {
 // 행렬은 묘비로 남긴다(행을 지우면 id 인덱싱이 무너진다).
 function removeSim(world, sim, t, emit, cause, eventType = 'died') {
   const id = sim.id;
+  // Departing cash leaves the simulated economy with its owner. There is no
+  // in-world inheritance model; record this boundary flow, never invent a payee.
+  const cashOutflow=sim.money,root=world.rootWorld??world;
+  root.externalOutflow=(root.externalOutflow??0)+cashOutflow;
   // 예약 해제 — 죽은 사람이 자리를 붙들고 있으면 안 된다
   if (sim.state.facilityId !== null && sim.state.resourceId !== null) {
     const key = `${sim.state.facilityId}:${sim.state.resourceId}`;
@@ -1343,7 +1347,7 @@ function removeSim(world, sim, t, emit, cause, eventType = 'died') {
   }
   const idx = world.sims.findIndex((s) => s.id === id);
   if (idx >= 0) world.sims.splice(idx, 1);
-  emit(eventType, id, { name: sim.name, age: sim.traits.age, cause, pop: world.sims.length });
+  emit(eventType, id, { name: sim.name, age: sim.traits.age, cause, pop: world.sims.length, cashOutflow });
 }
 
 // 누적된 낮은 기분과 미충족 욕구가 실제로 쌓인 심은 마을을 떠난다.

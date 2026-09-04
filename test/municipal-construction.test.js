@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, serialize, deserialize, hashWorld, tick } from '../sim/index.js';
+import { createWorld, serialize, deserialize, hashWorld, tick, migrateWorld } from '../sim/index.js';
 import { TILE, addBuilding } from '../sim/map.js';
 import { newGovernment, publicBalance } from '../sim/government.js';
 import { municipalProjectLimit, projectMunicipality, municipalConstructionView, planMunicipalConstruction } from '../sim/municipal-construction.js';
@@ -43,6 +43,42 @@ test('#32 local housing deficit and committed capacity do not borrow beds or ove
   assert.equal(events[0].payload.villageId,'village:1');
   assert.equal(localHome.resources.length,1,'planned beds are not usable before construction');
   assert.equal(plan(w).length,0,'pending capacity covers the deficit');
+});
+
+test('single-town and municipal planners build a small house when the only available parcel cannot fit an apartment',()=>{
+  for(const municipal of [false,true])for(const blocked of [false,true]){
+    const w=fixture(),id=municipal?'village:1':'village:0';
+    if(!municipal){w.villages=w.villages.slice(0,1);w.sims=w.sims.slice(0,2);w.map.facilities=w.map.facilities.filter(f=>f.villageId===id);}
+    const home=w.map.facilities.find(f=>f.type==='house'&&f.villageId===id);home.resources.length=1;
+    (municipal?w.villages[1].government:w).cityTier=1;
+    w.plots=[{plotId:1000,x:40,y:80,used:false,villageId:id}];
+    for(let y=80;y<86;y++)w.map.tiles[y*w.map.w+46]=TILE.ROAD;
+    if(blocked)w.map.railTracks={[82*w.map.w+44]:true};
+    w.lastPlanDay=-1;
+    const before=w.map.tiles.slice(),money=publicBalance(w)+w.externalOutflow,saved=deserialize(serialize(w));
+    const events=tick(w);assert.deepEqual(events,tick(saved));assert.equal(hashWorld(w),hashWorld(saved));
+    const projects=w.projects.filter(p=>p.plotId===1000);
+    assert.equal(projects.length,blocked?0:1,`${municipal?'municipal':'single'} blocked=${blocked}`);
+    if(!blocked)assert.equal(projects[0].type,'house');
+    assert.deepEqual(w.map.tiles,before,'planning must not erase bordering roads or a railway');
+    assert.equal(publicBalance(w)+w.externalOutflow,money);
+  }
+});
+
+test('integration migration fills romance rules but preserves saved calendar tuning, projects, funds and RNG',()=>{
+  assert.equal(createWorld(32).logic.society.yearDays,40);
+  for(const yearDays of [40,120,60]){
+    const w=fixture();w.logic.logicSchemaVersion=84;w.logic.society.yearDays=yearDays;
+    delete w.logic.romance.minRomanceAge;delete w.logic.romance.ageGapBase;
+    w.projects=[{plotId:1,type:'house',progress:10,required:25000}];
+    const before=serialize({map:w.map,projects:w.projects,money:publicBalance(w),rngSim:w.rngSim});
+    migrateWorld(w);
+    assert.equal(w.logic.society.yearDays,yearDays);assert.equal(w.logic.romance.minRomanceAge,19);
+    assert.equal(w.logic.romance.ageGapBase,7);
+    assert.equal(serialize({map:w.map,projects:w.projects,money:publicBalance(w),rngSim:w.rngSim}),before);
+    const saved=serialize(w);migrateWorld(w);assert.equal(serialize(w),saved);
+    const replay=deserialize(saved);assert.deepEqual(tick(w),tick(replay));assert.equal(hashWorld(w),hashWorld(replay));
+  }
 });
 
 test('#32 reserving an occupied spouse home does not erase the beds already serving its residents',()=>{

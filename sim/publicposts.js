@@ -13,6 +13,14 @@ import { OCCUPATIONS, occupationAllowed } from './traits.js';
 
 function floorDiv(a, b) { return Math.floor(a / b); }
 
+// Preserve the published default hiring priority, not object insertion order:
+// canonical saves alphabetize keys and otherwise change who gets which job.
+const PUBLIC_POST_ORDER=['civil_servant','teacher','doctor','police','nurse','firefighter','politician'];
+function orderedPosts(posts){
+  const keys=Object.keys(posts??{});
+  return [...PUBLIC_POST_ORDER.filter(k=>keys.includes(k)),...keys.filter(k=>!PUBLIC_POST_ORDER.includes(k)).sort()];
+}
+
 // 이 인구에서 그 자리가 몇 개인가. 문턱 미만이면 0 — "아직 그런 자리가 없는 마을"이다.
 export function publicQuota(world, occ) {
   const spec = world.logic.economy.publicPosts?.[occ];
@@ -79,7 +87,7 @@ export function seedPublicPosts(world) {
 
 function fillPosts(world, emit, genesis) {
   let hired = 0;
-  for (const occ of Object.keys(world.logic.economy.publicPosts ?? {})) {
+  for (const occ of orderedPosts(world.logic.economy.publicPosts)) {
     const quota = publicQuota(world, occ);
     let have = publicHeadcount(world, occ);
     if (have >= quota) continue;
@@ -114,7 +122,7 @@ function fillPosts(world, emit, genesis) {
 export function trimOverQuotaPosts(world, emit = null, onChange = null) {
   const E = world.logic.economy;
   let trimmed = 0;
-  for (const occ of Object.keys(E.publicPosts ?? {})) {
+  for (const occ of orderedPosts(E.publicPosts)) {
     const over = publicHeadcount(world, occ) - publicQuota(world, occ);
     if (over <= 0) continue;
     // §23.17 예전에는 직군당 한 명이었다. 초과가 50명이면 50년 동안 초과 임금을 계속

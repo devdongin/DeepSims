@@ -38,14 +38,31 @@ const municipalities=w=>w.villages.map(v=>{
     unusedPlots:unusedPlots.length,buildableUnusedPlots:unusedPlots.filter(p=>plotBuildable(w.map,p)).length};
 });
 
-export function observeSettlementTraffic(initial,{days=30,resume=false}={}){
+function firstDifference(a,b,path='world'){
+  if(Object.is(a,b))return null;
+  if(a===null||b===null||typeof a!=='object'||typeof b!=='object')return {path,a,b};
+  if(Array.isArray(a)&&Array.isArray(b)){
+    if(a.length!==b.length)return {path:`${path}.length`,a:a.length,b:b.length};
+    for(let i=0;i<a.length;i++){const d=firstDifference(a[i],b[i],`${path}.${i}`);if(d)return d;}
+    return null;
+  }
+  const keys=[...new Set([...Object.keys(a),...Object.keys(b)])].sort();
+  for(const key of keys){const d=firstDifference(a[key],b[key],`${path}.${key}`);if(d)return d;}
+  return null;
+}
+export function observeSettlementTraffic(initial,{days=30,resume=false,auditResume=false}={}){
   assert.ok(Number.isInteger(days)&&days>0&&days<=365);
-  let w=initial;
+  let w=initial,shadow=null;
   const startTick=w.worldTick,initialMunicipalities=municipalities(w),money=closedMoney(w);
   const arrivals=arrivalObserver(w.transportStats.today),noPath={},noPathSamples=[],started={},construction=[],migration={};
   for(let n=0;n<days*1440;n++){
-    if(resume&&n===Math.floor(days*1440/2))w=deserialize(serialize(w));
+    if(resume&&n===Math.floor(days*1440/2)){if(auditResume)shadow=w;w=deserialize(serialize(w));}
     const events=tick(w);arrivals.collect(w.transportStats.today);
+    if(shadow){
+      const shadowEvents=tick(shadow),diff=firstDifference(events,shadowEvents,'events')
+        ??((w.worldTick%1440===0||n===Math.floor(days*1440/2))?firstDifference(w,shadow):null);
+      if(diff)throw new Error(JSON.stringify({tick:w.worldTick,diff,events,shadowEvents}));
+    }
     for(const e of events){
       const villageId=w.sims.find(s=>s.id===e.simId)?.villageId??'unknown';
       if(e.type==='action_failed'&&e.payload.reason==='no_path'){

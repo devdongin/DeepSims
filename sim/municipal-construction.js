@@ -52,8 +52,8 @@ export function planMunicipalConstruction(world,t,limits,emit){
       const busy=new Set([...world.projects,...world.zoneOrders].map(p=>p.plotId));
       const centers=[...local.map.facilities.filter(f=>['city_hall','market'].includes(f.type)),
         ...(world.centers??[]).filter(c=>(c.villageId??PRIMARY_GOVERNMENT)===id)];
-      const candidates=local.plots.filter(p=>!p.used&&!busy.has(p.plotId)&&plotBuildable(world.map,p)
-        &&!foundingSiteReserved(world,p,'office'));
+      const candidates=local.plots.filter(p=>!p.used&&!busy.has(p.plotId)&&plotBuildable(world.map,p,6,5)
+        &&!foundingSiteReserved(world,p,'house')&&!campusSiteReserved(world,p,'house'));
       const scores=new Map(candidates.map(p=>[p.plotId,centers.length?Math.min(...centers.map(c=>distance(p,c))):0]));
       candidates.sort((a,b)=>scores.get(a.plotId)-scores.get(b.plotId)||a.plotId-b.plotId);
       if(!candidates.length)break;
@@ -91,8 +91,12 @@ export function planMunicipalConstruction(world,t,limits,emit){
       if(!type&&local.sims.length>capacity(['cafe'])*L.construct.cafeRatio)type='cafe';
       if(!type&&local.sims.length>capacity(['park'])*L.construct.parkRatio)type='park';
       if(!type)break;
-      const fp=zoneFootprint(type,0),plot=candidates.find(p=>plotBuildable(world.map,p,fp.w,fp.h)
-        &&!foundingSiteReserved(world,p,type)&&!campusSiteReserved(world,p,type));
+      const fits=type=>candidates.find(p=>{
+        const fp=zoneFootprint(type,0);
+        return plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type)&&!campusSiteReserved(world,p,type);
+      });
+      let plot=fits(type);
+      if(!plot&&type==='apartment'){type='house';plot=fits(type);}
       if(!plot)break;
       const localEmit=governmentEmitter(local,emit),g=governmentFor(world,id);
       if(SCHOOL_TYPES.includes(type)||['workshop','lab','warehouse'].includes(type)){

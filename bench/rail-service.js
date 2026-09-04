@@ -19,6 +19,7 @@ for(let n=0;n<120*1440;n++){
       &&governmentFor(w,p.villageId).treasury>=w.logic.zone.costs.train_station);
     if(p)inputs.push({sequence:0,command:'zone',payload:{plotId:p.plotId,type:'train_station',dir:0}});
   }
+  const beforeResidents=w.sims.map(s=>({id:s.id,money:s.money}));
   const events=tick(w,inputs);
   if(inputs.length)assert.ok(events.some(e=>e.type==='zoned'&&e.payload.type==='train_station'));
   for(const e of events){
@@ -30,7 +31,8 @@ for(let n=0;n<120*1440;n++){
     }
     if(e.type==='action_failed'&&e.payload.reason==='no_path')noPath++;
   }
-  assert.equal(money(w),initialMoney);
+  assert.equal(money(w),initialMoney,JSON.stringify({tick:w.worldTick,events,beforeResidents,
+    afterResidents:w.sims.map(s=>({id:s.id,money:s.money}))}));
   for(const l of w.rail.links)assert.ok(l.train.passengers.length<=l.capacity);
   if(process.argv.includes('--resume')&&!resumed&&firstServiceTick!=null&&w.worldTick-firstServiceTick>=15*1440){
     w=deserialize(serialize(w));resumed=true;

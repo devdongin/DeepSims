@@ -44,10 +44,13 @@ import { collectCandidates } from '../sim/tick.js';
 //   §23.32 통합(schema73/logic82): main 카운터와 이관 충돌 해결. 전체 상태 해시 재검증.
 //   #32 schema74/logic83: 철도 상태/파라미터 추가. 역 없는 후보·선택·이벤트 동일 확인.
 //   §23.33 통합 logic84: 공터 포장 보호. 초기240틱 후보·선택·이벤트는 동일.
+//   §23.34~36 통합 logic85: 40일 달력·연애 나이·주택 footprint. 초기240틱 세 행동 벡터 동일.
+//   제거 회계: 인구200 tick1 사망자146의 현금1000 유출 및 이벤트 필드 추가.
+//   이 두 추가만 제거하면 종전 이벤트2179523f/세계d932c483와 정확히 일치한다.
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', '77f083d0']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '936285f1']],
-  [200, ['91f50dd7', 'a23787ba', '2179523f', 'a58e6d90']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', '0ac150d5']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', 'c041ba1c']],
+  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', 'b96ace48']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
