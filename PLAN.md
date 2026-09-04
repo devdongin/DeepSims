@@ -3857,3 +3857,19 @@ P2 정확성 결함 없음, 집중12/12였다. 성능 개선 완료는 주장하
 legacy의×1은 그대로다. 첫 tick/배속 명령 전 재접속, 실제 시간 목표40tick, 저장된 배속
 보존을 회귀로 추가했다. 기존×1→×3/최고 배속 테스트는 시작×1을 명시하며 32게임일
 프루닝 지평은 실제 배속으로 환산했다. 집중14/14 통과; 후속 리뷰/전체 검증은 진행 중이다.
+## §23.48 저장 계층이 거부하던 이벤트 12종 등록 (schema 유지)
+
+`db/storage.js:153`은 커밋 트랜잭션 안에서 `EVENT_TYPES`에 없는 타입을 만나면 던진다.
+병렬 작업이 들여온 §117 이주·§118 철도·#151 고용유발 건설이 emit하는 12종
+(`plot_relocated`, `construction_relocation_deferred`, `household_migration_gathering`,
+`household_migration_departed`, `employment_construction_planned`, `village_land_assigned`,
+`rail_opened`, `rail_cancelled`, `rail_suspended`, `rail_resumed`, `rail_boarded`,
+`rail_alighted`)이 등록에서 빠져 있었다 — **그 코드 경로가 라이브에서 처음 실행되는
+순간 커밋이 죽는 상태**였다.
+
+16c(라이브 프루닝)가 잡아주기 전까지 조용했던 것은 안전해서가 아니라 테스트 궤적이
+거기 닿지 않았기 때문이다. 실제로 이번에 §23.47로 궤적이 밀리자마자
+`employment_construction_planned`가 튀어나왔다. §22.91에서 `sidewalk_formed`로
+똑같은 사고를 겪었는데 재발했다 — **emit을 추가할 때 등록을 함께 하지 않으면
+테스트가 우연히 그 경로를 밟기 전까지 아무도 모른다.** append-only 규약대로 끝에 붙였다.
+
