@@ -25,8 +25,8 @@ test('labor evidence separates eligible unemployment, vacant capacity and actual
   assert.equal(a.jobless,4);assert.equal(a.eligibleJobless,1);assert.equal(a.ineligibleJobless,3);
   assert.equal(b.eligibleJobless,1);
   const office=a.sectors.find(s=>s.type==='office'),restaurant=a.sectors.find(s=>s.type==='restaurant');
-  assert.equal(office.vacantCapacity,2);assert.equal(office.recruitmentVacancies,0);
-  assert.equal(office.hiringPath,false);assert.equal(office.pendingFacilities,1);
+  assert.equal(office.vacantCapacity,2);assert.equal(office.recruitmentVacancies,2);
+  assert.equal(office.hiringPath,true);assert.equal(office.pendingFacilities,1);
   assert.equal(b.sectors.find(s=>s.type==='office').vacantCapacity,1);
   assert.equal(restaurant.recruitmentVacancies,1);
   assert.equal(serialize(w),before);assert.deepEqual(employmentStatus(deserialize(before)),[a,b]);
@@ -47,4 +47,11 @@ test('legacy office slots count as work capacity just like constructed desks',()
   assert.ok(offices.some(f=>f.resources.some(r=>r.kind==='slot')));
   const row=employmentStatus(w)[0].sectors.find(s=>s.type==='office');
   assert.equal(row.capacity,offices.reduce((n,f)=>n+f.resources.length,0));
+});
+
+test('incident-blocked offices remain physical capacity but are not recruitment capacity',()=>{
+  const w=fixture();w.incidents=[{facilityId:'office'}];
+  const office=employmentStatus(w)[0].sectors.find(s=>s.type==='office');
+  assert.equal(office.capacity,2);assert.equal(office.vacantCapacity,2);
+  assert.equal(office.recruitmentCapacity,0);assert.equal(office.recruitmentVacancies,0);
 });

@@ -5,6 +5,7 @@ import {maybeJobSwitch} from '../sim/society.js';
 
 function fixture(){
   const w=createWorld(32);w.sims=w.sims.slice(0,1);
+  w.map.facilities=w.map.facilities.filter(f=>f.type!=='office'); // isolate service recruitment
   const s=w.sims[0];s.traits.age=30;s.traits.occupation='jobless';
   s.education.course=null;s.abilities={stamina:50,dexterity:50,intellect:50,charisma:50};
   for(const f of w.map.facilities)f.revenue=f.type==='restaurant'?w.logic.industry.minRevenueToHire:0;

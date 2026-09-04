@@ -240,6 +240,7 @@ const LABOR_ACTIONS = new Set(['work', 'construct', 'build', 'respond_fire', 'pa
 //   no_facility   — 이 행동을 제공하는 시설이 세계에 하나도 없다
 //   capacity_full — 시설은 있는데 자리가 전부 예약돼 있다
 //   unreachable   — 자리는 있는데 길이 막혀 있다 (§17.23 no_path 쿨다운)
+//   unavailable   — 시설은 있지만 사건으로 일시 사용 불가 (신축 수요가 아님)
 // rng 미소비, 세계를 바꾸지 않는다.
 export function facilityShortfallKind(world, sim, action, t) {
   const L = world.logic;
@@ -264,12 +265,12 @@ export function facilityShortfallKind(world, sim, action, t) {
     ? [].concat(L.workplace[sim.traits.occupation] ?? [])
     : action === 'study' ? [schoolFor(sim)] : (ACTION_FACILITY[action] ?? []);
   if (ftypes.length === 0) return null; // 시설을 쓰지 않는 행동
-  let anyFacility = false, anyFree = false;
+  let anyFacility = false, anyFree = false, anyUnavailable = false;
   for (const ftype of ftypes) {
     for (const fac of world.map.facilities) {
       if (fac.type !== ftype) continue;
       if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue;
-      if (world.incidents.some((inc) => inc.facilityId === fac.id)) continue;
+      if (world.incidents.some((inc) => inc.facilityId === fac.id)) { anyUnavailable=true; continue; }
       anyFacility = true;
       for (const res of fac.resources) {
         if (fac.type === 'mall'
@@ -283,7 +284,7 @@ export function facilityShortfallKind(world, sim, action, t) {
       }
     }
   }
-  if (!anyFacility) return 'no_facility';
+  if (!anyFacility) return anyUnavailable?'unavailable':'no_facility';
   if (!anyFree) return 'capacity_full';
   return 'unreachable'; // 자리는 있는데 전부 길이 막혀 있다 (§17.23 쿨다운)
 }

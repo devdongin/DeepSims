@@ -1,8 +1,40 @@
-// Read-only labor evidence. Labor supply is not consumer demand, and a desk is
-// not an executable hiring path. Do not add these counts to unmet purchases.
+// Labor evidence and capacity-bound recruitment. Labor supply is not consumer
+// demand. Do not add jobseeker counts to unmet purchases.
 import {canWork} from './education.js';
 import {occupationAllowed} from './traits.js';
 import {PRIMARY_GOVERNMENT} from './government.js';
+import {sameRegion} from './map.js';
+import {aptitudeFor} from './abilities.js';
+import {dayHash} from './chrono.js';
+
+// Offices already belong to the export/base-wage economy. Hiring only grants
+// the occupation: wages still require actual work through the existing ledger.
+export function recruitOfficeWorkers(world,t,day,emit){
+  const L=world.logic,I=L.industry,belongs=x=>x.villageId??PRIMARY_GOVERNMENT;
+  if(L.workplace.office_worker!=='office'||L.occupations.office_worker.wagePct<=0)return;
+  const offices=world.map.facilities.filter(f=>f.type==='office'
+    &&!world.incidents.some(i=>i.facilityId===f.id));
+  const isWorker=s=>canWork(s)&&L.workplace[s.traits.occupation]==='office'
+    &&L.occupations[s.traits.occupation].wagePct>0;
+  let globalWorkers=world.sims.filter(isWorker).length;
+  const globalCapacity=offices.reduce((n,f)=>n+f.resources.length,0);
+  for(const villageId of [...new Set(offices.map(belongs))].sort()){
+    if(globalWorkers>=globalCapacity)break;
+    const local=offices.filter(f=>belongs(f)===villageId);
+    const workers=world.sims.filter(s=>belongs(s)===villageId&&isWorker(s)).length;
+    const candidates=world.sims.filter(s=>belongs(s)===villageId&&s.traits.occupation==='jobless'
+      &&canWork(s)&&s.traits.age<L.society.retireAge&&occupationAllowed('office_worker',s.traits.age)
+      &&local.reduce((n,f)=>n+f.resources.filter(r=>sameRegion(world.map,s.x,s.y,r.x,r.y)).length,0)>workers);
+    candidates.sort((a,b)=>aptitudeFor(b,'office_worker',L)-aptitudeFor(a,'office_worker',L)||a.id-b.id);
+    const s=candidates[0];if(!s)continue;
+    const aptitude=aptitudeFor(s,'office_worker',L);
+    const pct=Math.min(I.switchMaxPct,Math.floor(aptitude*I.switchPctPerApt/100));
+    if(dayHash(s.id,day,53)>=pct)continue;
+    s.traits.occupation='office_worker';s.unpaidDays=0;globalWorkers++;
+    emit('job_changed',s.id,{from:'jobless',to:'office_worker',facilityType:'office',
+      aptitude,villageId,reason:'existing_office_capacity'});
+  }
+}
 
 export function employmentStatus(world){
   const root=world.rootWorld??world,L=root.logic;
@@ -31,14 +63,17 @@ export function employmentStatus(world){
         ?L.workplace[s.traits.occupation]==='office'&&L.occupations[s.traits.occupation].wagePct>0
         :s.traits.occupation===occupation)).length;
       const revenue=sites.reduce((n,f)=>n+(f.revenue??0),0);
-      const demandBacked=type!=='office'&&(revenue>=L.industry.minRevenueToHire
-        ||(['workshop','lab','warehouse'].includes(type)&&root.unlockedIndustries?.includes(type))||false);
-      const hiringPath=type!=='office'; // maybeJobSwitch currently has no office opening.
+      const demandBacked=type==='office'||revenue>=L.industry.minRevenueToHire
+        ||(['workshop','lab','warehouse'].includes(type)&&root.unlockedIndustries?.includes(type))||false;
+      const hiringPath=type!=='office'||(L.workplace.office_worker==='office'&&L.occupations.office_worker.wagePct>0);
       const vacantCapacity=Math.max(0,capacity-workers);
+      const recruitmentCapacity=type==='office'?sites.filter(f=>!root.incidents.some(i=>i.facilityId===f.id))
+        .reduce((n,f)=>n+f.resources.length,0):capacity;
       return {type,occupation,facilities:sites.length,capacity,workers,vacantCapacity,
         eligibleApplicants:seekers.filter(s=>occupationAllowed(occupation,s.traits.age)).length,
         revenue,demandBacked,hiringPath,
-        recruitmentVacancies:hiringPath&&demandBacked?vacantCapacity:0,
+        recruitmentCapacity,
+        recruitmentVacancies:hiringPath&&demandBacked?Math.max(0,recruitmentCapacity-workers):0,
         pendingFacilities:[...pending.values()].filter(p=>p.type===type).length};
     });
     return {villageId,scope:'resident-local-capacity-proxy',jobless:jobless.length,eligibleJobless:seekers.length,

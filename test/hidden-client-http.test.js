@@ -48,7 +48,7 @@ test('#143 hidden client receives no tick batches and resumes with one current s
     for(const row of industry.employment){
       assert.equal(row.jobless,row.eligibleJobless+row.ineligibleJobless);
       assert.equal(row.scope,'resident-local-capacity-proxy');
-      assert.equal(row.sectors.find(s=>s.type==='office').hiringPath,false);
+      assert.equal(row.sectors.find(s=>s.type==='office').hiringPath,true);
     }
     assert.equal(initial.world.zoneCosts.train_station,8000,'station UI receives authoritative construction price');
     const legacy=await waitFor(m=>m.type==='tickBatch');

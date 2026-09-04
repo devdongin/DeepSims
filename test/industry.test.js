@@ -221,6 +221,16 @@ test('I-10. 사유가 붙은 실패는 시설 수요로 세지 않는다 (오분
   assert.equal(w.industryDemand.I, undefined, '돈이 없어 못 먹은 것이 음식점업 수요로 잡혔다');
 });
 
+test('incident-blocked homes are unavailable, not missing household-industry facilities',async()=>{
+  const {facilityShortfallKind}=await import('../sim/tick.js');
+  const w=createWorld(4242),s=w.sims[0];
+  assert.ok(w.map.facilities.some(f=>f.id===s.homeId));
+  w.incidents=[{type:'fire',facilityId:s.homeId,sinceTick:0}];
+  assert.equal(facilityShortfallKind(w,s,'cook_eat',100),'unavailable');
+  w.incidents=[];
+  assert.equal(facilityShortfallKind(w,s,'cook_eat',100),null);
+});
+
 test('I-11. 학생은 이용자이지 종사자가 아니다 (109차 ②)', () => {
   // student를 종사자로 세면 **고용이 하나도 없어도** 학교가 active가 된다.
   const w = createWorld(4242);

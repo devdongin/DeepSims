@@ -19,6 +19,7 @@ import { learnToken as learnTokenRef } from './planning.js';
 import { maybeRoadWorks, roadMaintenanceVillage } from './roads.js';
 import { applyBirthTalent } from './genius.js';
 import { updateEducation, canWork } from './education.js';
+import { recruitOfficeWorkers } from './employment.js';
 import { governmentFor, PRIMARY_GOVERNMENT, changeReputation } from './government.js';
 
 // §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
@@ -1224,6 +1225,7 @@ export function maybeJobSwitch(world, t, day, emit) {
     pick.unpaidDays = 0;
     emit('job_changed', pick.id, { from, to: occ, facilityType: facType, aptitude: apt, revenue });
   }
+  recruitOfficeWorkers(world,t,day,emit);
   for (const s of world.sims.filter((x) => canWork(x) && (x.unpaidDays ?? 0) >= 3 && x.traits.occupation !== 'jobless')) {
     const from = s.traits.occupation;
     s.traits.occupation = 'jobless';

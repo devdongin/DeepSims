@@ -52,10 +52,11 @@ import { collectCandidates } from '../sim/tick.js';
 //   logic88: 무직 재취업 이직 문턱 제외.
 //   logic89: 탑승 중 생애 전환은 하차 후 활동 취소. 역 없는 초기 세 행동 벡터 동일.
 //   logic90: 재취업/철도 두 변경 통합. 초기 세 행동 벡터 동일, 버전 해시만 갱신.
+//   logic91: 사무직 빈자리 재취업. 초기 세 행동 벡터 동일, 버전 해시만 갱신.
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', 'cd26d1a3']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', 'ebf33812']],
-  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', 'ca1c27b2']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', 'f46c218e']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '8c923f87']],
+  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', 'abef0125']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
