@@ -74,6 +74,11 @@ try{
   await page.waitForFunction(()=>window.__game?.scene?.scenes?.[0]?.airMarkers?.size===1&&window.__airBatch);
   assert.equal(await page.evaluate(()=>window.__airFrame.links[0].aircraft.passengers),1);
   assert.equal(await page.evaluate(()=>window.__airFrame.links[0].waiting),1);
+  assert.deepEqual(await page.evaluate(()=>{
+    const scene=window.__game.scene.scenes[0];
+    const count=()=>scene.propSprites.filter(p=>p.getData?.('airportPart')==='runway').length;
+    const before=count();scene.drawWorld();return {before,after:count()};
+  }),{before:2,after:2},'real airport geometry redraw must not duplicate retained graphics');
   await page.evaluate(()=>window.__select(0));await page.locator('#action').filter({hasText:'항공기 탑승 중'}).waitFor();
   await page.evaluate(()=>window.__select(1));await page.locator('#action').filter({hasText:'공항 게이트 대기'}).waitFor();
   await page.locator('#planning-btn').click();await page.locator('[data-zt=airport]').click();
@@ -89,6 +94,7 @@ try{
   await page.evaluate(()=>window.__airSockets.at(-1).close());
   await page.waitForFunction(n=>window.__airSnapshots>n,snapshots);
   assert.equal(await page.evaluate(()=>window.__game.scene.scenes[0].airMarkers.size),1);
+  assert.equal(await page.evaluate(()=>window.__game.scene.scenes[0].propSprites.filter(p=>p.getData?.('airportPart')==='terminal').length),2);
   assert.ok((await page.evaluate(()=>[...window.__game.scene.scenes[0].airMarkers.values()][0].text)).includes('게이트 대기'));
   await page.reload({waitUntil:'networkidle'});
   await page.waitForFunction(()=>window.__game?.scene?.scenes?.[0]?.airMarkers?.size===1);

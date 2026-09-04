@@ -4,6 +4,7 @@ import Phaser from 'phaser';
 import {resetSimCache,mergeSimBatch} from './sim-stream.js';
 import {mountWorldEvents} from './world-events-ui.js';
 import {aircraftLabel,airportConstructionLabel,travelStateLabel} from './air-ui.js';
+import {drawAirportExterior} from './airport-visual.js';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c,
@@ -788,7 +789,9 @@ class TownScene extends Phaser.Scene {
         const hh = world ? Math.floor((world.worldTick % 1440) / 60) : 12;
         if ((hh >= 19 || hh < 6) && this.textures.exists(`${bldKey}_night`)) bldKey = `${bldKey}_night`;
       }
-      if (bldKey) {
+      if (fac.type === 'airport' && !opened) {
+        this.propSprites.push(...drawAirportExterior(this,fac,isoX,isoY));
+      } else if (bldKey) {
         const cx = isoX(fac.x + fac.w / 2, fac.y + fac.h / 2);
         const cy = isoY(fac.x + fac.w / 2, fac.y + fac.h / 2);
         const img = this.add.image(cx, cy + TH, bldKey).setOrigin(0.5, 1);
