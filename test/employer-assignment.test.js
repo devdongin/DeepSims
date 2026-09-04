@@ -4,6 +4,7 @@ import {createWorld,serialize,deserialize,tick,advance,migrateWorld} from '../si
 import {collectCandidates} from '../sim/tick.js';
 import {updateEmployment,employerAllows} from '../sim/employer-assignment.js';
 import {TILE} from '../sim/map.js';
+import {SCHEMA_VERSION} from '../sim/constants.js';
 import {makeRng} from '../sim/prng.js';
 import {pfStats} from '../sim/pathfind.js';
 import {Storage} from '../db/storage.js';
@@ -88,7 +89,8 @@ test('becoming a student cancels old work before movement or wages; migration co
   const legacy=deserialize(serialize(w));legacy.schemaVersion=75;
   delete legacy.sims[0].employment;delete legacy.sims[0].employmentSearch;
   const rng={...legacy.rngSim};migrateWorld(legacy);
-  assert.equal(legacy.schemaVersion,76);assert.equal(legacy.sims[0].employment,null);
+  // §23.47 스키마 번호를 박아 두면 다음 스키마 변경 때 무관한 테스트가 깨진다.
+  assert.equal(legacy.schemaVersion,SCHEMA_VERSION);assert.equal(legacy.sims[0].employment,null);
   assert.deepEqual(legacy.rngSim,rng);
 });
 

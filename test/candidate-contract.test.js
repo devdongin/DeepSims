@@ -62,12 +62,15 @@ for (const [pop, expected] of [
   // behavior; snapshots retain all employment fields/events, without normalization.
   // Followup excludes retired residents, uses physical employer planning counts
   // and bounds event evidence; retain those intentional effects in the vectors.
-  //   schema77/logic100 (§23.47 거절이 호감도·기억에 닿는다 + contacts 행렬): 거절은 rng를
-  //     소비하지 않는 고정 감산이라 드로우 순서가 보존된다. 그래도 240틱 안에서 호감·기분이
-  //     결정에 닿으므로 선택·이벤트·세계 해시가 갈린다 — 의도한 변화다.
-  [10, ['PENDING10a', 'PENDING10b', 'PENDING10c', 'PENDING10d']],
-  [50, ['PENDING50a', 'PENDING50b', 'PENDING50c', 'PENDING50d']],
-  [200, ['PENDING200a', 'PENDING200b', 'PENDING200c', 'PENDING200d']],
+  //   schema77/logic100 (§23.47 거절이 호감도·기억에 닿는다 + contacts 행렬):
+  //     거절 감산은 rngSim을 소비하지 않으므로 드로우 순서가 보존된다. 그 증거가 인구10이다
+  //     — 후보(272da7d7)·선택(4ae751f3)·이벤트(9bcc9d00) **세 해시가 부모와 한 글자도 다르지
+  //     않고** 세계 해시만 움직였다. affinity·contacts 행렬이 실제로 변했기 때문이다.
+  //     인구50·200에서는 선택·이벤트도 갈리는데, 사람이 많으면 240틱 안에도 거절이 쌓여
+  //     호감과 기분(말다툼 −800)이 결정에 닿기 때문이다 — 의도한 변화다.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '2febdcff']],
+  [50, ['8f96407c', '31c608eb', '1a80ff90', '07899d3e']],
+  [200, ['23a3029f', 'df690287', 'd6564dc2', 'b35c931d']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

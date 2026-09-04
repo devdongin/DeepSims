@@ -2822,17 +2822,24 @@ function eventText(e) {
       // 나빠진 순간을 좋아진 순간과 같은 문장으로 말한 것이다. 거절이 호감도를
       // 실제로 내리기 시작한 이상 이 방향은 자주 일어난다. 어디서 왔는지도 본다.
       const prev = e.payload.prevTier;
+      // §23.51 **앙숙에서 벗어난 것은 어디로 가든 화해다.** 전에는 도착 티어가
+      // acquaintance일 때만 '앙금이 풀렸습니다'였는데, §23.47이 앙숙을 contacts(대화+거절)로
+      // 판정하게 되면서 **한 번도 대화한 적 없는 두 사람도 앙숙이 될 수 있다** — 그 사이가
+      // 풀리면 대화 수가 모자라 acquaintance가 아니라 stranger로 떨어지고, 화해에
+      // '🍃 멀어졌습니다'라는 결별 문장이 찍혔다. 스토리 리뷰가 잡은 자리다.
+      if (prev === 'rival') return `🕊️ ${wa(n)} ${ga(who)} 앙금이 풀렸습니다`;
       if (e.payload.tier === 'acquaintance' && prev === 'friend') {
         return `💔 ${wa(n)} ${ga(who)} 예전만큼 가깝지 않습니다`;
-      }
-      if (e.payload.tier === 'acquaintance' && prev === 'rival') {
-        return `🕊️ ${wa(n)} ${ga(who)} 앙금이 풀렸습니다`;
       }
       if (e.payload.tier === 'stranger' && prev === 'friend') {
         return `🍃 ${wa(n)} ${ga(who)} 남처럼 멀어졌습니다`;
       }
+      // §23.51 앙숙은 **한 방향**이다. 거절은 청한 쪽의 호감만 깎고(society.js),
+      // 내가 상대를 앙숙으로 찍는 순간 상대의 청 자체가 막혀 상대는 거절당할 기회가
+      // 없다 — 실측 앙숙 17건 중 상호는 0건이었다. 그런데 여기서는 '와/과'로 묶어
+      // **세계가 계산한 적 없는 상호성**을 말하고 있었다. 주어를 되돌린다.
       const TIER = { friend: `🤝 ${wa(n)} ${ga(who)} 친구가 되었습니다`,
-        rival: `💢 ${wa(n)} ${ga(who)} 사이가 틀어졌습니다`,
+        rival: `💢 ${eun(n)} ${ga(who)} 껄끄러워졌습니다`,
         acquaintance: `🙂 ${wa(n)} ${ga(who)} 아는 사이가 되었습니다`,
         stranger: `🍃 ${wa(n)} ${ga(who)} 멀어졌습니다` };
       return TIER[e.payload.tier] ?? null;
@@ -2972,7 +2979,7 @@ const CHRON_KO = {
   helped: '챙김', money_shared: '나눔', immigrated: '이민', grew_up: '성장', graduated: '졸업',
   retired_now: '은퇴', facility_built: '완공', festival: '축제', petition: '청원',
   education_decided: '진학·졸업',
-  car_bought: '차 구입', fell_sick: '병치레',
+  car_bought: '차 구입', fell_sick: '병치레', argument: '다툼', // §23.51
 };
 
 function chronicleText(e, nameOf) {
@@ -3087,6 +3094,8 @@ function lifeLine(r, ctx) {
     case 'started_dating': return withName(p.withSimId, (n) => `${wa(n)} 사귀기 시작했다`, '누군가와 사귀기 시작했다');
     case 'married': return withName(p.withSimId, (n) => `${wa(n)} 결혼했다`, '결혼했다');
     case 'broke_up': return withName(p.withSimId, (n) => `${wa(n)} 헤어졌다`, '헤어졌다');
+    // §23.51 말다툼이 일대기에 남는다 — 4시드 100일에 4.3건으로 결혼보다 희귀하다.
+    case 'argument': return withName(p.withSimId, (n) => `${rang(n)} 크게 다퉜다`, '누군가와 크게 다퉜다');
     case 'child_settled': return '아이가 제 살림을 차렸다';
     case 'moved_home': return '집을 옮겼다';
     case 'retired_now': return '일을 놓고 은퇴했다';

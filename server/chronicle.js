@@ -26,7 +26,8 @@ export const CHRONICLE_PRIORITY = [
   'died', 'bereaved', 'child_settled', 'married', 'election',
   'heroic_save', 'fire_started', 'fire_out',
   'city_promoted', 'job_changed', 'policy_changed',
-  'started_dating', 'broke_up', 'helped', 'money_shared',
+  'started_dating', 'broke_up', 'argument', // §23.51 말다툼 — 4시드 100일에 4.3건, 결혼보다 희귀하다
+  'helped', 'money_shared',
   'immigrated', 'grew_up', 'graduated', 'education_decided', 'retired_now',
   'facility_built', 'festival', 'petition', 'car_bought', 'fell_sick',
 ];
