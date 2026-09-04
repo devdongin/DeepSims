@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 76; // Persist physical employer and failed-search retry state.
+export const SCHEMA_VERSION = 77; // §23.47 접촉 행렬(contacts) — 앙숙 판정 전용.
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분

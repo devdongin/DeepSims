@@ -3,7 +3,7 @@ import { rngInt } from './prng.js';
 import { worldEventPercent } from './world-events.js';
 import { syncResidenceVillage } from './villages.js';
 import { publicPostAvailable, demotePublicIfOverQuota, fillPublicPosts, trimOverQuotaPosts } from './publicposts.js';
-import { recordFact } from './cognition.js';
+import { recordFact, argumentThreshold } from './cognition.js';
 import { makeSim } from './simfactory.js';
 import { surnameFor } from './surnames.js';
 import { generateTraits, occupationAllowed } from './traits.js';
@@ -1470,6 +1470,12 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
     if (target === undefined) continue; // 오늘 이 자리 사람들에게는 이미 다 청해봤다
     sim.approachedTo.push(target.id); // 95차 ③: 건너뛰는 경우도 기록해야 매 틱 재검사를 막는다
     if (target.invitedTo && target.invitedTo.untilTick > t) continue; // 이미 청을 받았다
+    // §23.47 **앙숙으로 여기는 사람에게는 청하지 않는다.** 아래의 rival 검사는
+    // `target.relTiers[sim.id]` — 상대가 나를 앙숙으로 볼 때다. 내가 상대를 앙숙으로
+    // 보는 방향은 여태 아무 데도 걸리지 않았다(애초에 그 방향이 생길 수 없었다).
+    // 거절이 실제로 호감을 내리기 시작하면 처음으로 생기므로, 여기서 받는다.
+    // pairHash는 rngSim을 쓰지 않으므로 드로우 순서에 영향이 없다.
+    if (sim.relTiers[target.id] === 'rival') continue;
     // 응할 확률: 관계가 가까울수록, 상대도 사교가 고플수록 (이분 컷이 아니라 가중)
     let pct = S.approachBasePct;
     const tier = target.relTiers[sim.id];
@@ -1538,7 +1544,46 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
         }
       }
     } else {
-      emit('invite_declined', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
+      // §23.47 **거절은 이제 흔적을 남긴다.** 바로 위 `helped` 분기가 고마움을 다루는
+      // 것과 같은 자리다. rng를 쓰지 않는 고정 감산이라 드로우 순서는 그대로다.
+      const fidD = sim.state.facilityId;
+
+      // ① 거절도 접촉이다. 앙숙 티어는 `호감 ≤ -2000` **그리고 `상호작용 ≥ 30`**을
+      // 요구하는데, 상호작용은 여태 tick.js의 마주 앉은 대화에서만 올랐다. 호감이
+      // 내려가는 유일한 길이 거절이고 거절은 대화가 아니므로 **두 조건이 서로 배타적이라
+      // 앙숙은 태어날 수가 없었다** — 호감이 -2250까지 간 쌍이 나와도 앙숙은 0명이었다.
+      // 마흔 번 청하고 마흔 번 거절당한 사이를 '서로 모르는 사이'로 세는 것이 틀렸다.
+      // 연애·결혼 게이트는 호감 하한(datingMin·marryMin)이 따로 있어 이 증가로 열리지 않는다.
+      const IC_MAX = 1000000; // tick.js의 대화 경로와 같은 상한
+      world.interactions[sim.id][target.id] =
+        Math.min(IC_MAX, (world.interactions[sim.id][target.id] ?? 0) + 1);
+      world.interactions[target.id][sim.id] =
+        Math.min(IC_MAX, (world.interactions[target.id][sim.id] ?? 0) + 1);
+
+      // ② 같은 사람에게 거듭 거절당하면 더 아프다. 한 번은 사정이고 다섯 번은 사이다.
+      // 기억이 밀려 나가면 앙금도 옅어진다 — 오래된 서운함을 잊는 것은 버그가 아니다.
+      let priors = 0;
+      for (const m of sim.memories) if (m.kind === 'rejected' && m.subjectSimId === target.id) priors++;
+      const drop = S.declineAffinity * (1 + Math.min(priors, S.declineEscalationCap));
+      const before = world.affinity[sim.id][target.id];
+      const after = Math.max(AFFINITY_MIN, before - drop);
+      world.affinity[sim.id][target.id] = after;
+      recordFact(sim, t, world.logic, 'rejected', { subjectSimId: target.id, placeId: fidD,
+        tags: ['rejected', `facility:${fidD}`, `sim:${target.id}`] });
+
+      // ③ 그 낙폭이 다툼 문턱을 아래로 지나가면 그건 말다툼이다 — 대화 중이 아니어도.
+      // 페어 임계 = 두 심 중 더 얕은(높은) 값 (PLAN §12.1), tick.js의 대화 경로와 같은 규칙.
+      const thrD = Math.max(argumentThreshold(sim, world.logic), argumentThreshold(target, world.logic));
+      if (before >= thrD && after < thrD) {
+        sim.mood = Math.max(-10000, Math.min(10000, sim.mood + world.logic.mood.argument));
+        target.mood = Math.max(-10000, Math.min(10000, target.mood + world.logic.mood.argument));
+        emit('argument', sim.id, { withSimId: target.id });
+        recordFact(sim, t, world.logic, 'argument', { subjectSimId: target.id, placeId: fidD,
+          tags: ['argument', `facility:${fidD}`, `sim:${target.id}`] });
+        recordFact(target, t, world.logic, 'argument', { subjectSimId: sim.id, placeId: fidD,
+          tags: ['argument', `facility:${fidD}`, `sim:${sim.id}`] });
+      }
+      emit('invite_declined', sim.id, { toSimId: target.id, facilityId: fidD, relation: tier ?? 'stranger' });
     }
   }
   return sideTalked;

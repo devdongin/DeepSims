@@ -158,9 +158,13 @@ test('#32 actual family settlement sustains its own government and conserved fin
   // contain an immigration wave. Count observed arrivals, not an invented fourth resident.
   assert.equal(result.governmentCheck.residents,3+result.governmentCheck.immigrants.length);
   assert.ok(result.governmentCheck.immigrants.every(Number.isSafeInteger));
-  // Preserving existing walls moves founding to tick26961; this seed elects
-  // resident1, not resident0 from the former structure-erasing fixture.
-  assert.ok(result.governmentCheck.treasury>0);assert.equal(result.governmentCheck.mayorId,1);
+  // §23.47 이제 거절이 호감도를 움직이므로 **누가 뽑히는지는 궤적마다 달라진다**
+  // (이 시드는 resident1 → resident0으로 바뀌었다). 이 테스트가 주장하는 것은
+  // "정부가 유지되고 재정이 보존된다"이지 특정 id가 아니다. 그리고 시장이 그 마을의
+  // 일할 수 있는 주민이라는 진짜 조건은 bench/founding-construction.js:95가 이미
+  // 매 실행 검사한다 — id 고정은 그 위에 얹힌 궤적 핀일 뿐이라 걷어낸다.
+  assert.ok(result.governmentCheck.treasury>0);
+  assert.ok(Number.isSafeInteger(result.governmentCheck.mayorId),'시장이 없다 — 정부가 유지되지 않았다');
 });
 
 test('#32 actual volunteer completion and neglected fire change only the served facility municipality',()=>{

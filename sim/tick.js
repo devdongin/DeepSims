@@ -51,7 +51,7 @@ import { makeSim, emptyState } from './simfactory.js';
 import { recordIndustryDemand, recordCapacityShortfall, recordIndustryWant, maybeUnlockIndustries, neededIndustryFacility } from './industry.js';
 import { makeAbilities } from './abilities.js';
 import { surnameFor, surnameHash } from './surnames.js';
-import { recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
+import { argumentThreshold, recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
@@ -722,11 +722,7 @@ function scaleDelta(delta, factor) {
   return s * floorDiv(Math.abs(delta) * factor, 100);
 }
 
-function argumentThreshold(sim, L) {
-  return clamp(
-    L.affinity.argumentBase - (sim.traits.mbti.TF - 50) * L.affinity.argumentTfCoef,
-    L.affinity.argClampMin, L.affinity.argClampMax);
-}
+// §23.47 argumentThreshold는 cognition.js로 옮겼다 — 거절 경로도 같은 문턱을 쓴다.
 
 // ---- 입력 명령 핸들러 (1단계) ----
 

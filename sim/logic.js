@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 99, // Persistent employers with home-distance weighted initial assignment.
+  logicSchemaVersion: 100, // §23.47 거절이 호감도·기억에 닿는다 (99=지속 고용주 위에)
   founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
@@ -193,6 +193,7 @@ export const DEFAULT_LOGIC = {
       new_neighbor: 3, club_joined: 4, heroic: 8, celebration: 7, milestone: 7, unmet: 6,
       welfare: 6, // §22.20 정부가 나를 도왔다 — 회고 투표의 재료
       helped: 5, was_helped: 6, // §22.21 이웃을 챙겼다 / 이웃이 나를 챙겼다
+      rejected: 6, // §23.47 청을 거절당했다 — 기억에 남지 않으면 원망도 없다
       governed: 4 }, // §22.22 정책을 조정했다 — 시장 자신의 통치 기록
     recencyLut: [1000, 820, 670, 550, 450, 370, 300, 250, 200, 165, 135, 110, 90, 74, 60, 50],
     wRecency: 2, wImportance: 100, relevancePer: 100, relevanceCap: 4,
@@ -234,6 +235,21 @@ export const DEFAULT_LOGIC = {
     helpAcceptBonusPct: 25,           // 곤경일 때 승낙 확률 가산 (사람은 챙김을 더 잘 받는다)
     helpGiverSocialPct: 100,          // 주는 쪽 사교 회복 (정면 대비 %) — 곁다리(30)보다 크다
     helpGratitudeAffinity: 300,       // 받는 쪽 → 주는 쪽 호감 (한 방향)
+    // §23.47 **거절은 이 세계에서 유일하게 이미 매일 일어나는 좌절이다.** 100일에 1,878건인데
+    // 여태 이벤트만 쏘고 호감도·기억·기분 어디에도 닿지 않았다(society.js의 거절 분기가
+    // emit 한 줄뿐이다). 그 결과 122명 마을에서 가장 나쁜 사이가 −74다 — 앙숙 문턱(−2000)의 3.7%.
+    //
+    // 전역 노브로는 안 된다는 것이 A/B로 확인됐다: 대화 델타의 평균 드리프트를 +10 → 0으로
+    // 만들면 친구가 315 → 0.8, 결혼이 11 → 0.1로 **사회가 지워질 뿐** 앙숙은 0.1명이다.
+    // 필요한 것은 **특정한 두 사람**을 갈라놓는 사건이고, 거절이 바로 그것이다.
+    // 청한 쪽만 감점한다 — 거절한 쪽은 자기가 고른 것이라 원망할 이유가 없다.
+    // §23.47 크기는 바로 위 helpGratitudeAffinity와 **대칭으로** 잡았다: 챙김이 얹는 만큼
+    // 거절이 덜어낸다. 임의의 숫자가 아니라 이 세계가 이미 쓰고 있던 눈금이다.
+    // 실측(20시드×100일): 150이면 앙숙 0.1±0.2·말다툼 0.2±0.5로 사실상 여전히 죽어 있고,
+    // 300이면 앙숙 1.8·말다툼 5 수준 — 120명 마을 100일에 원수 두엇이면 과하지 않다.
+    declineAffinity: 300,             // 청한 쪽 → 거절한 쪽 호감 감소 (한 방향)
+    // 같은 사람에게 거듭 거절당하면 커진다(최대 1+cap 배). 한 번은 사정이고 다섯 번은 사이다.
+    declineEscalationCap: 5,
     helpMoodGiver: 40,                // 챙긴 쪽 기분
     helpMoodTaker: 60,                // 챙김 받은 쪽 기분
     rivalStatePenalty: 200000000000,  // 라이벌이 있으면 감점 (양수로 저장, 적용 시 부호)
@@ -570,7 +586,7 @@ export const DEFAULT_LOGIC = {
 };
 
 // 부호가 음(불쾌)인 기억 종류 — memoryMod·pendingMood 계산에 사용 (구조, 코드 고정)
-export const NEGATIVE_MEMORY_KINDS = ['argument', 'starving', 'lonely', 'sick', 'heartbreak'];
+export const NEGATIVE_MEMORY_KINDS = ['argument', 'starving', 'lonely', 'sick', 'heartbreak', 'rejected'];
 
 // 구버전 world.logic에 새 섹션의 기본값을 결정적으로 병합 (마이그레이션 전용)
 export function mergeLogicDefaults(oldLogic) {
@@ -720,6 +736,8 @@ function checkRanges(p, errors) {
   inRange('social.helpAcceptBonusPct', p.social.helpAcceptBonusPct, 0, 100);
   inRange('social.helpGiverSocialPct', p.social.helpGiverSocialPct, 0, 300);
   inRange('social.helpGratitudeAffinity', p.social.helpGratitudeAffinity, 0, 5000);
+  inRange('social.declineAffinity', p.social.declineAffinity, 0, 5000);
+  inRange('social.declineEscalationCap', p.social.declineEscalationCap, 0, 100);
   inRange('social.helpMoodGiver', p.social.helpMoodGiver, 0, 1000);
   inRange('social.helpMoodTaker', p.social.helpMoodTaker, 0, 1000);
   inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);

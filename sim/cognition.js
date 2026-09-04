@@ -167,6 +167,14 @@ export function stateModFor(world, sim, facilityId, L) {
   return clamp(mod, -STATE_MOD_CLAMP, STATE_MOD_CLAMP);
 }
 
+// §23.47 다툼 문턱. 전에는 tick.js 안에 있어서 **마주 앉은 대화 중에만** 검사됐다.
+// 거절로 호감이 내려가면 이 문턱을 조용히 지나가 버려, 사이가 아무리 나빠져도
+// 말다툼이 한 번도 나지 않았다(20시드 100일 실측 0건). 두 경로가 같은 판단을 쓰도록 옮긴다.
+export function argumentThreshold(sim, L) {
+  const v = L.affinity.argumentBase - (sim.traits.mbti.TF - 50) * L.affinity.argumentTfCoef;
+  return Math.max(L.affinity.argClampMin, Math.min(L.affinity.argClampMax, v));
+}
+
 export function computeTier(affinityVal, interactionCount, L) {
   if (affinityVal >= L.social.friendAffinity && interactionCount >= L.social.friendInteractions) return 'friend';
   if (affinityVal <= L.social.rivalAffinity && interactionCount >= L.social.rivalInteractions) return 'rival';

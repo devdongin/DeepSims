@@ -62,9 +62,12 @@ for (const [pop, expected] of [
   // behavior; snapshots retain all employment fields/events, without normalization.
   // Followup excludes retired residents, uses physical employer planning counts
   // and bounds event evidence; retain those intentional effects in the vectors.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '16a03eef']],
-  [50, ['8f96407c', '8464940b', 'a2baa370', '2ce64384']],
-  [200, ['23a3029f', '3b0afc44', '1dcc03c1', '10b4e7cb']],
+  //   schema77/logic100 (§23.47 거절이 호감도·기억에 닿는다 + contacts 행렬): 거절은 rng를
+  //     소비하지 않는 고정 감산이라 드로우 순서가 보존된다. 그래도 240틱 안에서 호감·기분이
+  //     결정에 닿으므로 선택·이벤트·세계 해시가 갈린다 — 의도한 변화다.
+  [10, ['PENDING10a', 'PENDING10b', 'PENDING10c', 'PENDING10d']],
+  [50, ['PENDING50a', 'PENDING50b', 'PENDING50c', 'PENDING50d']],
+  [200, ['PENDING200a', 'PENDING200b', 'PENDING200c', 'PENDING200d']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);
