@@ -48,7 +48,8 @@ export function staticKey(sim) {
   const t = sim.traits, a = sim.abilities ?? {}, e = sim.education ?? {};
   return `${sim.name}|${sim.surname}|${t.age}|${t.occupation}|${t.gender}|`
     + `${a.stamina}.${a.dexterity}.${a.intellect}.${a.charisma}|`
-    + `${sim.isPlayer ? 1 : 0}${sim.isGenius ? 1 : 0}|${e.stage ?? ''}${e.highestDegree ?? ''}${e.course ?? ''}`;
+    + `${sim.isPlayer ? 1 : 0}${sim.isGenius ? 1 : 0}|${e.stage ?? ''}${e.highestDegree ?? ''}${e.course ?? ''}`
+    + `|${sim.homeId ?? ''}|${sim.householdId ?? ''}`; // §23.41 이사·혼인 때 다시 보낸다
 }
 
 export function simView(sim) {
@@ -74,8 +75,12 @@ export function simView(sim) {
     hasCar: sim.hasCar,
     isPlayer: sim.isPlayer,
     isGenius: sim.isGenius,
-    // §23.37 homeId·householdId는 화면이 한 번도 읽지 않는다 (전수 확인). 14.6KB/배치.
-    // 다시 필요해지면 여기 두 줄을 되살리면 된다 — 지우는 게 아니라 안 보내는 것이다.
+    // §23.41 homeId·householdId는 지금 화면이 안 읽지만 **로드맵에 있다** —
+    // PLAN §125~126이 가구를 핵심 개념으로 두고 #51(가구)·#32(마을 귀속)이 진행 중이다.
+    // 안 쓴다고 빼는 게 아니라, 배치마다 보내지 않고 **정적 쪽에 둔다**: 이사·혼인 때만
+    // 바뀌므로 실질 비용이 0에 수렴하고, 화면이 필요해지는 날 그대로 쓸 수 있다.
+    homeId: sim.homeId,
+    householdId: sim.householdId,
     needsTier: sim.needsTier ? { level: sim.needsTier.level } : null, // §23.40 level만 읽는다
     education: sim.education ? { universityEnrolled: sim.education.universityEnrolled,
       universityGraduated: sim.education.universityGraduated, stage: sim.education.lastStage,
