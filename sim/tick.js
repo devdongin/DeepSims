@@ -917,6 +917,9 @@ function applyPlanCenter(world, inp, t, emit, source = 'player') {
   root.centers.push({ centerId, x: p.x, y: p.y, createdTick: t, ...jurisdiction });
   emit('center_planned', source === 'mayor' ? government.mayorId : null,
     { centerId, x: p.x, y: p.y, cost, treasury: government.treasury, source, ...jurisdiction });
+  // Publish usable ownership with the paid center input. Waiting for the next
+  // daily automatic plan can consume all new parcels before a player can zone.
+  allocateMunicipalLand(root,t,emit);
 }
 
 // 재정 리뷰일에 관측된 외곽 거주 수요를 본다. 기존 중심지 반경 안에는 중복 투자하지 않는다.

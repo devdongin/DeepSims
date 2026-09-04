@@ -47,10 +47,11 @@ import { collectCandidates } from '../sim/tick.js';
 //   §23.34~36 통합 logic85: 40일 달력·연애 나이·주택 footprint. 초기240틱 세 행동 벡터 동일.
 //   제거 회계: 인구200 tick1 사망자146의 현금1000 유출 및 이벤트 필드 추가.
 //   이 두 추가만 제거하면 종전 이벤트2179523f/세계d932c483와 정확히 일치한다.
+//   logic86: 지방 유료 중심의 공터 배정 확장. 초기 후보·선택·이벤트는 동일.
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', '0ac150d5']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', 'c041ba1c']],
-  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', 'b96ace48']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', '02ffc72a']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '500c0173']],
+  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', 'f597d211']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

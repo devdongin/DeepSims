@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import {tick,hashWorld} from '../sim/index.js';
 import {serialize,deserialize,findNonFinite} from '../sim/serialize.js';
 import {governmentFor,publicBalance} from '../sim/government.js';
-import {plotBuildable,isWalkable} from '../sim/map.js';
+import {plotBuildable,isWalkable,zoneFootprint,sameRegion} from '../sim/map.js';
+import {foundingSiteReserved} from '../sim/founding.js';
+import {campusSiteReserved} from '../sim/center-plots.js';
 
 // A window may start partway through a day. Count only new arrivals, not the
 // pre-window part of today's counters; retain totals beyond the 14-day ring.
@@ -50,20 +52,84 @@ function firstDifference(a,b,path='world'){
   for(const key of keys){const d=firstDifference(a[key],b[key],`${path}.${key}`);if(d)return d;}
   return null;
 }
-export function observeSettlementTraffic(initial,{days=30,resume=false,auditResume=false}={}){
+export function observeSettlementTraffic(initial,{days=30,resume=false,auditResume=false,stations=false,expandCenters=false}={}){
   assert.ok(Number.isInteger(days)&&days>0&&days<=365);
+  assert.ok(!expandCenters||stations,'center investment requires the explicit station-order scenario');
   let w=initial,shadow=null;
   const startTick=w.worldTick,initialMunicipalities=municipalities(w),money=closedMoney(w);
   const arrivals=arrivalObserver(w.transportStats.today),noPath={},noPathSamples=[],started={},construction=[],migration={};
+  const stationOrders=[],centerOrders=[],ordered=new Set(),expanded=new Set(),blockedTicks={},railDirections={};
+  const railBefore={...w.rail.stats};
+  let serviceWindow=null,serviceArrivals=null;
   for(let n=0;n<days*1440;n++){
     if(resume&&n===Math.floor(days*1440/2)){if(auditResume)shadow=w;w=deserialize(serialize(w));}
-    const events=tick(w);arrivals.collect(w.transportStats.today);
+    const inputs=[];
+    if(stations)for(const village of [...w.villages].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0)){
+      if(ordered.has(village.id))continue;
+      const blocked=reason=>{const counts=blockedTicks[village.id]??={};counts[reason]=(counts[reason]??0)+1;};
+      if(!w.transit.stationUnlocked){blocked('demand');continue;}
+      if(governmentFor(w,village.id).treasury<w.logic.zone.costs.train_station){blocked('funds');continue;}
+      const busy=new Set([...w.projects,...w.zoneOrders].map(p=>p.plotId)),fp=zoneFootprint('train_station',0);
+      const p=[...w.plots].sort((a,b)=>a.plotId-b.plotId).find(p=>(p.villageId??'village:0')===village.id
+        &&!p.used&&!busy.has(p.plotId)&&p.foundingPetitionId==null&&plotBuildable(w.map,p,fp.w,fp.h)
+        &&!foundingSiteReserved(w,p,'train_station')&&!campusSiteReserved(w,p,'train_station'));
+      if(!p){
+        blocked('land');
+        if(expandCenters&&village.id!=='village:0'&&!expanded.has(village.id)
+          &&governmentFor(w,village.id).treasury>=w.logic.zone.costs.train_station+w.logic.zone.plannedCenterCost){
+          const distance=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y),radius=w.logic.zone.centerRadius;
+          const primary=w.villages.find(v=>v.id==='village:0');
+          const eligible=[...w.plots].filter(q=>q.villageId==null&&!q.used&&!busy.has(q.plotId)&&q.foundingPetitionId==null
+            &&plotBuildable(w.map,q,fp.w,fp.h)&&(!primary||distance(q,primary.center)>radius)
+            &&sameRegion(w.map,village.center.x,village.center.y,q.x,q.y)
+            &&!w.centers.some(c=>distance(q,c)<=radius)
+            &&!foundingSiteReserved(w,q,'train_station')&&!campusSiteReserved(w,q,'train_station'));
+          // An explicit mayor investment scenario: prefer the service area with
+          // most currently available parcels, then nearest/lowest-id. Schools
+          // and housing keep their normal priority and may consume those sites.
+          const scores=new Map(eligible.map(q=>[q.plotId,eligible.filter(p=>distance(p,q)<=radius).length]));
+          const site=eligible.sort((a,b)=>scores.get(b.plotId)-scores.get(a.plotId)
+            ||distance(a,village.center)-distance(b,village.center)||a.plotId-b.plotId)[0];
+          if(site)inputs.push({sequence:inputs.length,command:'plan_center',payload:{x:site.x,y:site.y,villageId:village.id}});
+        }
+        continue;
+      }
+      inputs.push({sequence:inputs.length,command:'zone',payload:{plotId:p.plotId,type:'train_station',dir:0}});
+    }
+    const events=tick(w,inputs);arrivals.collect(w.transportStats.today);
+    if(serviceWindow&&w.worldTick<=serviceWindow.endTick)serviceArrivals.collect(w.transportStats.today);
+    for(const input of inputs){
+      if(input.command==='plan_center'){
+        const e=events.find(e=>e.type==='center_planned'&&e.payload.villageId===input.payload.villageId);
+        assert.ok(e,'ordinary paid center order must be accepted');
+        expanded.add(input.payload.villageId);centerOrders.push({tick:e.tick,...e.payload});continue;
+      }
+      const e=events.find(e=>e.type==='zoned'&&e.payload.plotId===input.payload.plotId);
+      assert.ok(e,'ordinary station order must be accepted');
+      const villageId=w.plots.find(p=>p.plotId===input.payload.plotId).villageId??'village:0';
+      ordered.add(villageId);stationOrders.push({tick:e.tick,villageId,...e.payload});
+    }
     if(shadow){
-      const shadowEvents=tick(shadow),diff=firstDifference(events,shadowEvents,'events')
+      const shadowEvents=tick(shadow,inputs),diff=firstDifference(events,shadowEvents,'events')
         ??((w.worldTick%1440===0||n===Math.floor(days*1440/2))?firstDifference(w,shadow):null);
       if(diff)throw new Error(JSON.stringify({tick:w.worldTick,diff,events,shadowEvents}));
     }
     for(const e of events){
+      if(e.type==='rail_opened'&&!serviceWindow){
+        const from=w.map.facilities.find(f=>f.id===e.payload.from)?.villageId;
+        const to=w.map.facilities.find(f=>f.id===e.payload.to)?.villageId;
+        if(from&&to&&from!==to){
+          serviceWindow={startTick:e.tick,endTick:e.tick+30*1440,directions:{}};
+          serviceArrivals=arrivalObserver(w.transportStats.today);
+        }
+      }
+      if(e.type==='rail_boarded'){
+        const from=w.map.facilities.find(f=>f.id===e.payload.from)?.villageId;
+        const to=w.map.facilities.find(f=>f.id===e.payload.to)?.villageId;
+        const key=`${from}>${to}`;railDirections[key]=(railDirections[key]??0)+1;
+        if(serviceWindow&&e.tick<=serviceWindow.endTick)
+          serviceWindow.directions[key]=(serviceWindow.directions[key]??0)+1;
+      }
       const villageId=w.sims.find(s=>s.id===e.simId)?.villageId??'unknown';
       if(e.type==='action_failed'&&e.payload.reason==='no_path'){
         noPath[villageId]=(noPath[villageId]??0)+1;
@@ -101,5 +167,9 @@ export function observeSettlementTraffic(initial,{days=30,resume=false,auditResu
     arrivals:arrivals.rows(),noPath,noPathSamples,started,construction,migrations:Object.values(migration),
     transport:{cars:w.sims.filter(s=>s.hasCar).length,stationUnlocked:w.transit.stationUnlocked,demand:w.transit.demand,
       stations:w.map.facilities.filter(f=>f.type==='train_station').map(f=>({id:f.id,villageId:f.villageId}))},
+    ...(stations?{railObservation:{stationOrders,centerOrders,blockedTicks,directions:railDirections,
+      serviceWindow:serviceWindow?{...serviceWindow,observedUntil:Math.min(w.worldTick,serviceWindow.endTick),
+        complete:w.worldTick>=serviceWindow.endTick,arrivals:serviceArrivals.rows()}:null,
+      stats:Object.fromEntries(Object.entries(w.rail.stats).map(([k,v])=>[k,v-(railBefore[k]??0)]))}}:{}),
     closedMoney:money,hash:hashWorld(w)}};
 }

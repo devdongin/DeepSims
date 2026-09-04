@@ -4,7 +4,7 @@ import { createWorld, serialize, deserialize, hashWorld, tick } from '../sim/ind
 import { TILE, zoneFootprint } from '../sim/map.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { newGovernment } from '../sim/government.js';
+import { newGovernment, publicBalance } from '../sim/government.js';
 import { allocateMunicipalLand } from '../sim/municipal-land.js';
 import { foundingEvidence } from '../sim/founding.js';
 
@@ -68,6 +68,50 @@ test('#32 closest founded municipality wins stable ties, regardless of list orde
   assert.deepEqual(assign(w),assign(b));assert.equal(w.plots[0].villageId,'village:1');
   const c=fixture();c.centers=[{centerId:'own',x:85,y:85,villageId:'village:1'}];
   assert.equal(assign(c).length,1,'own center does not block its own territory');
+});
+
+test('a paid municipal center extends vacant-land attribution beyond the founding-center radius',()=>{
+  const w=fixture();w.plots=[{plotId:1,x:120,y:85,used:false}];
+  w.villages[1].government.treasury=w.logic.zone.plannedCenterCost;
+  w.lastDailyDay=0;w.lastPlanDay=0;
+  const replay=deserialize(serialize(w)),before=w.map.tiles.slice();
+  const inputs=[{sequence:0,command:'plan_center',payload:{x:115,y:85,villageId:'village:1'}}];
+  const events=tick(w,inputs);assert.deepEqual(events,tick(replay,inputs));
+  assert.ok(events.some(e=>e.type==='center_planned'));assert.equal(w.villages[1].government.treasury,0);
+  assert.ok(events.some(e=>e.type==='village_land_assigned'),'paid input exposes its new parcels before the next daily automatic planner');
+  assert.deepEqual(assign(w),assign(replay));assert.equal(hashWorld(w),hashWorld(replay));
+  assert.equal(w.plots[0].villageId,'village:1');assert.deepEqual(w.map.tiles,before);
+});
+
+test('paid-center expansion preserves ownership, other centers, commitments and connectivity',()=>{
+  for(const condition of ['owned','primary','foreign_center','empty','blocked','order']){
+    const w=fixture();w.plots=[{plotId:1,x:120,y:85,used:false}];
+    w.centers=[{centerId:'own',x:115,y:85,villageId:'village:1'}];
+    if(condition==='owned')w.plots[0].villageId='village:0';
+    if(condition==='primary')w.villages[0].center={x:110,y:85};
+    if(condition==='foreign_center')w.centers.push({centerId:'other',x:120,y:85});
+    if(condition==='empty')w.sims[0].villageId='village:0';
+    if(condition==='order')w.zoneOrders=[{plotId:1,type:'house'}];
+    if(condition==='blocked'){for(let y=0;y<128;y++)w.map.tiles[y*128+100]=TILE.MOUNTAIN;w.map.reachVersion++;}
+    const before=serialize(w);assert.deepEqual(assign(w),[],condition);assert.equal(serialize(w),before,condition);
+  }
+});
+
+test('center then station in one ordinary input batch assigns land before charging the local order',()=>{
+  const w=fixture();w.plots=[{plotId:1,x:120,y:85,used:false}];
+  w.lastDailyDay=0;w.lastPlanDay=0;w.transit.stationUnlocked=true;
+  w.villages[1].government.treasury=w.logic.zone.plannedCenterCost+w.logic.zone.costs.train_station;
+  const rootCash=w.treasury,money=publicBalance(w)+w.externalOutflow,terrain=w.map.tiles.slice();
+  const replay=deserialize(serialize(w)),inputs=[
+    {sequence:0,command:'plan_center',payload:{x:115,y:85,villageId:'village:1'}},
+    {sequence:1,command:'zone',payload:{plotId:1,type:'train_station',dir:0}},
+  ];
+  const events=tick(w,inputs);assert.deepEqual(events,tick(replay,inputs));assert.equal(hashWorld(w),hashWorld(replay));
+  assert.ok(events.findIndex(e=>e.type==='center_planned')<events.findIndex(e=>e.type==='village_land_assigned'));
+  assert.ok(events.findIndex(e=>e.type==='village_land_assigned')<events.findIndex(e=>e.type==='zoned'));
+  assert.equal(w.plots[0].villageId,'village:1');assert.equal(w.villages[1].government.treasury,0);
+  assert.equal(w.treasury,rootCash);assert.equal(publicBalance(w)+w.externalOutflow,money);
+  assert.deepEqual(w.map.tiles,terrain);assert.ok(w.projects.some(p=>p.plotId===1&&p.type==='train_station'&&p.required>=18000));
 });
 
 test('#32 daily integration attributes land before planning and resumes identically',()=>{
