@@ -39,11 +39,11 @@ import { collectCandidates } from '../sim/tick.js';
 //     1개라 240틱 지평에서는 아무것도 안 바뀌어야 하는데, world 해시는 로직 파라미터를
 //     포함하므로 그 값만 움직인다.
 //   §23.29  (기분에 돈) : 현금 여력이 바닥선에 들어가 첫 틱부터 기분이 갈린다.
-//   #32 schema72/logic77 통합: main의 기분/건설 변경을 보존하고 world 해시 재측정.
+//   #32 schema72/logic78: main의 기분/건설 변경 보존, 독립 이주 저장 계약 반영.
 for (const [pop, expected] of [
-  [10, ['272da7d7', '32b2391b', 'ddff0557', 'b490af47']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '35832df8']],
-  [200, ['91f50dd7', 'a23787ba', '2179523f', '084ff737']],
+  [10, ['272da7d7', '32b2391b', 'ddff0557', 'be7ebc3a']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '71b11fa7']],
+  [200, ['91f50dd7', 'a23787ba', '2179523f', '4c174d36']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

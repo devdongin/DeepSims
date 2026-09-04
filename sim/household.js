@@ -1,9 +1,10 @@
 // #51 Explicit households and durable, next-tick revalidated separation intents.
-import { isResidence, isAvailableResidence } from './map.js';
+import { isResidence, isAvailableResidence, sameRegion } from './map.js';
 import { syncResidenceVillage } from './villages.js';
 import { askingRent } from './housing.js';
 import { isSettlementInTransit } from './settlement.js';
 import { beginHouseholdMigration } from './household-migration.js';
+import { planIndependentHousehold } from './independent-household.js';
 import { canWork } from './education.js';
 
 const employed = (world, sim) => canWork(sim)
@@ -56,8 +57,16 @@ export function applyHouseholdIntents(world, t, emit) {
     else if (!liveParentAtHome(world, sim)) reason = 'parent_not_cohabiting';
     else if (!employed(world, sim)) reason = 'income_unstable';
     else if (sim.money < world.logic.household.reserveMoney) reason = 'reserve_short';
-    const vacant = reason ? null : vacantResidences(world,sim.homeId)[0];
+    const family=!reason&&world.villages.length>1?planIndependentHousehold(world,sim.id,sim.villageId):null;
+    const origin=!reason?world.map.facilities.find(f=>f.id===sim.homeId):null;
+    const vacant = reason ? null : vacantResidences(world,sim.homeId).find(h=>h.villageId===sim.villageId
+      ||(family?.ok&&h.resources.length>=family.residents.length&&origin
+        &&sameRegion(world.map,origin.door.x,origin.door.y,h.door.x,h.door.y)));
     if (!reason && !vacant) reason = 'no_vacant_home';
+    if(!reason&&vacant.villageId!==sim.villageId){
+      reason=beginHouseholdMigration(world,intent,vacant,t,emit);
+      if(!reason)continue;
+    }
     if (reason) {
       if (sim) sim.independenceDays = 0;
       world.householdDaily.failures[reason] = (world.householdDaily.failures[reason] ?? 0) + 1;
