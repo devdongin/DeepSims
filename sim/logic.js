@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 80, // #32 completed foreign homes receive whole families through actual travel.
+  logicSchemaVersion: 81, // #32 demand-unlocked stations use paid, physical construction.
   founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
@@ -310,7 +310,7 @@ export const DEFAULT_LOGIC = {
       primary_school: 8000, middle_school: 10000, high_school: 12000,
       hospital: 10000, city_hall: 10000, police_station: 10000, fire_station: 10000, cinema: 10000,
       apartment: 14000, mall: 14000,
-      university: 20000, factory: 20000, workshop:10000, lab:16000, warehouse:14000,
+      university: 20000, factory: 20000, workshop:10000, lab:16000, warehouse:14000, train_station:20000,
     },
     deficit: 4000,       // needValue = NEED_MAX - deficit (고정 급함)
     persJDiv: 4,         // persFactor = 100 + floorDiv(100 - JP, persJDiv)
@@ -402,7 +402,7 @@ export const DEFAULT_LOGIC = {
   },
   // §18.T2 건설 지시: 주문 시 국고 차감 (취소 없음 — 47차 합의), 착공 시 재검증
   zone: {
-    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school: 4000, middle_school: 5000, high_school: 6000, workshop:6000, lab:9000, warehouse:8000 },
+    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school: 4000, middle_school: 5000, high_school: 6000, workshop:6000, lab:9000, warehouse:8000, train_station:8000 },
     demolitionCostPerTile: 200,
     plannedCenterCost: 5000,
     centerRadius: 32,
@@ -1098,7 +1098,7 @@ function checkShape(ref, val, path, errors) {
 }
 
 // §18.T1: 시장 정책 화이트리스트 — 필드·정수·범위 검증 (서버·시뮬 공유 단일 권위)
-export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university', 'primary_school','middle_school','high_school','workshop','lab','warehouse'];
+export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university', 'primary_school','middle_school','high_school','workshop','lab','warehouse','train_station'];
 
 export const POLICY_FIELDS = {
   healthCopayPct: [0, 100],

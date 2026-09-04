@@ -764,8 +764,7 @@ export function zoneAllowedTypes(world, villageId) {
   const out = ['house', 'cafe', 'office', 'park', 'primary_school','middle_school','high_school'];
   for (let i = 1; i <= governmentFor(world, villageId).cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**로 언락된다 (이슈 #52).
-  // 건설 레시피(ZONEABLE·비용·footprint)는 후속 라운드 — 그 전까지 zone 주문은
-  // 기존 'bad_type'(언락됐지만 레시피 미구현) 분기로 결정적으로 거부된다.
+  // Unlock permits an ordinary paid zone order, not instant construction or trains.
   if (world.transit?.stationUnlocked) out.push('train_station');
   for (const id of world.unlockedIndustries ?? []) if (!out.includes(id)) out.push(id);
   return out;

@@ -41,6 +41,7 @@ test('#143 hidden client receives no tick batches and resumes with one current s
       throw new Error('message timeout');
     };
     const initial = await waitFor((m) => m.type === 'snapshot');
+    assert.equal(initial.world.zoneCosts.train_station,8000,'station UI receives authoritative construction price');
     ws.send(JSON.stringify({ type: 'visibility', hidden: true }));
     await waitFor((m) => m.type === 'visibility' && m.hidden === true);
     messages.length = 0;
@@ -57,6 +58,8 @@ test('#143 hidden client receives no tick batches and resumes with one current s
     await new Promise((resolve) => setTimeout(resolve, 1100));
     assert.equal(messages.some((m) => m.type === 'tickBatch'), false);
     assert.equal(observerMessages.some((m) => m.type === 'tickBatch'), true, 'visible client keeps receiving live batches');
+    assert.equal(observerMessages.find(m=>m.type==='tickBatch').zoneCosts.train_station,8000,
+      'live batches retain current prices rather than reverting to a UI constant');
 
     ws.send(JSON.stringify({ type: 'visibility', hidden: false }));
     const resumed = await waitFor((m) => m.type === 'snapshot');

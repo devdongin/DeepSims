@@ -147,7 +147,7 @@ test('ST-7. 장거리 이동이 칸수를 함께 누적한다 (거리 분포의 
   assert.deepEqual(findNonFinite(w), [], '3일 뒤에도 undefined/NaN 없음');
 });
 
-test('ST-8. zone 계약 — 언락 전 tier_locked, 언락 후 bad_type (레시피는 후속 라운드)', () => {
+test('ST-8. zone contract — locked before demand, paid construction after unlock', () => {
   const w = createWorld(SEED);
   zeroTransport(w);
   // 명령 거부의 회계만 검증한다. 일일 학교 수요 착공은 education.test.js에서 검증.
@@ -158,12 +158,15 @@ test('ST-8. zone 계약 — 언락 전 tier_locked, 언락 후 bad_type (레시�
   // 언락 전: 허용 타입에 없음 → tier_locked
   const evs0 = tick(w, [{ sequence: 0, command: 'zone', payload: { plotId: free.plotId, type: 'train_station', dir: 0 } }]);
   assert.ok(evs0.some((e) => e.type === 'input_rejected' && e.payload.reason === 'tier_locked'), '언락 전 잠김');
-  // 언락 후: 허용은 되지만 ZONEABLE 레시피가 없음 → bad_type (§18.T3와 같은 대기 계약)
+  assert.equal(w.treasury, 99999, 'locked order does not charge');
+  // Unlock permits a paid project, never an instantly completed station.
   w.transit.stationUnlocked = true;
-  const free2 = w.plots.find((p) => !p.used && plotBuildable(w.map, p));
+  const free2 = w.plots.find((p) => !p.used && plotBuildable(w.map, p,8,6));
   const evs1 = tick(w, [{ sequence: 0, command: 'zone', payload: { plotId: free2.plotId, type: 'train_station', dir: 0 } }]);
-  assert.ok(evs1.some((e) => e.type === 'input_rejected' && e.payload.reason === 'bad_type'), '레시피 미구현 대기');
-  assert.equal(w.treasury, 99999, '거부된 주문은 국고를 건드리지 않는다');
+  assert.ok(evs1.some((e) => e.type === 'zoned' && e.payload.type === 'train_station'));
+  assert.equal(w.treasury, 99999-w.logic.zone.costs.train_station);
+  assert.equal(w.projects.find(p=>p.plotId===free2.plotId).required,20000);
+  assert.equal(w.map.facilities.some(f=>f.type==='train_station'),false);
 });
 
 test('ST-9. 직렬화 왕복 고정점 — 언락 전·후 모두 해시가 보존된다', () => {

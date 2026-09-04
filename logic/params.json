@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 80,
+  "logicSchemaVersion": 81,
   "founding": { "petitionDays": 3, "minSettlers": 2 },
   "needsTiers": {
     "fulfilledMin": 4000,
@@ -709,7 +709,8 @@
       "factory": 20000,
       "workshop": 10000,
       "lab": 16000,
-      "warehouse": 14000
+      "warehouse": 14000,
+      "train_station": 20000
     },
     "deficit": 4000,
     "persJDiv": 4,
@@ -860,6 +861,7 @@
       "workshop": 6000,
       "lab": 9000,
       "warehouse": 8000,
+      "train_station": 8000,
       "primary_school": 4000,
       "middle_school": 5000,
       "high_school": 6000

@@ -415,7 +415,9 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
       }
       if (!pr) continue;
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
-      const right=pr.foundingPetitionId===undefined?5:4; // 개척 집 완공 후에도 내부 바닥인 작업점
+      // Narrow rotated stations must not complete a wall under the worker.
+      // Preserve existing non-station and founding workspot choices.
+      const right=pr.foundingPetitionId!==undefined||pr.type==='train_station'&&(pr.dir??0)%2===1?4:5;
       const spots = [
         { id: `p${pr.plotId}:spot0`, x: plot.x + 1, y: plot.y + 1 },
         { id: `p${pr.plotId}:spot1`, x: plot.x + right, y: plot.y + 1 },

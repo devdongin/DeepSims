@@ -58,3 +58,18 @@ test('missing government and unavailable station cannot submit; zone payload rem
   element('house').handlers.click();await element('zone-go').handlers.click();
   assert.deepEqual(requests[0].payload,{plotId:1,type:'house',dir:0});
 });
+
+test('unlocked station uses current server price and selected municipality without claiming train service',async()=>{
+  const {world,window,element,requests}=setup();
+  world.transit={stationUnlocked:true,fulfillmentPct:123};world.zoneCosts={train_station:9123};
+  window.openZoneModal(world.plots[1]);element('train_station').handlers.click();
+  assert.equal(element('zone-go').disabled,false);
+  assert.match(element('zone-info').textContent,/새마을 · 국고 6000원/);
+  assert.match(element('zone-info').textContent,/비용 9123원/);
+  assert.match(element('zone-info').textContent,/열차 운행 미지원/);
+  await element('zone-go').handlers.click();
+  assert.deepEqual(requests[0].payload,{plotId:2,type:'train_station',dir:0});
+  world.plots[1].villageId='missing';window.openZoneModal(world.plots[1]);element('train_station').handlers.click();
+  assert.equal(element('zone-go').disabled,true);
+  await element('zone-go').handlers.click();assert.equal(requests.length,1);
+});

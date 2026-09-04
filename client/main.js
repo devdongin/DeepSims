@@ -7,6 +7,7 @@ const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2
   6: 0x3a6b9a, 7: 0x7a6b4a, 8: 0xd4c48a, 9: 0x6b6b72, 10: 0x5a7a4a, 11: 0x8a6a4a }; // §19 R-A
 const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a, restaurant: 0xd4885a, gym: 0x5ad4a8, cinema: 0x6a5ad4, police_station: 0x4a5ad4, fire_station: 0xd44a3a, apartment: 0xb08a5a, factory: 0x8a8a92, mall: 0xd49ad4, university: 0x5ab0d4 };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
+FACILITY_COLORS.train_station = 0x739da8; // Dedicated tile-render fallback until station art exists.
 
 let world = null;
 let updatePolicySummary=()=>{};
@@ -1095,7 +1096,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
 }
 
 const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', workshop:'공방',lab:'연구소',warehouse:'창고', site: '공사장' };
-Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교'});
+Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교',train_station:'기차역 (운행 미지원)'});
 // §22.12 한국어 조사 — 종성(받침)으로 고른다.
 // 예전에는 이름 뒤에 조사를 하드코딩해 "수아이(가)", "은지이(가)", "수아과(와)"가
 // 나왔다. 이벤트 피드는 가상 플레이어 3인이 모두 이 게임 최고의 자산으로 꼽은
@@ -1197,7 +1198,7 @@ const PLACE_FALLBACK = {
   house: '집', apartment: '아파트', office: '직장', cafe: '카페', park: '공원', bar: '술집',
   library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청',
   school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', mall: '쇼핑몰',
-  police_station: '파출소', fire_station: '소방서',
+  police_station: '파출소', fire_station: '소방서', train_station:'기차역 (운행 미지원)',
 };
 // 해시로 고르면 카페 9곳에 이름 8개라 반드시 겹친다. 그래서 **같은 종류 안에서 몇 번째인가**로
 // 고른다 — 이름이 동나면 "2호점"이 붙는다. id 정렬이라 목록 순서가 바뀌어도 이름은 그대로다.
@@ -3635,6 +3636,7 @@ function connect() {
         if (msg.policyDefaults) world.policyDefaults=msg.policyDefaults;
         updatePolicySummary();
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
+        if (msg.zoneCosts !== undefined) world.zoneCosts = msg.zoneCosts;
         for (const e of msg.events ?? []) {
           if(e.type==='household_migration_gathering'){
             const home=world.map.facilities.find(f=>f.id===e.payload.targetHomeId);
@@ -3870,11 +3872,10 @@ setInterval(pushSpark, 5000);
   const modal = document.getElementById('zone-modal');
   if (!modal) return;
   let cur = null; let dir = 0; let type = 'house';
-  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school:4000,middle_school:5000,high_school:6000, workshop:6000,lab:9000,warehouse:8000 };
+  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school:4000,middle_school:5000,high_school:6000, workshop:6000,lab:9000,warehouse:8000,train_station:8000 };
   const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**가 언락한다 (world.transit, 이슈 #52).
-  // 착공 레시피(ZONEABLE·비용)는 후속 라운드 — 언락 전에는 충족도 %를, 언락 후에는
-  // 언락 사실을 보여주고 '지시'는 잠근다 (서버가 bad_type으로 거부할 주문을 보내지 않는다).
+  // Paid construction is available after unlock; this does not claim train service.
   const stationLocked = () => !(world?.transit?.stationUnlocked);
   const jurisdiction = () => {
     const id=cur?.villageId??'village:0';
@@ -3886,17 +3887,18 @@ setInterval(pushSpark, 5000);
     const isStation = type === 'train_station';
     const need = TIER_NEED[type] ?? 0;
     const industryLocked = ['workshop','lab','warehouse'].includes(type) && !world?.unlockedIndustries?.includes(type);
-    const locked = !local.government || (local.government.cityTier ?? 0) < need || industryLocked;
+    const locked = !local.government || (local.government.cityTier ?? 0) < need || industryLocked || (isStation && stationLocked());
+    const cost = world?.zoneCosts?.[type] ?? COST[type];
     const pct = world?.transit?.fulfillmentPct ?? 0;
     const info = isStation
       ? `공터 ${cur.plotId} · ${type} · ` + (stationLocked()
         ? `🔒 이동 수요 ${pct}% — 100%에 언락`
-        : `🚉 언락됨 (수요 ${pct}%) · 착공 레시피는 후속 라운드`)
-      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원` + (locked ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
+        : `🚉 언락됨 (수요 ${pct}%) · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원 · 역 건설만 지원, 열차 운행 미지원`)
+      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원` + (locked ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
     document.getElementById('zone-info').textContent = `${local.name} · 국고 ${local.government?.treasury??'?'}원 · ${info}`;
     for (const b of modal.querySelectorAll('[data-zt]')) {
       const zt = b.dataset.zt;
-      const dim = zt === 'train_station' ? stationLocked() : !local.government || (local.government.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt));
+      const dim = !local.government || (zt === 'train_station' ? stationLocked() : (local.government.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt)));
       b.style.opacity = dim ? 0.4 : 1;
       b.style.borderColor = zt === type ? '#ffcf6a' : '#6b5638';
     }
@@ -3905,7 +3907,7 @@ setInterval(pushSpark, 5000);
     const planned = world?.centers?.some((c) => c.x === cur.x && c.y === cur.y && (c.villageId??'village:0')===local.id);
     center.textContent = planned ? '이미 지정된 계획 중심지' : `이 공터를 계획 중심지로 지정 (−${world?.plannedCenterCost ?? 5000}원)`;
     center.disabled = !!planned || !local.government;
-    go.disabled = isStation || locked;
+    go.disabled = locked;
     go.style.opacity = go.disabled ? 0.4 : 1;
   };
   const plotsAvailable = () => (world?.plots ?? []).filter((p) => !p.used && p.foundingPetitionId==null
