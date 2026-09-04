@@ -25,19 +25,19 @@ const days=Number(process.argv[2]??30);
 assert.ok(Number.isSafeInteger(days)&&days>=30&&days<=90);
 const employmentWitnesses=new Set();
 const employmentKey=(id,e)=>JSON.stringify([id,e.facilityId,e.occupation,e.assignedTick]);
-const step=(world,inputs)=>{
+const step=(world,inputs,witnesses=employmentWitnesses)=>{
   const expectedIds=new Set(world.sims.map(s=>s.id));
   const result=tick(world,inputs);
   for(const e of result){
     if(['child_settled','immigrated'].includes(e.type))expectedIds.add(e.simId);
     if(['died','emigrated'].includes(e.type))expectedIds.delete(e.simId);
-    if(e.type==='employment_started')employmentWitnesses.add(employmentKey(e.simId,e.payload));
+    if(e.type==='employment_started')witnesses.add(employmentKey(e.simId,e.payload));
     if(e.type==='action_started'&&['work','construct'].includes(e.payload.action)){
       const sim=world.sims.find(s=>s.id===e.simId);
       assert.ok(sim&&canWork(sim)&&sim.traits.occupation!=='retired',`ineligible labor start: ${JSON.stringify(e)}`);
       if(e.payload.action==='work'){
         assert.equal(sim.employment?.facilityId,e.payload.facilityId);
-        assert.ok(employmentWitnesses.has(employmentKey(sim.id,sim.employment)),'work needs a witnessed real employer assignment');
+        assert.ok(witnesses.has(employmentKey(sim.id,sim.employment)),'work needs a witnessed real employer assignment');
       }
     }
   }
@@ -81,6 +81,7 @@ const money=world=>publicBalance(world)+world.sims.reduce((n,s)=>n+s.money,0)
   +world.map.facilities.reduce((n,f)=>n+(f.revenue??0),0)+(world.externalOutflow??0)-(world.externalInflow??0);
 const baseline=money(w),events=[];
 const initialPopulation=w.sims.length;
+const initialSourceIds=w.sims.slice(0,12).map(s=>s.id);
 assert.ok(w.sims.every(s=>s.employment===null),'no direct fixture employment');
 if(bootstrap){
   assert.deepEqual(w.transportStats.history,[]);assert.deepEqual(w.transportStats.pending,{});
@@ -88,7 +89,7 @@ if(bootstrap){
   assert.equal(w.transportStats.today.municipalVisits,undefined);assert.equal(w.transportStats.today.unservedAirTrips,undefined);
   events.push(...step(w));assert.equal(money(w),baseline);
   const failures=events.filter(e=>e.type==='air_trip_unserved');
-  assert.deepEqual(failures.map(e=>e.simId),w.sims.slice(0,12).map(s=>s.id));
+  assert.deepEqual(failures.map(e=>e.simId),initialSourceIds);
   assert.ok(failures.every(e=>e.payload.action==='eat'&&e.payload.from==='village:0'
     &&e.payload.to==='village:1'&&e.payload.facilityId===cafe.id));
   assert.equal(w.transportStats.today.arrivals,0);
@@ -134,6 +135,7 @@ for(const s of w.sims)if(canWork(s)&&s.traits.occupation!=='retired')
 assert.deepEqual(setupLedger(),beforeSetup);
 const openedTick=w.worldTick,endTick=openedTick+days*1440;
 let resumed=migrateWorld(deserialize(serialize(w))),batch=[],stored=events.length;
+const replayEmploymentWitnesses=new Set(employmentWitnesses);
 const byType={},directions={},arrivals={},samples=[],storage=new Storage(':memory:');
 let committedTick=0;
 const commitAndReload=expected=>{
@@ -150,7 +152,8 @@ try{
   storage.loadOrCreate({seed:32,nowUtcMs:1000});
   resumed=commitAndReload(events);
   while(w.worldTick<endTick){
-    const actual=step(w),replay=step(resumed);assert.deepEqual(actual,replay);
+    const actual=step(w),replay=step(resumed,undefined,replayEmploymentWitnesses);assert.deepEqual(actual,replay);
+    assert.deepEqual(replayEmploymentWitnesses,employmentWitnesses);
     assert.equal(money(w),baseline,`closed money at ${w.worldTick}`);
     assert.equal(money(resumed),baseline);batch.push(...actual);
     for(const e of actual){
