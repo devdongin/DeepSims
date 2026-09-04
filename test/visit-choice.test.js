@@ -58,7 +58,7 @@ test('a disconnected top resource does not hide the next reachable resource in t
   const result=chooseVisit(world,sim,[...cs,reachable],cs[0],pick);
   assert.equal(result.evidence.candidates.find(c=>c.villageId==='b').resourceId,'reachable');
 });
-test('real idle decision selects a visit then walks to the actual resource with identical save replay',()=>{
+function physicalFixture(){
   const w=createWorld(32);w.map={w:80,h:64,tiles:Array(5120).fill(TILE.GRASS),facilities:[],reachVersion:0};
   w.sims=w.sims.slice(0,3);w.plots=[];w.projects=[];w.lastDailyDay=0;w.lastPlanDay=0;
   for(let n=0;n<3;n++){
@@ -74,6 +74,10 @@ test('real idle decision selects a visit then walks to the actual resource with 
   for(const f of w.map.facilities.filter(f=>f.type==='house'||f.villageId==='village:0'))for(const r of f.resources)
     w.reservations[`${f.id}:${r.id}`]=999;
   w.rngSim=makeRng(1); // Fixed draw exercises an actual foreign destination.
+  return w;
+}
+test('real idle decision selects a visit then walks to the actual resource with identical save replay',()=>{
+  const w=physicalFixture();
   let saved=deserialize(serialize(w));const events=tick(w);assert.deepEqual(events,tick(saved));
   const started=events.find(e=>e.type==='action_started'&&e.simId===0);
   assert.ok(started?.payload.reason.visitChoice,JSON.stringify(started));
@@ -86,4 +90,24 @@ test('real idle decision selects a visit then walks to the actual resource with 
   assert.equal(s.state.kind,'performing');assert.equal(s.x,r.x);assert.equal(s.y,r.y);
   assert.equal(s.homeId,home);assert.equal(s.villageId,village);assert.equal(serialize(w),serialize(saved));
   assert.ok(Object.values(w.transportStats.today.municipalVisits).some(v=>v.to===target.villageId&&v.arrivals===1));
+});
+
+test('actual urgent decision bypasses town lottery and survives replay',()=>{
+  const w=physicalFixture();w.sims[0].needs.fun=1000;
+  const saved=deserialize(serialize(w)),events=tick(w);assert.deepEqual(events,tick(saved));
+  const started=events.find(e=>e.type==='action_started'&&e.simId===0);
+  assert.equal(started.payload.reason.urgencyOverride,true);
+  assert.equal(started.payload.reason.visitChoice,undefined);
+  assert.equal(serialize(w),serialize(saved));
+});
+
+test('actual party appointment keeps the named venue instead of drawing another town',()=>{
+  const w=physicalFixture(),s=w.sims[0],park=w.map.facilities.find(f=>f.type==='park'&&f.villageId==='village:1');
+  s.needs.fun=10000;s.needs.social=4000;s.knownTokens=[900];
+  w.tokens=[{tokenId:900,topic:'gathering',originTick:0,scheduledTick:1,expiresTick:100,placeId:park.id}];
+  const saved=deserialize(serialize(w)),events=tick(w);assert.deepEqual(events,tick(saved));
+  const started=events.find(e=>e.type==='action_started'&&e.simId===0);
+  assert.equal(started.payload.action,'socialize');assert.equal(started.payload.facilityId,park.id);
+  assert.equal(started.payload.reason.partyPull,true);assert.equal(started.payload.reason.visitChoice,undefined);
+  assert.equal(serialize(w),serialize(saved));
 });
