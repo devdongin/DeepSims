@@ -41,6 +41,16 @@ export function chooseAirJourney(world,sim,target,tick,directPath=undefined){
   const directTicks=ground?Math.ceil(ground.length/(sim.hasCar?world.logic.transport.carSpeedTiles:1)):null;
   const closed=unavailableAirports(world.air,world.map.facilities,world.incidents),closedSet=new Set(closed);
   const airports=world.air.airports.filter(a=>!closedSet.has(a.id)).sort((a,b)=>cmp(a.id,b.id));
+  if(directTicks!==null){
+    // An admissible lower bound, not a replacement path: access/egress walk
+    // one tile/tick, boarding is no earlier than the next tick, and any flight
+    // takes at least one tick. Ignoring obstacles, waits and transfers can only
+    // underestimate duration. If even this cannot beat ground, avoid all BFS.
+    const distance=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
+    const canBeatGround=airports.some(from=>airports.some(to=>to.id!==from.id
+      &&Math.max(1,distance(sim,from.door))+1+distance(to.door,target.res)<directTicks));
+    if(!canBeatGround)return null;
+  }
   const access=new Map(),egress=new Map(),links=new Map(world.air.links.map(l=>[l.id,l]));
   for(const airport of airports){
     const p=airport.door;

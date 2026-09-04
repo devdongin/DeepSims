@@ -33,6 +33,24 @@ test('short ground journeys and slow airport service do not select flight',()=>{
   assert.equal(choose(f.world,f.sim,{...f.target,res:{x:8,y:10}},0),null);
 });
 
+test('provably slower airport access and egress bypass terrain searches without changing ground choice',()=>{
+  const f=fixture(),target={...f.target,res:{x:9,y:10}};
+  const path=[{x:9,y:10}];
+  Object.defineProperty(f.world.map,'tiles',{get(){throw Error('unnecessary terrain search');}});
+  assert.equal(choose(f.world,f.sim,target,0,path),null);
+});
+
+test('optimistic access bound preserves faster air journeys and walking/car ground ties',()=>{
+  const f=fixture();f.world.air.links[0].speed=100;
+  // At A on tick1: cannot board before tick2, one flying tick, zero egress.
+  const sim={...f.sim,x:10},target={...f.target,res:{x:60,y:10}};
+  const q=choose(f.world,sim,target,1);assert.equal(q.estimatedTicks,2);
+  f.world.logic.transport.carSpeedTiles=25;
+  assert.equal(choose(f.world,{...sim,hasCar:true},target,1),null,'real 50-tile car trip ties two-tick air');
+  f.world.air.airports[1].door.x=12;target.res.x=12;
+  assert.equal(choose(f.world,sim,target,1),null,'real two-tile walking trip ties two-tick air');
+});
+
 test('closed airports and suspended links are unavailable, while return-home flights are supported',()=>{
   const f=fixture();f.world.incidents=[{facilityId:'B'}];assert.equal(choose(f.world,f.sim,f.target,0),null);
   f.world.incidents=[];f.world.air.links[0].blocked=true;assert.equal(choose(f.world,f.sim,f.target,0),null);
