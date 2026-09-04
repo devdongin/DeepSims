@@ -13,6 +13,37 @@
 //
 // 이건 **전송 계층만의 변화**다 — 시뮬 상태·결정성·리플레이는 그대로다.
 // 새 필드가 화면에 필요해지면 여기에 한 줄 추가하면 된다.
+// §23.39 **안 바뀌는 것을 250ms마다 다시 보내지 않는다.**
+// 배치 payload 185KB 중 이름·성·특성·능력치·잠재치·학력이 약 110KB(59%)인데, 이것들은
+// 나이 먹는 날이나 전직할 때만 바뀐다. 클라이언트마다 마지막으로 보낸 정적 부분의 키를
+// 기억해 두고 **달라진 사람 것만** 실어 보낸다. 스냅샷은 언제나 전체를 보낸다.
+export function simVolatile(sim) {
+  return {
+    id: sim.id,
+    x: sim.x,
+    y: sim.y,
+    state: { kind: sim.state.kind, action: sim.state.action, facilityId: sim.state.facilityId, rail: !!sim.state.rail },
+    needs: sim.needs,
+    mood: sim.mood,
+    money: sim.money,
+    sick: sim.sick,
+    hasCar: sim.hasCar,
+    needsTier: sim.needsTier ? { ...sim.needsTier } : null,
+  };
+}
+
+export function simStatic(sim) {
+  const v = simView(sim);
+  for (const k of Object.keys(simVolatile(sim))) if (k !== 'id') delete v[k];
+  return v;
+}
+
+// Compare the actual wire projection, not a second incomplete field whitelist.
+// This includes degree completion/tuition, MBTI, potential and village changes.
+export function staticKey(sim) {
+  return JSON.stringify(simStatic(sim));
+}
+
 export function simView(sim) {
   return {
     id: sim.id,
@@ -20,7 +51,16 @@ export function simView(sim) {
     surname: sim.surname, // §22.16 표시는 성+이름
     x: sim.x,
     y: sim.y,
-    state: sim.state,
+    // §23.37 **state를 통째로 보내면 경로가 따라온다.** 화면은 kind와 action만 읽는데
+    // (client/main.js 전수 확인), path 배열은 BFS가 만든 수백 칸짜리다.
+    // 실측(인구 249): state 212KB 중 path가 164.5KB — 배치 payload 395KB의 42%가
+    // **아무도 안 읽는 경로**였다. 250ms마다 이걸 보내고 파싱했다.
+    state: {
+      kind: sim.state.kind,
+      action: sim.state.action,
+      facilityId: sim.state.facilityId,
+      rail: !!sim.state.rail,
+    },
     needs: sim.needs,
     mood: sim.mood,
     money: sim.money,
@@ -28,9 +68,9 @@ export function simView(sim) {
     hasCar: sim.hasCar,
     isPlayer: sim.isPlayer,
     isGenius: sim.isGenius,
-    homeId: sim.homeId, // #51 가구/거주 관측
-    householdId: sim.householdId,
     villageId: sim.villageId,
+    // §23.37 homeId·householdId는 화면이 한 번도 읽지 않는다 (전수 확인). 14.6KB/배치.
+    // 다시 필요해지면 여기 두 줄을 되살리면 된다 — 지우는 게 아니라 안 보내는 것이다.
     needsTier: sim.needsTier ? { ...sim.needsTier } : null,
     education: sim.education ? { universityEnrolled: sim.education.universityEnrolled,
       universityGraduated: sim.education.universityGraduated, stage: sim.education.lastStage,

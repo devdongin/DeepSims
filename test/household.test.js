@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { createWorld } from '../sim/world.js';
 import { migrateWorld } from '../sim/migrate.js';
@@ -73,9 +74,15 @@ test('#51 no vacant residence prevents stability from accumulating',()=>{
   assert.equal(child.independenceDays,0);assert.equal(w.householdIntents.length,0);
 });
 
-test('#51 client projection exposes residence and household identity',()=>{
-  const { child }=fixture();const view=simView(child);
-  assert.equal(view.homeId,child.homeId);assert.equal(view.householdId,child.householdId);
+test('#51/§23.39 투영에는 화면이 읽는 필드만 있다 (죽은 payload 금지)',()=>{
+  // 이 테스트는 원래 homeId·householdId가 **투영에 있는지**를 검사했다. 그런데 화면은
+  // 그 둘을 한 번도 읽지 않는다(전수 확인) — 아무도 안 보는 것을 250ms마다 보내는 계약을
+  // 굳히고 있었던 셈이다. 성능 리뷰가 같은 부류로 affinity 1.27MB가 스냅샷에 실려 나가는
+  // 것을 잡았다. 그래서 계약을 뒤집는다: **투영의 모든 필드는 클라이언트가 읽어야 한다.**
+  const client = fs.readFileSync(new URL('../client/main.js', import.meta.url), 'utf8');
+  const { child } = fixture();
+  const dead = Object.keys(simView(child)).filter((k) => !new RegExp(`\\b${k}\\b`).test(client));
+  assert.deepEqual(dead, [], `화면이 안 읽는 필드가 투영에 있다: ${dead.join(', ')}`);
 });
 
 test('#51 v58 migration derives households deterministically and preserves married households across homes',()=>{
