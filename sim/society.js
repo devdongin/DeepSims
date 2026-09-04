@@ -1206,7 +1206,9 @@ export function maybeJobSwitch(world, t, day, emit) {
       if (!canWork(s)) continue;
       if (s.traits.occupation === 'retired' || s.traits.occupation === 'student') continue;
       const gain = aptitudeFor(s, occ, L) - aptitudeFor(s, s.traits.occupation, L);
-      if (gain < I.minAptGain) continue; // 잦은 이직 방지 — 확실히 더 잘할 때만 옮긴다
+      // An unemployed person has no current job to protect from churn. Keep
+      // target aptitude in ranking/probability, not an imaginary neutral job.
+      if (s.traits.occupation !== 'jobless' && gain < I.minAptGain) continue;
       cands.push(s);
     }
     if (cands.length === 0) continue;
