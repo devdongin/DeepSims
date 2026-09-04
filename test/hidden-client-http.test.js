@@ -55,6 +55,10 @@ test('#143 hidden client receives no tick batches and resumes with one current s
     assert.equal(started.worldEvents[0].effect,'disease');
     const industry=await (await fetch(`http://127.0.0.1:${port}/api/industry`)).json();
     assert.ok(Array.isArray(industry.employment));
+    assert.deepEqual(initial.world.publicServices,started.publicServices);
+    assert.deepEqual(industry.publicServices,started.publicServices);
+    assert.equal(industry.publicServices.windowDays,14);
+    assert.equal(JSON.stringify(industry.publicServices).includes('seen'),false);
     assert.ok(industry.employment.some(row=>row.villageId==='village:0'));
     for(const row of industry.employment){
       assert.equal(row.jobless,row.eligibleJobless+row.ineligibleJobless);

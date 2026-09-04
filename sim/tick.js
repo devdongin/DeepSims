@@ -43,7 +43,9 @@ import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
 import {recordUnservedAirTrip} from './unserved-air-demand.js';
-import {patrolTarget,fireTargets} from './public-service-targets.js';
+import {patrolTarget,fireTargets,patrolShortfallKind,fireResponseShortfallKind} from './public-service-targets.js';
+import {rollPublicServiceObservation,recordServiceCount,recordServiceShortfall,
+  publicServiceKind,serviceVillage,recordServiceEvent} from './public-service-observation.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, ZONEABLE } from './logic.js';
 import { applyPolicyCommand } from './policy-command.js';
@@ -644,11 +646,15 @@ function startAction(world, sim, cand, t, emit, reason, selectedPath = null, sel
   if(['riding_train','flying'].includes(sim.state.kind))return false;
   releaseReservation(world, sim);
   world.reservations[resKey(cand.facilityId, cand.resourceId)] = sim.id;
+  const service=publicServiceKind(cand.action,cand.facilityId);
+  const serviceTown=service?serviceVillage(world,sim,service,cand.resourceId):null;
+  if(service)recordServiceCount(world,t,service,'attempted',serviceTown);
   const path = selectedPath ?? bfsPath(world.map, sim.x, sim.y, cand.res.x, cand.res.y);
   const railTrip=path?chooseRailJourney(world,sim,cand,path,t):null;
   let airTrip=selectedAir??chooseAirJourney(world,sim,cand,t,path);
   if(airTrip&&railTrip&&airTrip.estimatedTicks>=railTrip.rail.estimatedTicks)airTrip=null;
   if (path === null&&!airTrip) {
+    if(service)recordServiceCount(world,t,service,'no_path',serviceTown);
     recordUnservedAirTrip(world,sim,cand,emit);
     delete world.reservations[resKey(cand.facilityId, cand.resourceId)];
     sim.state = emptyState();
@@ -1013,8 +1019,10 @@ export function tick(world, inputsForThisTick = []) {
   const t = world.worldTick + 1;
   const events = [];
   rollTransportDay(world, t);
+  rollPublicServiceObservation(world,t);
   const emit = (type, simId, payload) => {
     recordTransportEvent(world, type);
+    recordServiceEvent(world,t,type,simId,payload);
     events.push({ tick: t, type, simId, payload });
   };
 
@@ -1924,6 +1932,22 @@ export function tick(world, inputsForThisTick = []) {
     const choices = survival.length ? survival : cands;
     const visit = chooseVisit(world,sim,choices,pickBest(choices),pickBest,urgency,visitSnapshot);
     const best = visit.candidate;
+
+    // #88: observe virtual public-service gaps separately from facility demand.
+    // Eligibility and a real deficit precede observation; no additional BFS or
+    // alternate candidate choice. Actual selected attempts are counted above.
+    const serviceAction=sim.traits.occupation==='police'?'work'
+      :sim.traits.occupation==='firefighter'?'respond_fire':null;
+    if(serviceAction&&!cands.some(c=>c.action===serviceAction)
+      &&actionBlockReason(world,sim,serviceAction,t)===null
+      &&needValueFor(sim,serviceAction,L)<NEED_MAX){
+      const kind=serviceAction==='work'?patrolShortfallKind(world,sim,t):fireResponseShortfallKind(world,sim);
+      if(kind){
+        const towns=serviceAction==='work'?[serviceVillage(world,sim,'patrol',null)]
+          :[...new Set(fireTargets(world).map(({res})=>serviceVillage(world,sim,'fire',res.id)))];
+        for(const town of towns)recordServiceShortfall(world,t,sim,serviceAction==='work'?'patrol':'fire',kind,town);
+      }
+    }
 
     // §22.19 일상 수요 (이슈 #87). §22.18 원장은 **위급한 필요**에만 걸려서, 진료·독서·여가처럼
     // 굶어 죽지는 않지만 하고 싶은 일은 영원히 잡히지 않았다 — 실측으로 병원의 진료 자리를

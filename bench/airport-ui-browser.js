@@ -85,6 +85,12 @@ try{
   await page.locator('#zone-info').filter({hasText:'공항 또는 공항 공사 있음'}).waitFor();
   assert.equal(await page.locator('#zone-go').isDisabled(),true);
   await page.locator('#zone-close').click();
+  await page.locator('#dash-btn').click();
+  await page.locator('#dash-modal summary').filter({hasText:'경찰·소방 관측'}).click();
+  await page.locator('#public-services').filter({hasText:'시설 신축 수요/필요 인원과 별개'}).waitFor();
+  assert.ok((await page.locator('#public-services').innerText()).includes('주민·서비스·사유별 하루 1회'));
+  await page.screenshot({path:'/tmp/deepsims-public-service-ui.png'});
+  await page.locator('#dash-close').click();
   await page.evaluate(()=>{
     const scene=window.__game.scene.scenes[0],marker=[...scene.airMarkers.values()][0];
     scene.cameras.main.centerOn(marker.x,marker.y);scene.cameras.main.setZoom(1);
