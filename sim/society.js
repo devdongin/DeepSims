@@ -304,8 +304,11 @@ export function maybeChildren(world, t, day, emit) {
     const home = world.map.facilities.find((f) => f.id === pa.homeId);
     const residents = world.sims.filter((s2) => s2.homeId === pa.homeId).length;
     // 정원 여유 또는 증축 여력(예비 슬롯) 필요 — 아이가 생기면 부모의 build(§15.1)가 발동하는 창발
+    // §23.45 `- 2`는 집의 기본 침대 수를 박아 둔 것이라 아파트(기본 8)에서 −6이 나왔다.
+    // 이미 늘린 침대 = 지금 침대 − 그 시설의 기본 침대. 종류별 기본값을 쓴다.
+    const baseBeds = home.type === 'apartment' ? 8 : 2;
     const extraLeft = Math.min(home.extraBedSlots?.length ?? 0, world.logic.build.maxExtraBeds)
-      - (home.resources.length - 2);
+      - (home.resources.length - baseBeds);
     if (home.resources.length <= residents && extraLeft <= 0) continue; // (드로우 없음)
     const roll = rngInt(world.rngSim, 1000);
     if (roll >= F.childPermille) continue;

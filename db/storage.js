@@ -136,8 +136,12 @@ export class Storage {
   // 배치 커밋: 스냅샷 회전 + events + inputs.applied + meta 원자 커밋 (PLAN §4)
   commitBatch({ world, events, appliedInputIds, epochUtcMs }) {
     const tx = this.db.transaction(() => {
-      const cur = this.db.prepare('SELECT tick, state FROM snapshot WHERE id = 1').get();
-      this.db.prepare('INSERT OR REPLACE INTO snapshot(id, tick, state) VALUES (2, ?, ?)').run(cur.tick, cur.state);
+      // §23.46 이전 스냅샷을 백업(id=2)으로 돌리는 데 **16MB를 JS로 읽어 올렸다가 다시
+      // 바인딩**하고 있었다. 성능 리뷰 실측: 커밋 772ms vs 시뮬 591ms — 루프 비용의 57%가
+      // 커밋이고, 그것만으로 최고 배속 상한이 38.9 tick/s로 묶인다.
+      // SQL 안에서 옮기면 그 왕복이 통째로 사라진다. 백업 의미는 그대로다.
+      this.db.prepare(
+        'INSERT OR REPLACE INTO snapshot(id, tick, state) SELECT 2, tick, state FROM snapshot WHERE id = 1').run();
       this.db.prepare('INSERT OR REPLACE INTO snapshot(id, tick, state) VALUES (1, ?, ?)')
         .run(world.worldTick, serialize(world));
       const evIns = this.db.prepare(

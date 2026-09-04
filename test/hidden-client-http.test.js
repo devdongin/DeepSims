@@ -73,9 +73,14 @@ test('#143 hidden client receives no tick batches and resumes with one current s
     await waitFor((m) => m.type === 'visibility' && m.hidden === true);
     messages.length = 0;
     observer = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-    observer.on('open',()=>observer.send(JSON.stringify({type:'visibility',hidden:false,simStatics:true})));
-    const observerMessages = [];
-    observer.on('message', (raw) => observerMessages.push(JSON.parse(raw)));
+    const observerMessages = [];let optInSent=false;
+    observer.on('message', (raw) => {
+      const message=JSON.parse(raw);observerMessages.push(message);
+      // Exercise the legal pre-negotiation legacy batch deterministically.
+      if(message.type==='tickBatch'&&!optInSent){
+        optInSent=true;observer.send(JSON.stringify({type:'visibility',hidden:false,simStatics:true}));
+      }
+    });
     for (let i = 0; i < 100 && !observerMessages.some((m) => m.type === 'snapshot'); i++) {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
@@ -89,12 +94,19 @@ test('#143 hidden client receives no tick batches and resumes with one current s
     assert.equal(observerMessages.some((m) => m.type === 'tickBatch'), true, 'visible client keeps receiving live batches');
     assert.equal(observerMessages.find(m=>m.type==='tickBatch').zoneCosts.train_station,8000,
       'live batches retain current prices rather than reverting to a UI constant');
-    const cache=new Map();
+    const cache=new Map();let splitAcknowledged=false;
     for(const message of observerMessages){
+      if(message.type==='visibility'&&message.hidden===false)splitAcknowledged=true;
       if(message.type==='snapshot')resetSimCache(cache,message.world.sims);
       if(message.type!=='tickBatch')continue;
       assert.equal(message.simRefs,undefined,'internal simulation references never reach the socket');
       assert.equal(message.statKeys,undefined);
+      // Opening the socket and processing its opt-in are separate server turns.
+      // A queued legacy batch before the visibility ACK is valid, not split data.
+      if(!splitAcknowledged){
+        assert.equal(message.statics,undefined);assert.ok(message.sims[0].traits);
+        continue;
+      }
       assert.ok(Array.isArray(message.statics));assert.ok(Array.isArray(message.villages));
       assert.ok(message.rail);assert.ok(message.policyDefaults);
       for(const sim of mergeSimBatch(cache,message.sims,message.statics)){
@@ -103,6 +115,10 @@ test('#143 hidden client receives no tick batches and resumes with one current s
         assert.equal(sim.state.path,undefined);assert.equal(sim.memories,undefined);
       }
     }
+    assert.equal(observerMessages.find(m=>m.type==='tickBatch').statics,undefined);
+    assert.ok(splitAcknowledged,'observer must receive its protocol opt-in acknowledgement');
+    assert.ok(observerMessages.some(m=>m.type==='tickBatch'&&Array.isArray(m.statics)),
+      'at least one batch after opt-in must validate split projection');
 
     ws.send(JSON.stringify({ type: 'visibility', hidden: false }));
     const resumed = await waitFor((m) => m.type === 'snapshot');

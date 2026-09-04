@@ -16,7 +16,12 @@ const BATCH_TICKS = TICKS_PER_DAY; // 따라잡기 배치 = 게임 1일
 // 해당하고, 그 위는 **엔진이 못 낸다** — 인구 249 세계 실측 상한이 47.6 tick/s다.
 // 낼 수 없는 배속을 버튼에 두면 사용자는 ×48을 누르고 ×24를 받는다(성능 리뷰가 잡은 결함).
 export const MAX_SPEED = 20;
-const LIVE_COMMIT_TICKS = 30;      // §17.0: 라이브 커밋 주기 (미커밋 유실은 스냅샷+입력 재생으로 복구)
+// §23.46 30 → 120. 커밋 한 번이 인구 249에서 494ms인데 30틱마다 하면 커밋만으로
+// 상한이 61 tick/s, 시뮬까지 합치면 38.8 tick/s다 — ×20(48)이 안 나온다.
+// 미커밋 구간은 스냅샷+내구 입력 재생으로 **결정적으로** 복구되므로(§17.0), 잃는 것은
+// 상태가 아니라 그 구간을 다시 계산하는 시간뿐이다. 플레이어 입력이 들어오면 그 자리에서
+// 즉시 커밋하는 규칙은 그대로다(pendingApplied.length > 0).
+const LIVE_COMMIT_TICKS = 120;     // §17.0: 라이브 커밋 주기 (미커밋 유실은 스냅샷+입력 재생으로 복구)
 
 export class Engine {
   constructor(storage, { seed, now = () => Date.now() }) {
@@ -27,7 +32,13 @@ export class Engine {
     this.epochUtcMs = loaded.epochUtcMs;
     // §22.11 배속은 epoch와 한 쌍이다 — 저장된 값으로 복원하지 않으면 ×48 기준
     // epoch에 ×1로 붙어 rawTarget이 현재 틱 아래로 떨어지고 세계가 멈춘다.
-    this.speed = loaded.speed ?? 1;
+    // §23.43 처음 켰을 때의 배속을 ×4로. 신규 플레이어 리뷰 실측: ×1·기본 필터로 시작하면
+    // 첫 5분에 큰 사건이 **0건**이고 행동 로그만 148줄 흐른다. 시뮬레이션의 사건 밀도 자체는
+    // 나쁘지 않다(최근 20일 하루 2.85건) — ×4면 분당 1.1건으로 관람에 적정하다.
+    // 이어서 켜는 세계는 저장된 배속을 그대로 쓴다.
+    // §23.46 클램프가 없어서 옛 세이브의 speed=48이 그대로 복원됐다 — UI에 없는 배속으로
+    // 96 tick/s를 요구하며 돌아간다(성능 리뷰가 아카이브 세이브에서 발견).
+    this.speed = Math.max(1, Math.min(MAX_SPEED, loaded.speed ?? 4));
     this.createdNow = loaded.created === true; // §22.7 이번 실행에서 새 마을을 만들었는가
     storage.retargetStaleInputs(this.world.worldTick, now());
     storage.pruneEvents(this.world.worldTick);
