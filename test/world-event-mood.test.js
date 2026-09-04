@@ -7,6 +7,20 @@ import {applyWorldEvent,validateWorldEvent} from '../sim/world-events.js';
 import {emptyState} from '../sim/simfactory.js';
 const event=(delta,durationTicks=10)=>({effect:'mood',delta,durationTicks});
 
+test('replacing a saturated mood shock with zero never subtracts an unapplied increment',()=>{
+  for(const [initial,delta] of [[10000,3000],[-10000,-3000],[9000,3000],[-9000,-3000]]){
+    const w=createWorld(32),s=w.sims[0];s.mood=initial;s.pendingMood=initial;
+    applyWorldEvent(w,event(delta),1,()=>{});
+    const resumed=deserialize(serialize(w));
+    for(const copy of [w,resumed]){
+      applyWorldEvent(copy,event(0),2,()=>{});
+      assert.equal(copy.sims[0].mood,initial);
+      assert.equal(copy.sims[0].pendingMood,initial);
+    }
+    assert.equal(serialize(resumed),serialize(w));
+  }
+});
+
 test('same-tick autonomous sleep reflection retains the active mood shock',()=>{
   const base=createWorld(32),s=base.sims[0];
   base.worldTick=1380;base.lastDailyDay=0;base.lastPlanDay=0;
