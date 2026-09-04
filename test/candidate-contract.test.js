@@ -82,10 +82,11 @@ for (const [pop, expected] of [
   // match main1572cf2, retaining rejection/conflict behavior. World hashes add air.
   // logic105 records only actual disconnected intermunicipal failures. These
   // single-town behavior vectors remain identical; only the version hash moves.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '8ed747a9']],
-  // §23.54 adds priors to repeated-decline events only; retain logic105 world hashes.
-  [50, ['8f96407c', '31c608eb', '413a3388', 'd4dc56fa']],
-  [200, ['23a3029f', 'df690287', '6a7a0043', 'eaac06b1']],
+  // logic106 adds main efbeb2d argumentAffinity. In this 240-tick fixture,
+  // candidate/choice/event vectors still match; only parameter/world hashes move.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', 'd398fe46']],
+  [50, ['8f96407c', '31c608eb', '413a3388', '9ba72077']],
+  [200, ['23a3029f', 'df690287', '6a7a0043', '5716716c']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

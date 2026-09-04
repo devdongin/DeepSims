@@ -1487,7 +1487,16 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
     const tier = target.relTiers[sim.id];
     if (tier === 'friend') pct += S.approachFriendBonusPct;
     else if (tier === 'acquaintance') pct += S.approachAcquaintanceBonusPct;
-    else if (tier === 'rival') continue; // 사이가 나쁘면 말을 걸지 않는다
+    // §23.55 **거절당하는 일 자체가 없어지던 자리.** 전에는 상대가 나를 앙숙으로 보면
+    // 여기서 `continue`했다 — 청이 아예 없었으니 거절도 없고, 그래서 **상대가 나를
+    // 싫어한다는 사실이 나에게 도달할 방법이 없었다.** 상호 앙숙이 0/22 · 0/17 · 0/24로
+    // 세 리뷰어 모두에게서 0이었던 진짜 원인이다.
+    //
+    // 게다가 이 검사는 `target.relTiers[sim.id]` — **상대의 사적인 감정**이다. 그것으로
+    // 내 행동을 막는 것은 내가 알 수 없는 것을 아는 셈이다. 나는 모르니까 청하고,
+    // 상대가 거절한다. 그 거절이 §23.47대로 내 호감을 깎는다 — 앙금이 비로소 돌아온다.
+    // (내가 상대를 앙숙으로 여겨 청하지 않는 것은 아래에 그대로 있다. 그건 내 감정이다.)
+    const targetSeesRival = tier === 'rival';
     const deficit = NEED_MAX_REF - Math.min(NEED_MAX_REF, target.needs.social);
     pct += floorDiv(deficit * S.approachNeedBonusMax, NEED_MAX_REF);
     // §22.21 상대가 곤경이면 수다가 아니라 **챙김**이 된다 (이슈 #69, KIND RCT).
@@ -1498,7 +1507,7 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
       || target.needs.hunger < world.logic.needCritical
       || target.money < (world.policy.welfareThreshold ?? w2.welfareThreshold);
     if (distress) pct += S.helpAcceptBonusPct;
-    const accepted = pairHash(sim.id, target.id, day, 83) < Math.min(100, pct);
+    const accepted = !targetSeesRival && pairHash(sim.id, target.id, day, 83) < Math.min(100, pct);
     if (accepted) {
       target.invitedTo = { facilityId: sim.state.facilityId, untilTick: t + S.inviteTtlTicks };
       emit('invited', sim.id, { toSimId: target.id, facilityId: sim.state.facilityId, relation: tier ?? 'stranger' });
@@ -1587,6 +1596,12 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
       if (before >= thrD && after < thrD) {
         sim.mood = Math.max(-10000, Math.min(10000, sim.mood + world.logic.mood.argument));
         target.mood = Math.max(-10000, Math.min(10000, target.mood + world.logic.mood.argument));
+        // §23.55 싸움은 쌍방이다 — 양쪽 호감을 함께 깎는다. 거절만으로는 청한 쪽만
+        // 내려가서 상호 앙숙이 구조적으로 불가능했다(실측 0/22).
+        world.affinity[sim.id][target.id] = Math.max(AFFINITY_MIN,
+          world.affinity[sim.id][target.id] - S.argumentAffinity);
+        world.affinity[target.id][sim.id] = Math.max(AFFINITY_MIN,
+          world.affinity[target.id][sim.id] - S.argumentAffinity);
         pushRecentConflict(world, sim.id, target.id, t, 'argument'); // §23.52 마을이 옮길 수 있게
         emit('argument', sim.id, { withSimId: target.id });
         recordFact(sim, t, world.logic, 'argument', { subjectSimId: target.id, placeId: fidD,

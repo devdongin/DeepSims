@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 105, // Separate observed unserved intents can justify disconnected first airports.
+  logicSchemaVersion: 106, // Integrate observed airport demand with main bilateral argument affinity.
   founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
@@ -250,6 +250,13 @@ export const DEFAULT_LOGIC = {
     declineAffinity: 300,             // 청한 쪽 → 거절한 쪽 호감 감소 (한 방향)
     // 같은 사람에게 거듭 거절당하면 커진다(최대 1+cap 배). 한 번은 사정이고 다섯 번은 사이다.
     declineEscalationCap: 5,
+    // §23.55 **싸움은 쌍방이다.** 거절은 청한 쪽만 깎으므로 이 세계의 앙금은 한 방향이었고,
+    // 게다가 앙숙이 되면 양쪽 다 청하지 않게 되어(§23.47) 반대 방향이 생길 기회가 영영
+    // 막혔다 — 실측 상호 앙숙 0/22 · 0/17 · 0/24, 세 리뷰어가 각자 0을 쟀다.
+    // 그런데 말다툼은 이미 **양쪽 다** 기분이 상하고 **양쪽 다** 그 일을 기억한다.
+    // 호감도만 한쪽으로 움직이는 것이 앞뒤가 안 맞았다: 싸운 걸 기억하고 기분도 나쁜데
+    // 상대를 여전히 똑같이 좋아한다. 크기는 거절과 같은 눈금을 쓴다.
+    argumentAffinity: 300,            // 말다툼 시 양방향 호감 감소
     helpMoodGiver: 40,                // 챙긴 쪽 기분
     helpMoodTaker: 60,                // 챙김 받은 쪽 기분
     rivalStatePenalty: 200000000000,  // 라이벌이 있으면 감점 (양수로 저장, 적용 시 부호)
@@ -742,6 +749,7 @@ function checkRanges(p, errors) {
   inRange('social.helpGratitudeAffinity', p.social.helpGratitudeAffinity, 0, 5000);
   inRange('social.declineAffinity', p.social.declineAffinity, 0, 5000);
   inRange('social.declineEscalationCap', p.social.declineEscalationCap, 0, 100);
+  inRange('social.argumentAffinity', p.social.argumentAffinity, 0, 5000);
   inRange('social.helpMoodGiver', p.social.helpMoodGiver, 0, 1000);
   inRange('social.helpMoodTaker', p.social.helpMoodTaker, 0, 1000);
   inRange('social.invitePullPct', p.social.invitePullPct, 0, 500);

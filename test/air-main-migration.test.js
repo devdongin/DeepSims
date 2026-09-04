@@ -7,6 +7,21 @@ import {commissionAirport} from '../sim/air-network.js';
 import {addBuilding,airportSiteBuildable} from '../sim/map.js';
 import {newGovernment} from '../sim/government.js';
 
+test('logic106 fills missing main argument affinity without resetting customized main/airport parameters',()=>{
+  for(const version of [102,105]){
+    const w=createWorld(32);w.logic.logicSchemaVersion=version;
+    if(version===105)delete w.logic.social.argumentAffinity;
+    else w.logic.social.argumentAffinity=123;
+    w.logic.transport.airSpeedTiles=7;
+    const air=serialize(w.air),rng=serialize(w.rngSim);
+    migrateWorld(w);
+    assert.equal(w.logic.social.argumentAffinity,version===105?300:123);
+    assert.equal(w.logic.transport.airSpeedTiles,7);
+    assert.equal(serialize(w.air),air);assert.equal(serialize(w.rngSim),rng);
+    const after=serialize(w);migrateWorld(w);assert.equal(serialize(w),after);
+  }
+});
+
 test('main schema77 contacts/conflicts survive adding an empty air network',()=>{
   const w=createWorld(32);w.schemaVersion=77;w.logic.logicSchemaVersion=101;
   delete w.air;w.contacts[0][1]=40;w.contacts[1][0]=40;
