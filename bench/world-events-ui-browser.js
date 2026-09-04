@@ -24,6 +24,11 @@ try{
   });
   browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH});
   const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];
+  await page.addInitScript(()=>{
+    window.__testSockets=[];
+    const Native=window.WebSocket;
+    window.WebSocket=class extends Native{constructor(...args){super(...args);window.__testSockets.push(this);}};
+  });
   page.on('pageerror',e=>errors.push(String(e)));
   await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'networkidle'});
   await page.locator('#ob-name').fill('검증 주민');
@@ -48,6 +53,12 @@ try{
   assert.equal(await dialog.locator('[name=value]').isEnabled(),true);
   assert.equal(sent.length,2);assert.deepEqual(sent[1],sent[0]);
   await dialog.locator('pre').filter({hasText:'기분 충격: -1000'}).waitFor();
+  await page.evaluate(()=>window.__testSockets.at(-1).close());
+  await dialog.locator('[data-freshness]').filter({hasText:'마지막으로 받은 상태'}).waitFor();
+  const sentBefore=sent.length;
+  await dialog.locator('button[type=submit]').click();
+  assert.equal(sent.length,sentBefore,'disconnected panel must not submit stale input');
+  await dialog.locator('[data-freshness]').filter({hasText:'서버와 동기화됨'}).waitFor();
   await page.screenshot({path:'/tmp/deepsims-world-event-ui.png'});
   await page.keyboard.press('Escape');assert.equal(await dialog.isVisible(),false);
   await page.reload({waitUntil:'networkidle'});

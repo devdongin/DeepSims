@@ -20,7 +20,7 @@ export function activeEventLines(world){
     `${EVENT_LABELS[e.effect]??e.effect}: ${e.effect==='mood'?`${e.delta>0?'+':''}${e.delta}`:`${e.percent}%`} · 남은 게임 시간 ${e.expiresAt-t}분`);
 }
 
-export function mountWorldEvents(getWorld){
+export function mountWorldEvents(getWorld,isFresh=()=>true){
   const dialog=document.createElement('dialog');
   dialog.className='world-events-dialog';
   dialog.setAttribute('aria-labelledby','world-events-title');
@@ -32,7 +32,7 @@ export function mountWorldEvents(getWorld){
     <p><label>게임 내 기간 (일) <input name="days" type="number" min="1" max="30" step="1" value="1" required></label></p>
     <p>비율 100%는 평소와 같고 0%는 억제입니다. 기분 충격은 -3000~3000입니다. 대화는 기존 문맥 조건을 따르며 후보가 없으면 날씨로 돌아갑니다.</p>
     <button type="submit">위 조건으로 사건 입력 저장</button></form>
-    <p role="status" aria-live="polite"></p><h3>현재 적용 중</h3><pre style="white-space:pre-wrap"></pre><button type="button" data-close>닫기</button>`;
+    <p role="status" aria-live="polite"></p><p data-freshness aria-live="polite"></p><h3>현재 적용 중</h3><pre style="white-space:pre-wrap"></pre><button type="button" data-close>닫기</button>`;
   document.body.append(dialog);
   const form=dialog.querySelector('form'),effect=form.elements.effect,value=form.elements.value;
   const status=dialog.querySelector('[role=status]'),submit=form.querySelector('button');
@@ -44,13 +44,14 @@ export function mountWorldEvents(getWorld){
   });
   const refresh=()=>{
     if(!dialog.open)return;
+    dialog.querySelector('[data-freshness]').textContent=isFresh()?'서버와 동기화됨':'연결 끊김 또는 동기화 대기 — 아래는 마지막으로 받은 상태입니다.';
     dialog.querySelector('pre').textContent=getWorld()?activeEventLines(getWorld()).join('\n')||'적용 중인 사건 없음':'세계 연결을 기다리는 중';
   };
   document.getElementById('world-events-btn').addEventListener('click',()=>{dialog.showModal();refresh();});
   dialog.querySelector('[data-close]').addEventListener('click',()=>dialog.close());
   form.addEventListener('submit',async e=>{
     e.preventDefault();if(submit.disabled)return;
-    if(!getWorld()){status.textContent='세계가 연결된 후 입력하세요.';return;}
+    if(!getWorld()||!isFresh()){status.textContent='세계가 다시 동기화된 후 입력하세요.';return;}
     let payload;
     try{payload=eventPayload(effect.value,value.value,form.elements.days.value);}catch(err){status.textContent=err.message;return;}
     if(pending&&JSON.stringify(pending.payload)!==JSON.stringify(payload)){

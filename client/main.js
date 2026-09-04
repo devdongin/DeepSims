@@ -12,7 +12,8 @@ const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 
 FACILITY_COLORS.train_station = 0x739da8; // Dedicated tile-render fallback until station art exists.
 
 let world = null;
-const refreshWorldEvents=mountWorldEvents(()=>world);
+let worldStreamFresh=false;
+const refreshWorldEvents=mountWorldEvents(()=>world,()=>worldStreamFresh);
 let updatePolicySummary=()=>{};
 let selectedSimId = null;
 let simSprites = new Map();
@@ -3650,6 +3651,7 @@ function connect() {
   ws.onmessage = (raw) => {
     const msg = JSON.parse(raw.data);
     if (msg.seq !== lastSeq + 1 && msg.type !== 'snapshot') {
+      worldStreamFresh=false;refreshWorldEvents();
       ws.send(JSON.stringify({ type: 'resync' })); // 갭 감지 (PLAN §5)
       lastSeq = msg.seq;
       return;
@@ -3660,6 +3662,7 @@ function connect() {
         $('status').textContent = '동기화 중…';
         break;
       case 'catchingUp':
+        worldStreamFresh=false;refreshWorldEvents();
         $('status').textContent = `세계 따라잡는 중… ${msg.progress.current}${msg.progress.target ? '/' + msg.progress.target : ''}`;
         break;
       case 'speed': // §20
@@ -3667,6 +3670,7 @@ function connect() {
         break;
       case 'snapshot':
         world = msg.world;
+        worldStreamFresh=true;
         refreshWorldEvents();
         updatePolicySummary();
         // §23.39 스냅샷은 전체를 주므로 정적 지도를 여기서 새로 채운다.
@@ -3839,6 +3843,7 @@ function connect() {
     }
   };
   ws.onclose = () => {
+    worldStreamFresh=false;refreshWorldEvents();
     $('status').textContent = '연결 끊김 — 재접속 중…';
     setTimeout(connect, 2000);
   };
@@ -3846,6 +3851,7 @@ function connect() {
 connect();
 
 document.addEventListener('visibilitychange', () => {
+  worldStreamFresh=false;refreshWorldEvents();
   if (wsRef?.readyState === WebSocket.OPEN) {
     wsRef.send(JSON.stringify({ type: 'visibility', hidden: !forceLiveStream && (document.hidden || forcePausedStream) }));
   }
