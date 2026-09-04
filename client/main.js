@@ -2736,6 +2736,8 @@ function eventText(e) {
       return `\u{1f5fa}️ ${townKo(e.payload.villageId)}에 땅 ${e.payload.plotIds?.length ?? 0}칸이 배정됐습니다`;
     case 'employment_construction_planned':
       return `\u{1f3d7}️ 일자리를 못 구한 ${e.payload.unmet}명 때문에 사무실을 짓기로 했습니다 (${e.payload.cost}원)`;
+    case 'employment_started': return `💼 ${n}: ${placeKo(e.payload.facilityId)}에 고용됐습니다`;
+    case 'employment_ended': return `💼 ${n}: ${placeKo(e.payload.facilityId)}에서의 고용이 종료됐습니다`;
     case 'plot_relocated':
       return `\u{1f4d0} ${townKo(e.payload.villageId)} 공사 자리를 (${e.payload.x}, ${e.payload.y})로 옮겼습니다`;
     case 'starving': return `⚠️ ${ga(n)} 굶고 있습니다!`;
@@ -2908,6 +2910,7 @@ const FEED_STORY = new Set([
   'city_promoted', 'station_unlocked', 'facility_built', 'argument', 'petition',
   'rail_opened','rail_suspended','rail_resumed',
   'public_posts_filled', 'job_changed',
+  'employment_started', 'employment_ended',
   'founding_petition_created', 'founding_petition_withdrawn',
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
@@ -3527,7 +3530,9 @@ function renderPanel() {
     if (sim.education?.universityGraduated) extra += ' · 🎓대졸';
     if (sim.education?.course) extra += ` · ${{university:'학부',masters:'석사',doctorate:'박사'}[sim.education.course]} ${sim.education.universityEnrolled?'재학':'등록 보류'}`;
     if (sim.education?.highestDegree && sim.education.highestDegree !== 'bachelor') extra += ` · 🎓${{masters:'석사',doctorate:'박사'}[sim.education.highestDegree]}`;
-    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${sim.isPlayer ? ' · ◆나' : ''}${sim.isGenius ? ' · ⭐천재' : ''}${extra}`;
+    const employer=sim.employment&&world?.map?.facilities?.find(f=>f.id===sim.employment.facilityId);
+    const employmentLabel=employer?` · 근무지: ${PLACE_KO[employer.type]??employer.type} (${employer.id})`:'';
+    $('traits').textContent = `${mbti} · ${tr.age}세 · ${g} · ${occKo(tr.occupation)}${employmentLabel}${sim.isPlayer ? ' · ◆나' : ''}${sim.isGenius ? ' · ⭐천재' : ''}${extra}`;
   }
   renderRelations(sim.id); // §23.15 관계 (열려 있는 동안 사람이 바뀔 때만 다시 읽는다)
   $('money').textContent = `💰 ${sim.money}원`;

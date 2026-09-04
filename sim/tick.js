@@ -6,6 +6,7 @@ import {
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
+import { updateEmployment, employerAllows } from './employer-assignment.js';
 import { applyWorldEvent, expireWorldEvents, worldEventMood, wakeEventMood } from './world-events.js';
 import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isAvailableResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
@@ -272,6 +273,7 @@ export function facilityShortfallKind(world, sim, action, t) {
   for (const ftype of ftypes) {
     for (const fac of world.map.facilities) {
       if (fac.type !== ftype) continue;
+      if (action === 'work' && !employerAllows(world,sim,fac.id)) continue;
       if (HOME_ONLY_ACTIONS.includes(action) && fac.id !== sim.homeId) continue;
       if (world.incidents.some((inc) => inc.facilityId === fac.id)) { anyUnavailable=true; continue; }
       anyFacility = true;
@@ -323,6 +325,7 @@ export function actionBlockReason(world, sim, action, t) {
   if (cost > 0 && sim.money < cost) return 'no_money';
   if (action === STOCK_ACTION && sim.money - cost < L.actions.eat.cost) return 'not_needed'; // 비축 뒤에도 긴급 한 끼 현금은 남긴다.
   if (action === 'work') {
+    if (!sim.employment || sim.employment.occupation !== sim.traits.occupation) return 'not_needed';
     const ww = workWindowFor(sim, L, floorDiv(t, 1440)); // §17.13 단일 권위 (일별 야근 포함)
     if (!ww) return 'off_hours';
     if (!slotMatches(ww, t % 1440)) return 'off_hours';
@@ -462,7 +465,9 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
     // §17.24: 경찰 work = 순찰 — patrolIdx 순회 지점(공공시설 문 앞) 가상 스팟
     if (action === 'work' && sim.traits.occupation === 'police') {
       // 57차: facilities 배열 순 단일 필터 — 신축 append 시 기존 인덱스 의미 보존
-      const spots = world.map.facilities.filter((f) => L.patrol.targets.includes(f.type));
+      const employer=world.map.facilities.find(f=>employerAllows(world,sim,f.id));
+      const spots = world.map.facilities.filter((f) => employer
+        && (f.villageId??'village:0')===(employer.villageId??'village:0') && L.patrol.targets.includes(f.type));
       if (spots.length > 0) {
         const fac2 = spots[sim.patrolIdx % spots.length];
         // §19.4: 순찰 지점은 문 주변의 **도달 가능한** 칸 — 북→남→동→서 고정 순서(결정적).
@@ -499,6 +504,7 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
       const facilities = HOME_ONLY_ACTIONS.includes(action)
         ? (home?.type === ftype ? [home] : []) : (byType.get(ftype) ?? []);
       for (const fac of facilities) {
+        if (action === 'work' && !employerAllows(world,sim,fac.id)) continue;
         if ((action === 'shop' || action === STOCK_ACTION) && (fac.groceryStock ?? 0) < purchaseQuantity(world, sim, action)) continue;
         if (action === SUPPLY_ACTION && !deliveryQuote(world, sim, fac).ok) continue;
         // §23.8 보드게임은 **혼자 할 수 없다.** 사람이 없는 카페에서는 후보가 아니다.
@@ -968,6 +974,9 @@ function applyAssign(world, inp, t, emit) {
     emit('input_rejected', typeof simId === 'number' ? simId : null, { reason: 'invalid', inputId: inp.id ?? null });
     return;
   }
+  // A fresh/migrated resident may receive their first work command now. Only
+  // this command's target is assigned here; unrelated inputs keep stage priority.
+  if(actionType==='work')updateEmployment(world,t,emit,sim.id);
   const cands = collectCandidates(world, sim, [actionType], t, true); // assign은 효용 무시 (PLAN §2)
   const best = pickBest(cands);
   if (!best) {
@@ -978,6 +987,19 @@ function applyAssign(world, inp, t, emit) {
 }
 
 // ---- 메인: 틱 t로의 전이. world를 mutate, 이벤트 배열 반환 ----
+function reconcileEmployment(world,t,emit){
+  updateEmployment(world,t,emit);
+  for(const sim of world.sims){
+    const s=sim.state;if(s.action!=='work')continue;
+    const valid=sim.traits.occupation==='police'&&s.facilityId==='patrol'
+      ?Boolean(sim.employment&&canWork(sim)):employerAllows(world,sim,s.facilityId);
+    if(valid)continue;
+    releaseReservation(world,sim);
+    if(s.kind==='riding_train'){s.rail.cancelOnAlight=true;continue;}
+    sim.state=emptyState();emit('action_failed',sim.id,{action:'work',reason:'employment_changed'});
+  }
+}
+
 export function tick(world, inputsForThisTick = []) {
   const t = world.worldTick + 1;
   const events = [];
@@ -1011,6 +1033,10 @@ export function tick(world, inputsForThisTick = []) {
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
   advanceHouseholdMigrations(world,t,emit,(sim,cand)=>startAction(world,sim,cand,t,emit,{migration:true}));
   advanceSettlementPlans(world,t,emit,(sim,cand)=>startAction(world,sim,cand,t,emit,{settlement:true}));
+
+  // After household moves, before any work travel/labor. Old work cannot earn a
+  // new occupation's wages after retirement, enrollment or a change of employer.
+  reconcileEmployment(world,t,emit);
 
   // A guardian can die/emigrate between ticks. Never leave a child frozen or a
   // hospital seat owned by that child when the escort no longer exists.
@@ -1370,7 +1396,7 @@ export function tick(world, inputsForThisTick = []) {
         // 일을 했으면 받는다. 국고가 모자라면 음수(공채)로 내려가고, §22.22의
         // runway 반응이 부채에 작동한다 (Bohn 1998이 정확히 부채 반응 함수다).
         // §22.4 폐쇄 회계는 유지된다 — 국고가 합산 항이므로 총합 불변식은 음수여도 성립.
-        const workplace=world.map.facilities.find(f=>f.id===s.facilityId);
+        const workplace=world.map.facilities.find(f=>f.id===(s.facilityId==='patrol'?sim.employment?.facilityId:s.facilityId));
         const government=governmentFor(world,workplace?.villageId??sim.villageId);
         const before = government.treasury;
         const cap = -(L.economy.maxDebt ?? 0);
@@ -1797,6 +1823,9 @@ export function tick(world, inputsForThisTick = []) {
   }
 
   // 5) idle 심 결정 (id 오름차순, world.reservations = 틱-로컬 원장)
+  if(events.some(e=>['job_changed','education_decided','school_enrolled','graduated',
+    'retired_now','immigrated','facility_built','moved_home','village_founded'].includes(e.type)))
+    reconcileEmployment(world,t,emit);
   syncRailNetwork(world,t,emit);
   // §23.10 재실 인원은 **결정을 시작하기 전에 한 번** 찍는다 (Codex 지적).
   // 심마다 그때그때 세면, 앞 순번이 방금 카페에 앉은 것이 뒷 순번에게 보인다.

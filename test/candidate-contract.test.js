@@ -58,10 +58,13 @@ import { collectCandidates } from '../sim/tick.js';
 //     이벤트/전체 상태가 버전과 빈 목록 제외 부모e1ae1ed와 동일함을 검증했다.
 //   §23.44~46 통합: 일대기 눈금·아파트 증축 계산·커밋 주기·기본 배속.
 for (const [pop, expected] of [
-  // logic98: general visit gravity preserves single-town vectors; version hash only.
-  [10, ['272da7d7', '32b2391b', 'ddff0557', '7cc31ba2']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', 'f2230825']],
-  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', '9faacd2f']],
+  // schema76/logic99: employer draws and employer-only work intentionally change
+  // behavior; snapshots retain all employment fields/events, without normalization.
+  // Followup excludes retired residents, uses physical employer planning counts
+  // and bounds event evidence; retain those intentional effects in the vectors.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '16a03eef']],
+  [50, ['8f96407c', '8464940b', 'a2baa370', '2ce64384']],
+  [200, ['23a3029f', '3b0afc44', '1dcc03c1', '10b4e7cb']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

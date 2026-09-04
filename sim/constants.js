@@ -1,6 +1,6 @@
 // 구조적 상수 — 수치 튜너블은 전부 world.logic (sim/logic.js, PLAN §14.1).
 
-export const SCHEMA_VERSION = 75; // Durable, expiring world-event modifiers.
+export const SCHEMA_VERSION = 76; // Persist physical employer and failed-search retry state.
 export const PROTOCOL_VERSION = 1;
 
 export const TICKS_PER_DAY = 1440;          // 1틱 = 게임 1분
@@ -93,15 +93,6 @@ export const EVENT_TYPES = [
   'industry_unlocked',
   'medical_visit_paid',
   'child_allowance_paid',
-  // §23.48 병렬 작업(§117 이주·§118 철도·#151 고용유발 건설)이 emit하는데 등록이 빠져 있던
-  // 12종이다. db/storage.js:153이 커밋 트랜잭션에서 던지므로 **라이브가 죽는 자리**다
-  // — 16c가 잡아주기 전까지 조용했던 것은 테스트 궤적이 여기 닿지 않았기 때문이지
-  // 안전해서가 아니었다. §22.91과 똑같은 사고가 반복됐다. append-only로 끝에 붙인다.
-  'plot_relocated', 'construction_relocation_deferred',
-  'household_migration_gathering', 'household_migration_departed',
-  'employment_construction_planned', 'village_land_assigned',
-  'rail_opened', 'rail_cancelled', 'rail_suspended', 'rail_resumed',
-  'rail_boarded', 'rail_alighted',
   'child_escorted',
   'household_intent_created',
   'household_intent_applied',
@@ -117,11 +108,13 @@ export const EVENT_TYPES = [
   'founding_approved', 'founding_rejected',
   'founding_funded', 'founding_cancelled', 'founding_homes_built',
   'founding_gathering', 'founding_departed', 'village_founded',
+  // §23.48 / #173: shared registry fix, registered once at its original append position.
   'plot_relocated', 'construction_relocation_deferred',
   'household_migration_gathering', 'household_migration_departed',
   'employment_construction_planned', 'village_land_assigned',
   'rail_opened', 'rail_cancelled', 'rail_suspended', 'rail_resumed',
   'rail_alighted', 'rail_boarded',
+  'employment_started', 'employment_ended',
 ];
 
 export const COMMANDS = ['assign', 'create_player', 'logic_update', 'announce', 'plan_center'];

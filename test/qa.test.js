@@ -8,6 +8,15 @@ import fs from 'node:fs';
 // 규칙을 베껴 오면 동어반복이 되고, 소스가 바뀌어도 테스트가 안 깨진다.
 const CLIENT = fs.readFileSync(new URL('../client/main.js', import.meta.url), 'utf8');
 
+test('#112 employer changes appear in the default story feed', () => {
+  const source = CLIENT.match(/const FEED_STORY = new Set\(\[[\s\S]*?\]\);/);
+  assert.ok(source, 'story filter must exist');
+  const story = new Function(`${source[0]}; return FEED_STORY;`)();
+  for (const type of ['employment_started', 'employment_ended']) {
+    assert.ok(story.has(type), `${type} must not be hidden by the default filter`);
+  }
+});
+
 test('QA-1. 이벤트 피드에 조사가 하드코딩돼 있지 않다', () => {
   // "수아이(가)", "은지이(가)", "수아과(와)" — 피드는 이 게임의 주 서사 화면이다.
   const bad = CLIENT.split('\n')

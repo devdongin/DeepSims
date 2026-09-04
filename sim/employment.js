@@ -6,6 +6,7 @@ import {PRIMARY_GOVERNMENT} from './government.js';
 import {sameRegion} from './map.js';
 import {aptitudeFor} from './abilities.js';
 import {dayHash} from './chrono.js';
+import {employerRoster} from './employer-roster.js';
 
 // Existing office construction creates four resources. Pending seats prevent
 // duplicate orders, but are never usable recruitment capacity before completion.
@@ -39,9 +40,9 @@ export function officeConstructionDemand(world,villageId=world.municipalityId??P
   }
   const pendingCapacity=office.pendingFacilities*PLANNED_OFFICE_SEATS;
   const unplaced=seekers.filter(s=>remaining.has(s.id)).length;
-  return {workers:office.workers,jobseekers:seekers.length,servicePlacements:seekers.length-unplaced,
+  return {workers:office.workers,unassignedWorkers:office.unassignedWorkers,jobseekers:seekers.length,servicePlacements:seekers.length-unplaced,
     capacity:office.capacity,pendingCapacity,
-    unmet:Math.max(0,office.workers+unplaced-office.capacity-pendingCapacity)};
+    unmet:Math.max(0,office.workers+office.unassignedWorkers+unplaced-office.capacity-pendingCapacity)};
 }
 
 // Offices already belong to the export/base-wage economy. Hiring only grants
@@ -75,6 +76,7 @@ export function recruitOfficeWorkers(world,t,day,emit){
 
 export function employmentStatus(world){
   const root=world.rootWorld??world,L=root.logic;
+  const roster=employerRoster(root);
   const belongs=x=>x.villageId??PRIMARY_GOVERNMENT;
   const ids=[...new Set([PRIMARY_GOVERNMENT,...(root.villages??[]).map(v=>v.id)])].sort();
   const plotOwners=new Map(root.plots.map(p=>[p.plotId,belongs(p)]));
@@ -94,26 +96,32 @@ export function employmentStatus(world){
       // Initial offices use legacy `slot` resources; work accepts those too.
       const capacity=type==='office'?sites.reduce((n,f)=>n+f.resources.length,0)
         :sites.length*L.industry.workersPerFacility;
-      // There is no employer assignment yet (#112): resident occupation counts
-      // are a planning proxy, not measured occupied seats or commuting flows.
-      const workers=residents.filter(s=>canWork(s)&&(type==='office'
+      // Keep resident occupation counts visible, but physical employers determine
+      // which municipality's workplace capacity is occupied.
+      const residentWorkers=residents.filter(s=>canWork(s)&&(type==='office'
         ?L.workplace[s.traits.occupation]==='office'&&L.occupations[s.traits.occupation].wagePct>0
         :s.traits.occupation===occupation)).length;
+      const employers=roster.facilities.filter(f=>f.villageId===villageId&&f.type===type);
+      const workers=employers.reduce((n,f)=>n+f.workers,0);
+      const unassignedWorkers=roster.unassigned.filter(s=>s.villageId===villageId&&(type==='office'
+        ?L.workplace[s.occupation]==='office':s.occupation===occupation)).length;
       const revenue=sites.reduce((n,f)=>n+(f.revenue??0),0);
       const demandBacked=type==='office'||revenue>=L.industry.minRevenueToHire
         ||(['workshop','lab','warehouse'].includes(type)&&root.unlockedIndustries?.includes(type))||false;
       const hiringPath=type!=='office'||(L.workplace.office_worker==='office'&&L.occupations.office_worker.wagePct>0);
-      const vacantCapacity=Math.max(0,capacity-workers);
+      const vacantCapacity=employers.reduce((n,f)=>n+f.vacancies,0);
       const recruitmentCapacity=type==='office'?sites.filter(f=>!root.incidents.some(i=>i.facilityId===f.id))
         .reduce((n,f)=>n+f.resources.length,0):capacity;
-      return {type,occupation,facilities:sites.length,capacity,workers,vacantCapacity,
+      const recruitmentVacancies=employers.filter(f=>type!=='office'||!root.incidents.some(i=>i.facilityId===f.facilityId))
+        .reduce((n,f)=>n+f.vacancies,0);
+      return {type,occupation,facilities:sites.length,capacity,workers,residentWorkers,unassignedWorkers,employers,vacantCapacity,
         eligibleApplicants:seekers.filter(s=>occupationAllowed(occupation,s.traits.age)).length,
         revenue,demandBacked,hiringPath,
         recruitmentCapacity,
-        recruitmentVacancies:hiringPath&&demandBacked?Math.max(0,recruitmentCapacity-workers):0,
+        recruitmentVacancies:hiringPath&&demandBacked?recruitmentVacancies:0,
         pendingFacilities:[...pending.values()].filter(p=>p.type===type).length};
     });
-    return {villageId,scope:'resident-local-capacity-proxy',jobless:jobless.length,eligibleJobless:seekers.length,
+    return {villageId,scope:'assigned-employer-capacity',jobless:jobless.length,eligibleJobless:seekers.length,
       ineligibleJobless:jobless.length-seekers.length,sectors};
   });
 }

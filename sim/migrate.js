@@ -447,6 +447,7 @@ export function migrateWorld(world) {
   if (from < 73) for (const sim of world.sims) refreshMoodCounts(sim,world.logic);
   if (from < 74) initializeRail(world);
   world.worldEvents ??= []; // Also repair absent/null optional state in current-version saves.
+  for(const sim of world.sims){sim.employment??=null;sim.employmentSearch??=null;}
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }

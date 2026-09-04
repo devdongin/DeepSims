@@ -78,6 +78,7 @@ export function simView(sim) {
     // 안 쓴다고 빼는 게 아니라, 배치마다 보내지 않고 **정적 쪽에 둔다**: 이사·혼인 때만
     // 바뀌므로 실질 비용이 0에 수렴하고, 화면이 필요해지는 날 그대로 쓸 수 있다.
     homeId: sim.homeId,
+    employment: sim.employment ? {...sim.employment} : null,
     householdId: sim.householdId,
     needsTier: sim.needsTier ? { level: sim.needsTier.level } : null, // §23.40 level만 읽는다
     education: sim.education ? { universityEnrolled: sim.education.universityEnrolled,

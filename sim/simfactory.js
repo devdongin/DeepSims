@@ -57,6 +57,8 @@ export function makeSim({
     isGenius: false,
     geniusBirth: null,
     education: newEducation(),
+    employment: null,
+    employmentSearch: null,
     needsTier: newNeedsTier(),
     traits,
     abilities: makeAbilities(seed, id), // §21.1 드로우 없이 seed·id에서 유도
