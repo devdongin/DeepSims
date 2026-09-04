@@ -7,6 +7,7 @@ import {emptyState} from '../sim/simfactory.js';
 import {applyRomance} from '../sim/society.js';
 import {applyHouseholdIntents} from '../sim/household.js';
 import {completeHouseholdMigrations,advanceHouseholdMigrations} from '../sim/household-migration.js';
+import {rngNext} from '../sim/prng.js';
 
 function fixture(){
   const w=createWorld(32);
@@ -128,4 +129,51 @@ test('local cohabitation cannot fall back into a spouse home reserved for a diff
   w.sims[1].villageId=w.sims[2].villageId='village:0';a.migrationIntentId=99;
   marry(w);assert.equal(w.sims[1].homeId,b.id);assert.equal(a.migrationIntentId,99);
   assert.equal(w.householdIntents.length,0,'a local alternative does not require a cross-town intent');
+});
+
+test('married retry weights feasible towns once, preserves its draw and physically reunites the whole family after reload',()=>{
+  const {w,a,fresh}=fixture();w.partnerStage={0:'married',1:'married'};
+  const neighbor=w.sims[3];neighbor.homeId=fresh.id;neighbor.villageId=fresh.villageId;
+  neighbor.x=fresh.door.x;neighbor.y=fresh.door.y;
+  const replay=deserialize(serialize(w)),reordered=deserialize(serialize(w));
+  reordered.map.facilities.reverse();
+  const rng={...w.rngSim},draw=rngNext(rng),money=closed(w);
+  const events=marry(w);assert.deepEqual(events,marry(replay));
+  assert.deepEqual(events,marry(reordered),'facility storage order cannot select the destination');
+  const intent=w.householdIntents[0],choice=intent.migrationChoice;
+  assert.equal(choice.candidates.length,3);assert.equal(choice.fromVillageId,'village:1');
+  assert.equal(choice.draw,draw);assert.deepEqual(w.rngSim,rng);
+  assert.deepEqual(choice.candidates.map(c=>c.population),[2,2,1]);
+  for(const c of choice.candidates)assert.equal(c.weight,Math.floor(c.population*1000000/c.distance));
+  const target=w.map.facilities.find(f=>f.id===intent.targetHomeId);
+  const moving=intent.memberIds.slice();
+  assert.ok(moving.length>0);assert.ok(!events.some(e=>e.type==='moved_home'));
+  applyRomance(w,w.sims[1],0,()=>assert.fail('pending intent must not be recreated'));
+  assert.deepEqual(w.rngSim,rng,'retry of a pending trip consumes no second choice draw');
+  let saved=deserialize(serialize(w)),arrivals=[];
+  for(let n=0;n<400&&w.householdIntents.length;n++){
+    const ev=tick(w);assert.deepEqual(ev,tick(saved));arrivals.push(...ev);
+    if(n===1)saved=deserialize(serialize(w));
+    assert.equal(closed(w),money);
+  }
+  assert.equal(w.householdIntents.length,0);assert.equal(serialize(w),serialize(saved));
+  for(const id of [0,1,2,4]){
+    assert.equal(w.sims[id].homeId,target.id);assert.equal(w.sims[id].villageId,target.villageId);
+  }
+  assert.equal(w.sims[3].homeId,fresh.id,'unrelated parent is not moved');
+  assert.equal(arrivals.filter(e=>e.type==='moved_home'&&e.payload.reason==='marriage').length,moving.length);
+});
+
+test('marriage gravity excludes queued homes before drawing, and never substitutes inaccessible or undersized homes',()=>{
+  const {w,a,b,fresh}=fixture();w.partnerStage={0:'married',1:'married'};
+  a.resources.length=2;b.resources.length=2;
+  w.householdIntents.push({intentId:99,kind:'separate',simId:3,targetHomeId:fresh.id});
+  const rng={...w.rngSim};marry(w);
+  assert.equal(w.householdIntents.length,1);assert.deepEqual(w.rngSim,rng);
+  w.householdIntents=[];fresh.resources.length=3;marry(w);
+  assert.equal(w.householdIntents.length,0);assert.deepEqual(w.rngSim,rng);
+  fresh.resources.push({...fresh.resources[0],id:'extra'});
+  for(let y=0;y<w.map.h;y++)w.map.tiles[y*w.map.w+70]=TILE.WATER;
+  w.map.reachVersion++;marry(w);
+  assert.equal(w.householdIntents.length,0);assert.deepEqual(w.rngSim,rng);
 });

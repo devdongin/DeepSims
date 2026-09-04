@@ -1,4 +1,6 @@
 import {isAvailableResidence,sameRegion} from './map.js';
+import {chooseMigrationHome} from './migration-choice.js';
+import {askingRent} from './housing.js';
 
 // Marriage joins spouses and their cohabiting minor descendants, not roommates/parents.
 export function planMarriedHousehold(w,coupleIds,targetHomeId){
@@ -32,9 +34,12 @@ export function queueMarriageMigration(w,lo,hi,t,emit,allowFresh){
   const legacy=loHome&&isAvailableResidence(loHome)&&free(loHome)>0?loHome
     :allowFresh?w.map.facilities.find(h=>isAvailableResidence(h)&&free(h)>=2):null;
   if(legacy&&[lo,hi].every(s=>s.villageId===legacy.villageId))return false;
-  const candidates=[loHome,...(allowFresh?w.map.facilities:[])];
-  const target=candidates.find(h=>{
+  const origin=w.map.facilities.find(f=>f.id===hi.homeId);
+  if(!origin)return true;
+  const claimed=new Set(w.householdIntents.map(i=>i.targetHomeId));
+  const candidates=[...new Set([loHome,...(allowFresh?w.map.facilities:[])])].filter(h=>{
     if(!h||!isAvailableResidence(h)||!w.villages.some(v=>v.id===h.villageId)||w.incidents.some(j=>j.facilityId===h.id))return false;
+    if(claimed.has(h.id))return false;
     const moving=base.familyResidents.filter(s=>s.homeId!==h.id);
     if(!moving.length||free(h)<moving.length)return false;
     return moving.every(r=>{
@@ -43,12 +48,18 @@ export function queueMarriageMigration(w,lo,hi,t,emit,allowFresh){
         &&sameRegion(w.map,s.x,s.y,h.door.x,h.door.y);
     });
   });
+  // The higher-ID spouse is the existing marriage path's departing anchor.
+  // Choose once per municipality, not once per vacant bed/building. All family
+  // homes and current positions passed reachability/capacity checks above.
+  const choice=chooseMigrationHome(w,origin,candidates.map(home=>({home,rent:askingRent(w,home)})),{preference:'id'});
+  const target=choice?.home;
   if(!target)return true; // No feasible home yet; the normal married retry remains available.
   const family=planMarriedHousehold(w,coupleIds,target.id),first=family.residents[0];
   const intent={intentId:w.nextHouseholdIntentId++,kind:'marriage_move',simId:first.simId,coupleIds,
     fromHomeId:first.homeId,fromHouseholdId:first.householdId,targetHomeId:target.id,
     memberIds:family.residents.map(s=>s.simId),familyResidents:family.familyResidents,
-    destinationResidents:marriageHomeResidents(w,target.id),createdTick:t,applyTick:t+1};
+    destinationResidents:marriageHomeResidents(w,target.id),createdTick:t,applyTick:t+1,
+    ...(choice.evidence?{migrationChoice:choice.evidence}:{})};
   w.householdIntents.push(intent);emit('household_intent_created',intent.simId,{...intent});
   return true;
 }
