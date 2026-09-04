@@ -3,9 +3,25 @@ import assert from 'node:assert/strict';
 import {createWorld} from '../sim/world.js';
 import {tick,moodBaseline} from '../sim/tick.js';
 import {serialize,deserialize} from '../sim/serialize.js';
-import {applyWorldEvent,validateWorldEvent} from '../sim/world-events.js';
+import {applyWorldEvent,validateWorldEvent,reflectedEventMood,wakeEventMood} from '../sim/world-events.js';
 import {emptyState} from '../sim/simfactory.js';
 const event=(delta,durationTicks=10)=>({effect:'mood',delta,durationTicks});
+
+test('renewal and sleep replacement use actual applied amounts without rewriting prior events',()=>{
+  const w=createWorld(32),s=w.sims[0],events=[];
+  s.mood=10000;s.pendingMood=null;
+  applyWorldEvent(w,event(3000),1,(...e)=>events.push(e));
+  const emitted=serialize(events);
+  s.mood=9000; // An unrelated change must survive an identical renewal.
+  applyWorldEvent(w,event(3000),2,()=>{});
+  assert.equal(s.mood,9000);
+  s.pendingMood=reflectedEventMood(w,s,3,9000);
+  assert.equal(s.pendingMood,10000);
+  s.mood=s.pendingMood;wakeEventMood(w,s,4);s.pendingMood=null;
+  applyWorldEvent(w,event(0),5,()=>{});
+  assert.equal(s.mood,9000,'waking transfers the partially saturated reflection receipt');
+  assert.equal(serialize(events),emitted,'stored input event payload must not alias live receipts');
+});
 
 test('replacing a saturated mood shock with zero never subtracts an unapplied increment',()=>{
   for(const [initial,delta] of [[10000,3000],[-10000,-3000],[9000,3000],[-9000,-3000]]){
