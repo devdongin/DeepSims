@@ -43,6 +43,7 @@ import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
 import {recordUnservedAirTrip} from './unserved-air-demand.js';
+import {patrolTarget,fireTargets} from './public-service-targets.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
 import { validateLogic, logicHash, ZONEABLE } from './logic.js';
 import { applyPolicyCommand } from './policy-command.js';
@@ -459,9 +460,7 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
     }
     // §17.20: respond_fire — 불타는 시설 문 앞 가상 스팟 (위급 승격은 아래 소방관 분기)
     if (action === 'respond_fire') {
-      for (const inc of world.incidents) {
-        const fac = world.map.facilities.find((f) => f.id === inc.facilityId);
-        const res = { id: `fire:${inc.facilityId}`, x: fac.door.x, y: fac.door.y - 1 >= 0 ? fac.door.y - 1 : fac.door.y };
+      for (const {res} of fireTargets(world)) {
         const holder = world.reservations[resKey('firesite', res.id)];
         if (holder !== undefined && holder !== sim.id) continue;
         const sc = scoreCandidate(sim, action, res, L);
@@ -479,22 +478,9 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
     // §17.24: 경찰 work = 순찰 — patrolIdx 순회 지점(공공시설 문 앞) 가상 스팟
     if (action === 'work' && sim.traits.occupation === 'police') {
       // 57차: facilities 배열 순 단일 필터 — 신축 append 시 기존 인덱스 의미 보존
-      const employer=world.map.facilities.find(f=>employerAllows(world,sim,f.id));
-      const spots = world.map.facilities.filter((f) => employer
-        && (f.villageId??'village:0')===(employer.villageId??'village:0') && L.patrol.targets.includes(f.type));
-      if (spots.length > 0) {
-        const fac2 = spots[sim.patrolIdx % spots.length];
-        // §19.4: 순찰 지점은 문 주변의 **도달 가능한** 칸 — 북→남→동→서 고정 순서(결정적).
-        // 문 북쪽이 나무·벽이면 영원히 no_path가 나던 고착 수리 (이슈 #40).
-        const around = [
-          { x: fac2.door.x, y: fac2.door.y - 1 },
-          { x: fac2.door.x, y: fac2.door.y + 1 },
-          { x: fac2.door.x + 1, y: fac2.door.y },
-          { x: fac2.door.x - 1, y: fac2.door.y },
-          { x: fac2.door.x, y: fac2.door.y }, // 최후: 문 자체
-        ];
-        const spot = around.find((p) => isWalkable(world.map, p.x, p.y));
-        const res = spot ? { id: `patrol:${fac2.id}`, x: spot.x, y: spot.y } : null;
+      const target=patrolTarget(world,sim);
+      if (target) {
+        const {res}=target;
         const cool = res ? sim.noPathCool[`patrol:${res.id}`] : undefined;
         const holder = res ? world.reservations[resKey('patrol', res.id)] : undefined;
         if (res && !(cool !== undefined && t < cool) && (holder === undefined || holder === sim.id)) {
