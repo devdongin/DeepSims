@@ -42,8 +42,10 @@ try{
   });
   await dialog.locator('button[type=submit]').click();
   await status.filter({hasText:'저장 여부를 확인하지 못했습니다'}).waitFor();
+  assert.equal(await dialog.locator('[name=value]').isDisabled(),true);
   await dialog.locator('button[type=submit]').click();
   await status.filter({hasText:'입력이 저장됐습니다'}).waitFor();
+  assert.equal(await dialog.locator('[name=value]').isEnabled(),true);
   assert.equal(sent.length,2);assert.deepEqual(sent[1],sent[0]);
   await dialog.locator('pre').filter({hasText:'기분 충격: -1000'}).waitFor();
   await page.screenshot({path:'/tmp/deepsims-world-event-ui.png'});

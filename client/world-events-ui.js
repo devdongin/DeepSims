@@ -22,6 +22,7 @@ export function activeEventLines(world){
 
 export function mountWorldEvents(getWorld){
   const dialog=document.createElement('dialog');
+  dialog.className='world-events-dialog';
   dialog.setAttribute('aria-labelledby','world-events-title');
   dialog.style.cssText='margin:auto;max-height:85vh;overflow:auto;line-height:1.8;max-width:440px;width:calc(100% - 48px);background:#241d14;color:#ead9b0;border:2px solid #c9a86a;border-radius:12px;padding:20px';
   dialog.innerHTML=`<h2 id="world-events-title">세계 사건</h2>
@@ -56,14 +57,22 @@ export function mountWorldEvents(getWorld){
       status.textContent='이전 전송 결과가 불확실합니다. 이전 값으로 다시 제출해 저장 여부를 확인하세요.';return;
     }
     pending??={clientInputId:`world-event:${crypto.randomUUID()}`,command:'world_event',payload};
+    for(const field of [effect,value,form.elements.days])field.disabled=true;
     submit.disabled=true;
     try{
       const res=await fetch('/api/input',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pending)});
       const result=await res.json();
-      if(!res.ok){status.textContent=`거부: ${result.error??res.status}`;if(res.status<500)pending=null;}
+      if(!res.ok){
+        status.textContent=res.status<500?`거부: ${result.error??res.status}`:'서버 오류로 저장 여부가 불확실합니다. 같은 입력의 저장 여부를 다시 확인하세요.';
+        if(res.status<500)pending=null;
+      }
       else{status.textContent='입력이 저장됐습니다. 실제 적용은 다음 틱부터 아래 목록에 표시됩니다.';pending=null;}
     }catch{status.textContent='저장 여부를 확인하지 못했습니다. 같은 값으로 다시 제출하면 중복 없이 확인합니다.';}
-    finally{submit.disabled=false;}
+    finally{
+      submit.disabled=false;
+      for(const field of [effect,value,form.elements.days])field.disabled=pending!==null;
+      submit.textContent=pending?'동일 입력 저장 확인':'위 조건으로 사건 입력 저장';
+    }
   });
   return refresh;
 }
