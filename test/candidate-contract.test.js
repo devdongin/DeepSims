@@ -85,9 +85,12 @@ for (const [pop, expected] of [
   // logic106 adds main efbeb2d argumentAffinity. In this 240-tick fixture,
   // candidate/choice/event vectors still match; only parameter/world hashes move.
   // logic107 observation leaves these behavior vectors unchanged.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', 'a675a335']],
-  [50, ['8f96407c', '31c608eb', '413a3388', 'b10968cc']],
-  [200, ['23a3029f', 'df690287', '6a7a0043', '64c0694b']],
+  //     §23.57 (#164 공공 식사의 지역 조달): **세계 해시만** 움직였다. 후보·선택·이벤트가
+  //     셋 다 그대로인 것은 240틱 안에 공공 식사가 없어 조달 규칙이 발동하지 않았고
+  //     (logicSchemaVersion만 상태에 들어감) rng 소비도 그대로라는 뜻이다.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '74d12bb8']],
+  [50, ['8f96407c', '31c608eb', '413a3388', '7f5858c5']],
+  [200, ['23a3029f', 'df690287', '6a7a0043', '3ce6c72a']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

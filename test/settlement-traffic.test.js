@@ -13,7 +13,10 @@ test('founded municipalities build paid stations and sustain reciprocal rail for
     fileURLToPath(new URL('../bench/founding-construction.js',import.meta.url)),
     '32','--settle','--family','--traffic','--retain-native-plots',
     '--station-orders','--expand-centers','--traffic-days=70','--complete-service-window',...extra,
-  ],{encoding:'utf8',timeout:360000}));
+  // §23.57 자식 프로세스 상한 360s는 조용한 기계 기준이었다. 이 픽스처는 단독으로도 570s 안팎이고
+  // 경합 중이면 그 이상이라, 하루에 세 번 **결과가 아니라 시간**으로 깨졌다(내 전체 실행 두 번,
+  // PR #175 리뷰 에이전트 한 번 — 단독 재실행은 전부 통과). 15분으로 올린다.
+  ],{encoding:'utf8',timeout:900000}));
   const a=run(),b=run(['--resume-traffic','--audit-traffic']);
   assert.deepEqual(a,b,'all observations and final world hash must survive a midpoint save');
   assert.equal(a.founded,1);assert.equal(a.ineligibleWork,0);
