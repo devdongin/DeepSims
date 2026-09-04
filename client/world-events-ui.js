@@ -23,7 +23,7 @@ export function activeEventLines(world){
 export function mountWorldEvents(getWorld){
   const dialog=document.createElement('dialog');
   dialog.setAttribute('aria-labelledby','world-events-title');
-  dialog.style.cssText='max-width:440px;width:calc(100% - 48px);background:#241d14;color:#ead9b0;border:2px solid #c9a86a;border-radius:12px;padding:20px';
+  dialog.style.cssText='margin:auto;max-height:85vh;overflow:auto;line-height:1.8;max-width:440px;width:calc(100% - 48px);background:#241d14;color:#ead9b0;border:2px solid #c9a86a;border-radius:12px;padding:20px';
   dialog.innerHTML=`<h2 id="world-events-title">세계 사건</h2>
     <p>모든 마을에 적용됩니다. 같은 종류의 활성 사건은 교체됩니다.</p>
     <form><label>효과 <select name="effect">${Object.entries(EVENT_LABELS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label>

@@ -26,6 +26,9 @@ try{
   const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];
   page.on('pageerror',e=>errors.push(String(e)));
   await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'networkidle'});
+  await page.locator('#ob-name').fill('검증 주민');
+  await page.locator('#ob-submit').click();
+  await page.locator('#onboard').waitFor({state:'hidden'});
   await page.locator('#world-events-btn').click();
   const dialog=page.locator('dialog'),status=dialog.locator('[role=status]');
   await dialog.locator('pre').filter({hasText:'적용 중인 사건 없음'}).waitFor();
