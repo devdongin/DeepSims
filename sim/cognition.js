@@ -96,7 +96,9 @@ export function prepareShortlist(shortlist, t, L) {
 // 비교자는 (retrieval desc, memorySeq asc) — memoryModFor의 전체 정렬과 동일한 총순서.
 const bucketScratch = []; // §17.22: 호출 간 재사용 (매 호출 초기화 — 순수성 불변)
 export function memoryModFast(prep, candTags, L) {
-  const cap = L.memory.relevanceCap;
+  // Each candidate tag contributes at most one match, including duplicates.
+  // Higher overlap buckets are unreachable; omit only those empty buckets.
+  const cap = Math.min(L.memory.relevanceCap, candTags.length);
   while (bucketScratch.length <= cap) bucketScratch.push([]);
   const buckets = bucketScratch;
   for (let o = 0; o <= cap; o++) buckets[o].length = 0;
