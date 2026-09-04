@@ -409,7 +409,7 @@ export function rotatedSize(w0, h0, dir) { return dir % 2 === 0 ? { w: w0, h: h0
 // §18.T2: 타입별 기본 footprint (dir 0 기준) — zone 검증·회전 치수의 단일 권위
 export const ZONE_DIMS = { house: [6, 5], cafe: [7, 5], office: [7, 5], park: [7, 5],
   primary_school: [8,6], middle_school: [8,6], high_school: [8,6],
-  apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [12, 10], workshop:[8,6],lab:[8,6],warehouse:[8,6],train_station:[8,6] };
+  apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [12, 10], workshop:[8,6],lab:[8,6],warehouse:[8,6],train_station:[8,6],airport:[20,12] };
 // §18.T3: 주거 시설 판정 단일 권위 — 이민·합가·자녀·완공 이사·수면(HOME_ONLY는 homeId 기준이라 무관)
 export function isResidence(f) { return f.type === 'house' || f.type === 'apartment'; }
 // Founding houses are real buildings, but their beds are held for the arriving
@@ -424,7 +424,22 @@ export function zoneFootprint(type, dir) {
 export function addBuilding(map, type, plot, dir = 0) {
   const { x, y } = plot;
   const count = map.facilities.filter((f) => f.type === type).length;
-  const id = `${type}${count}`;
+  let id = `${type}${count}`;
+  let airportSequence;
+  if(type==='airport'){
+    if(!Number.isInteger(dir)||dir<0||dir>3)throw new RangeError('airport direction');
+    if(!Number.isSafeInteger(x)||!Number.isSafeInteger(y)||x<0||y<0)throw new RangeError('airport coordinates');
+    const shape=zoneFootprint(type,dir);
+    if(!plotBuildable(map,plot,shape.w,shape.h))throw new RangeError('airport site blocked');
+    if(map.facilities.some(f=>x<f.x+f.w&&x+shape.w>f.x&&y<f.y+f.h&&y+shape.h>f.y
+      ||f.door&&f.door.x>=x&&f.door.x<x+shape.w&&f.door.y>=y&&f.door.y<y+shape.h))
+      throw new RangeError('airport overlaps an existing facility');
+    airportSequence=Math.max(map.nextAirportId??0,...map.facilities.filter(f=>f.type==='airport')
+      .map(f=>/^airport\d+$/.test(f.id)?Number(f.id.slice(7))+1:0));
+    if(!Number.isSafeInteger(airportSequence)||airportSequence<0||airportSequence>=Number.MAX_SAFE_INTEGER)
+      throw new RangeError('airport ID sequence');
+    id=`airport${airportSequence}`;
+  }
   const W = map.w;
   const bld = (bx, by, bw, bh, dx, dy) => {
     if (dir > 0) return; // Stamp only the final rotated footprint below.
@@ -489,6 +504,10 @@ export function addBuilding(map, type, plot, dir = 0) {
     fac = { id, type, x, y, w:8, h:6, door:{x:x+4,y:y+5},
       resources:[{id:'platform0',kind:'platform',x:x+2,y:y+2},
         {id:'platform1',kind:'platform',x:x+5,y:y+3}] };
+  } else if(type==='airport'){
+    bld(x,y,20,12,x+10,y+11);
+    fac={id,type,x,y,w:20,h:12,door:{x:x+10,y:y+11},
+      resources:[{id:'gate0',kind:'gate',x:x+6,y:y+8},{id:'gate1',kind:'gate',x:x+14,y:y+8}]};
   } else if (type === 'mall') { // §18.T3: 쇼핑(till)+여가(seat) 복합 — 51차: till 결정적 명시
     bld(x, y, 8, 6, x + 4, y + 5);
     fac = {
@@ -544,6 +563,7 @@ export function addBuilding(map, type, plot, dir = 0) {
   }
   fac.dir = dir;
   if(type==='train_station')map.stationVersion=(map.stationVersion??0)+1;
+  if(type==='airport')map.nextAirportId=airportSequence+1;
   fac.villageId = plot.villageId ?? PRIMARY_VILLAGE_ID;
   fac.revenue ??= 0; // §20.2 매출 원장 — 신축 시설도 0에서 시작 (이슈 #43)
   if(isResidence(fac))fac.ownerSimId??=null; // #93 소유자 없는 신축 주택의 임대료는 국고 귀속

@@ -5,7 +5,7 @@ export function campusSiteReserved(world, plot, type, dir=0) {
   const shape = zoneFootprint(type,dir);
   return [...world.projects,...world.zoneOrders].some(order => {
     if (order.plotId === plot.plotId) return false;
-    if (type !== 'university' && order.type !== 'university') return false;
+    if (!['university','airport'].includes(type) && !['university','airport'].includes(order.type)) return false;
     const other = world.plots.find(p => p.plotId === order.plotId);
     if (!other) return false;
     const size = zoneFootprint(order.type,order.dir??0);
