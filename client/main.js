@@ -5,6 +5,7 @@ import {resetSimCache,mergeSimBatch} from './sim-stream.js';
 import {mountWorldEvents} from './world-events-ui.js';
 import {aircraftLabel,airportConstructionLabel,travelStateLabel} from './air-ui.js';
 import {drawAirportExterior} from './airport-visual.js';
+import {publicServiceLines} from './public-service-ui.js';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c,
@@ -3922,6 +3923,10 @@ function connect() {
           world.rail={...world.rail,...msg.rail,links:msg.rail.links.map(l=>({...old.get(l.id),...l}))};
         }
         if(msg.air)world.air=msg.air;
+        if(msg.publicServices){
+          world.publicServices=msg.publicServices;
+          document.getElementById('public-services').textContent=publicServiceLines(world.publicServices,world.villages).join('\n');
+        }
         if (msg.unlockedIndustries) world.unlockedIndustries = msg.unlockedIndustries;
         if (msg.housingMarket) world.housingMarket = msg.housingMarket;
         if (msg.householdDaily) world.householdDaily = msg.householdDaily;
@@ -4277,6 +4282,7 @@ setInterval(pushSpark, 5000);
     ['reputation', '#7ab5e8', (v) => v],
   ];
   function drawDash() {
+    document.getElementById('public-services').textContent=publicServiceLines(world?.publicServices,world?.villages).join('\n');
     const hist = world?.statsHistory ?? [];
     const cv = document.getElementById('dash-canvas');
     const ctx = cv.getContext('2d');
