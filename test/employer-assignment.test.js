@@ -7,6 +7,7 @@ import {TILE} from '../sim/map.js';
 import {makeRng} from '../sim/prng.js';
 import {pfStats} from '../sim/pathfind.js';
 import {Storage} from '../db/storage.js';
+import {SCHEMA_VERSION} from '../sim/constants.js';
 
 function fixture(){
   const w=createWorld(32),s=w.sims[0];w.sims=[s];
@@ -88,7 +89,7 @@ test('becoming a student cancels old work before movement or wages; migration co
   const legacy=deserialize(serialize(w));legacy.schemaVersion=75;
   delete legacy.sims[0].employment;delete legacy.sims[0].employmentSearch;
   const rng={...legacy.rngSim};migrateWorld(legacy);
-  assert.equal(legacy.schemaVersion,76);assert.equal(legacy.sims[0].employment,null);
+  assert.equal(legacy.schemaVersion,SCHEMA_VERSION);assert.equal(legacy.sims[0].employment,null);
   assert.deepEqual(legacy.rngSim,rng);
 });
 

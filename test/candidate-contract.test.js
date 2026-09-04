@@ -62,9 +62,11 @@ for (const [pop, expected] of [
   // behavior; snapshots retain all employment fields/events, without normalization.
   // Followup excludes retired residents, uses physical employer planning counts
   // and bounds event evidence; retain those intentional effects in the vectors.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '16a03eef']],
-  [50, ['8f96407c', '8464940b', 'a2baa370', '2ce64384']],
-  [200, ['23a3029f', '3b0afc44', '1dcc03c1', '10b4e7cb']],
+  // schema77/logic100: empty air network and airport parameters change only
+  // world hashes. All three candidate/choice/event vectors remain identical.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '5ab5d8cb']],
+  [50, ['8f96407c', '8464940b', 'a2baa370', '4214f3b4']],
+  [200, ['23a3029f', '3b0afc44', '1dcc03c1', '59e1ced1']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

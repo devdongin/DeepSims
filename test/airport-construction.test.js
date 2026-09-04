@@ -62,6 +62,25 @@ test('fund shortage and protected roads/open facilities reject before deducting 
   }
 });
 
+test('paid airport order retains its committed eligibility after queued demand expires',()=>{
+  const w=fixture();
+  w.plots.push({plotId:501,x:90,y:45,villageId:'village:1',used:false});
+  w.projects.push({plotId:501,type:'house',dir:0,progress:0,required:100000000,zoned:true});
+  tick(w,order);
+  const paid=w.zoneOrders.find(o=>o.type==='airport');assert.ok(paid);
+  assert.equal(paid.fundedCost,30000);assert.equal(w.villages[1].government.treasury,0);
+  w.projects=[];
+  w.transportStats.today={day:14,municipalVisits:{}};w.transportStats.history=[];
+  assert.equal(evidence(w,'village:1').eligible,false);
+  // No fictional elapsed simulation is needed: the rolling demand observation
+  // changed while this already-paid order waited for a project slot.
+  const copy=deserialize(serialize(w)),events=tick(w);
+  assert.deepEqual(events,tick(copy));assert.equal(hashWorld(w),hashWorld(copy));
+  const project=w.projects.find(p=>p.type==='airport');assert.ok(project);
+  assert.equal(project.orderedTick,paid.orderedTick);assert.equal(project.fundedCost,30000);
+  assert.ok(!events.some(e=>e.type==='input_rejected'&&e.payload.plotId===500));
+});
+
 test('completed paid construction registers its actual airport without instant extra aircraft',()=>{
   // Tuned unit fixture only. Default60000 labor remains asserted separately;
   // the full default-labor completion/30-day operating audit is still required.
