@@ -7,7 +7,8 @@ import {
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
 import {commissionAirport} from './air-network.js';
-import {advanceAirService} from './air-service.js';
+import {advanceAirTravel} from './air-travel.js';
+import {chooseAirJourney} from './air-journey.js';
 import {airportSiteBuildable} from './map.js';
 import { updateEmployment, employerAllows } from './employer-assignment.js';
 import { applyWorldEvent, expireWorldEvents, worldEventMood, wakeEventMood } from './world-events.js';
@@ -36,7 +37,7 @@ import { advanceHouseholdMigrations, completeHouseholdMigrations } from './house
 import { assignCompletedResidence } from './construction-relocation.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
-import { rollTransportDay, recordTransportDeparture, recordTransportStep,
+import { rollTransportDay, recordTransportDeparture, recordAirDeparture, recordTransportStep,
   recordTransportArrival, pruneTransportTrips, recordTransportEvent, transportSummary } from './transport-stats.js';
 import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup,
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
@@ -98,7 +99,7 @@ export function socialPresence(world, selfId) {
     if (o.id === selfId) continue;
     const st = o.state;
     if (st.action !== 'socialize' || st.facilityId === null) continue;
-    if (!['performing','walking','waiting_train','riding_train'].includes(st.kind)) continue;
+    if (!['performing','walking','waiting_train','riding_train','waiting_flight','flying'].includes(st.kind)) continue;
     let e = m.get(st.facilityId);
     if (e === undefined) { e = { here: 0, coming: 0 }; m.set(st.facilityId, e); }
     if (st.kind === 'performing') e.here++; else e.coming++;
@@ -109,7 +110,7 @@ export function socialPresence(world, selfId) {
 // 점수에 **곱하는** 끌림(%). 가산 슬롯(stateMod)으로는 안 된다 — 전형 점수 ~3e12 대비
 // 클램프가 ±2.5e11(약 8%)이라 거리 항을 못 이긴다. 실제로 가산 형태는 3번째 반증됐다.
 // 좌석이 다 찼으면 0 — 몰려가도 앉을 자리가 없으면 헛걸음만 는다 (79차 ③).
-export function socialPullPct(world, fac, presence, L, sim = null) {
+export function socialPullPct(world, fac, presence, L, sim = null, airReachability = null) {
   const S = L.social;
   if (S.gravityPullPct === 0) return 0;   // 끄면 아래 비용을 아예 치르지 않는다
   const p = presence.get(fac.id);
@@ -124,7 +125,14 @@ export function socialPullPct(world, fac, presence, L, sim = null) {
   // 중력으로 거리 항을 이기면 no_path가 폭증한다(끌림 150%에서 1,880건).
   // 심은 타일을 막지 않으므로 연결성은 타일에만 의존하고, 결과는 결정적이다.
   // 셋 중 가장 비싸므로 맨 뒤에 둔다 (성능 이슈 #17).
-  if (sim !== null && !sameRegion(world.map, sim.x, sim.y, fac.door.x, fac.door.y)) return 0;
+  if (sim !== null && !sameRegion(world.map, sim.x, sim.y, fac.door.x, fac.door.y)) {
+    let reachable=airReachability?.get(fac.id);
+    if(reachable===undefined){
+      reachable=Boolean(chooseAirJourney(world,sim,{action:'socialize',facilityId:fac.id,res:fac.door},world.worldTick+1,null));
+      airReachability?.set(fac.id,reachable);
+    }
+    if(!reachable)return 0;
+  }
   const units = p.here + floorDiv(p.coming * S.gravityWalkingPct, 100);
   return Math.min(units * S.gravityPullPct, S.gravityPullCap);
 }
@@ -299,6 +307,7 @@ export function facilityShortfallKind(world, sim, action, t) {
 
 export function actionBlockReason(world, sim, action, t) {
   if(sim.state.kind==='riding_train')return 'rail_in_transit';
+  if(sim.state.kind==='flying')return 'air_in_transit';
   if(isSettlementInTransit(world,sim.id)&&action!==SETTLE_ACTION)return 'household_in_transit';
   if(action===SETTLE_ACTION)return settlementGatherTarget(world,sim)?null:'not_needed';
   const L = world.logic;
@@ -389,6 +398,7 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
   // Decision-local only: reservations/cooldowns may change before the next sim or tick.
   // Preserve resource order; own reservations remain available, not counted as full.
   const availableCache = new Map();
+  const airReachability = new Map(); // One social-air query per facility, not per seat.
   const home = facIdIndex.get(sim.homeId);
   const candTags = ['', '']; // 재사용 버퍼 (memoryModFast는 동기 소비)
   for (const action of actions) {
@@ -589,7 +599,7 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
             // 먹기·놀기는 붐빈다고 끌리지 않으므로 socialize에만 적용한다.
             if (action === 'socialize' && L.social.gravityPullPct > 0) {
               presence ??= socialPresence(world, sim.id);
-              const pull = socialPullPct(world, fac, presence, L, sim);
+              const pull = socialPullPct(world, fac, presence, L, sim, airReachability);
               if (pull > 0) cand.score += floorDiv(cand.score * pull, 100);
             }
             // §22.6 청을 받아들였으면 그 자리로 마음이 기운다 (이슈 #69).
@@ -643,12 +653,15 @@ function payToFacility(world, facilityId, amount) {
 }
 
 // 예약 + walking/performing 전이 (원자적). reason은 판단 사유 (PLAN §14.1).
-function startAction(world, sim, cand, t, emit, reason, selectedPath = null) {
-  if(sim.state.kind==='riding_train')return false;
+function startAction(world, sim, cand, t, emit, reason, selectedPath = null, selectedAir = null) {
+  if(['riding_train','flying'].includes(sim.state.kind))return false;
   releaseReservation(world, sim);
   world.reservations[resKey(cand.facilityId, cand.resourceId)] = sim.id;
   const path = selectedPath ?? bfsPath(world.map, sim.x, sim.y, cand.res.x, cand.res.y);
-  if (path === null) {
+  const railTrip=path?chooseRailJourney(world,sim,cand,path,t):null;
+  let airTrip=selectedAir??chooseAirJourney(world,sim,cand,t,path);
+  if(airTrip&&railTrip&&airTrip.estimatedTicks>=railTrip.rail.estimatedTicks)airTrip=null;
+  if (path === null&&!airTrip) {
     delete world.reservations[resKey(cand.facilityId, cand.resourceId)];
     sim.state = emptyState();
     emit('action_failed', sim.id, { action: cand.action, reason: 'no_path' });
@@ -664,26 +677,31 @@ function startAction(world, sim, cand, t, emit, reason, selectedPath = null) {
   }
   // §19 R-B: 장거리 이동 통계 — **출발 시점** 누적(64차 (c) 계약 고정)
   // §19.12: 칸수도 같은 자리에서 누적 — 거리 분포가 역 수요 판정의 입력이다 (이슈 #52)
-  if (path.length >= world.logic.transport.longTripMin) {
+  const tripDistance=airTrip?.airJourneyDistance??path.length;
+  if (tripDistance >= world.logic.transport.longTripMin) {
     sim.longTrips++;
-    sim.longTripTiles = (sim.longTripTiles ?? 0) + path.length;
+    sim.longTripTiles = (sim.longTripTiles ?? 0) + tripDistance;
   }
   // §22.16 emptyState를 펼쳐서 만든다. 예전에는 여기서 필드를 손으로 나열해
   // sideTalkTicks가 빠졌고(§22.14), 읽는 쪽의 `?? 0` 가드 덕에 우연히 버티고 있었다.
   // 필드를 하나 늘릴 때마다 이런 자리를 찾아다녀야 하는 구조는 언젠가 반드시 어긋난다.
-  const railTrip=chooseRailJourney(world,sim,cand,path,t);
+  const access=airTrip?.access??railTrip?.access??path;
   sim.state = {
     ...emptyState(),
-    kind: railTrip&&!railTrip.access.length?'waiting_train':path.length === 0 ? 'performing' : 'walking',
+    kind: airTrip&&!access.length?'waiting_flight':railTrip&&!airTrip&&!access.length?'waiting_train':access.length === 0 ? 'performing' : 'walking',
     action: cand.action,
     facilityId: cand.facilityId,
     resourceId: cand.resourceId,
-    path:railTrip?railTrip.access:path,
-    journey: path.length ? { x: sim.x, y: sim.y, walked: 0,...(railTrip?{mode:'rail'}:{}) } : null,
-    ...(railTrip?{rail:railTrip.rail}:{}),
+    path:access.map(p=>({...p})),
+    journey: tripDistance ? { x: sim.x, y: sim.y, walked: 0,...(airTrip?{mode:'air'}:railTrip?{mode:'rail'}:{}) } : null,
+    ...(railTrip&&!airTrip?{rail:railTrip.rail}:{}),
+    ...(airTrip?{flight:{legs:airTrip.itinerary.legs.map(l=>({...l})),legIndex:0,
+      phase:access.length?'access':'waiting',airportId:airTrip.itinerary.legs[0].from,
+      waitingSince:access.length?null:t,readyTick:t+Math.max(1,access.length),boardedTick:null}}:{}),
     ticksLeft: actionDuration(cand.action, world.logic),
   };
-  recordTransportDeparture(world, sim, railTrip?railTrip.fullPath:path, t);
+  if(airTrip)recordAirDeparture(world,sim,airTrip,cand.res,t);
+  else recordTransportDeparture(world, sim, railTrip?railTrip.fullPath:path, t);
   emit('action_started', sim.id, {
     action: cand.action, facilityId: cand.facilityId, resourceId: cand.resourceId, reason,
   });
@@ -699,8 +717,8 @@ function startAction(world, sim, cand, t, emit, reason, selectedPath = null) {
 function finishJourney(world,sim,t,emit){
   const s=sim.state;
   recordTransportArrival(world,sim);
-  if(s.journey?.mode!=='rail')recordRoadTrip(world,sim,s.journey,t,emit);
-  s.journey=null;delete s.rail;s.kind='performing';
+  if(!['rail','air'].includes(s.journey?.mode))recordRoadTrip(world,sim,s.journey,t,emit);
+  s.journey=null;delete s.rail;delete s.flight;s.kind='performing';
   if(s.action===ESCORT_ACTION&&s.escortPhase===null){
     if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
     else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
@@ -1002,6 +1020,7 @@ function reconcileEmployment(world,t,emit){
     if(valid)continue;
     releaseReservation(world,sim);
     if(s.kind==='riding_train'){s.rail.cancelOnAlight=true;continue;}
+    if(s.kind==='flying'){s.flight.cancelOnAlight=true;continue;}
     sim.state=emptyState();emit('action_failed',sim.id,{action:'work',reason:'employment_changed'});
   }
 }
@@ -1034,7 +1053,6 @@ export function tick(world, inputsForThisTick = []) {
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
   syncRailNetwork(world,t,emit);
-  advanceAirService(world.air,world.sims,world.map.facilities,world.incidents,t,L.transport.airTransferTicks,emit);
   fundFoundingPlans(world,t,emit);
   updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
@@ -1066,7 +1084,7 @@ export function tick(world, inputsForThisTick = []) {
     if(s.action===ESCORT_ACTION&&s.escortPhase==='travel'&&!syncEscortStep(world,sim)){
       cancelEscort(world,sim);emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'child_unavailable'});continue;
     }
-    const steps = sim.hasCar&&!s.rail&&s.action!==SETTLE_ACTION ? world.logic.transport.carSpeedTiles : 1;
+    const steps = sim.hasCar&&!s.rail&&!s.flight&&s.action!==SETTLE_ACTION ? world.logic.transport.carSpeedTiles : 1;
     let pickedThisTick = false; // §16.C 습득은 틱당 1회 — 차량이 습득률을 배로 늘리지 않도록 (65차 대비)
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
@@ -1116,12 +1134,14 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
     if (s.path.length === 0) {
-      if(s.rail?.phase==='access'){s.rail.phase='waiting';s.rail.waitingSince=t;s.kind='waiting_train';}
+      if(s.flight?.phase==='access'){s.flight.phase='waiting';s.flight.waitingSince=t;s.flight.readyTick=Math.max(t,s.flight.readyTick);s.kind='waiting_flight';}
+      else if(s.rail?.phase==='access'){s.rail.phase='waiting';s.rail.waitingSince=t;s.kind='waiting_train';}
       else finishJourney(world,sim,t,emit);
     }
     }
   }
 
+  advanceAirTravel(world,t,emit,sim=>finishJourney(world,sim,t,emit),releaseReservation);
   advanceRail(world,t,emit,sim=>finishJourney(world,sim,t,emit));
   completeSettlementArrivals(world,t,emit);
   completeHouseholdMigrations(world,t,emit);
@@ -1651,6 +1671,7 @@ export function tick(world, inputsForThisTick = []) {
           // Enrollment/employment changes now, but a passenger cannot leave a
           // moving train. Persist cancellation through saves until alighting.
           if(sim.state.kind==='riding_train'&&sim.state.rail)sim.state.rail.cancelOnAlight=true;
+          else if(sim.state.kind==='flying'&&sim.state.flight)sim.state.flight.cancelOnAlight=true;
           else sim.state=emptyState();
         };
         const aged = maybeNewYear(world, t, day, emit, resetStudent);
@@ -1972,7 +1993,7 @@ export function tick(world, inputsForThisTick = []) {
         citedMemorySeqs: best.cited,
         urgencyOverride: urgency,
         ...(visit.evidence?{visitChoice:visit.evidence}:{}),
-      },visit.path);
+      },visit.path,visit.air);
     } else startIdle(sim, L, emit);
   }
 

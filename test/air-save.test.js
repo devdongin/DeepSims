@@ -74,6 +74,26 @@ test('resident removed after service remains removed and stale occupancy cleans 
   assert.deepEqual(copy.air.links[0].aircraft.passengers,[]);
 });
 
+test('partial access and egress saves fail at load before a walking tick can consume them',()=>{
+  const valid=()=>{
+    const w=fixture(),s=w.sims[0];
+    s.state.kind='walking';s.state.path=[{x:0,y:0}];s.state.journey={mode:'air'};
+    Object.assign(s.state.flight,{phase:'access',waitingSince:null});return w;
+  };
+  const original=valid();migrateWorld(original);
+  for(const mutate of [
+    w=>delete w.sims[0].state.flight,
+    w=>delete w.sims[0].state.flight.legs,
+    w=>{w.sims[0].state.flight.readyTick=NaN;},
+    w=>{w.sims[0].state.path[0].x=4;},
+    w=>{w.sims[0].state.flight.legs[0].to='missing';},
+    w=>{w.sims[0].state.flight.phase='egress';w.sims[0].state.path=null;},
+  ]){
+    const w=valid();mutate(w);const before=serialize(w);assert.throws(()=>migrateWorld(w),RangeError);
+    assert.equal(serialize(w),before);
+  }
+});
+
 test('actual service and all recovery phases survive load with identical subsequent events and world',()=>{
   const phases=new Set();
   const closed=t=>t>=8&&t<11?['airport0','airport1','airport2']:t>=11&&t<17?['airport0','airport1']:[];

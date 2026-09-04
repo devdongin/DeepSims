@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 100,
+  "logicSchemaVersion": 101,
   "founding": {
     "petitionDays": 3,
     "minSettlers": 2

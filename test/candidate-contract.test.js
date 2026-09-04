@@ -64,9 +64,11 @@ for (const [pop, expected] of [
   // and bounds event evidence; retain those intentional effects in the vectors.
   // schema77/logic100: empty air network and airport parameters change only
   // world hashes. All three candidate/choice/event vectors remain identical.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '5ab5d8cb']],
-  [50, ['8f96407c', '8464940b', 'a2baa370', '4214f3b4']],
-  [200, ['23a3029f', '3b0afc44', '1dcc03c1', '59e1ced1']],
+  // logic101 passenger integration: all three behavior vectors stay identical
+  // in airport-free worlds; only the logic-version world hashes change.
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', 'f8619c12']],
+  [50, ['8f96407c', '8464940b', 'a2baa370', '60075f19']],
+  [200, ['23a3029f', '3b0afc44', '1dcc03c1', '42fee3ba']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

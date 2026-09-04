@@ -10,6 +10,27 @@ const ACTIONS=new Set(['work','study','eat','socialize','play','drink','binge_ea
   'shop','fish','stroll','volunteer','board_game','stock_food','visit_culture','sleep','cook_eat','hole_up','see_doctor']);
 const cmp=(a,b)=>a<b?-1:a>b?1:0;
 
+// A durable workplace relationship survives temporary airport closures. This
+// structural query ignores service suspension, not removed facilities/terrain.
+// New travel still uses the operational timetable query below.
+export function airStructurallyReachable(world,from,to){
+  if(!world.air?.links.length)return false;
+  const facilities=new Set(world.map.facilities.filter(f=>f.type==='airport').map(f=>f.id));
+  const airports=world.air.airports.filter(a=>!a.removed&&facilities.has(a.id));
+  const ids=new Set(airports.map(a=>a.id));
+  const reached=new Set(airports.filter(a=>sameRegion(world.map,from.x,from.y,a.door.x,a.door.y)).map(a=>a.id));
+  const destinations=new Set(airports.filter(a=>sameRegion(world.map,to.x,to.y,a.door.x,a.door.y)).map(a=>a.id));
+  const queue=[...reached];
+  for(let i=0;i<queue.length;i++){
+    const current=queue[i];if(destinations.has(current))return true;
+    for(const link of world.air.links){
+      const next=link.from===current?link.to:link.to===current?link.from:null;
+      if(next&&ids.has(next)&&!reached.has(next)){reached.add(next);queue.push(next);}
+    }
+  }
+  return false;
+}
+
 // Query only. Access/egress are real BFS paths; air legs never masquerade as a
 // walkable coordinate array. Seats remain allocated at real departure time.
 // The caller also compares this estimate with its existing rail option.

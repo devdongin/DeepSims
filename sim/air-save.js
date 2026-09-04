@@ -57,6 +57,24 @@ export function restoreAirNetwork(value,sims,tick){
     }
   }
   for(const sim of sims){
+    if(sim.state?.kind==='walking'&&(sim.state.flight||sim.state.journey?.mode==='air')){
+      const j=sim.state.flight,path=sim.state.path;
+      if(!j||!['access','egress'].includes(j.phase)||!Array.isArray(path)||!path.length)fail('air walking phase/path');
+      for(const p of path)point(p,'air walking path');
+      if(!Array.isArray(j.legs)||!j.legs.length)fail('air walking itinerary');
+      for(let i=0;i<j.legs.length;i++){
+        const leg=j.legs[i],link=network.links.find(l=>l.id===leg?.linkId);
+        if(!link||!(leg.from===link.from&&leg.to===link.to||leg.from===link.to&&leg.to===link.from)
+          ||i&&j.legs[i-1].to!==leg.from)fail('air walking itinerary direction');
+      }
+      if(integer(j.legIndex,'air walking leg index')>j.legs.length)fail('air walking leg index');
+      if(j.phase==='access'){
+        const gate=airports.get(j.legs[0].from)?.door,last=path.at(-1);
+        if(j.legIndex!==0||j.airportId!==j.legs[0].from||j.waitingSince!==null
+          ||last.x!==gate?.x||last.y!==gate?.y)fail('airport access gate');
+        integer(j.readyTick,'access ready tick');
+      }
+    }
     if(!['flying','waiting_flight'].includes(sim.state?.kind))continue;
     const journey=sim.state.flight,leg=journey?.legs?.[journey.legIndex];
     if(!links.has(leg?.linkId))fail('active passenger has no aircraft link');

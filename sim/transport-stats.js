@@ -39,14 +39,23 @@ export function rollTransportDay(world, t) {
 }
 
 export function recordTransportDeparture(world, sim, path, t, known = true) {
+  return recordDeparture(world,sim,path.length,path.at(-1),t,known,sim.state.rail?'rail':sim.hasCar?'car':'walk');
+}
+
+// Air legs are a physical distance, never a fabricated walkable tile array.
+export function recordAirDeparture(world,sim,journey,destination,t){
+  recordDeparture(world,sim,journey.airJourneyDistance,destination,t,true,'air');
+}
+
+function recordDeparture(world,sim,distance,destination,t,known,mode){
   const stats = world.transportStats, today = stats.today;
   if (stats.pending[sim.id]) { today.cancelledTrips++; delete stats.pending[sim.id]; }
-  if (!path.length) { if (known) today.zeroDistanceStarts++; return; }
-  const s = sim.state, destination = path[path.length - 1], purpose = purposeOf(s.action);
+  if (!distance) { if (known) today.zeroDistanceStarts++; return; }
+  const s = sim.state, purpose = purposeOf(s.action);
   stats.pending[sim.id] = { action: s.action, facilityId: s.facilityId,
     resourceId: s.resourceId, known, walkingTicks: 0, lastWalkTick: -1 };
-  const mode=s.rail?'rail':sim.hasCar?'car':'walk';
   if(mode==='rail')Object.assign(stats.pending[sim.id],{mode,departedTick:t,railTicks:0,railTiles:0,waitingTicks:0,lastRailTick:-1});
+  if(mode==='air')Object.assign(stats.pending[sim.id],{mode,departedTick:t,airTicks:0,airDistance:0,waitingTicks:0,lastAirTick:-1});
   if (!known) return; // Old saves have no observed departure.
   // Residence-to-service visits, not guessed border crossings. Snapshot both
   // identities at departure; a later move or municipal reassignment is not a visit.
@@ -59,14 +68,25 @@ export function recordTransportDeparture(world, sim, path, t, known = true) {
     }
   }
   today.departures++;
-  today.pathTiles += path.length;
-  today.maxPathTiles = Math.max(today.maxPathTiles, path.length);
-  if (path.length >= world.logic.transport.longTripMin) today.longTrips++;
+  today.pathTiles += distance;
+  today.maxPathTiles = Math.max(today.maxPathTiles, distance);
+  if (distance >= world.logic.transport.longTripMin) today.longTrips++;
   if (mode==='car') today.carTrips++;
   if (mode==='rail') today.railTrips=(today.railTrips??0)+1;
+  if (mode==='air') today.airTrips=(today.airTrips??0)+1;
   today.byPurpose[purpose] = (today.byPurpose[purpose] ?? 0) + 1;
   const key = `${purpose}|${cell(sim.x, sim.y)}>${cell(destination.x, destination.y)}|${mode}`;
   today.od[key] = (today.od[key] ?? 0) + 1;
+}
+
+export function recordAirStep(world,sim,t,distance){
+  const pending=world.transportStats.pending[sim.id],today=world.transportStats.today;if(pending?.mode!=='air')return;
+  if(pending.lastAirTick!==t){pending.lastAirTick=t;pending.airTicks++;today.airTicks=(today.airTicks??0)+1;}
+  pending.airDistance+=distance;today.airDistance=(today.airDistance??0)+distance;
+}
+export function recordAirWait(world,sim){
+  const pending=world.transportStats.pending[sim.id],today=world.transportStats.today;if(pending?.mode!=='air')return;
+  pending.waitingTicks++;today.airWaitingTicks=(today.airWaitingTicks??0)+1;
 }
 
 export function recordTransportStep(world, sim, t, tile) {
@@ -101,6 +121,10 @@ export function recordTransportArrival(world, sim) {
       stats.today.railArrivals=(stats.today.railArrivals??0)+1;
       stats.today.completedRailJourneyTicks=(stats.today.completedRailJourneyTicks??0)+world.worldTick+1-pending.departedTick;
     }
+    if(pending.mode==='air'){
+      stats.today.airArrivals=(stats.today.airArrivals??0)+1;
+      stats.today.completedAirJourneyTicks=(stats.today.completedAirJourneyTicks??0)+world.worldTick+1-pending.departedTick;
+    }
     const visit=pending.municipalVisit;
     if (visit && sim.villageId===visit.from) {
       const facility=world.map.facilities.find(f=>f.id===pending.facilityId);
@@ -124,7 +148,7 @@ export function pruneTransportTrips(world) {
     if (!trip) continue;
     live.add(sim.id);
     const state = sim.state;
-    if (['walking','waiting_train','riding_train'].includes(state?.kind) && state.action === trip.action
+    if (['walking','waiting_train','riding_train','waiting_flight','flying'].includes(state?.kind) && state.action === trip.action
       && state.facilityId === trip.facilityId && state.resourceId === trip.resourceId) continue;
     stats.today.cancelledTrips++; delete stats.pending[sim.id];
   }
