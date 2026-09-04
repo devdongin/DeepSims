@@ -11,6 +11,9 @@ const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 
 let world = null;
 let selectedSimId = null;
 let simSprites = new Map();
+// §23.39 심의 **안 변하는 부분** (이름·성·특성·능력치·잠재치·학력). 배치는 변동분만
+// 보내므로 여기 기억해 둔 것과 합쳐 쓴다. 서버가 달라진 사람만 statics로 다시 보낸다.
+const simStatic = new Map();
 let scene = null;
 let lastSeq = -1;
 
@@ -819,7 +822,26 @@ class TownScene extends Phaser.Scene {
   }
 
   syncSims() {
+    // §23.38 **화면 밖 사람은 스프라이트를 갖지 않는다.** 여태 전원에게 컨테이너(그림자 +
+    // 몸 + 이름표, 차가 있으면 아이콘까지)를 만들었다. 인구 249면 오브젝트 1,000개, 그리고
+    // 배치마다 전원에게 트윈을 만들고 죽였다(초당 약 1,000회). 지도가 다 보일 일은 없는데
+    // 사람은 전부 살아 있었다 — 페이지가 튕기던 이유의 한 축이다.
+    // 범위는 타일 컬링(§22.104)과 같은 u·v 역변환을 쓰되, 사람은 움직이므로 여유를 더 준다.
+    const uv = this.visibleUV(40);
+    const seen = new Set();
     for (const sim of world.sims) {
+      const u = sim.x - sim.y, v = sim.x + sim.y;
+      if (u < uv.minU || u > uv.maxU || v < uv.minV || v > uv.maxV) {
+        // 밖으로 나갔으면 정리한다. 다시 들어오면 그때 만든다 — 상태는 world.sims에 있다.
+        const gone = simSprites.get(sim.id);
+        if (gone) {
+          this.tweens.killTweensOf(gone); gone.destroy(); simSprites.delete(sim.id);
+          const b = bubbles.get(sim.id); // 말풍선도 같이 — 안 그러면 빈 자리에 떠 있는다
+          if (b) { clearTimeout(b.timer); b.container.destroy(); bubbles.delete(sim.id); }
+        }
+        continue;
+      }
+      seen.add(sim.id);
       let sp = simSprites.get(sim.id);
       const tx = isoX(sim.x, sim.y), ty = isoY(sim.x, sim.y) - 8;
       if (!sp) {
@@ -3585,6 +3607,9 @@ function connect() {
         break;
       case 'snapshot':
         world = msg.world;
+        // §23.39 스냅샷은 전체를 주므로 정적 지도를 여기서 새로 채운다.
+        simStatic.clear();
+        for (const sm of world.sims ?? []) simStatic.set(sm.id, sm);
         if (msg.world?.speed && window.__paintSpeed) window.__paintSpeed(msg.world.speed);
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
@@ -3611,10 +3636,17 @@ function connect() {
         updateStats();
         window.__publishDiag?.(); // #143 ?diag=1 초기 snapshot 직후의 안정된 기준값
         break;
-      case 'tickBatch':
+      case 'tickBatch': {
         if (!world) return;
         world.worldTick = msg.toTick;
-        world.sims = msg.sims;
+        // §23.39 배치에는 변하는 것만 온다. 이름·특성·능력치·학력은 **달라진 사람 것만**
+        // statics로 따라오므로, 기억해 둔 정적 부분과 합쳐 예전과 같은 모양을 만든다.
+        // (스냅샷은 언제나 전체를 보내므로 이 지도는 접속 직후부터 채워져 있다.)
+        for (const st of msg.statics ?? []) simStatic.set(st.id, st);
+        world.sims = msg.sims.map((v) => {
+          const st = simStatic.get(v.id);
+          return st ? { ...st, ...v } : v;
+        });
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
         if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
         if (msg.projects !== undefined) world.projects = msg.projects; // §19.3
@@ -3712,6 +3744,7 @@ function connect() {
         updateStats(); // #104: 인구·국고는 매 배치 바뀐다 — 스냅샷만 기다리면 화면이 멈춘 듯 보인다
         lsSet('deepsims.lastSeenTick', String(world.worldTick));
         break;
+      }
     }
   };
   ws.onclose = () => {

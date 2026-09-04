@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { Storage } from '../db/storage.js';
 import { Engine, MAX_SPEED } from './engine.js';
-import { simsView } from './view.js'; // §22.8 전송용 투영
+import { simsView, simStatic } from './view.js'; // §22.8 전송용 투영 · §23.39 정적 분리
 import { PROTOCOL_VERSION } from '../sim/constants.js';
 import { DEFAULT_LOGIC, validatePolicy } from '../sim/logic.js';
 import { industryStatus, purchasingPowerGap } from '../sim/industry.js';
@@ -347,7 +347,10 @@ function sendSnapshot(ws) {
     worldTick: engine.world.worldTick,
     map: engine.world.map,
     sims: simsView(engine.world.sims), // §22.8 화면이 쓰는 필드만
-    affinity: engine.world.affinity,
+    // §23.37 affinity는 화면이 한 번도 읽지 않는데 접속마다 **1.27MB**를 보냈다.
+    // 게다가 ever-sim 수의 제곱으로 자란다(667×667). 관계는 /api/relations가 한 사람분만
+    // 계산해 준다(§23.15) — 행렬 전체가 화면에 갈 이유가 없다.
+
     weather: engine.world.weather,
     lostItems: engine.world.lostItems,
     plots: engine.world.plots,
@@ -369,7 +372,8 @@ function sendSnapshot(ws) {
     reputation: engine.world.reputation,
     unlockedIndustries: engine.world.unlockedIndustries,
     statsHistory: engine.world.statsHistory,
-    transportStats: { today: engine.world.transportStats.today, history: engine.world.transportStats.history },
+    // §23.37 transportStats도 화면이 안 읽는다 (0.23MB).
+
     storyteller: engine.world.storyteller,
     foodSupply: engine.world.foodSupply,
     season: engine.world.season,
@@ -391,7 +395,22 @@ engine.onBatch((msg) => {
     // 그 클라이언트만 전송을 쉬고, 보일 때 최신 스냅샷 하나로 따라잡는다. 엔진과 다른
     // 클라이언트는 계속 진행하며 send를 안 했으므로 해당 소켓의 seq에도 틈이 생기지 않는다.
     if (ws.clientHidden) continue;
-    if (msg.type === 'tickBatch') send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost });
+    if (msg.type === 'tickBatch') {
+      // §23.39 이 클라이언트가 아직 모르거나 값이 달라진 사람의 정적 부분만 골라 붙인다.
+      const statics = [];
+      const sent = ws.sentStatic ?? (ws.sentStatic = new Map());
+      for (let i = 0; i < msg.simRefs.length; i++) {
+        const sim = msg.simRefs[i], key = msg.statKeys[i];
+        if (sent.get(sim.id) === key) continue;
+        sent.set(sim.id, key);
+        statics.push(simStatic(sim));
+      }
+      if (sent.size > msg.simRefs.length * 2) { // 떠난 사람의 키는 정리한다
+        const live = new Set(msg.simRefs.map((x) => x.id));
+        for (const id of sent.keys()) if (!live.has(id)) sent.delete(id);
+      }
+      send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, statics, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost });
+    }
     else send(ws, msg);
   }
 });

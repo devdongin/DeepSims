@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { advance } from '../sim/tick.js';
 import { computeTarget, TICK_DURATION_MS } from '../sim/time.js';
 import { TICKS_PER_DAY } from '../sim/constants.js';
-import { simsView } from './view.js'; // §22.8 전송용 투영
+import { simsView, simVolatile, staticKey } from './view.js'; // §22.8 전송용 투영 · §23.39 변동분 분리
 import { validateLogic, logicHash } from '../sim/logic.js';
 
 const BATCH_TICKS = TICKS_PER_DAY; // 따라잡기 배치 = 게임 1일
@@ -207,7 +207,12 @@ export class Engine {
       if (n <= 0) return;
       const batch = this.runLive(n);
       // §22.8 sims는 **화면이 쓰는 필드만** 투영해 보낸다 (라이브 실측 71배 절감).
-      this.emit({ type: 'tickBatch', ...batch, sims: simsView(this.world.sims), treasury: this.world.treasury, incidents: this.world.incidents, cityTier: this.world.cityTier, projects: this.world.projects, statsToday: this.world.statsHistory[this.world.statsHistory.length - 1] ?? null, speed: this.speed ?? 1, transit: this.world.transit ?? null, unlockedIndustries:this.world.unlockedIndustries ?? [], housingMarket:this.world.housingMarket, householdDaily:this.world.householdDaily });
+      // §23.39 배치에는 **변동분만** 싣는다. 정적 부분(이름·특성·능력치·학력)은 클라이언트마다
+      // 마지막으로 보낸 키와 비교해 달라진 사람만 index.js가 골라 붙인다. simRefs는 내부
+      // 전달용이라 소켓으로 나가지 않는다 (index.js가 필드를 골라 새 객체를 만든다).
+      this.emit({ type: 'tickBatch', ...batch, sims: this.world.sims.map(simVolatile),
+        statKeys: this.world.sims.map(staticKey), simRefs: this.world.sims,
+        treasury: this.world.treasury, incidents: this.world.incidents, cityTier: this.world.cityTier, projects: this.world.projects, statsToday: this.world.statsHistory[this.world.statsHistory.length - 1] ?? null, speed: this.speed ?? 1, transit: this.world.transit ?? null, unlockedIndustries:this.world.unlockedIndustries ?? [], housingMarket:this.world.housingMarket, householdDaily:this.world.householdDaily });
     }, 250);
   }
 
