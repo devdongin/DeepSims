@@ -2231,6 +2231,26 @@ function conversationLine(e) {
         '평가는 임기 끝나고 하는 거지',
         '나쁘다는 소리는 아직 못 들었어'], t);
     }
+    // §23.52 갈등 소식. couple_news와 짝을 이루는 채널이다 — 마을은 좋은 소식만
+    // 옮기지 않는다. `about`은 화자가 흉보는 쪽, `otherId`는 다른 당사자다.
+    case 'conflict_news': {
+      const other = simName(d.otherId);
+      return d.kind === 'rival'
+        ? pick([`${ga(about)} ${other} 아주 척을 졌대`,
+          `${about} 요즘 ${other} 얘기만 나오면 자리를 뜬대`,
+          `${rang(about)} ${other}, 이제 아예 말도 안 섞는다더라`,
+          `${about} 그 사람, 성격이 좀 그렇지 않아?`,
+          `${ga(about)} 먼저 틀어졌다던데`,
+          `${ne(about)} 일 들었어? 나 같으면 그렇게까진 안 해`,
+          `${wa(about)} ${other} 사이 안 좋은 거, 다들 알더라`], t)
+        : pick([`${ga(about)} ${other} 크게 붙었다며?`,
+          `어제 ${other} 앞에서 ${ga(about)} 언성 높였대`,
+          `${rang(about)} ${other} 그렇게 될 줄은 몰랐어`,
+          `${about} 그 얘기 듣고 좀 놀랐어`,
+          `${ga(about)} 좀 심했다는 말이 돌더라`,
+          `${ne(about)} 얘기 들었어? 어느 쪽 편도 못 들겠더라`,
+          `${wa(about)} ${other}, 화해는 했으려나`], t);
+    }
     case 'couple_news': {
       const other = simName(d.otherId);
       return d.kind === 'married'

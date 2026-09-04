@@ -162,6 +162,11 @@ export function createWorld(seed) {
     lastDailyDay: -1,      // 일일 평가(질병·선거·수당·이민) 가드
     campaigners: [],       // §17.9 유세 중 후보 (D-3 계산, 선거 직전 클리어)
     recentCouples: [],     // §17.9 최근 커플 링 (최대 8, {a,b,day,kind})
+    // §23.52 최근 갈등 링 (최대 8, {a,b,day,kind}). 커플 링과 같은 모양이다 —
+    // 이 세계에는 두 사람 사이의 일을 제3자의 입으로 옮기는 채널이 이미 있는데
+    // (couple_news, 60일에 1,531발화) 갈등에는 대응물이 없었다. 그래서 앙숙 22건이
+    // 전부 평균 14.5일 동안 아무 일도 일어나지 않는 침묵이었다.
+    recentConflicts: [],
     parents: {},           // §17.11 childId -> [부모A, 부모B] (id asc)
     reservations: {}, // "facilityId:resourceId" -> simId
     tokens: [],       // 활성 정보 토큰 (PLAN §F)

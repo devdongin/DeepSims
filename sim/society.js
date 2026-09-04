@@ -3,7 +3,7 @@ import { rngInt } from './prng.js';
 import { worldEventPercent } from './world-events.js';
 import { syncResidenceVillage } from './villages.js';
 import { publicPostAvailable, demotePublicIfOverQuota, fillPublicPosts, trimOverQuotaPosts } from './publicposts.js';
-import { recordFact, argumentThreshold } from './cognition.js';
+import { recordFact, argumentThreshold, pushRecentConflict } from './cognition.js';
 import { makeSim } from './simfactory.js';
 import { surnameFor } from './surnames.js';
 import { generateTraits, occupationAllowed } from './traits.js';
@@ -1582,6 +1582,7 @@ export function maybeApproach(world, t, day, emit, pairedThisTick = new Set()) {
       if (before >= thrD && after < thrD) {
         sim.mood = Math.max(-10000, Math.min(10000, sim.mood + world.logic.mood.argument));
         target.mood = Math.max(-10000, Math.min(10000, target.mood + world.logic.mood.argument));
+        pushRecentConflict(world, sim.id, target.id, t, 'argument'); // §23.52 마을이 옮길 수 있게
         emit('argument', sim.id, { withSimId: target.id });
         recordFact(sim, t, world.logic, 'argument', { subjectSimId: target.id, placeId: fidD,
           tags: ['argument', `facility:${fidD}`, `sim:${target.id}`] });

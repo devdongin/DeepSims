@@ -51,7 +51,7 @@ import { makeSim, emptyState } from './simfactory.js';
 import { recordIndustryDemand, recordCapacityShortfall, recordIndustryWant, maybeUnlockIndustries, neededIndustryFacility } from './industry.js';
 import { makeAbilities } from './abilities.js';
 import { surnameFor, surnameHash } from './surnames.js';
-import { argumentThreshold, recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
+import { argumentThreshold, pushRecentConflict, recordFact, shortlistMemories, memoryModFor, stateModFor, runReflection, memoryModFast, prepareShortlist, STATE_MOD_CLAMP } from './cognition.js';
 import { buildDailyPlan, planFactorFor, maybeGenerateToken, transferTokens, expireAndMeasureTokens, learnToken } from './planning.js';
 import { maybeConverse, processGreetings } from './interaction.js';
 import {
@@ -1171,6 +1171,7 @@ export function tick(world, inputsForThisTick = []) {
         const thr = Math.max(argumentThreshold(a, L), argumentThreshold(b, L));
         const crossed = (beforeAB >= thr && afterAB < thr) || (beforeBA >= thr && afterBA < thr);
         if (crossed) {
+          pushRecentConflict(world, a.id, b.id, t, 'argument'); // §23.52
           emit('argument', a.id, { withSimId: b.id });
           applyMood(a, L.mood.argument); applyMood(b, L.mood.argument); // 사실 발생 지점 (PLAN §12.1)
           recordFact(a, t, L, 'argument', { subjectSimId: b.id, placeId: facId, tags: ['argument', `facility:${facId}`, `sim:${b.id}`] });

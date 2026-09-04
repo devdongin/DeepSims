@@ -4,7 +4,7 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 100, // §23.47 거절이 호감도·기억에 닿는다 (99=지속 고용주 위에)
+  logicSchemaVersion: 101, // §23.52 갈등 소식 채널(conflict_news)
   founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
@@ -281,7 +281,10 @@ export const DEFAULT_LOGIC = {
   // 대화·상호작용 (logicSchemaVersion 4): D8~D10
   conversation: {
     lineInterval: 15,          // socialize 페어의 발화 간격 (pairedTicks % interval == 1)
-    topicWeights: { couple_news: 25, family_talk: 30, food: 20, gossip: 30, memory_share: 20, politics: 25, weather: 10, work_gripe: 20 },
+    // §23.52 conflict_news는 couple_news와 같은 무게다 — 마을은 좋은 소식과 나쁜 소식을
+    // 같은 정도로 옮긴다. 후보가 없으면(최근 7일 갈등 없음) 그냥 빠지므로, 조용한 마을에서는
+    // 이 주제가 다른 대화를 밀어내지 않는다.
+    topicWeights: { conflict_news: 25, couple_news: 25, family_talk: 30, food: 20, gossip: 30, memory_share: 20, politics: 25, weather: 10, work_gripe: 20 },
     greetingAffinity: 15,      // 인사 시 호감도(부호 보존 TF 스케일 적용 전 기본값)
     greetingSocial: 100,       // 인사 시 사교 회복
     greetingRange: 1,          // 맨해튼 거리 임계

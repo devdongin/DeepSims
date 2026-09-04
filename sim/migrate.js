@@ -451,6 +451,7 @@ export function migrateWorld(world) {
   // 옮겨 담는 것이 정확한 초기값이다 — 0으로 두면 옛 세계의 오래된 사이가
   // 하루아침에 '처음 만난 사이'가 되어 앙숙 판정이 리셋된다. 이미 있으면 건드리지 않는다.
   world.contacts ??= (world.interactions ?? []).map((row) => row.slice());
+  world.recentConflicts ??= []; // §23.52
   world.worldEvents ??= []; // Also repair absent/null optional state in current-version saves.
   for(const sim of world.sims){sim.employment??=null;sim.employmentSearch??=null;}
   world.schemaVersion = SCHEMA_VERSION;

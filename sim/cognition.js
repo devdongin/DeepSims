@@ -170,6 +170,14 @@ export function stateModFor(world, sim, facilityId, L) {
 // §23.47 다툼 문턱. 전에는 tick.js 안에 있어서 **마주 앉은 대화 중에만** 검사됐다.
 // 거절로 호감이 내려가면 이 문턱을 조용히 지나가 버려, 사이가 아무리 나빠져도
 // 말다툼이 한 번도 나지 않았다(20시드 100일 실측 0건). 두 경로가 같은 판단을 쓰도록 옮긴다.
+// §23.52 최근 갈등 링. society(거절 경로)와 tick(대화 경로) 양쪽이 쓴다.
+// rng를 소비하지 않는 순수 상태 변경이다.
+export function pushRecentConflict(world, a, b, t, kind) {
+  if (!world.recentConflicts) world.recentConflicts = [];
+  world.recentConflicts.push({ a: Math.min(a, b), b: Math.max(a, b), day: Math.floor(t / 1440), kind });
+  while (world.recentConflicts.length > 8) world.recentConflicts.shift();
+}
+
 export function argumentThreshold(sim, L) {
   const v = L.affinity.argumentBase - (sim.traits.mbti.TF - 50) * L.affinity.argumentTfCoef;
   return Math.max(L.affinity.argClampMin, Math.min(L.affinity.argClampMax, v));
@@ -222,6 +230,8 @@ export function runReflection(world, sim, t, emit) {
       else if (tier === 'rival') sim.rivalCount++;
       if (tier === 'stranger') delete sim.relTiers[other.id];
       else sim.relTiers[other.id] = tier;
+      // §23.52 사이가 틀어진 것도 마을이 옮길 만한 소식이다 — 말다툼과 같은 링에 넣는다.
+      if (tier === 'rival') pushRecentConflict(world, sim.id, other.id, t, 'rival');
       emit('relationship_changed', sim.id, { withSimId: other.id, tier, prevTier: prev });
       newTierFacts.push(other.id);
     }

@@ -1,5 +1,5 @@
 {
-  "logicSchemaVersion": 100,
+  "logicSchemaVersion": 101,
   "founding": {
     "petitionDays": 3,
     "minSettlers": 2
@@ -647,6 +647,7 @@
   "conversation": {
     "lineInterval": 15,
     "topicWeights": {
+      "conflict_news": 25,
       "couple_news": 25,
       "family_talk": 30,
       "food": 20,
