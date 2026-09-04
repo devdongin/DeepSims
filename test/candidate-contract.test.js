@@ -67,9 +67,11 @@ for (const [pop, expected] of [
   // logic101 passenger integration: all three behavior vectors stay identical
   // in airport-free worlds; only the logic-version world hashes change.
   // logic102: retirement observation is inert without airports; same behavior vectors.
-  [10, ['272da7d7', '4ae751f3', '9bcc9d00', '07da66ad']],
-  [50, ['8f96407c', '8464940b', 'a2baa370', '2b8af9ba']],
-  [200, ['23a3029f', '3b0afc44', '1dcc03c1', 'ea38b153']],
+  // logic103: critical survival priority; these initial 240-tick behavior vectors
+  // remain identical. Longer deficient-world behavior intentionally changes (#176).
+  [10, ['272da7d7', '4ae751f3', '9bcc9d00', 'cc1b03cc']],
+  [50, ['8f96407c', '8464940b', 'a2baa370', '1e41226f']],
+  [200, ['23a3029f', '3b0afc44', '1dcc03c1', '313e9b04']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

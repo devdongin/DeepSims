@@ -1928,7 +1928,13 @@ export function tick(world, inputsForThisTick = []) {
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false, occ: occSnapshot });
     if(world.villages.length>1)visitSnapshot??=visitContext(world);
-    const visit = chooseVisit(world,sim,cands,pickBest(cands),pickBest,urgency,visitSnapshot);
+    // #176: Critical bodily needs cannot lose forever to personality-weighted
+    // social/fun deficits. Keep normal scores within the executable survival
+    // candidates; retain the full list for shortage evidence below. If no such
+    // candidate exists, allow other actions rather than freezing the resident.
+    const survival = urgency ? cands.filter(c => ['hunger','energy'].includes(NEED_OF_ACTION[c.action])) : [];
+    const choices = survival.length ? survival : cands;
+    const visit = chooseVisit(world,sim,choices,pickBest(choices),pickBest,urgency,visitSnapshot);
     const best = visit.candidate;
 
     // §22.19 일상 수요 (이슈 #87). §22.18 원장은 **위급한 필요**에만 걸려서, 진료·독서·여가처럼
