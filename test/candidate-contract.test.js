@@ -58,10 +58,10 @@ import { collectCandidates } from '../sim/tick.js';
 //     이벤트/전체 상태가 버전과 빈 목록 제외 부모e1ae1ed와 동일함을 검증했다.
 //   §23.44~46 통합: 일대기 눈금·아파트 증축 계산·커밋 주기·기본 배속.
 for (const [pop, expected] of [
-  // logic97: main96 apartment fix + marriage gravity; initial vectors unchanged.
-  [10, ['272da7d7', '32b2391b', 'ddff0557', '7257ee1d']],
-  [50, ['8f96407c', '9a3cd25b', '7885fc6a', '35d2eaa2']],
-  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', '50ed741a']],
+  // logic98: general visit gravity preserves single-town vectors; version hash only.
+  [10, ['272da7d7', '32b2391b', 'ddff0557', '7cc31ba2']],
+  [50, ['8f96407c', '9a3cd25b', '7885fc6a', 'f2230825']],
+  [200, ['91f50dd7', 'a23787ba', 'b42f7c4b', '9faacd2f']],
 ]) {
   test(`#97 pre-optimization ordered candidates, choices, events and world: population ${pop}`, () => {
     assert.deepEqual(Object.values(candidateContract(pop)), expected);

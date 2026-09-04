@@ -1,4 +1,4 @@
-// Controlled jurisdiction fixture, NOT natural founding or gravity-model proof.
+// Controlled jurisdiction fixture, NOT natural founding or population-growth proof.
 // Existing population, facilities and coordinates are retained. Only jurisdiction
 // labels divide the original town, so this diagnoses existing cross-town behavior.
 import {createWorld,tick,hashWorld,serialize,deserialize} from '../sim/index.js';
@@ -12,7 +12,7 @@ for(const s of w.sims)s.villageId=w.map.facilities.find(f=>f.id===s.homeId).vill
 const initialPopulation=w.sims.length,visits={},residenceMoves=[];
 const migration={gathered:0,departed:0,completed:0,failed:0},migrationIds=new Set();
 const migrationByKind={},migrationKinds=new Map();
-let observedDay=0,noPath=0;
+let observedDay=0,noPath=0,gravityChoices=0,gravityDraws=0;
 const collect=day=>{
   for(const [key,row] of Object.entries(day?.municipalVisits??{})){
     const result=visits[key]??={...row,arrivals:0,walkingTicks:0};
@@ -22,6 +22,9 @@ const collect=day=>{
 for(let i=0;i<days*1440;i++){
   if(process.argv[3]==='resume'&&i===Math.floor(days*1440/2))w=deserialize(serialize(w));
   const events=tick(w);
+  for(const e of events)if(e.type==='action_started'&&e.payload.reason?.visitChoice){
+    gravityChoices++;if(e.payload.reason.visitChoice.draw!==null)gravityDraws++;
+  }
   noPath+=events.filter(e=>e.type==='action_failed'&&e.payload.reason==='no_path').length;
   for(const e of events)if(e.type==='moved_home')residenceMoves.push(e);
   for(const e of events){
@@ -43,5 +46,5 @@ for(let i=0;i<days*1440;i++){
 }
 collect(w.transportStats.today);
 console.log(JSON.stringify({fixture:'existing-town jurisdiction split, not natural settlement',days,
-  initialPopulation,finalPopulation:w.sims.length,noPath,visits:Object.values(visits),
+  initialPopulation,finalPopulation:w.sims.length,noPath,gravityChoices,gravityDraws,visits:Object.values(visits),
   residenceMoves:residenceMoves.length,migration,migrationByKind,hash:hashWorld(w)},null,2));

@@ -5,6 +5,7 @@ import {governmentFor,publicBalance} from '../sim/government.js';
 import {plotBuildable,isWalkable,zoneFootprint,sameRegion} from '../sim/map.js';
 import {foundingSiteReserved} from '../sim/founding.js';
 import {campusSiteReserved} from '../sim/center-plots.js';
+import {stationConstructionObserver} from './station-construction-observer.js';
 
 // A window may start partway through a day. Count only new arrivals, not the
 // pre-window part of today's counters; retain totals beyond the 14-day ring.
@@ -52,16 +53,21 @@ function firstDifference(a,b,path='world'){
   for(const key of keys){const d=firstDifference(a[key],b[key],`${path}.${key}`);if(d)return d;}
   return null;
 }
-export function observeSettlementTraffic(initial,{days=30,resume=false,auditResume=false,stations=false,expandCenters=false}={}){
+export function observeSettlementTraffic(initial,{days=30,resume=false,auditResume=false,stations=false,expandCenters=false,completeServiceWindow=false}={}){
   assert.ok(Number.isInteger(days)&&days>0&&days<=365);
   assert.ok(!expandCenters||stations,'center investment requires the explicit station-order scenario');
+  assert.ok(!completeServiceWindow||(stations&&days<=335),'bounded service follow-through requires stations and at most335 opening days');
   let w=initial,shadow=null;
   const startTick=w.worldTick,initialMunicipalities=municipalities(w),money=closedMoney(w);
   const arrivals=arrivalObserver(w.transportStats.today),noPath={},noPathSamples=[],started={},construction=[],migration={};
   const stationOrders=[],centerOrders=[],ordered=new Set(),expanded=new Set(),blockedTicks={},railDirections={};
   const railBefore={...w.rail.stats};
+  const stationLabor=stationConstructionObserver();
   let serviceWindow=null,serviceArrivals=null;
-  for(let n=0;n<days*1440;n++){
+  // Keep the original opening deadline. Only a service that opened within it
+  // may continue to finish its full30-day observation (absolute cap days+30).
+  const maxTicks=(days+(completeServiceWindow?30:0))*1440;
+  for(let n=0;n<maxTicks&&(n<days*1440||(serviceWindow&&w.worldTick<serviceWindow.endTick));n++){
     if(resume&&n===Math.floor(days*1440/2)){if(auditResume)shadow=w;w=deserialize(serialize(w));}
     const inputs=[];
     if(stations)for(const village of [...w.villages].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0)){
@@ -96,7 +102,9 @@ export function observeSettlementTraffic(initial,{days=30,resume=false,auditResu
       }
       inputs.push({sequence:inputs.length,command:'zone',payload:{plotId:p.plotId,type:'train_station',dir:0}});
     }
+    const constructionFrame=stations?stationLabor.before(w):[];
     const events=tick(w,inputs);arrivals.collect(w.transportStats.today);
+    if(stations)stationLabor.after(w,events,constructionFrame);
     if(serviceWindow&&w.worldTick<=serviceWindow.endTick)serviceArrivals.collect(w.transportStats.today);
     for(const input of inputs){
       if(input.command==='plan_center'){
@@ -163,11 +171,11 @@ export function observeSettlementTraffic(initial,{days=30,resume=false,auditResu
     assert.equal(closedMoney(w),money,'post-founding traffic must preserve closed accounting');
   }
   assert.deepEqual(findNonFinite(w),[]);
-  return {world:w,report:{days,startTick,endTick:w.worldTick,initialMunicipalities,finalMunicipalities:municipalities(w),
+  return {world:w,report:{days,...(completeServiceWindow?{serviceFollowThrough:true}:{}),startTick,endTick:w.worldTick,initialMunicipalities,finalMunicipalities:municipalities(w),
     arrivals:arrivals.rows(),noPath,noPathSamples,started,construction,migrations:Object.values(migration),
     transport:{cars:w.sims.filter(s=>s.hasCar).length,stationUnlocked:w.transit.stationUnlocked,demand:w.transit.demand,
       stations:w.map.facilities.filter(f=>f.type==='train_station').map(f=>({id:f.id,villageId:f.villageId}))},
-    ...(stations?{railObservation:{stationOrders,centerOrders,blockedTicks,directions:railDirections,
+    ...(stations?{railObservation:{stationOrders,centerOrders,stationLabor:stationLabor.rows(),blockedTicks,directions:railDirections,
       serviceWindow:serviceWindow?{...serviceWindow,observedUntil:Math.min(w.worldTick,serviceWindow.endTick),
         complete:w.worldTick>=serviceWindow.endTick,arrivals:serviceArrivals.rows()}:null,
       stats:Object.fromEntries(Object.entries(w.rail.stats).map(([k,v])=>[k,v-(railBefore[k]??0)]))}}:{}),
