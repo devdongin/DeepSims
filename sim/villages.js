@@ -1,4 +1,4 @@
-// #32 R-C storage foundation only. No founding, population, money or RNG changes.
+// #32 village identity and read-only summaries; financial authority is in government.js.
 export const PRIMARY_VILLAGE_ID = 'village:0';
 
 export function initializeVillages(world) {
@@ -18,11 +18,16 @@ export function syncResidenceVillage(world, simId) {
   sim.villageId = world.map.facilities.find(f => f.id === sim.homeId)?.villageId ?? PRIMARY_VILLAGE_ID;
 }
 
-// Read-only current facts. Treasury/reputation/government remain shared world
-// authority in this first slice; do not invent duplicate village balances.
+// Snapshot the authority, not another spendable balance. Do not expose live
+// policy references through this read-only diagnostic projection.
 export function villageSummary(world) {
-  const result = world.villages.map(v => ({ ...v, center: { ...v.center }, population: 0,
-    facilities: 0, homes: 0, beds: 0, occupiedBeds: 0 }));
+  const result = world.villages.map(v => {
+    const g=v.id===PRIMARY_VILLAGE_ID?world:v.government;
+    return {...v,center:{...v.center},population:0,facilities:0,homes:0,beds:0,occupiedBeds:0,
+      statsHistory:(v.id===PRIMARY_VILLAGE_ID?v.statsHistory??[]:g?.statsHistory??[]).map(row=>({...row})),
+      government:g?{treasury:g.treasury,mayorId:g.mayorId,reputation:g.reputation,cityTier:g.cityTier,
+        policy:{...g.policy},lastElectionDay:g.lastElectionDay}:null};
+  });
   const byId = new Map(result.map(v => [v.id, v]));
   const residents = new Map();
   for (const sim of world.sims) {

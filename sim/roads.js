@@ -1,6 +1,21 @@
 // Completed walks are evidence, not predicted demand. No RNG consumption.
 import { TILE, isWalkable, isRoadProtected } from './map.js';
 import { bfsPath } from './pathfind.js';
+import { PRIMARY_GOVERNMENT } from './government.js';
+
+// Maintenance jurisdiction, not new demand: only observed wear is eligible.
+// Founded centers and an explicit id tie-break keep ownership replay-stable.
+export function roadMaintenanceVillage(world, index) {
+  const root = world.rootWorld ?? world;
+  if ((root.villages?.length ?? 0) <= 1) return PRIMARY_GOVERNMENT;
+  const x = index % root.map.w, y = Math.floor(index / root.map.w);
+  let best = null, distance = Infinity;
+  for (const v of root.villages) {
+    const d = Math.abs(x - v.center.x) + Math.abs(y - v.center.y);
+    if (d < distance || (d === distance && v.id < best)) { best = v.id; distance = d; }
+  }
+  return best;
+}
 
 export function recordRoadTrip(world, sim, journey, t, emit) {
   if (!journey) return; // old saves/cancelled trips have no invented origin
@@ -10,13 +25,15 @@ export function recordRoadTrip(world, sim, journey, t, emit) {
       journey.walked * 100 < direct * P.detourRatioPct) return;
   const day = Math.floor(t / 1440);
   const a = journey.y * world.map.w + journey.x, b = sim.y * world.map.w + sim.x;
-  const key = `${Math.min(a, b)}:${Math.max(a, b)}`;
+  const villageId = sim.villageId ?? PRIMARY_GOVERNMENT;
+  const jurisdiction = villageId === PRIMARY_GOVERNMENT ? {} : { villageId };
+  const key = `${villageId === PRIMARY_GOVERNMENT ? '' : `${villageId}/`}${Math.min(a, b)}:${Math.max(a, b)}`;
   world.roadReports = (world.roadReports ?? []).filter(r =>
     r.plannedDay != null || day - r.lastDay <= world.logic.complaints.windowDays);
   let report = world.roadReports.find(r => r.key === key);
   if (!report) {
     report = { key, from: Math.min(a, b), to: Math.max(a, b), direct,
-      walked: journey.walked, lastDay: day, reporters: [], plannedDay: null };
+      walked: journey.walked, lastDay: day, reporters: [], plannedDay: null, ...jurisdiction };
     world.roadReports.push(report);
   }
   report.lastDay = day;
@@ -30,9 +47,9 @@ export function recordRoadTrip(world, sim, journey, t, emit) {
     const existing = world.complaints.find(c => c.kind === 'road_detour' && c.placeId === key);
     if (existing) { existing.count++; existing.severity = Math.min(100, existing.severity + 1); }
     else {
-      world.complaints.push({ kind: 'road_detour', placeId: key, severity: 1, sinceDay: day, count: 1 });
+      world.complaints.push({ kind: 'road_detour', placeId: key, severity: 1, sinceDay: day, count: 1, ...jurisdiction });
       emit('road_requested', sim.id, { routeKey: key, from: report.from, to: report.to,
-        walked: journey.walked, direct, repeated: person.count });
+        walked: journey.walked, direct, repeated: person.count, ...jurisdiction });
     }
     sim.complaintDays.road_detour = day;
     while (world.complaints.length > world.logic.complaints.cap) world.complaints.shift();
@@ -54,7 +71,8 @@ function connector(world, report, horizontalFirst) {
     else y += Math.sign(ty - y);
     if (isWalkable(map, x, y)) continue;
     const index = y * map.w + x, tile = map.tiles[index];
-    if (isRoadProtected(map, x, y) || (tile !== TILE.TREE && tile !== TILE.RIVER)) return null;
+    if (isRoadProtected(map, x, y, true, world.plots, world.projects, world.zoneOrders)
+      || (tile !== TILE.TREE && tile !== TILE.RIVER)) return null;
     changes.push({ index, tile: tile === TILE.RIVER ? TILE.BRIDGE : TILE.SIDEWALK });
   }
   if (!changes.length || changes.length > world.logic.publicWorks.paveMaxPerDay) return null;
@@ -65,23 +83,26 @@ function connector(world, report, horizontalFirst) {
 
 // Called only behind the mayor, election, fiscal-review and surplus guards.
 export function maybeRoadWorks(world, t, day, emit) {
+  const root = world.rootWorld ?? world;
+  const villageId = world.municipalityId ?? PRIMARY_GOVERNMENT;
   const P = world.logic.publicWorks;
-  world.roadReports = (world.roadReports ?? []).filter(r =>
+  root.roadReports = (root.roadReports ?? []).filter(r =>
     r.plannedDay != null || day - r.lastDay <= world.logic.complaints.windowDays);
   const active = new Set(world.sims.map(s => s.id));
   const voices = r => r.reporters.filter(p => active.has(p.simId) &&
     day - p.lastDay <= world.logic.complaints.windowDays && p.count >= world.logic.transport.detourRepeat).length;
-  const candidates = world.roadReports.filter(r => r.plannedDay != null || voices(r) > 0)
+  const candidates = root.roadReports.filter(r => (r.villageId ?? PRIMARY_GOVERNMENT) === villageId
+    && (r.plannedDay != null || voices(r) > 0))
     .sort((a, b) => (b.plannedDay != null) - (a.plannedDay != null) || voices(b) - voices(a) ||
       (b.walked - b.direct) - (a.walked - a.direct) || a.from - b.from || a.to - b.to);
   for (const r of candidates) {
-    const map = world.map;
+    const map = root.map;
     const path = bfsPath(map, r.from % map.w, Math.floor(r.from / map.w), r.to % map.w, Math.floor(r.to / map.w));
     if (path === null || path.length <= r.direct) {
-      world.roadReports = world.roadReports.filter(v => v !== r);
+      removeRoadReport(root, r);
       continue; // already improved, or no longer a valid observed route
     }
-    const plans = [connector(world, r, true), connector(world, r, false)].filter(Boolean)
+    const plans = [connector(root, r, true), connector(root, r, false)].filter(Boolean)
       .sort((a, b) => a.cost - b.cost);
     const plan = plans[0];
     if (!plan || world.treasury - plan.cost <= 0) continue;
@@ -93,20 +114,24 @@ export function maybeRoadWorks(world, t, day, emit) {
     }
     if (day < r.plannedDay + P.routeWorkDays) return true;
     // Revalidate the current map and budget at completion, no partial/unfunded bridge.
-    for (const c of plan.changes) { map.tiles[c.index] = c.tile; delete world.wear[c.index]; }
+    for (const c of plan.changes) { map.tiles[c.index] = c.tile; delete root.wear[c.index]; }
     map.reachVersion = (map.reachVersion ?? 0) + 1;
     world.treasury -= plan.cost;
-    world.externalOutflow = (world.externalOutflow ?? 0) + plan.cost;
-    world.roadReports = world.roadReports.filter(v => v !== r);
-    world.complaints = world.complaints.filter(c => c.kind !== 'road_detour' || c.placeId !== r.key);
-    for (const sim of world.sims) if (!world.roadReports.some(v =>
-      v.reporters.some(p => p.simId === sim.id && p.count >= world.logic.transport.detourRepeat))) {
-      delete sim.complaintDays.road_detour;
-    }
+    root.externalOutflow = (root.externalOutflow ?? 0) + plan.cost;
+    removeRoadReport(root, r);
     emit('public_works', world.mayorId, { kind: 'route', routeKey: r.key,
       tiles: plan.changes.map(c => c.index), tileChanges: plan.changes, cost: plan.cost,
       treasury: world.treasury, before: path.length, after: r.direct });
     return true;
   }
   return false;
+}
+
+function removeRoadReport(world, report) {
+  world.roadReports = world.roadReports.filter(r => r !== report);
+  world.complaints = world.complaints.filter(c => c.kind !== 'road_detour' || c.placeId !== report.key);
+  for (const sim of world.sims) if (!world.roadReports.some(r =>
+    r.reporters.some(p => p.simId === sim.id && p.count >= world.logic.transport.detourRepeat))) {
+    delete sim.complaintDays.road_detour;
+  }
 }

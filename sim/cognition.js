@@ -230,12 +230,11 @@ export function runReflection(world, sim, t, emit) {
   }
   for (const [key, n] of [...counts.entries()].sort()) {
     if (n < L.social.habitMinRepeats) continue;
-    const before = sim.habit[key] ?? 0;
+    const hadHabit=Object.hasOwn(sim.habit,key),before = sim.habit[key] ?? 0;
     sim.habit[key] = Math.min(L.social.habitCap, before + L.social.habitIncrement);
     // §23.32 '즐겨 하는 일'의 문턱을 넘는 순간만 센다 (근무는 취미가 아니다)
-    if (before < L.club.habitMin && sim.habit[key] >= L.club.habitMin && !key.startsWith('work:')) {
-      sim.habitCount = (sim.habitCount ?? 0) + 1;
-    }
+    if (!key.startsWith('work:')) sim.habitCount = (sim.habitCount ?? 0)
+      + Number(sim.habit[key] >= L.club.habitMin) - Number(hadHabit && before >= L.club.habitMin);
   }
 
   // 3.5) §17.5/§17.6: 연애 전이(파혼→결혼→탐색, 먼저 회고하는 쪽이 실행) + 동아리 가입

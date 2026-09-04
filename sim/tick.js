@@ -6,7 +6,7 @@ import {
   COPING_ACTIONS, HOME_ONLY_ACTIONS, OUTDOOR_FACILITIES,
 } from './constants.js';
 import { demotePublicIfOverQuota } from './publicposts.js';
-import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
+import { TILE, addBuilding, plotBuildable, zoneFootprint, isResidence, isAvailableResidence, isWalkable, sameRegion, isRoadProtected } from './map.js';
 import { bfsPath, manhattan } from './pathfind.js';
 import { recordRoadTrip } from './roads.js';
 import { schoolFor, updateEducation, recordStudy, neededSchool, SCHOOL_TYPES, canWork } from './education.js';
@@ -18,7 +18,17 @@ import { settleHousing } from './housing.js';
 import { resolveStoryCandidates } from './storyteller.js';
 import { STOCK_ACTION, updateSeason, shouldStockFood, seasonalYield, winterExposureCost } from './seasons.js';
 import { CULTURE_ACTION, updateNeedsTier, cultureBlockReason, completeCultureVisit } from './needs-tiers.js';
-import { syncResidenceVillage } from './villages.js';
+import { allocateMunicipalLand } from './municipal-land.js';
+import { repairCenterPlots, campusSiteReserved } from './center-plots.js';
+import { projectMunicipality, municipalProjectLimit, planMunicipalConstruction } from './municipal-construction.js';
+import { governmentFor, governmentViews, governmentEmitter, changeReputation,
+  reputationVillage, recordMunicipalStats, publicBalance } from './government.js';
+import { evaluateFoundingPetitions, applyFoundingDecision, fundFoundingPlans,
+  foundingSiteReserved, foundingWorkerAllowed, recordFoundingHome, cancelFoundingConstruction } from './founding.js';
+import { SETTLE_ACTION, isSettlementInTransit, settlementGatherTarget,
+  advanceSettlementPlans, completeSettlementArrivals } from './settlement.js';
+import { advanceHouseholdMigrations, completeHouseholdMigrations } from './household-migration.js';
+import { assignCompletedResidence } from './construction-relocation.js';
 import { SUPPLY_ACTION, GROW_ACTION, sellsGroceries, deliveryQuote, completeDelivery, purchaseQuantity,
   completeGroceryPurchase, refreshSupplyOrders, openSupplyMarket, recordGardenProduce, procurementReserve, purchaseCost } from './food-supply.js';
 import { rollTransportDay, recordTransportDeparture, recordTransportStep,
@@ -27,7 +37,10 @@ import { ESCORT_ACTION, escortableChildren, escortBlockReason, claimEscortPickup
   beginHospitalEscort, syncEscortStep, cancelEscort } from './child-escort.js';
 import { rngInt } from './prng.js';
 import { workWindowFor, slotMatches, circadianEnergyPct, dayHash } from './chrono.js';
-import { validateLogic, logicHash, validatePolicy, ZONEABLE } from './logic.js';
+import { validateLogic, logicHash, ZONEABLE } from './logic.js';
+import { applyPolicyCommand } from './policy-command.js';
+import { refreshMoodCounts } from './mood-counts.js';
+import { syncRailNetwork, chooseRailJourney, advanceRail } from './rail.js';
 import { validateTraits, OCCUPATIONS, occupationAllowed, SWITCH_ONLY_OCCUPATIONS, BIRTH_STAGE_OCCUPATIONS } from './traits.js';
 import { aptitudeFor, developFromActivity } from './abilities.js'; // §21.1 / #96
 import { makeSim, emptyState } from './simfactory.js';
@@ -78,7 +91,7 @@ export function socialPresence(world, selfId) {
     if (o.id === selfId) continue;
     const st = o.state;
     if (st.action !== 'socialize' || st.facilityId === null) continue;
-    if (st.kind !== 'performing' && st.kind !== 'walking') continue;
+    if (!['performing','walking','waiting_train','riding_train'].includes(st.kind)) continue;
     let e = m.get(st.facilityId);
     if (e === undefined) { e = { here: 0, coming: 0 }; m.set(st.facilityId, e); }
     if (st.kind === 'performing') e.here++; else e.coming++;
@@ -276,6 +289,9 @@ export function facilityShortfallKind(world, sim, action, t) {
 }
 
 export function actionBlockReason(world, sim, action, t) {
+  if(sim.state.kind==='riding_train')return 'rail_in_transit';
+  if(isSettlementInTransit(world,sim.id)&&action!==SETTLE_ACTION)return 'household_in_transit';
+  if(action===SETTLE_ACTION)return settlementGatherTarget(world,sim)?null:'not_needed';
   const L = world.logic;
   if (action === 'seek_food_aid') return foodAidBlockReason(world, sim);
   if (action === ESCORT_ACTION) return escortBlockReason(world, sim);
@@ -381,21 +397,29 @@ export function collectCandidates(world, sim, actions, t, includeZeroScore = fal
       continue;
     }
     // §16.5.B: construct는 가상 현장(site) — 활성 프로젝트 plot 모서리 4 작업 스팟
+    if(action===SETTLE_ACTION){
+      const target=settlementGatherTarget(world,sim);if(target)out.push(target.candidate);
+      continue;
+    }
     if (action === 'construct') {
       // §19.3: 다중 프로젝트 중 맨해튼 최근접 현장으로 (동률 plotId asc — 결정적)
       let pr = null; let best = Infinity;
       for (const cand2 of [...world.projects].sort((a, b) => a.plotId - b.plotId)) {
+        if(!foundingWorkerAllowed(world,sim,cand2))continue;
         const pl = world.plots.find((p) => p.plotId === cand2.plotId);
         const d = Math.abs(pl.x + 3 - sim.x) + Math.abs(pl.y + 2 - sim.y);
         if (d < best) { best = d; pr = cand2; }
       }
       if (!pr) continue;
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
+      // Narrow rotated stations must not complete a wall under the worker.
+      // Preserve existing non-station and founding workspot choices.
+      const right=pr.foundingPetitionId!==undefined||pr.type==='train_station'&&(pr.dir??0)%2===1?4:5;
       const spots = [
         { id: `p${pr.plotId}:spot0`, x: plot.x + 1, y: plot.y + 1 },
-        { id: `p${pr.plotId}:spot1`, x: plot.x + 5, y: plot.y + 1 },
+        { id: `p${pr.plotId}:spot1`, x: plot.x + right, y: plot.y + 1 },
         { id: `p${pr.plotId}:spot2`, x: plot.x + 1, y: plot.y + 3 },
-        { id: `p${pr.plotId}:spot3`, x: plot.x + 5, y: plot.y + 3 },
+        { id: `p${pr.plotId}:spot3`, x: plot.x + right, y: plot.y + 3 },
       ];
       for (const res of spots) {
         const holder = world.reservations[resKey('site', res.id)];
@@ -607,6 +631,7 @@ function payToFacility(world, facilityId, amount) {
 
 // 예약 + walking/performing 전이 (원자적). reason은 판단 사유 (PLAN §14.1).
 function startAction(world, sim, cand, t, emit, reason) {
+  if(sim.state.kind==='riding_train')return false;
   releaseReservation(world, sim);
   world.reservations[resKey(cand.facilityId, cand.resourceId)] = sim.id;
   const path = bfsPath(world.map, sim.x, sim.y, cand.res.x, cand.res.y);
@@ -633,17 +658,19 @@ function startAction(world, sim, cand, t, emit, reason) {
   // §22.16 emptyState를 펼쳐서 만든다. 예전에는 여기서 필드를 손으로 나열해
   // sideTalkTicks가 빠졌고(§22.14), 읽는 쪽의 `?? 0` 가드 덕에 우연히 버티고 있었다.
   // 필드를 하나 늘릴 때마다 이런 자리를 찾아다녀야 하는 구조는 언젠가 반드시 어긋난다.
+  const railTrip=chooseRailJourney(world,sim,cand,path,t);
   sim.state = {
     ...emptyState(),
-    kind: path.length === 0 ? 'performing' : 'walking',
+    kind: railTrip&&!railTrip.access.length?'waiting_train':path.length === 0 ? 'performing' : 'walking',
     action: cand.action,
     facilityId: cand.facilityId,
     resourceId: cand.resourceId,
-    path,
-    journey: path.length ? { x: sim.x, y: sim.y, walked: 0 } : null,
+    path:railTrip?railTrip.access:path,
+    journey: path.length ? { x: sim.x, y: sim.y, walked: 0,...(railTrip?{mode:'rail'}:{}) } : null,
+    ...(railTrip?{rail:railTrip.rail}:{}),
     ticksLeft: actionDuration(cand.action, world.logic),
   };
-  recordTransportDeparture(world, sim, path, t);
+  recordTransportDeparture(world, sim, railTrip?railTrip.fullPath:path, t);
   emit('action_started', sim.id, {
     action: cand.action, facilityId: cand.facilityId, resourceId: cand.resourceId, reason,
   });
@@ -654,6 +681,19 @@ function startAction(world, sim, cand, t, emit, reason) {
     collectComplaints(world, sim, world.worldTick + 1, emit); // §19.5
   }
   return true;
+}
+
+function finishJourney(world,sim,t,emit){
+  const s=sim.state;
+  recordTransportArrival(world,sim);
+  if(s.journey?.mode!=='rail')recordRoadTrip(world,sim,s.journey,t,emit);
+  s.journey=null;delete s.rail;s.kind='performing';
+  if(s.action===ESCORT_ACTION&&s.escortPhase===null){
+    if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
+    else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
+    return;
+  }
+  if(s.action==='sleep'){runReflection(world,sim,t,emit);maybeBuyCar(world,sim,t,emit);collectComplaints(world,sim,t,emit);}
 }
 
 
@@ -693,7 +733,10 @@ function applyLogicUpdate(world, inp, emit) {
     emit('input_rejected', null, { reason: 'invalid_logic', errors: (v.errors ?? []).slice(0, 5), inputId: inp.id ?? null });
     return;
   }
+  const previousHabitMin=world.logic.club.habitMin;
   world.logic = p.params;
+  if(previousHabitMin!==world.logic.club.habitMin)
+    for(const sim of world.sims)refreshMoodCounts(sim,world.logic);
   emit('logic_changed', null, { hash: p.hash, revision: p.revision });
 }
 
@@ -729,7 +772,7 @@ function applyCreatePlayer(world, inp, t, emit) {
   if (traitErr) return reject(`invalid_traits: ${traitErr}`);
 
   // 홈: 거주자 최소 집, 동수면 facilityId 오름차순 (결정적)
-  const houses = world.map.facilities.filter(isResidence); // §18.T3 아파트 포함
+  const houses = world.map.facilities.filter(isAvailableResidence); // 개척 예약 주택 제외
   const counts = new Map(houses.map((h) => [h.id, 0]));
   for (const s of world.sims) if (counts.has(s.homeId)) counts.set(s.homeId, counts.get(s.homeId) + 1);
   const home = [...houses].sort((a, b) => (counts.get(a.id) - counts.get(b.id)) || (a.id < b.id ? -1 : 1))[0];
@@ -800,17 +843,7 @@ function applyAnnounce(world, inp, t, emit) {
 
 // §18.T1: 시장 정책 — 화이트리스트 필드만 월드 정책 오버라이드로 병합 (내구 입력, 리플레이 불변)
 function applyPolicy(world, inp, t, emit) {
-  const v = validatePolicy(inp.payload ?? {});
-  if (!v.ok) { emit('input_rejected', null, { command: 'policy', reason: v.error }); return; }
-  const before = {};
-  for (const k of Object.keys(inp.payload)) {
-    before[k] = world.policy[k] ?? world.logic.economy[k];
-    world.policy[k] = inp.payload[k];
-  }
-  // §22.22 플레이어의 정책 입력을 기록한다 — 시장이 이 창 안에서는 조정을 삼간다.
-  // 내구 입력을 NPC가 곧바로 되돌리면 입력의 의미가 훼손된다 (117차 ⑤).
-  world.playerPolicyDay = floorDiv(t, 1440);
-  emit('policy_changed', null, { changes: inp.payload, before, source: 'player' });
+  applyPolicyCommand(world,inp.payload,t,emit);
 }
 
 // §18.T2: 건설 지시 — 주문 시 국고 차감·FIFO 적재 (47차 합의: 취소 없음, 착공 시 재검증)
@@ -818,22 +851,26 @@ function applyZone(world, inp, t, emit) {
   const p = inp.payload ?? {};
   const L = world.logic;
   const plot = world.plots.find((pl) => pl.plotId === p.plotId);
+  const government=governmentFor(world,plot?.villageId);
   const cost = L.zone.costs[p.type];
   let reason = null;
   if (!plot) reason = 'no_plot';
   else if (plot.used) reason = 'plot_used';
-  else if (!zoneAllowedTypes(world).includes(p.type)) reason = 'tier_locked'; // §18.T4 등급 게이트
+  else if (!zoneAllowedTypes(world,plot.villageId).includes(p.type)) reason = 'tier_locked'; // §18.T4 등급 게이트
   else if (!ZONEABLE.includes(p.type)) reason = 'bad_type'; // 언락됐지만 레시피 미구현(T3 대기)
   else if (!Number.isSafeInteger(p.dir) || p.dir < 0 || p.dir > 3) reason = 'bad_dir';
+  else if (foundingSiteReserved(world,plot,p.type,p.dir)) reason='site_reserved';
+  else if (campusSiteReserved(world,plot,p.type,p.dir)) reason='site_reserved';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionTiles = () => { const fp = zoneFootprint(p.type, p.dir); let n = 0;
     for (let y = plot.y; y < plot.y + fp.h; y++) for (let x = plot.x; x < plot.x + fp.w; x++) {
+      if(world.map.railTracks?.[y*world.map.w+x])return -1;
       const tile = world.map.tiles[y * world.map.w + x];
       if (tile === TILE.ROAD || tile === TILE.SIDEWALK) n++; else if (tile !== TILE.GRASS) return -1;
     } return n; };
   const demolished = plot ? demolitionTiles() : 0;
   if (reason === null && !(() => { const fp = zoneFootprint(p.type, p.dir); return plotBuildable(world.map, plot, fp.w, fp.h) || demolished > 0; })()) reason = 'not_buildable';
-  else if (reason === null && world.treasury < cost + Math.max(0, demolished) * (L.zone.demolitionCostPerTile ?? 0)) reason = 'treasury_short';
+  else if (reason === null && government.treasury < cost + Math.max(0, demolished) * (L.zone.demolitionCostPerTile ?? 0)) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'zone', reason }); return; }
   const demolitionCost = demolished * (L.zone.demolitionCostPerTile ?? 0);
   const tileChanges = [];
@@ -845,47 +882,63 @@ function applyZone(world, inp, t, emit) {
     }
     delete world.wear[y * world.map.w + x];
   }
-  world.treasury -= cost + demolitionCost;
+  government.treasury -= cost + demolitionCost;
   // §22.4 (93차 ②) 건설비는 마을 밖 시공사에게 나간다 — 경계 **유출**로 명시한다.
   // 안 세면 '내부에서 돈이 사라지는' 회계가 되어 G1 폐쇄 회계가 성립하지 않는다.
   world.externalOutflow = (world.externalOutflow ?? 0) + cost + demolitionCost;
   world.zoneOrders.push({ plotId: p.plotId, type: p.type, dir: p.dir });
-  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, tileChanges, treasury: world.treasury });
+  emit('zoned', null, { plotId: p.plotId, type: p.type, dir: p.dir, cost, demolitionCost, demolished, tileChanges, treasury: government.treasury });
 }
 
 // §18.T6: 플레이어가 지정한 계획 중심점 — 비용을 즉시 예약하고 자동 건설 점수에 반영한다.
 function applyPlanCenter(world, inp, t, emit, source = 'player') {
   const p = inp.payload ?? {};
+  const root = world.rootWorld ?? world;
+  const villageId = Object.hasOwn(p, 'villageId') ? p.villageId : world.municipalityId ?? 'village:0';
+  if (!root.villages.some(v => v.id === villageId)
+    || (villageId !== 'village:0' && !root.villages.find(v => v.id === villageId)?.government)) {
+    emit('input_rejected', null, { command: 'plan_center', reason: 'invalid_village' }); return;
+  }
+  const government = governmentFor(root, villageId);
   const cost = world.logic.zone.plannedCenterCost;
   const validCoord = Number.isSafeInteger(p.x) && Number.isSafeInteger(p.y)
     && p.x >= 0 && p.x < world.map.w && p.y >= 0 && p.y < world.map.h;
   let reason = null;
   if (!validCoord) reason = 'out_of_bounds';
   else if (!isWalkable(world.map, p.x, p.y)) reason = 'not_walkable';
-  else if ((world.centers ?? []).some((c) => c.x === p.x && c.y === p.y)) reason = 'duplicate';
-  else if (world.treasury < cost) reason = 'treasury_short';
+  else if ((root.centers ?? []).some((c) => c.x === p.x && c.y === p.y)) reason = 'duplicate';
+  else if (government.treasury < cost) reason = 'treasury_short';
   if (reason) { emit('input_rejected', null, { command: 'plan_center', reason }); return; }
-  world.treasury -= cost;
-  world.externalOutflow = (world.externalOutflow ?? 0) + cost;
-  world.centers ??= [];
-  const centerId = `center${world.centers.length}`;
-  world.centers.push({ centerId, x: p.x, y: p.y, createdTick: t });
-  emit('center_planned', source === 'mayor' ? world.mayorId : null, { centerId, x: p.x, y: p.y, cost, treasury: world.treasury, source });
+  government.treasury -= cost;
+  root.externalOutflow = (root.externalOutflow ?? 0) + cost;
+  root.centers ??= [];
+  const centerId = `center${root.centers.length}`;
+  const jurisdiction = villageId === 'village:0' ? {} : { villageId };
+  root.centers.push({ centerId, x: p.x, y: p.y, createdTick: t, ...jurisdiction });
+  emit('center_planned', source === 'mayor' ? government.mayorId : null,
+    { centerId, x: p.x, y: p.y, cost, treasury: government.treasury, source, ...jurisdiction });
+  // Publish usable ownership with the paid center input. Waiting for the next
+  // daily automatic plan can consume all new parcels before a player can zone.
+  allocateMunicipalLand(root,t,emit);
 }
 
 // 재정 리뷰일에 관측된 외곽 거주 수요를 본다. 기존 중심지 반경 안에는 중복 투자하지 않는다.
 export function maybePlanCenter(world, t, day, emit) {
   const mayor = world.sims.find((s) => s.id === world.mayorId);
-  if (!mayor || mayor.isPlayer || day % world.logic.fiscal.reviewIntervalDays !== 0) return;
+  if (!mayor || !canWork(mayor) || mayor.isPlayer || day % world.logic.fiscal.reviewIntervalDays !== 0) return;
   const Z = world.logic.zone;
   const cash = world.sims.reduce((n, s) => n + s.money, 0);
   const reserve = Math.max(0, floorDiv(cash * world.logic.election.hoardRatioPct, 100));
   if (world.treasury - Z.plannedCenterCost <= reserve) return;
-  const centers = [...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)), ...world.centers];
+  const villageId = world.municipalityId ?? 'village:0';
+  const centers = [...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)),
+    ...world.centers.filter(c => (c.villageId ?? 'village:0') === villageId)];
   const homes = new Map(world.map.facilities.filter(isResidence).map((f) => [f.id, f]));
   const residents = world.sims.map((s) => homes.get(s.homeId)).filter(Boolean);
   const busy = new Set(world.projects.map((p) => p.plotId));
-  const choices = world.plots.filter((p) => !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)
+  const choices = world.plots.filter((p) => (p.villageId ?? 'village:0') === villageId
+    && !p.used && !busy.has(p.plotId) && plotBuildable(world.map, p)
+    && !foundingSiteReserved(world.rootWorld ?? world, p, 'office')
     && centers.every((c) => manhattan(p.x, p.y, c.x, c.y) >= Z.centerRadius))
     .map((p) => ({ p, residents: residents.filter((h) => manhattan(p.x, p.y, h.door.x, h.door.y) < Z.centerRadius
       && sameRegion(world.map, p.x, p.y, h.door.x, h.door.y)).length }))
@@ -895,8 +948,8 @@ export function maybePlanCenter(world, t, day, emit) {
 }
 
 // §18.T1: 유효 경제값 — 정책 오버라이드 우선 (읽기 단일 권위)
-function econ(world, key) {
-  return world.policy[key] ?? world.logic.economy[key];
+function econ(world, key, villageId) {
+  return governmentFor(world,villageId).policy[key] ?? world.logic.economy[key];
 }
 
 function applyAssign(world, inp, t, emit) {
@@ -940,13 +993,18 @@ export function tick(world, inputsForThisTick = []) {
     else if (inp.command === 'policy') applyPolicy(world, inp, t, emit);
     else if (inp.command === 'zone') applyZone(world, inp, t, emit);
     else if (inp.command === 'plan_center') applyPlanCenter(world, inp, t, emit);
+    else if (inp.command === 'found_village') applyFoundingDecision(world, inp.payload, t, emit);
     else emit('input_rejected', null, { reason: 'unknown_command', inputId: inp.id ?? null });
   }
 
   // L은 logic_update 적용 **이후**에 캡처 — "같은 틱부터 새 로직" 계약 (PLAN §14.1)
   const L = world.logic;
+  syncRailNetwork(world,t,emit);
+  fundFoundingPlans(world,t,emit);
   updateSeason(world, t, emit);
   applyHouseholdIntents(world,t,emit); // #51 전날 의도는 이동/행동 전에 현재 조건으로 재검증
+  advanceHouseholdMigrations(world,t,emit,(sim,cand)=>startAction(world,sim,cand,t,emit,{migration:true}));
+  advanceSettlementPlans(world,t,emit,(sim,cand)=>startAction(world,sim,cand,t,emit,{settlement:true}));
 
   // A guardian can die/emigrate between ticks. Never leave a child frozen or a
   // hospital seat owned by that child when the escort no longer exists.
@@ -969,7 +1027,7 @@ export function tick(world, inputsForThisTick = []) {
     if(s.action===ESCORT_ACTION&&s.escortPhase==='travel'&&!syncEscortStep(world,sim)){
       cancelEscort(world,sim);emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'child_unavailable'});continue;
     }
-    const steps = sim.hasCar ? world.logic.transport.carSpeedTiles : 1;
+    const steps = sim.hasCar&&!s.rail&&s.action!==SETTLE_ACTION ? world.logic.transport.carSpeedTiles : 1;
     let pickedThisTick = false; // §16.C 습득은 틱당 1회 — 차량이 습득률을 배로 늘리지 않도록 (65차 대비)
     for (let stepI = 0; stepI < steps && s.kind === 'walking' && s.path.length > 0; stepI++) {
     const next = s.path.shift();
@@ -985,7 +1043,7 @@ export function tick(world, inputsForThisTick = []) {
       world.wear[ti] = (world.wear[ti] ?? 0) + 1; // 희소 객체 (§17.0)
       if (world.wear[ti] >= world.logic.build.wearThreshold) {
         delete world.wear[ti]; // 0 엔트리 금지 규칙의 연장 — 도로화된 칸은 제거
-        if (!isRoadProtected(world.map, sim.x, sim.y, false, world.plots)) {
+        if (!isRoadProtected(world.map, sim.x, sim.y, false, world.plots, world.projects, world.zoneOrders)) {
           world.map.tiles[ti] = TILE.SIDEWALK;
           emit('sidewalk_formed', sim.id, { x: sim.x, y: sim.y });
         }
@@ -1019,21 +1077,15 @@ export function tick(world, inputsForThisTick = []) {
       }
     }
     if (s.path.length === 0) {
-      recordTransportArrival(world, sim);
-      recordRoadTrip(world, sim, s.journey, t, emit);
-      s.journey = null;
-      s.kind = 'performing';
-      if(s.action===ESCORT_ACTION&&s.escortPhase===null){
-        if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
-        else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
-        continue;
-      }
-      // onEnterPerforming(sleep) — 도착 전이 지점 (PLAN §2 전이 훅)
-      if (s.action === 'sleep') { runReflection(world, sim, t, emit); maybeBuyCar(world, sim, t, emit); collectComplaints(world, sim, t, emit); } // §19 R-B/§19.5
+      if(s.rail?.phase==='access'){s.rail.phase='waiting';s.rail.waitingSince=t;s.kind='waiting_train';}
+      else finishJourney(world,sim,t,emit);
     }
     }
   }
 
+  advanceRail(world,t,emit,sim=>finishJourney(world,sim,t,emit));
+  completeSettlementArrivals(world,t,emit);
+  completeHouseholdMigrations(world,t,emit);
   // 2a-2) 스쳐 지나가는 인사 (D9) — 전파(2b)보다 먼저: 같은 틱 전파는 인사 후 호감도를 본다
   processGreetings(world, t, emit);
 
@@ -1147,7 +1199,11 @@ export function tick(world, inputsForThisTick = []) {
       if (m2) {
         const pid = Number(m2[1]);
         const prj = Number.isSafeInteger(pid) ? world.projects.find((p) => p.plotId === pid) : null;
-        if (prj) prj.progress++;
+        if (prj&&foundingWorkerAllowed(world,sim,prj)) {
+          const plot=world.plots.find(p=>p.plotId===pid);
+          const onSite=plot&&[plot.x+1,plot.x+4].includes(sim.x)&&[plot.y+1,plot.y+3].includes(sim.y);
+          if(prj.foundingPetitionId===undefined||onSite)prj.progress++;
+        }
       }
     }
     // 대처 행동의 틱당 효과 (§15.1.A): 기분 직접 회복 + 부수 욕구
@@ -1165,6 +1221,7 @@ export function tick(world, inputsForThisTick = []) {
   for (const sim of world.sims) {
     const s = sim.state;
     if (s.kind !== 'performing' || s.ticksLeft > 0) continue;
+    if(s.action===SETTLE_ACTION){releaseReservation(world,sim);sim.state=emptyState();continue;}
     if(s.action===ESCORT_ACTION&&s.escortPhase===null){
       if(beginHospitalEscort(world,sim)){recordTransportDeparture(world,sim,sim.state.path,t);emit('child_escorted',sim.id,{childId:sim.state.escortId,facilityId:sim.state.facilityId});}
       else{sim.state=emptyState();emit('action_failed',sim.id,{action:ESCORT_ACTION,reason:'hospital_unavailable'});}
@@ -1206,7 +1263,8 @@ export function tick(world, inputsForThisTick = []) {
     } else if (s.action === 'volunteer') {
       // 봉사는 마을의 평판을 올린다. 평판은 이민을 부르므로(§society.immigration)
       // "좋은 사람들이 사는 곳"이 실제로 사람을 불러들인다.
-      world.reputation = Math.min(L.growth.repCap, (world.reputation ?? 0) + L.actions.volunteer.repGain);
+      const facility=world.map.facilities.find(f=>f.id===s.facilityId);
+      changeReputation(world,L.actions.volunteer.repGain,facility?.villageId??sim.villageId);
     } else if (s.action === 'board_game') {
       const cost = L.actions.board_game.cost;
       sim.money -= cost;
@@ -1306,20 +1364,22 @@ export function tick(world, inputsForThisTick = []) {
         // 일을 했으면 받는다. 국고가 모자라면 음수(공채)로 내려가고, §22.22의
         // runway 반응이 부채에 작동한다 (Bohn 1998이 정확히 부채 반응 함수다).
         // §22.4 폐쇄 회계는 유지된다 — 국고가 합산 항이므로 총합 불변식은 음수여도 성립.
-        const before = world.treasury;
+        const workplace=world.map.facilities.find(f=>f.id===s.facilityId);
+        const government=governmentFor(world,workplace?.villageId??sim.villageId);
+        const before = government.treasury;
         const cap = -(L.economy.maxDebt ?? 0);
         if (before - wage < cap) {
           // maxDebt는 오버플로 가드다(1e12) — 여기 걸리는 건 사실상 버그 상황이고,
           // 그때만 부분 지급하며 관측 가능하게 알린다 (118차 C).
           const paid = Math.max(0, before - cap);
           emit('insolvent', sim.id, { asked: wage, paid, treasury: before });
-          world.treasury = before - paid;
+          government.treasury = before - paid;
           wage = paid;
         } else {
-          world.treasury = before - wage;
+          government.treasury = before - wage;
           // 0 하향 돌파 전이에만 알린다 — 매 지급마다가 아니라 빚이 시작될 때
-          if (before >= 0 && world.treasury < 0) {
-            emit('treasury_debt', sim.id, { treasury: world.treasury, firstWage: wage });
+          if (before >= 0 && government.treasury < 0) {
+            emit('treasury_debt', sim.id, { treasury: government.treasury, firstWage: wage });
           }
         }
       } else {
@@ -1327,16 +1387,16 @@ export function tick(world, inputsForThisTick = []) {
         world.externalInflow = (world.externalInflow ?? 0) + wage;
       }
       // §17.15 소득세 원천징수: 실수령 = wage×(100-taxPct)/100, 세금은 국고로
-      const net = floorDiv(wage * (100 - econ(world, 'taxPct')), 100);
+      const net = floorDiv(wage * (100 - econ(world, 'taxPct',sim.villageId)), 100);
       const tax = wage - net;
       sim.money += net;
-      world.treasury += tax;
+      governmentFor(world,sim.villageId).treasury += tax;
       emit('money_changed', sim.id, { delta: net, balance: sim.money, action: 'work', tax });
       applyMood(sim, L.mood.moneyGain);
       if (tax > 0) applyMood(sim, -floorDiv(tax * L.economy.taxMoodPer, 10)); // §18.T1 납세 불만 (그라데이션)
       if (sim.traits.occupation === 'police' && s.facilityId === 'patrol') { // §17.24 순찰 정산
         sim.patrolIdx++;
-        world.reputation = Math.min(L.growth.repCap, world.reputation + L.patrol.repPerPatrol);
+        changeReputation(world,L.patrol.repPerPatrol,sim.villageId);
       }
     }
     // §22.14 옆 사람과 말이 트였으면 헛걸음이 아니다
@@ -1456,7 +1516,7 @@ export function tick(world, inputsForThisTick = []) {
   }
 
   // 4c) §16.5: 완공 판정(매 틱) → 일일 도시계획 트리거 (서브순서 맨 끝).
-  // 의도된 순서: 완공 틱의 facility_built/moved_home은 잔여 노동자들의 action_completed보다
+  // 의도된 순서: 완공 틱의 facility_built/지역 내 moved_home은 잔여 노동자들의 action_completed보다
   // 먼저 나온다 (완공은 4단계, 노동 정산은 각자 스틴트가 끝나는 틱의 3단계 — Codex 24차 항목 2 문서화)
   // §19.3: plotId asc 순회 다중 완공 — 각 건물마다 축조→제거→이사→이벤트 (66차 ③)
   {
@@ -1465,29 +1525,12 @@ export function tick(world, inputsForThisTick = []) {
     if (pr.progress >= pr.required) {
       const plot = world.plots.find((p) => p.plotId === pr.plotId);
       const fac = addBuilding(world.map, pr.type, plot, pr.dir ?? 0); // §18.T2 회전
+      recordFoundingHome(world,pr,fac,t,emit);
       openSupplyMarket(world, fac, emit);
       plot.used = true;
       world.projects.splice(world.projects.indexOf(pr), 1);
       emit('facility_built', null, { facilityId: fac.id, type: fac.type, x: plot.x, y: plot.y });
-      if (isResidence(fac)) { // §18.T3: 아파트 완공도 과밀 이사 대상
-        // 이주: 가장 과밀한 집(거주-침대 최대, 동률 facilityId asc)의 최고 id 거주자
-        let worst = null, worstOver = 0;
-        for (const h of world.map.facilities) {
-          if (!isResidence(h) || h.id === fac.id) continue;
-          const res = world.sims.filter((x) => x.homeId === h.id).length;
-          const over = res - h.resources.length;
-          if (over > worstOver || (over === worstOver && worst && h.id < worst.id)) {
-            if (over > 0) { worst = h; worstOver = over; }
-          }
-        }
-        if (worst) {
-          const mover = world.sims.filter((x) => x.homeId === worst.id).sort((a, b) => b.id - a.id)[0];
-          mover.homeId = fac.id;
-          syncResidenceVillage(world, mover.id);
-          emit('moved_home', mover.id, { from: worst.id, to: fac.id });
-          recordFact(mover, t, L, 'built_bed', { placeId: fac.id, tags: ['home'] });
-        }
-      }
+      if (isAvailableResidence(fac)) assignCompletedResidence(world,fac,t,emit);
     }
     } // §19.3 완공 루프 종료 (일일 평가부터는 매 틱 실행)
     // §17.8 일일 평가: 질병 → 선거 → 시장 수당 → 이민 (도시계획 트리거보다 앞)
@@ -1497,16 +1540,21 @@ export function tick(world, inputsForThisTick = []) {
         world.lastDailyDay = day;
         // §22.2 사망 판정 — 선거·수당·이민보다 **먼저** (89차 ③). id asc, riskHash라 RNG 미소비.
         maybeDeaths(world, t, day, emit);
+        allocateMunicipalLand(world,t,emit);
         const storyCandidates = [];
         const offerStory = candidate => storyCandidates.push(candidate);
         dailyDiseaseDraws(world, t, emit, offerStory);
         dailyFireDraws(world, t, emit, offerStory); // 기존 질병 → 화재 드로우 수/순서 유지
         resolveStoryCandidates(world, t, storyCandidates, emit); // #89 후보 중 최대 1개, RNG 없음
-        updateCampaigners(world, day); // §17.9 (선거일엔 클리어 후 선거)
-        maybeElection(world, t, day, emit);
-        maybeFiscalReview(world, t, day, emit); // §22.22 선거 직후 고정 위치 — 그날 복지 정산부터 새 정책
-        maybePublicWorks(world, t, day, emit); // §22.26 순서 고정: 선거 → 재정 → 공공사업 (120차 ⑥)
-        maybePlanCenter(world, t, day, emit);
+        for(const local of governmentViews(world)){
+          if(local.mayorId!==null&&!local.sims.some(s=>s.id===local.mayorId&&canWork(s)))local.mayorId=null;
+          const localEmit=governmentEmitter(local,emit);
+          updateCampaigners(local,day);
+          maybeElection(local,t,day,localEmit);
+          maybeFiscalReview(local,t,day,localEmit);
+        }
+        for(const local of governmentViews(world))maybePublicWorks(local, t, day, governmentEmitter(local,emit)); // 선거 → 재정 → 공공사업
+        for(const local of governmentViews(world))maybePlanCenter(local, t, day, governmentEmitter(local,emit));
         // §22.4 공공 시설 매출 → 국고 (수당·복지보다 **먼저** — 오늘 쓸 재원을 먼저 채운다).
         // 89차 ④의 정산 순서: 소비 매출 반영 → 공공 지출.
         // §22.6 (95차 ②) 만료된 초대를 센다 — 성사되지 못한 청이 얼마나 되는지 봐야
@@ -1518,11 +1566,15 @@ export function tick(world, inputsForThisTick = []) {
           }
         }
         remitPublicRevenue(world, t, emit);
-        mayorStipend(world, t, emit);
-        applyWelfare(world, t, emit); // §17.15 (수당 다음 — 서브순서 고정)
-        applyChildAllowance(world, t, emit); // #71 실제 부모 가구에 이전, RNG 없음
+        for(const local of governmentViews(world)){
+          const localEmit=governmentEmitter(local,emit);
+          mayorStipend(local,t,localEmit);
+          applyWelfare(local,t,localEmit);
+          applyChildAllowance(local,t,localEmit);
+        }
         settleHousing(world,t,day,emit); // #93 지원 뒤 임대 정산, 다음 tick 이사 의도
         evaluateHouseholds(world,t,day,emit); // #51 지원·현재 잔고 뒤, 다음 틱 분가 의도 생성
+        evaluateFoundingPetitions(world,t,emit); // 실제 주거/공터 부족이 지속된 경우만 청원
         // §21.3 전직: 손님이 몰린 가게에 누군가 일하러 간다 (복지 다음 — 서브순서 고정).
         // 복지 뒤에 두는 이유: 오늘의 지원이 반영된 뒤에 진로를 정하는 게 순서상 자연스럽다.
         maybeJobSwitch(world, t, day, emit);
@@ -1539,31 +1591,42 @@ export function tick(world, inputsForThisTick = []) {
             }
           }
         }
-        { // §18.T3 공장 공해 (51차: 복지 다음·이민 전 고정) — 전역 평판 감소
-          const nf = world.map.facilities.filter((f) => f.type === 'factory').length;
-          if (nf > 0) world.reputation = Math.max(0, world.reputation - nf * L.pollution.repPerFactoryPerDay);
+        { // Factory pollution belongs to its actual municipality.
+          for(const local of governmentViews(world)){
+            const nf=local.map.facilities.filter(f=>f.type==='factory').length;
+            if(nf>0)local.reputation=Math.max(0,local.reputation-nf*L.pollution.repPerFactoryPerDay);
+          }
         }
         maybeImmigration(world, t, day, emit);
         maybeEmigration(world, t, day, emit);
-        maybePromotion(world, t, emit); // §18.T4 (이민 직후·새해 전 — 49차 합의)
-        const resetStudent = sim => { releaseReservation(world,sim); sim.state=emptyState(); };
+        for(const local of governmentViews(world))maybePromotion(local, t, governmentEmitter(local,emit)); // 이민 직후·새해 전
+        const resetStudent = sim => {
+          releaseReservation(world,sim);
+          // Enrollment/employment changes now, but a passenger cannot leave a
+          // moving train. Persist cancellation through saves until alighting.
+          if(sim.state.kind==='riding_train'&&sim.state.rail)sim.state.rail.cancelOnAlight=true;
+          else sim.state=emptyState();
+        };
         const aged = maybeNewYear(world, t, day, emit, resetStudent);
         if(!aged) updateEducation(world, t, emit, resetStudent);
         maybeChildren(world, t, day, emit); // §17.11 자녀 정착
         maybeFestival(world, t, day, emit); // §17.10
-        world.reputation = floorDiv(world.reputation * world.logic.growth.repDecayPct, 100); // §17.21 일일 감쇠
-        maybePetition(world, t, day, emit); // §19.5 (70차 ③: 평판 합산·감쇠 뒤)
+        for(const local of governmentViews(world)){
+          local.reputation=floorDiv(local.reputation*world.logic.growth.repDecayPct,100);
+          maybePetition(local,t,day,governmentEmitter(local,emit));
+        }
         decayComplaints(world); // §19.7 불만 망각 — 청원 판정 뒤에 적용 (당일 불만은 온전히 반영)
         { // §18.T5 일일 통계 (평판 감쇠 다음 — 54차 고정, 캡 180 shift)
           const pop = world.sims.length;
           const sumMood = world.sims.reduce((n, s2) => n + s2.mood, 0);
           const employed = world.sims.filter((s2) => world.logic.occupations[s2.traits.occupation].wagePct > 0
             && s2.traits.occupation !== 'student').length;
-          world.statsHistory.push({ day, pop, treasury: world.treasury, reputation: world.reputation,
+          world.statsHistory.push({ day, pop, treasury: publicBalance(world), reputation: world.reputation,
             avgMood: pop > 0 ? floorDiv(sumMood, pop) : 0, employed, tier: world.cityTier,
             incidents: world.incidents.length,
             transport: world.transportStats.history.length ? transportSummary(world.transportStats.history.at(-1)) : null });
           while (world.statsHistory.length > 180) world.statsHistory.shift();
+          recordMunicipalStats(world,day);
         }
         // §19.12 역 수요 판정 (일일 통계 다음 — 서브순서 고정). RNG 미소비라 드로우
         // 순서 계약과 무관하고, world.transit 관측 필드와 1회성 언락 이벤트만 만든다.
@@ -1579,24 +1642,41 @@ export function tick(world, inputsForThisTick = []) {
     // §19.3: 계획 단계 시작 시 슬롯 수를 한 번 계산 (틱 중 국고 변동에 흔들리지 않게 — 66차 ②)
     const maxProjects = Math.max(1, Math.min(L.growth.maxProjectSlots,
       1 + floorDiv(world.treasury, L.growth.slotPerTreasury)));
-    while (world.projects.length < maxProjects && world.zoneOrders.length > 0) {
-      const order = world.zoneOrders.shift();
+    const municipal=world.villages.length>1;
+    const limits=new Map(world.villages.map(v=>[v.id,municipalProjectLimit(world,v.id)]));
+    while (world.zoneOrders.length > 0) {
+      const index=municipal?world.zoneOrders.findIndex(o=>{
+        const id=projectMunicipality(world,o);
+        return world.projects.filter(p=>projectMunicipality(world,p)===id).length<limits.get(id);
+      }):world.projects.length<maxProjects?0:-1;
+      if(index<0)break;
+      const order = world.zoneOrders[index];
       const plot = world.plots.find((p) => p.plotId === order.plotId);
       const fp2 = plot ? zoneFootprint(order.type, order.dir) : null;
-      if (!plot || plot.used || !plotBuildable(world.map, plot, fp2.w, fp2.h)) { // 착공 재검증 — 회전 치수 (Codex 48차)
+      if (!plot || plot.used || !plotBuildable(world.map, plot, fp2.w, fp2.h)
+        ||foundingSiteReserved(world,plot,order.type,order.dir,order.foundingPetitionId??null)) { // 착공 재검증
+        if(order.foundingPetitionId!==undefined){
+          if(cancelFoundingConstruction(world,order.foundingPetitionId,'stale_order',t,emit))continue;
+        }
+        world.zoneOrders.splice(index,1);
         emit('input_rejected', null, { command: 'zone', reason: 'stale_order', plotId: order.plotId });
         continue;
       }
+      world.zoneOrders.splice(index,1);
       // §22.23 공기 차등 — 타입별 노동량. 시장 행정력 할인은 그대로 곱한다.
       const base4 = L.construct.requiredByType?.[order.type] ?? L.construct.laborRequired;
-      const required = world.mayorId !== null
+      const required = governmentFor(world,projectMunicipality(world,order)).mayorId !== null
         ? floorDiv(base4 * L.election.mayorLaborPct, 100)
         : base4;
-      world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true });
+      world.projects.push({ plotId: order.plotId, type: order.type, dir: order.dir, progress: 0, required, zoned: true,
+        ...(order.foundingPetitionId===undefined?{}:{foundingPetitionId:order.foundingPetitionId,fundedCost:order.fundedCost}) });
       emit('project_started', null, { plotId: order.plotId, type: order.type, dir: order.dir, x: plot.x, y: plot.y, required, zoned: true });
     }
     if (world.lastPlanDay !== day) {
       world.lastPlanDay = day;
+      repairCenterPlots(world, emit);
+      if(municipal)planMunicipalConstruction(world,t,limits,emit);
+      else {
       // §19.3 (67차 ①): 슬롯이 찰 때까지 수요를 재평가하며 반복 착공
       while (world.projects.length < maxProjects) {
       // §19.3: 이미 착공 중인 공터는 제외 (중복 배정 금지)
@@ -1608,15 +1688,19 @@ export function tick(world, inputsForThisTick = []) {
       // 장르 리뷰 실측(400일): 남은 공터 26곳 중 7×5로는 0곳, 6×5로는 25곳이 통과.
       // 국고 239만·빈 땅 25곳을 쥐고 250일간 한 채도 못 지었다.
       const candidates = world.plots.filter((p) => !p.used && !busy.has(p.plotId)
-        && plotBuildable(world.map, p, 6, 5)); // §17.23 침범 방지
+        && plotBuildable(world.map, p, 6, 5)
+        &&!foundingSiteReserved(world,p,'house')&&!campusSiteReserved(world,p,'house'));
       const centers = [
         ...world.map.facilities.filter((f) => ['city_hall', 'market'].includes(f.type)),
         ...(world.centers ?? []),
       ];
       const distance = (p, f) => Math.abs(p.x - f.x) + Math.abs(p.y - f.y);
+      const centerScores = new Map(candidates.map(p => {
+        const local = centers.filter(c => (c.villageId ?? 'village:0') === (p.villageId ?? 'village:0'));
+        return [p.plotId, local.length === 0 ? 0 : Math.min(...local.map(f => distance(p, f)))];
+      }));
       let freePlot = candidates.sort((a, b) => {
-        const score = (p) => centers.length === 0 ? 0 : Math.min(...centers.map((f) => distance(p, f)));
-        return (score(a) - score(b)) || (a.plotId - b.plotId);
+        return (centerScores.get(a.plotId) - centerScores.get(b.plotId)) || (a.plotId - b.plotId);
       })[0];
       if (!freePlot) break;
       {
@@ -1626,7 +1710,7 @@ export function tick(world, inputsForThisTick = []) {
         // §23.26으로 슬롯을 3 → 6으로 올리면서 이 잠재 결함이 여섯 배로 드러났다.
         const PLANNED_BEDS = { house: 2, apartment: 8 };
         const pendingBeds = world.projects.reduce((n, p2) => n + (PLANNED_BEDS[p2.type] ?? 0), 0);
-        const beds = world.map.facilities.filter(isResidence)
+        const beds = world.map.facilities.filter(isAvailableResidence)
           .reduce((n, f) => n + f.resources.length, 0) + pendingBeds;
         // §23.28 카페·공원도 착공 중인 것을 함께 센다 — 침대와 같은 이유다.
         const PLANNED_SEATS = { cafe: 4, park: 1 }; // addBuilding이 만드는 자원 수와 같다
@@ -1655,49 +1739,49 @@ export function tick(world, inputsForThisTick = []) {
           }
         }
         // §17.21 일자리 수요: office 근무 직업 심 수 vs 책상 슬롯 합
-        const officeWorkers = world.sims.filter((s2) => L.workplace[s2.traits.occupation] === 'office'
+        const officeWorkers = world.sims.filter((s2) => canWork(s2) && L.workplace[s2.traits.occupation] === 'office'
           && L.occupations[s2.traits.occupation].wagePct > 0).length;
         const PLANNED_DESKS = 4; // office 자원 수와 같은 값 — 착공 중인 사무실도 센다
         const officeDesks = world.map.facilities.filter((f) => f.type === 'office')
           .reduce((n, f) => n + f.resources.length, 0)
           + world.projects.filter((p2) => p2.type === 'office').length * PLANNED_DESKS;
         let type = neededSchool(world);
-        if (type === 'university' && !zoneAllowedTypes(world).includes(type)) type = null;
+        if (type === 'university' && !candidates.some(p => zoneAllowedTypes(world,p.villageId).includes(type))) type = null;
+        if (type === 'university' && !candidates.some(p => {
+          const fp=zoneFootprint(type,0);
+          return plotBuildable(world.map,p,fp.w,fp.h)&&!foundingSiteReserved(world,p,type)
+            &&!campusSiteReserved(world,p,type);
+        })) type=null; // An unavailable campus site must not block urgent housing.
         if (!type) type = neededIndustryFacility(world);
         if (!type && pop + separated + observedHeadroom > beds) {
           // 읍 이상에서는 같은 공터로 더 많은 침대를 제공하는 아파트를 우선한다.
           // tier는 관측된 세계 상태이고, 타입 선택은 결정적이다.
-          type = world.cityTier >= 1 ? 'apartment' : 'house';
+          type = governmentFor(world,freePlot.villageId).cityTier >= 1 ? 'apartment' : 'house';
         } // 선제 주택 (§17.21)
         if (!type && officeWorkers > officeDesks) type = 'office';
         else if (!type && pop > cafeSeats * L.construct.cafeRatio) type = 'cafe';
         else if (!type && pop > parkSpots * L.construct.parkRatio) type = 'park';
         if (!type) break;
-        if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
+        const fits=type=>candidates.find(p=>{
           const fp=zoneFootprint(type,0);
-          freePlot=candidates.find(p=>plotBuildable(world.map,p,fp.w,fp.h));
-          if(!freePlot) break;
+          return zoneAllowedTypes(world,p.villageId).includes(type)&&plotBuildable(world.map,p,fp.w,fp.h)
+            &&!foundingSiteReserved(world,p,type)&&!campusSiteReserved(world,p,type);
+        });
+        let fit=fits(type);
+        if(!fit&&type==='apartment'){type='house';fit=fits(type);}
+        if(!fit)break;
+        freePlot=fit; // Validate before charging school/industry funds.
+        if (SCHOOL_TYPES.includes(type) || ['workshop','lab','warehouse'].includes(type)) {
           const cost=L.zone.costs[type];
-          world.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
-          if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:world.treasury});
+          const government=governmentFor(world,freePlot.villageId);
+          if(government.treasury<cost)break;
+          government.treasury-=cost;world.externalOutflow=(world.externalOutflow??0)+cost;
+          if (SCHOOL_TYPES.includes(type)) emit('school_planned',null,{type,plotId:freePlot.plotId,cost,treasury:government.treasury});
         }
         {
-          // §23.35 고른 타입이 **그 공터에 실제로 들어가는지** 확인한다. 예전에는 7×5로
-          // 거른 후보 중 가장 가까운 곳을 그대로 썼다. 읍이 되면 주거는 무조건 아파트인데
-          // (7×5) 남은 공터가 6×5짜리뿐이면 영원히 아무것도 못 짓는다 — 실측에서 마을이
-          // 250일간 "아파트를 짓고 싶어 하다가" 멈춰 있었다. 안 들어가면 집으로 내려간다.
-          const fpT = zoneFootprint(type, 0);
-          let fit = candidates.find((p) => plotBuildable(world.map, p, fpT.w, fpT.h));
-          if (!fit && type === 'apartment') {
-            type = 'house'; // 더 작은 주거로 물러선다 — 침대 8개보다 2개가 낫다
-            const fpH = zoneFootprint('house', 0);
-            fit = candidates.find((p) => plotBuildable(world.map, p, fpH.w, fpH.h));
-          }
-          if (!fit) break; // 이 타입이 들어갈 땅이 없다 — 다음 날 다시 본다
-          freePlot = fit;
           // §17.4: 시장 재임 중엔 행정력으로 공사가 빨라진다 (시작 시점 스냅샷)
           const base5 = L.construct.requiredByType?.[type] ?? L.construct.laborRequired;
-          const required = world.mayorId !== null
+          const required = governmentFor(world,freePlot.villageId).mayorId !== null
             ? floorDiv(base5 * L.election.mayorLaborPct, 100)
             : base5;
           world.projects.push({ plotId: freePlot.plotId, type, progress: 0, required });
@@ -1705,10 +1789,12 @@ export function tick(world, inputsForThisTick = []) {
         }
       }
       } // while 슬롯
+      }
     }
   }
 
   // 5) idle 심 결정 (id 오름차순, world.reservations = 틱-로컬 원장)
+  syncRailNetwork(world,t,emit);
   // §23.10 재실 인원은 **결정을 시작하기 전에 한 번** 찍는다 (Codex 지적).
   // 심마다 그때그때 세면, 앞 순번이 방금 카페에 앉은 것이 뒷 순번에게 보인다.
   // 결과는 재현되지만 **id 순서가 세계의 의미를 바꾼다** — 같은 상황에서 1번이 먼저
@@ -1760,6 +1846,15 @@ export function tick(world, inputsForThisTick = []) {
         if (kind18 === 'no_facility') recordIndustryDemand(world, act, day18);
         else if (kind18 === 'capacity_full') recordCapacityShortfall(world, act, day18);
       }
+    }
+    if(!urgency){
+      const gather=settlementGatherTarget(world,sim);
+      if(gather){
+        if(gather.hold)startIdle(sim,L,emit);
+        else startAction(world,sim,gather.candidate,t,emit,{settlement:true});
+        continue;
+      }
+      if(isSettlementInTransit(world,sim.id)){startIdle(sim,L,emit);continue;}
     }
     if (cands.length === 0) cands = collectCandidates(world, sim, ACTIONS, t, false, { shortlist, prep, urgency: false, occ: occSnapshot });
     const best = pickBest(cands);
@@ -1837,7 +1932,7 @@ export function tick(world, inputsForThisTick = []) {
       child_settled: G.repChild, election: G.repElection, gathering: G.repGathering };
     for (const e of events) {
       const r = REP[e.type];
-      if (r) world.reputation = Math.min(G.repCap, world.reputation + r);
+      if (r) changeReputation(world,r,reputationVillage(world,e));
     }
   }
 

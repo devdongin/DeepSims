@@ -12,12 +12,16 @@ import { makeStoryteller } from './storyteller.js';
 import { initializeFoodSupply } from './food-supply.js';
 import { seasonAt } from './seasons.js';
 import { initializeVillages } from './villages.js';
+import { initializeGovernments, initializeMunicipalHistory, initializeMunicipalWorks, initializeMunicipalGrowth } from './government.js';
+import { newFoundingState } from './founding.js';
 import { newNeedsTier } from './needs-tiers.js';
 import { newEducation } from './education.js';
 import { surnameFor } from './surnames.js';
 import { makeTransitState } from './world.js'; // §19.12 신규 월드와 단일 정의 공유
 import { isWalkable, isResidence } from './map.js';
 import { emptyState } from './simfactory.js';
+import { refreshMoodCounts } from './mood-counts.js';
+import { initializeRail } from './rail.js';
 
 export function migrateWorld(world) {
   const from = world.schemaVersion ?? 1;
@@ -431,20 +435,17 @@ export function migrateWorld(world) {
   if (from < 66) initializeVillages(world);
   // §23.24 면역은 세이브에 없던 필드다. 0이면 '면역 없음'이라 옛 세계의 행동이 그대로 이어진다.
   if (from < 67) for (const sim of world.sims) sim.immuneUntil ??= 0;
-  // §23.32 카운터는 이제 쓸 때 갱신되지만, 옛 세이브에는 필드가 없다. 한 번만 세어 채운다.
-  if (from < 68) {
-    for (const sim of world.sims) {
-      let f = 0, r = 0;
-      for (const tier of Object.values(sim.relTiers ?? {})) {
-        if (tier === 'friend') f++; else if (tier === 'rival') r++;
-      }
-      let h = 0;
-      for (const [k, n] of Object.entries(sim.habit ?? {})) {
-        if (n >= world.logic.club.habitMin && !k.startsWith('work:')) h++;
-      }
-      sim.friendCount = f; sim.rivalCount = r; sim.habitCount = h;
-    }
-  }
+  // Main also used schema68, but for counters rather than founding. Its saves
+  // need the missing branch field even when their numeric version is already68.
+  world.founding ??= newFoundingState();
+  if (from < 69) initializeGovernments(world);
+  if (from < 70) initializeMunicipalHistory(world);
+  if (from < 71) initializeMunicipalWorks(world);
+  if (from < 72) initializeMunicipalGrowth(world);
+  // Both main68 and branch68..72 can arrive here; rebuild once from their actual
+  // dictionaries. Never require a per-tick scan in moodBaseline.
+  if (from < 73) for (const sim of world.sims) refreshMoodCounts(sim,world.logic);
+  if (from < 74) initializeRail(world);
   world.schemaVersion = SCHEMA_VERSION;
   return world;
 }

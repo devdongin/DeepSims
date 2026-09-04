@@ -1,5 +1,6 @@
 {
-  "logicSchemaVersion": 68,
+  "logicSchemaVersion": 89,
+  "founding": { "petitionDays": 3, "minSettlers": 2 },
   "needsTiers": {
     "fulfilledMin": 4000,
     "deprivedMax": 1000,
@@ -102,6 +103,7 @@
     "oldEnergyAdd": 2
   },
   "actions": {
+    "settle_village": { "duration": 1 },
     "supply_groceries": {
       "duration": 30,
       "cost": 0
@@ -707,7 +709,8 @@
       "factory": 20000,
       "workshop": 10000,
       "lab": 16000,
-      "warehouse": 14000
+      "warehouse": 14000,
+      "train_station": 20000
     },
     "deficit": 4000,
     "persJDiv": 4,
@@ -812,7 +815,10 @@
     "stationDemand": 300,
     "stationCarOwnerPct": 50,
     "stationDistBoostMin": 60,
-    "stationDistBoostPct": 25
+    "stationDistBoostPct": 25,
+    "railSpeedTiles": 4,
+    "railDwellTicks": 10,
+    "railCapacity": 8
   },
   "patrol": {
     "targets": [
@@ -858,6 +864,7 @@
       "workshop": 6000,
       "lab": 9000,
       "warehouse": 8000,
+      "train_station": 8000,
       "primary_school": 4000,
       "middle_school": 5000,
       "high_school": 6000

@@ -1,13 +1,17 @@
 // #51 Explicit households and durable, next-tick revalidated separation intents.
-import { isResidence } from './map.js';
+import { isResidence, isAvailableResidence, sameRegion } from './map.js';
 import { syncResidenceVillage } from './villages.js';
 import { askingRent } from './housing.js';
+import { isSettlementInTransit } from './settlement.js';
+import { beginHouseholdMigration } from './household-migration.js';
+import { planIndependentHousehold } from './independent-household.js';
+import { canWork } from './education.js';
+import { chooseMigrationHome } from './migration-choice.js';
 
-const employed = (world, sim) => sim.traits.occupation !== 'student'
-  && sim.traits.occupation !== 'child'
+const employed = (world, sim) => canWork(sim)
   && (world.logic.occupations[sim.traits.occupation]?.wagePct ?? 0) > 0;
 
-const vacantResidences = (world, fromHomeId) => world.map.facilities.filter(isResidence)
+const vacantResidences = (world, fromHomeId) => world.map.facilities.filter(isAvailableResidence)
   .filter(h => h.id !== fromHomeId && !world.sims.some(s => s.homeId === h.id) && h.resources.length > 0)
   .sort((a,b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
@@ -26,16 +30,30 @@ export function applyHouseholdIntents(world, t, emit) {
   const due = (world.householdIntents ?? []).filter(i => i.applyTick <= t)
     .sort((a,b) => a.intentId-b.intentId);
   for (const intent of due) {
+    if(intent.relocation)continue; // Gathering/travel is revalidated by the physical migration path.
+    if((intent.memberIds??[intent.simId]).some(id=>isSettlementInTransit(world,id)))continue;
     const sim = world.sims.find(s => s.id === intent.simId);
     let reason = null;
+    if(intent.kind==='marriage_move'||intent.kind==='construction_move'){
+      const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isAvailableResidence(f));
+      reason=target?beginHouseholdMigration(world,intent,target,t,emit):'target_unavailable';
+      if(!reason)continue;
+      world.householdDaily.failures[reason]=(world.householdDaily.failures[reason]??0)+1;
+      emit('household_intent_failed',intent.simId,{intentId:intent.intentId,kind:intent.kind,reason});
+      world.householdIntents.splice(world.householdIntents.indexOf(intent),1);continue;
+    }
     if(intent.kind==='rent_move'){
       const members=(intent.memberIds??[]).map(id=>world.sims.find(s=>s.id===id));
-      const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isResidence(f));
+      const target=world.map.facilities.find(f=>f.id===intent.targetHomeId&&isAvailableResidence(f));
       if(members.some(s=>!s))reason='person_missing';
       else if(members.some(s=>s.householdId!==intent.fromHouseholdId||s.homeId!==intent.fromHomeId))reason='household_changed';
       else if(world.sims.some(s=>s.householdId===intent.fromHouseholdId&&s.homeId===intent.fromHomeId&&!intent.memberIds.includes(s.id)))reason='household_changed';
       else if(!target||world.sims.some(s=>s.homeId===target.id)||target.resources.length<members.length)reason='target_unavailable';
       else if(askingRent(world,target)>=intent.maxRent)reason='not_cheaper';
+      if(!reason&&target.villageId!==sim.villageId){
+        reason=beginHouseholdMigration(world,intent,target,t,emit);
+        if(!reason)continue;
+      }
       if(reason){world.householdDaily.failures[reason]=(world.householdDaily.failures[reason]??0)+1;
         emit('household_intent_failed',intent.simId,{intentId:intent.intentId,kind:intent.kind,reason});}
       else {for(const member of members){member.homeId=target.id;syncResidenceVillage(world,member.id);emit('moved_home',member.id,{from:intent.fromHomeId,to:target.id,reason:'rent_pressure'});}
@@ -48,8 +66,23 @@ export function applyHouseholdIntents(world, t, emit) {
     else if (!liveParentAtHome(world, sim)) reason = 'parent_not_cohabiting';
     else if (!employed(world, sim)) reason = 'income_unstable';
     else if (sim.money < world.logic.household.reserveMoney) reason = 'reserve_short';
-    const vacant = reason ? null : vacantResidences(world,sim.homeId)[0];
+    const family=!reason&&world.villages.length>1?planIndependentHousehold(world,sim.id,sim.villageId):null;
+    const origin=!reason?world.map.facilities.find(f=>f.id===sim.homeId):null;
+    const options = reason ? [] : vacantResidences(world,sim.homeId).filter(h=>h.villageId===sim.villageId
+      ||(family?.ok&&h.resources.length>=family.residents.length&&origin
+        &&sameRegion(world.map,origin.door.x,origin.door.y,h.door.x,h.door.y)));
+    // Preserve within-town ID preference; only the municipality distribution
+    // changes. Separation eligibility remains independent of destination choice.
+    const choice=world.villages.length>1&&origin
+      ?chooseMigrationHome(world,origin,options.map(home=>({home,rent:askingRent(world,home)})),{preference:'id'})
+      :options.length?{home:options[0]}:null;
+    const vacant=choice?.home;
+    if(choice?.evidence)intent.migrationChoice=choice.evidence;
     if (!reason && !vacant) reason = 'no_vacant_home';
+    if(!reason&&vacant.villageId!==sim.villageId){
+      reason=beginHouseholdMigration(world,intent,vacant,t,emit);
+      if(!reason)continue;
+    }
     if (reason) {
       if (sim) sim.independenceDays = 0;
       world.householdDaily.failures[reason] = (world.householdDaily.failures[reason] ?? 0) + 1;
@@ -60,7 +93,8 @@ export function applyHouseholdIntents(world, t, emit) {
       syncResidenceVillage(world, sim.id);
       sim.householdId = `household:${sim.id}:${intent.intentId}`;
       sim.independenceDays = 0;
-      emit('household_intent_applied', sim.id, { intentId:intent.intentId, from, to:vacant.id, householdId:sim.householdId });
+      emit('household_intent_applied', sim.id, { intentId:intent.intentId, from, to:vacant.id, householdId:sim.householdId,
+        ...(intent.migrationChoice?{migrationChoice:intent.migrationChoice}:{}) });
       emit('moved_home', sim.id, { from, to:vacant.id, reason:'independence' });
     }
     world.householdIntents.splice(world.householdIntents.indexOf(intent),1);

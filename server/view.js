@@ -22,7 +22,7 @@ export function simVolatile(sim) {
     id: sim.id,
     x: sim.x,
     y: sim.y,
-    state: { kind: sim.state.kind, action: sim.state.action, facilityId: sim.state.facilityId },
+    state: { kind: sim.state.kind, action: sim.state.action, facilityId: sim.state.facilityId, rail: !!sim.state.rail },
     needs: sim.needs,
     mood: sim.mood,
     money: sim.money,
@@ -42,14 +42,10 @@ export function simStatic(sim) {
   return v;
 }
 
-// 정적 부분이 바뀌었는지 볼 짧은 키. 값을 통째로 비교하지 않는다 — 사람마다 매 배치
-// 문자열 하나면 충분하다.
+// Compare the actual wire projection, not a second incomplete field whitelist.
+// This includes degree completion/tuition, MBTI, potential and village changes.
 export function staticKey(sim) {
-  const t = sim.traits, a = sim.abilities ?? {}, e = sim.education ?? {};
-  return `${sim.name}|${sim.surname}|${t.age}|${t.occupation}|${t.gender}|`
-    + `${a.stamina}.${a.dexterity}.${a.intellect}.${a.charisma}|`
-    + `${sim.isPlayer ? 1 : 0}${sim.isGenius ? 1 : 0}|${e.stage ?? ''}${e.highestDegree ?? ''}${e.course ?? ''}`
-    + `|${sim.homeId ?? ''}|${sim.householdId ?? ''}`; // §23.41 이사·혼인 때 다시 보낸다
+  return JSON.stringify(simStatic(sim));
 }
 
 export function simView(sim) {
@@ -67,6 +63,7 @@ export function simView(sim) {
       kind: sim.state.kind,
       action: sim.state.action,
       facilityId: sim.state.facilityId,
+      rail: !!sim.state.rail,
     },
     needs: sim.needs,
     mood: sim.mood,
@@ -75,6 +72,7 @@ export function simView(sim) {
     hasCar: sim.hasCar,
     isPlayer: sim.isPlayer,
     isGenius: sim.isGenius,
+    villageId: sim.villageId,
     // §23.41 homeId·householdId는 지금 화면이 안 읽지만 **로드맵에 있다** —
     // PLAN §125~126이 가구를 핵심 개념으로 두고 #51(가구)·#32(마을 귀속)이 진행 중이다.
     // 안 쓴다고 빼는 게 아니라, 배치마다 보내지 않고 **정적 쪽에 둔다**: 이사·혼인 때만
@@ -102,4 +100,10 @@ export function simsView(sims) {
   const out = new Array(sims.length);
   for (let i = 0; i < sims.length; i++) out[i] = simView(sims[i]);
   return out;
+}
+
+// Static corridor paths travel in snapshots, not every live batch.
+export function railView(rail){
+  return {stats:{...rail.stats},links:rail.links.map(l=>({id:l.id,from:l.from,to:l.to,blocked:l.blocked,
+    capacity:l.capacity,speed:l.speed,train:{x:l.train.x,y:l.train.y,passengers:[...l.train.passengers]}}))};
 }

@@ -1,6 +1,8 @@
 // DeepSims 로컬 서버 (PLAN §5). 부팅: 락 → DB → 따라잡기 → 라이브.
 import express from 'express';
 import { villageSummary } from '../sim/villages.js';
+import { publicBalance } from '../sim/government.js';
+import { validateFoundingDecision } from '../sim/founding.js';
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -12,7 +14,8 @@ import { Storage } from '../db/storage.js';
 import { Engine, MAX_SPEED } from './engine.js';
 import { simsView, simStatic } from './view.js'; // §22.8 전송용 투영 · §23.39 정적 분리
 import { PROTOCOL_VERSION } from '../sim/constants.js';
-import { DEFAULT_LOGIC, validatePolicy } from '../sim/logic.js';
+import { DEFAULT_LOGIC, POLICY_FIELDS } from '../sim/logic.js';
+import { validatePolicyCommand } from '../sim/policy-command.js';
 import { industryStatus, purchasingPowerGap } from '../sim/industry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -304,7 +307,7 @@ app.post('/api/input', async (req, res) => {
     || payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
     return res.status(400).json({ error: 'clientInputId(문자열), command(문자열), payload(객체)가 필요합니다' });
   }
-  if (!['assign', 'create_player', 'announce', 'policy', 'zone', 'plan_center'].includes(command)) {
+  if (!['assign', 'create_player', 'announce', 'policy', 'zone', 'plan_center', 'found_village'].includes(command)) {
     return res.status(400).json({ error: '허용되지 않은 명령입니다' }); // logic_update는 서버 내부 전용
   }
   if (command === 'assign'
@@ -312,8 +315,12 @@ app.post('/api/input', async (req, res) => {
     return res.status(400).json({ error: 'assign payload는 {simId: number, actionType: string} 형식입니다' });
   }
   if (command === 'policy') {
-    const v = validatePolicy(payload); // §18.T1 화이트리스트·범위 (시뮬과 단일 권위 공유)
+    const v = validatePolicyCommand(engine.world,payload);
     if (!v.ok) return res.status(400).json({ error: `policy: ${v.error}` });
+  }
+  if(command==='found_village'){
+    const v=validateFoundingDecision(payload);
+    if(!v.ok)return res.status(400).json({error:`found_village: ${v.error}`});
   }
   const result = await engine.submitInput({ clientInputId, command, payload });
   res.json(result); // insert 커밋 후에만 응답 (PLAN §3)
@@ -346,6 +353,7 @@ function sendSnapshot(ws) {
   send(ws, { type: 'snapshot', world: {
     worldTick: engine.world.worldTick,
     map: engine.world.map,
+    rail: engine.world.rail,
     sims: simsView(engine.world.sims), // §22.8 화면이 쓰는 필드만
     // §23.37 affinity는 화면이 한 번도 읽지 않는데 접속마다 **1.27MB**를 보냈다.
     // 게다가 ever-sim 수의 제곱으로 자란다(667×667). 관계는 /api/relations가 한 사람분만
@@ -361,11 +369,14 @@ function sendSnapshot(ws) {
     partnerStage: engine.world.partnerStage,
     mayorId: engine.world.mayorId,
     treasury: engine.world.treasury,
+    publicTreasury: publicBalance(engine.world),
     incidents: engine.world.incidents,
     policy: engine.world.policy,
+    policyDefaults:Object.fromEntries(Object.keys(POLICY_FIELDS).map(key=>[key,engine.world.logic.economy[key]])),
     zoneOrders: engine.world.zoneOrders,
     centers: engine.world.centers,
     plannedCenterCost: engine.world.logic.zone.plannedCenterCost,
+    zoneCosts: engine.world.logic.zone.costs,
     cityTier: engine.world.cityTier,
     // §23.23 목표 화면이 지금 값을 읽어야 한다. 평판은 statsHistory에 하루 단위로만 있어
     // "지금 얼마인가"를 물으면 어제 값이 나온다 — 실측에서 목표가 0/500으로 보였다.
@@ -381,6 +392,7 @@ function sendSnapshot(ws) {
     foodSupply: engine.world.foodSupply,
     season: engine.world.season,
     villages: villageSummary(engine.world),
+    founding: engine.world.founding,
     clubs: engine.world.clubs,
     campaigners: engine.world.campaigners,
     tokens: engine.world.tokens,
@@ -401,8 +413,9 @@ engine.onBatch((msg) => {
     if (msg.type === 'tickBatch') {
       // §23.39 이 클라이언트가 아직 모르거나 값이 달라진 사람의 정적 부분만 골라 붙인다.
       const statics = [];
+      const split = ws.simStatics === true; // Older loaded clients still need complete views.
       const sent = ws.sentStatic ?? (ws.sentStatic = new Map());
-      for (let i = 0; i < msg.simRefs.length; i++) {
+      for (let i = 0; split && i < msg.simRefs.length; i++) {
         const sim = msg.simRefs[i], key = msg.statKeys[i];
         if (sent.get(sim.id) === key) continue;
         sent.set(sim.id, key);
@@ -412,7 +425,7 @@ engine.onBatch((msg) => {
         const live = new Set(msg.simRefs.map((x) => x.id));
         for (const id of sent.keys()) if (!live.has(id)) sent.delete(id);
       }
-      send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: msg.sims, statics, treasury: msg.treasury, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost });
+      send(ws, { type: 'tickBatch', fromTick: msg.fromTick, toTick: msg.toTick, events: msg.events, sims: split ? msg.sims : simsView(msg.simRefs), statics: split ? statics : undefined, treasury: msg.treasury, publicTreasury:msg.publicTreasury, villages:msg.villages, policyDefaults:msg.policyDefaults, incidents: msg.incidents, cityTier: msg.cityTier, projects: msg.projects, statsToday: msg.statsToday, speed: msg.speed, transit: msg.transit, rail:msg.rail, unlockedIndustries:msg.unlockedIndustries, housingMarket:msg.housingMarket, householdDaily:msg.householdDaily, plannedCenterCost: engine.world.logic.zone.plannedCenterCost, zoneCosts: engine.world.logic.zone.costs });
     }
     else send(ws, msg);
   }
@@ -429,6 +442,7 @@ wss.on('connection', async (ws) => {
     try { msg = JSON.parse(data); } catch { return; }
     if (msg.type === 'resync') sendSnapshot(ws); // 갭 감지 → 새 스냅샷 (PLAN §5)
     else if (msg.type === 'visibility' && typeof msg.hidden === 'boolean') {
+      if (msg.simStatics === true) ws.simStatics = true;
       const wasHidden = ws.clientHidden === true;
       ws.clientHidden = msg.hidden;
       send(ws, { type: 'visibility', hidden: ws.clientHidden });

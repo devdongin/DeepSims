@@ -164,3 +164,14 @@ jobs:
               issue_number: number,
               body,
             });
+
+      # Report first, but never turn a failing (or missing) test result green.
+      - name: 테스트 실패를 체크 상태에 반영
+        if: always()
+        env:
+          TEST_EXIT: ${{ steps.tests.outputs.exit }}
+        run: |
+          if [ "$TEST_EXIT" != "0" ]; then
+            echo "::error::Contract tests failed or did not produce an exit code"
+            exit 1
+          fi

@@ -105,6 +105,7 @@ test('S-3. 전염: 페어링에서 감염이 옮는다 (결정적 드로우)', (
 
 test('S-4. 선거: 인기 기반 후보·투표·시장, 수당과 공사 가속', () => {
   const w = createWorld(SEED);
+  w.sims[3].traits.age=25;w.sims[3].traits.occupation='office_worker';w.sims[3].education.course=null;
   // 호감도 조작: 심 3을 모두가 좋아하고, 심 5를 절반이 좋아함
   for (const o of w.sims) {
     if (o.id !== 3) w.affinity[o.id][3] = 8000;
@@ -188,6 +189,7 @@ test('S-6. 연애 수명주기: 교제 → 결혼(+이주) → (별도) 파혼',
   // 파혼 (다른 페어로)
   const w2 = createWorld(SEED);
   w2.partners[2] = 3; w2.partners[3] = 2;
+  w2.sims[2].traits.age=w2.sims[3].traits.age=25;
   w2.partnerStage[2] = 'dating'; w2.partnerStage[3] = 'dating';
   w2.affinity[2][3] = 1000; // < breakup
   idleAll(w2, []);
@@ -292,6 +294,7 @@ test('S-11. §17.9: 결혼식 잔치 토큰·유세·새해 (결정적)', () => 
   // 결혼식: S-6과 같은 세팅으로 married 유발 → 잔치 토큰이 친구들에게 인지되는지
   const w = createWorld(SEED);
   const [a, b] = w.sims;
+  a.traits.age=b.traits.age=25;
   w.partners[0] = 1; w.partners[1] = 0;
   w.partnerStage[0] = 'dating'; w.partnerStage[1] = 'dating';
   w.affinity[0][1] = 9500; w.affinity[1][0] = 9500;
@@ -313,6 +316,7 @@ test('S-11. §17.9: 결혼식 잔치 토큰·유세·새해 (결정적)', () => 
 
   // 유세: D-3에 캐시, 선거일에 클리어 후 선거
   const w2 = createWorld(SEED);
+  w2.sims[3].traits.age=25;w2.sims[3].traits.occupation='office_worker';w2.sims[3].education.course=null;
   for (const o of w2.sims) if (o.id !== 3) w2.affinity[o.id][3] = 8000;
   idleAll(w2, []);
   w2.worldTick = 27 * 1440 - 1; // day 27 = D-3
@@ -405,6 +409,7 @@ test('S-14. §17.11 개정: 별거 부부 신혼집 이사 + 별거 수요 건�
   // ⓑ 신혼집: lo 집도 만원 → 빈 침대 2개 집으로 부부가 함께 이사
   const w = createWorld(SEED);
   const a = w.sims[0]; const b = w.sims[2];
+  a.traits.age=b.traits.age=25;
   w.partners[0] = 2; w.partners[2] = 0;
   w.partnerStage[0] = 'married'; w.partnerStage[2] = 'married';
   assert.notEqual(a.homeId, b.homeId, '전제: 별거');

@@ -4,7 +4,8 @@ import { fnv1a } from './serialize.js';
 
 // v1 등가 + Phase 2 기본값. logic/params.json의 초기 내용이기도 하다.
 export const DEFAULT_LOGIC = {
-  logicSchemaVersion: 68, // §23.36 yearDays 120 → 40
+  logicSchemaVersion: 89, // Lifecycle cancellation preserves rail transit (88 reserved by stacked reemployment PR).
+  founding: { petitionDays: 3, minSettlers: 2 },
   needsTiers: { fulfilledMin: 4000, deprivedMax: 1000, promoteTicks: 7200,
     demoteTicks: 720, cultureDecay: 1, cultureFun: 2000 },
   seasons: { winterHarvestPct: 50, winterFishPct: 50, winterOutdoorEnergy: 1,
@@ -49,6 +50,7 @@ export const DEFAULT_LOGIC = {
     grow_groceries: { duration: 120, cost: 0, groceriesGain: 3 },
     stock_food: { duration: 15, cost: 600, groceriesGain: 3 },
     visit_culture: { duration: 40, cost: 100 },
+    settle_village: { duration: 1 },
   },
   occupations: {
     office_worker: { workStart: 540, workEnd: 1080, wagePct: 100, startMoney: 1000, flex: true },
@@ -308,7 +310,7 @@ export const DEFAULT_LOGIC = {
       primary_school: 8000, middle_school: 10000, high_school: 12000,
       hospital: 10000, city_hall: 10000, police_station: 10000, fire_station: 10000, cinema: 10000,
       apartment: 14000, mall: 14000,
-      university: 20000, factory: 20000, workshop:10000, lab:16000, warehouse:14000,
+      university: 20000, factory: 20000, workshop:10000, lab:16000, warehouse:14000, train_station:20000,
     },
     deficit: 4000,       // needValue = NEED_MAX - deficit (고정 급함)
     persJDiv: 4,         // persFactor = 100 + floorDiv(100 - JP, persJDiv)
@@ -404,6 +406,7 @@ export const DEFAULT_LOGIC = {
     stationCarOwnerPct: 50,   // 차 보유 심의 longTrips 반영률 %
     stationDistBoostMin: 60,  // 평균 장거리 칸수가 이 이상이면 수요 가중
     stationDistBoostPct: 25,  // 그때 가중 % (100 + 이 값이 계수가 된다)
+    railSpeedTiles: 4, railDwellTicks: 10, railCapacity: 8,
   },
   // §17.24 순찰·정직 (56차 합의): p(신고) = honesty.base + floorDiv(TF, honesty.tfDiv) — 정수식 고정
   patrol: { targets: ['cafe', 'park', 'market', 'bar', 'mall'], repPerPatrol: 1 },
@@ -414,7 +417,7 @@ export const DEFAULT_LOGIC = {
   },
   // §18.T2 건설 지시: 주문 시 국고 차감 (취소 없음 — 47차 합의), 착공 시 재검증
   zone: {
-    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school: 4000, middle_school: 5000, high_school: 6000, workshop:6000, lab:9000, warehouse:8000 },
+    costs: { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school: 4000, middle_school: 5000, high_school: 6000, workshop:6000, lab:9000, warehouse:8000, train_station:8000 },
     demolitionCostPerTile: 200,
     plannedCenterCost: 5000,
     centerRadius: 32,
@@ -927,6 +930,9 @@ function checkRanges(p, errors) {
   inRange('transport.stationCarOwnerPct', p.transport.stationCarOwnerPct, 0, 100);
   inRange('transport.stationDistBoostMin', p.transport.stationDistBoostMin, 1, 10000);
   inRange('transport.stationDistBoostPct', p.transport.stationDistBoostPct, 0, 1000);
+  inRange('transport.railSpeedTiles', p.transport.railSpeedTiles, 1, 8);
+  inRange('transport.railDwellTicks', p.transport.railDwellTicks, 1, 120);
+  inRange('transport.railCapacity', p.transport.railCapacity, 1, 64);
   inRange('patrol.repPerPatrol', p.patrol.repPerPatrol, 0, 1000);
   inRange('honesty.base', p.honesty.base, 0, 100);
   if (p.honesty.base + Math.floor(100 / p.honesty.tfDiv) > 100) {
@@ -1012,6 +1018,8 @@ function checkRanges(p, errors) {
   inRange('supply.unitPrice', p.supply.unitPrice, 1, 1000000);
   inRange('seasons.winterHarvestPct', p.seasons.winterHarvestPct, 0, 100);
   inRange('needsTiers.fulfilledMin', p.needsTiers.fulfilledMin, 1, 10000);
+  inRange('founding.petitionDays', p.founding.petitionDays, 1, 3650);
+  inRange('founding.minSettlers', p.founding.minSettlers, 1, 100000);
   inRange('needsTiers.deprivedMax', p.needsTiers.deprivedMax, 0, p.needsTiers.fulfilledMin);
   inRange('needsTiers.promoteTicks', p.needsTiers.promoteTicks, 1, 10000000);
   inRange('needsTiers.demoteTicks', p.needsTiers.demoteTicks, 1, 10000000);
@@ -1116,7 +1124,7 @@ function checkShape(ref, val, path, errors) {
 }
 
 // §18.T1: 시장 정책 화이트리스트 — 필드·정수·범위 검증 (서버·시뮬 공유 단일 권위)
-export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university', 'primary_school','middle_school','high_school','workshop','lab','warehouse'];
+export const ZONEABLE = ['house', 'cafe', 'office', 'park', 'apartment', 'factory', 'mall', 'university', 'primary_school','middle_school','high_school','workshop','lab','warehouse','train_station'];
 
 export const POLICY_FIELDS = {
   healthCopayPct: [0, 100],
@@ -1130,7 +1138,7 @@ export function validatePolicy(p) {
   const keys = Object.keys(p);
   if (keys.length === 0) return { ok: false, error: '변경 필드 없음' };
   for (const k of keys) {
-    const range = POLICY_FIELDS[k];
+    const range = Object.hasOwn(POLICY_FIELDS,k)?POLICY_FIELDS[k]:null;
     if (!range) return { ok: false, error: `허용되지 않은 필드: ${k}` };
     if (!Number.isSafeInteger(p[k]) || p[k] < range[0] || p[k] > range[1]) {
       return { ok: false, error: `${k}: ${range[0]}~${range[1]} 정수 필요` };

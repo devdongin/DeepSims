@@ -28,14 +28,20 @@ export const BLOCKING_TILES = new Set([TILE.WATER, TILE.WALL, TILE.RIVER, TILE.M
 // facility_built 0건 · project_started 0건. 국고 334만·건설 슬롯 6개를 쥐고도 못 지었다.
 // 인과 실험: 공터 타일만 GRASS로 되돌리자 같은 10일에 착공 13건·완공 5채.
 //
-// 가장 큰 구역 발자국이 8×6이므로 그만큼을 잡아 둔다. 이미 쓴 공터는 그 위에 시설이
-// 있으니 아래 시설 검사가 맡는다.
-const MAX_ZONE_W = 8, MAX_ZONE_H = 6;
-export function isRoadProtected(map, x, y, includeOpenAreas = true, plots = null) {
+// Ordinary unused parcels keep8×6; larger/rotated projects and orders reserve
+// their actual recipe footprint. Completed facilities protect themselves.
+const PARCEL_W = 8, PARCEL_H = 6;
+export function isRoadProtected(map, x, y, includeOpenAreas = true, plots = null, projects = [], orders = []) {
+  if(map.railTracks?.[y*map.w+x])return true;
   if (plots) {
     for (const p of plots) {
       if (p.used) continue;
-      if (x >= p.x && x < p.x + MAX_ZONE_W && y >= p.y && y < p.y + MAX_ZONE_H) return true;
+      if (x >= p.x && x < p.x + PARCEL_W && y >= p.y && y < p.y + PARCEL_H) return true;
+    }
+    for(const reservations of [projects,orders])for(const q of reservations){
+      const p=plots.find(p=>p.plotId===q.plotId);if(!p||!ZONE_DIMS[q.type])continue;
+      const fp=zoneFootprint(q.type,q.dir??0);
+      if(x>=p.x&&x<p.x+fp.w&&y>=p.y&&y<p.y+fp.h)return true;
     }
   }
   return map.facilities.some((f) => {
@@ -380,6 +386,7 @@ export function plotBuildable(map, plot, w = 7, h = 5) {
   for (let j = plot.y; j < plot.y + h; j++) {
     for (let i = plot.x; i < plot.x + w; i++) {
       if (i < 0 || j < 0 || i >= map.w || j >= map.h) return false;
+      if (map.railTracks?.[j*map.w+i]) return false;
       if (map.tiles[j * map.w + i] !== TILE.GRASS) return false;
     }
   }
@@ -402,9 +409,12 @@ export function rotatedSize(w0, h0, dir) { return dir % 2 === 0 ? { w: w0, h: h0
 // §18.T2: 타입별 기본 footprint (dir 0 기준) — zone 검증·회전 치수의 단일 권위
 export const ZONE_DIMS = { house: [6, 5], cafe: [7, 5], office: [7, 5], park: [7, 5],
   primary_school: [8,6], middle_school: [8,6], high_school: [8,6],
-  apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [8, 6], workshop:[8,6],lab:[8,6],warehouse:[8,6] };
+  apartment: [7, 5], factory: [8, 6], mall: [8, 6], university: [12, 10], workshop:[8,6],lab:[8,6],warehouse:[8,6],train_station:[8,6] };
 // §18.T3: 주거 시설 판정 단일 권위 — 이민·합가·자녀·완공 이사·수면(HOME_ONLY는 homeId 기준이라 무관)
 export function isResidence(f) { return f.type === 'house' || f.type === 'apartment'; }
+// Founding houses are real buildings, but their beds are held for the arriving
+// existing residents; immigration/instant household moves cannot claim them.
+export function isAvailableResidence(f) { return isResidence(f)&&f.foundingPetitionId==null&&f.migrationIntentId==null; }
 
 export function zoneFootprint(type, dir) {
   const [w0, h0] = ZONE_DIMS[type];
@@ -417,6 +427,7 @@ export function addBuilding(map, type, plot, dir = 0) {
   const id = `${type}${count}`;
   const W = map.w;
   const bld = (bx, by, bw, bh, dx, dy) => {
+    if (dir > 0) return; // Stamp only the final rotated footprint below.
     for (let j = by; j < by + bh; j++) for (let i = bx; i < bx + bw; i++) map.tiles[j * W + i] = TILE.WALL;
     for (let j = by + 1; j < by + bh - 1; j++) for (let i = bx + 1; i < bx + bw - 1; i++) map.tiles[j * W + i] = TILE.FLOOR;
     map.tiles[dy * W + dx] = TILE.FLOOR;
@@ -471,6 +482,13 @@ export function addBuilding(map, type, plot, dir = 0) {
         id: `slot${k}`, kind: 'slot', x: x + 1 + (k % 4) + Math.floor((k % 4) / 2), y: y + 2 + Math.floor(k / 4) * 2,
       })),
     };
+  } else if (type === 'train_station') {
+    // A completed station is infrastructure, not a free workplace or leisure
+    // venue. Platform resources are reserved for the subsequent rail service.
+    bld(x, y, 8, 6, x + 4, y + 5);
+    fac = { id, type, x, y, w:8, h:6, door:{x:x+4,y:y+5},
+      resources:[{id:'platform0',kind:'platform',x:x+2,y:y+2},
+        {id:'platform1',kind:'platform',x:x+5,y:y+3}] };
   } else if (type === 'mall') { // §18.T3: 쇼핑(till)+여가(seat) 복합 — 51차: till 결정적 명시
     bld(x, y, 8, 6, x + 4, y + 5);
     fac = {
@@ -485,10 +503,16 @@ export function addBuilding(map, type, plot, dir = 0) {
       ],
     };
   } else if (['university','primary_school','middle_school','high_school'].includes(type)) {
-    bld(x, y, 8, 6, x + 4, y + 5);
+    // Legacy in-progress universities may have reserved only 8×6. New orders
+    // validate the larger footprint, but completing an old order cannot erase roads.
+    const campus = rotatedSize(12,10,dir);
+    const [w,h] = type === 'university' && !plotBuildable(map,plot,campus.w,campus.h)
+      ? [8,6] : ZONE_DIMS[type];
+    const dx = Math.floor(w/2);
+    bld(x, y, w, h, x + dx, y + h - 1);
     fac = {
-      id, type, x, y, w: 8, h: 6, door: { x: x + 4, y: y + 5 },
-      resources: [0, 1, 2, 3].map((k) => ({ id: `slot${k}`, kind: 'slot', x: x + 2 + (k % 2) * 3, y: y + 2 + Math.floor(k / 2) * 2 })),
+      id, type, x, y, w, h, door: { x: x + dx, y: y + h - 1 },
+      resources: [0, 1, 2, 3].map((k) => ({ id: `slot${k}`, kind: 'slot', x: x + 2 + (k % 2) * (w-5), y: y + 2 + Math.floor(k / 2) * (h-4) })),
     };
   } else { // park: 무벽 스팟 6
     fac = {
@@ -506,11 +530,8 @@ export function addBuilding(map, type, plot, dir = 0) {
       const r = rotateLocal(px - x, py - y, w0, h0, dir);
       return { x: x + r.x, y: y + r.y };
     };
-    // 타일 재배치: 기존 분기가 그린 dir0 벽·바닥을 지우고(초지) 회전본으로 다시
+    // Paint only the rotated area: the unrotated area may contain a road.
     if (fac.type !== 'park') {
-      for (let j = y; j < y + Math.max(w0, h0); j++) for (let i = x; i < x + Math.max(w0, h0); i++) {
-        if (i < x + w0 && j < y + h0) map.tiles[j * W + i] = TILE.GRASS;
-      }
       for (let j = y; j < y + sz.h; j++) for (let i = x; i < x + sz.w; i++) map.tiles[j * W + i] = TILE.WALL;
       for (let j = y + 1; j < y + sz.h - 1; j++) for (let i = x + 1; i < x + sz.w - 1; i++) map.tiles[j * W + i] = TILE.FLOOR;
     }
@@ -522,6 +543,7 @@ export function addBuilding(map, type, plot, dir = 0) {
     fac.w = sz.w; fac.h = sz.h;
   }
   fac.dir = dir;
+  if(type==='train_station')map.stationVersion=(map.stationVersion??0)+1;
   fac.villageId = plot.villageId ?? PRIMARY_VILLAGE_ID;
   fac.revenue ??= 0; // §20.2 매출 원장 — 신축 시설도 0에서 시작 (이슈 #43)
   if(isResidence(fac))fac.ownerSimId??=null; // #93 소유자 없는 신축 주택의 임대료는 국고 귀속

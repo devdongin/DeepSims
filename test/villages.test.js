@@ -7,7 +7,8 @@ import { tick } from '../sim/tick.js';
 import { serialize, deserialize, hashWorld } from '../sim/serialize.js';
 import { initializeVillages, villageSummary, syncResidenceVillage, PRIMARY_VILLAGE_ID } from '../sim/villages.js';
 import { migrateWorld } from '../sim/migrate.js';
-import { makeSim } from '../sim/simfactory.js';
+import { makeSim, emptyState } from '../sim/simfactory.js';
+import { newGovernment } from '../sim/government.js';
 import { addBuilding } from '../sim/map.js';
 import { applyHouseholdIntents } from '../sim/household.js';
 
@@ -55,12 +56,18 @@ test('#32 actual tick save/resume preserves village assignments and entire world
 test('#32 actual household relocation moves every member village, not only the intent owner', () => {
   const w=createWorld(32),s=w.sims[0];
   const members=w.sims.filter(p=>p.homeId===s.homeId&&p.householdId===s.householdId);
-  const target=addBuilding(w.map,'house',{x:400,y:400,villageId:'village:test'});
-  w.villages.push({id:'village:test',name:'fixture',foundedTick:0,center:{x:400,y:400}});
+  const origin=w.map.facilities.find(f=>f.id===s.homeId);
+  const target=addBuilding(w.map,'house',{x:50,y:4,villageId:'village:test'});
+  w.villages.push({id:'village:test',name:'fixture',foundedTick:0,center:{...target.door},government:newGovernment()});
+  for(const p of members){p.x=origin.door.x;p.y=origin.door.y;p.state=emptyState();p.needs.hunger=10000;p.needs.energy=10000;}
+  w.lastDailyDay=0;w.lastPlanDay=0;
   w.householdIntents=[{kind:'rent_move',intentId:0,applyTick:1,simId:s.id,
     fromHomeId:s.homeId,fromHouseholdId:s.householdId,memberIds:members.map(p=>p.id),targetHomeId:target.id,maxRent:1000000}];
-  const events=[];applyHouseholdIntents(w,1,(...a)=>events.push(a));
+  const events=[];applyHouseholdIntents(w,1,(type,simId,payload)=>events.push({type,simId,payload}));
+  assert.ok(members.every(p=>p.homeId===origin.id&&p.villageId===PRIMARY_VILLAGE_ID));
+  assert.equal(w.householdIntents[0].relocation.phase,'gathering');
+  for(let n=0;n<200&&w.householdIntents.length;n++)events.push(...tick(w));
   assert.ok(members.every(p=>p.homeId===target.id&&p.villageId==='village:test'));
-  assert.equal(events.filter(e=>e[0]==='moved_home').length,members.length);
+  assert.equal(events.filter(e=>e.type==='moved_home').length,members.length);
   assert.equal(villageSummary(w).find(v=>v.id==='village:test').population,members.length);
 });

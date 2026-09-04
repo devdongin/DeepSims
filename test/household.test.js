@@ -17,6 +17,14 @@ function fixture() {
   return{w,parent,child,events,emit};
 }
 
+test('#96 unfinished degree is not projected employment or independence income',()=>{
+  const {w,child,emit}=fixture();child.education.course='doctorate';child.education.completed=false;
+  evaluateHouseholds(w,100,1,emit);evaluateHouseholds(w,200,2,emit);
+  assert.equal(w.householdIntents.length,0);
+  const row=w.householdDaily.households.flatMap(h=>h.residents).find(s=>s.simId===child.id);
+  assert.equal(row.employed,false);assert.equal(row.income,0);
+});
+
 test('#51 stable employed adult child creates a durable intent, then separates on the next tick',()=>{
   const{w,child,events,emit}=fixture();
   evaluateHouseholds(w,100,1,emit);assert.equal(w.householdIntents.length,0);

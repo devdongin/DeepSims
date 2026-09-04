@@ -1,5 +1,6 @@
 // #76 One physical commodity: produced pantry surplus -> delivery -> shop stock.
 import { canWork } from './education.js';
+import { governmentFor } from './government.js';
 
 export const SUPPLY_ACTION = 'supply_groceries';
 export const GROW_ACTION = 'grow_groceries';
@@ -24,8 +25,9 @@ export function openSupplyMarket(world, fac, emit) {
   if (!sellsGroceries(fac) || fac.groceryStock !== undefined) return;
   fac.groceryStock = 0; // A new building does not produce food.
   const budget = world.logic.supply.targetStock * world.logic.supply.unitPrice;
-  const paid = Math.min(Math.max(0, world.treasury), budget);
-  world.treasury -= paid; fac.revenue = (fac.revenue ?? 0) + paid;
+  const government=governmentFor(world,fac.villageId);
+  const paid = Math.min(Math.max(0, government.treasury), budget);
+  government.treasury -= paid; fac.revenue = (fac.revenue ?? 0) + paid;
   world.foodSupply.totals.workingCapital += paid;
   emit('supply_capitalized', null, { facilityId: fac.id, amount: paid });
 }

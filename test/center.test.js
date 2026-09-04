@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld, tick, serialize, deserialize, migrateWorld, hashWorld } from '../sim/index.js';
 import { maybePlanCenter } from '../sim/tick.js';
 import { isWalkable } from '../sim/map.js';
+import { newGovernment, governmentViews, governmentEmitter, publicBalance } from '../sim/government.js';
 
 test('#119 계획 중심점은 국고·이벤트·영속 상태를 결정적으로 갱신한다', () => {
   const a = createWorld(119);
@@ -77,7 +78,8 @@ test('#119 NPC mayor invests in an inhabited outlying cluster, respects funds an
   const w = emptyTown();
   w.map.facilities = [{ id: 'home', type: 'house', x: 75, y: 75, door: { x: 76, y: 76 }, resources: [] },
     { id: 'hall', type: 'city_hall', x: 5, y: 5 }];
-  w.sims = Array.from({ length: 4 }, (_, id) => ({ id, homeId: 'home', money: 0, isPlayer: false }));
+  w.sims = Array.from({ length: 4 }, (_, id) => ({ id, homeId: 'home', money: 0, isPlayer: false,
+    traits: { age: 25, occupation: 'office_worker' } }));
   w.mayorId = 0;
   const events = [];
   const emit = (type, simId, payload) => events.push({ type, simId, payload });
@@ -95,4 +97,67 @@ test('#119 NPC mayor invests in an inhabited outlying cluster, respects funds an
   assert.equal(w.treasury, 5000);
   maybePlanCenter(w, 2, 0, emit);
   assert.equal(events.length, 1);
+});
+
+test('#32 selected center treasury and ownership survive replay without spending the neighboring balance', () => {
+  const w = emptyTown();
+  w.sims = createWorld(119).sims; // Construction needs actual residents, not an empty municipality.
+  for (const s of w.sims) s.state={...s.state,kind:'performing',action:'idle',ticksLeft:10000};
+  w.villages.push({ id: 'village:1', name: '새마을', center: { x: 80, y: 80 }, government: newGovernment() });
+  const g = w.villages[1].government;
+  g.treasury = 6000;
+  const before = publicBalance(w) + w.externalOutflow;
+  const input = [{ command: 'plan_center', payload: { x: 82, y: 82, villageId: 'village:1' } }];
+  const restored = deserialize(serialize(w));
+  const events = tick(w, input);
+  assert.deepEqual(events, tick(restored, input));
+  assert.equal(hashWorld(w), hashWorld(restored));
+  assert.equal(w.treasury, 10000);
+  assert.equal(g.treasury, 1000);
+  assert.equal(publicBalance(w) + w.externalOutflow, before);
+  assert.equal(w.centers[0].villageId, 'village:1');
+  assert.equal(events.find(e => e.type === 'center_planned').payload.villageId, 'village:1');
+  // A neighboring center must not pull primary construction to the distant plot.
+  assert.equal(events.find(e => e.type === 'project_started').payload.plotId, 1);
+  for (const villageId of [null, '', 'missing', 'village:1']) {
+    const before = publicBalance(w), centers = w.centers.length;
+    const result = tick(w, [{ command: 'plan_center', payload: { x: 90, y: 90, villageId } }]);
+    assert.equal(result[0].type, 'input_rejected');
+    assert.equal(publicBalance(w), before);
+    assert.equal(w.centers.length, centers);
+  }
+});
+
+test('#32 local mayor uses local residents, plots, centers and funds, writing shared accounting once', () => {
+  const w = emptyTown();
+  w.villages.push({ id: 'village:1', name: '새마을', center: { x: 80, y: 80 }, government: newGovernment() });
+  w.plots[0].villageId = 'village:1';
+  w.map.facilities = [{ id: 'home', type: 'house', villageId: 'village:1', x: 75, y: 75,
+    door: { x: 76, y: 76 }, resources: [] }];
+  w.sims = Array.from({ length: 4 }, (_, id) => ({ id, homeId: 'home', villageId: 'village:1',
+    money: 0, isPlayer: false, traits: { age: 25, occupation: 'office_worker' } }));
+  w.mayorId = null;
+  const g = w.villages[1].government;
+  g.mayorId = 0; g.treasury = 10000;
+  const events = [], emit = (type, simId, payload) => events.push({ type, simId, payload });
+  const run = () => { for (const local of governmentViews(w)) maybePlanCenter(local, 1, 0, governmentEmitter(local, emit)); };
+  w.sims[0].traits.occupation = 'student'; run(); assert.equal(events.length, 0);
+  w.sims[0].traits.occupation = 'office_worker';
+  w.sims[0].education = { course: 'doctorate', completed: false }; run(); assert.equal(events.length, 0);
+  delete w.sims[0].education;
+  w.sims[1].villageId = 'village:0'; run(); assert.equal(events.length, 0, 'neighbor is not local demand');
+  w.sims[1].villageId = 'village:1';
+  w.plots[0].villageId = 'village:0'; run(); assert.equal(events.length, 0, 'cannot use neighboring plot');
+  w.plots[0].villageId = 'village:1';
+  // An observed center in the neighboring municipality does not suppress local demand.
+  w.centers.push({ centerId: 'center0', x: 81, y: 81, createdTick: 0 });
+  const money = publicBalance(w) + w.externalOutflow;
+  run();
+  assert.equal(events.length, 1);
+  assert.equal(events[0].payload.villageId, 'village:1');
+  assert.equal(events[0].payload.x, 80);
+  assert.equal(w.centers[1].centerId, 'center1');
+  assert.equal(g.treasury, 5000); assert.equal(w.treasury, 10000);
+  assert.equal(publicBalance(w) + w.externalOutflow, money);
+  run(); assert.equal(events.length, 1, 'same municipality center suppresses duplicate demand');
 });

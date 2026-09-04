@@ -5,6 +5,7 @@ import { rngInt } from './prng.js';
 import { aptitudeFor } from './abilities.js';
 import { occupationAllowed } from './traits.js';
 import { sameRegion } from './map.js';
+import { governmentFor } from './government.js';
 
 export const SCHOOL_TYPES = ['primary_school', 'middle_school', 'high_school', 'university'];
 export function newEducation() {
@@ -72,7 +73,7 @@ export function considerUniversity(world, sim, t, emit) {
     const amount = Math.min(Math.max(0,payer.money),remaining);
     if (amount > 0) { payer.money -= amount; remaining -= amount; payments.push({simId:payer.id,amount}); }
   }
-  world.treasury += fee; // public university tuition remains in the domestic ledger
+  governmentFor(world,campus.villageId).treasury += fee; // Paid to the actual campus jurisdiction.
   if (!E.course) { E.course = 'university'; E.courseStartAge = sim.traits.age; }
   E.tuitionPaid += fee; E.tuitionYear = year; E.universityEnrolled = true;
   emit('education_decided', sim.id, { choice:'university', course:E.course, campusId:campus.id, year, tuition:fee, payments });

@@ -1,5 +1,9 @@
 // #93 Deterministic land value, closed-accounting rent, and durable cheaper-home moves.
-import { isResidence } from './map.js';
+import { isResidence, isAvailableResidence } from './map.js';
+import { governmentFor } from './government.js';
+import { canWork } from './education.js';
+import { planSettlementHouseholds } from './settlement-households.js';
+import { chooseMigrationHome } from './migration-choice.js';
 
 const cmp = (a,b) => a < b ? -1 : a > b ? 1 : 0;
 const at = f => f.door ?? { x:f.x, y:f.y };
@@ -24,7 +28,7 @@ export function askingRent(world,home,uses=world.facilityUseToday??{}){
     + home.resources.length*world.logic.housing.bedRent;
 }
 
-const incomeOf=(world,s)=>!['student','child'].includes(s.traits.occupation)
+const incomeOf=(world,s)=>canWork(s)
   ? Math.floor(world.logic.actions.work.wageBase*(world.logic.occupations[s.traits.occupation]?.wagePct??0)/100):0;
 
 function take(members,amount){
@@ -52,7 +56,7 @@ export function settleHousing(world,t,day,emit){
       const owner=world.sims.find(s=>s.id===home.ownerSimId)??null;
       if(owner&&members.some(s=>s.id===owner.id)){world.rentPressure[pressureKey]=0;continue;}
       const got=take(members,share);charged+=share;paid+=got;shortfall+=share-got;
-      if(owner)owner.money+=got;else world.treasury+=got;
+      if(owner)owner.money+=got;else governmentFor(world,home.villageId).treasury+=got;
       emit('rent_paid',members[0].id,{householdId,homeId:home.id,charged:share,paid:got,
         shortfall:share-got,recipient:owner?`sim:${owner.id}`:'treasury'});
       if(got<share)emit('rent_shortfall',members[0].id,{householdId,homeId:home.id,shortfall:share-got});
@@ -62,13 +66,17 @@ export function settleHousing(world,t,day,emit){
       if(world.rentPressure[pressureKey]<world.logic.housing.moveAfterDays
         ||world.sims.some(s=>s.householdId===householdId&&s.homeId!==home.id)
         ||world.householdIntents.some(i=>i.fromHouseholdId===householdId))continue;
-      const target=homes.filter(h=>h.id!==home.id&&!world.sims.some(s=>s.homeId===h.id)
-        &&!claimedTargets.has(h.id)&&h.resources.length>=members.length&&askingRent(world,h,uses)<share)
-        .sort((a,b)=>askingRent(world,a,uses)-askingRent(world,b,uses)||cmp(a.id,b.id))[0];
+      const family=world.villages.length>1?planSettlementHouseholds(world,[members[0].id],home.villageId):null;
+      const options=homes.filter(h=>isAvailableResidence(h)&&h.id!==home.id&&!world.sims.some(s=>s.homeId===h.id)
+        &&!claimedTargets.has(h.id)&&h.resources.length>=members.length
+        &&(h.villageId===home.villageId||!family||(family.ok&&h.resources.length>=family.residents.length)))
+        .map(h=>({home:h,rent:askingRent(world,h,uses)})).filter(o=>o.rent<share);
+      const choice=chooseMigrationHome(world,home,options),target=choice?.home;
       if(!target)continue;
       const intent={intentId:world.nextHouseholdIntentId++,kind:'rent_move',simId:members[0].id,
         memberIds:members.map(s=>s.id),fromHouseholdId:householdId,fromHomeId:home.id,
-        targetHomeId:target.id,maxRent:share,pressureKey,createdTick:t,applyTick:t+1};
+        targetHomeId:target.id,maxRent:share,pressureKey,createdTick:t,applyTick:t+1,
+        ...(choice.evidence?{migrationChoice:choice.evidence}:{})};
       world.householdIntents.push(intent);emit('household_intent_created',members[0].id,{...intent});
       claimedTargets.add(target.id);
     }

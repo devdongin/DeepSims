@@ -11,12 +11,15 @@ import { NEED_MAX as NEED_MAX_REF } from './constants.js'; // §22.6
 import { pairHash, dayHash, riskHash } from './chrono.js'; // §21.2 나눔 · §21.3 전직 · §22.2 사망 (rngSim 미소비)
 import { IMMIGRANT_NAMES } from './world.js';
 import { CLUBS, CLUB_MEETINGS, AFFINITY_MIN, AFFINITY_MAX } from './constants.js';
-import { TILE, isRoadProtected } from './map.js';
-import { isResidence } from './map.js';
+import { TILE, isRoadProtected, sameRegion } from './map.js';
+import { isResidence, isAvailableResidence } from './map.js';
+import { isSettlementInTransit } from './settlement.js';
+import { queueMarriageMigration } from './marriage-household.js';
 import { learnToken as learnTokenRef } from './planning.js';
-import { maybeRoadWorks } from './roads.js';
+import { maybeRoadWorks, roadMaintenanceVillage } from './roads.js';
 import { applyBirthTalent } from './genius.js';
 import { updateEducation, canWork } from './education.js';
+import { governmentFor, PRIMARY_GOVERNMENT, changeReputation } from './government.js';
 
 // §17.9: 최근 커플 링 (최대 8, 오래된 것부터 퇴출; dating/married 별개 엔트리)
 function pushRecentCouple(world, a, b, t, kind) {
@@ -151,22 +154,24 @@ export function retrospectiveScore(world, voter, candidateId, sinceTick, L, ctx 
 
 export function maybeElection(world, t, day, emit) {
   const E = world.logic.election;
-  if (day === 0 || day % E.intervalDays !== 0 || world.lastElectionDay === day) return;
+  const bootstrap=world.municipalityId&&world.municipalityId!==PRIMARY_GOVERNMENT&&world.lastElectionDay<0;
+  if ((!bootstrap&&(day === 0 || day % E.intervalDays !== 0)) || world.lastElectionDay === day) return;
   const prevElectionDay = world.lastElectionDay; // 회고 창의 시작 (첫 선거면 -1 → 세계 시작부터)
   const sinceTick = prevElectionDay < 0 ? 0 : prevElectionDay * 1440;
   world.lastElectionDay = day;
+  const electorate=world.sims.filter(s=>!world.municipalityId||s.traits.age>=19);
   // 인기 = 타 심들의 자신을 향한 양수 호감 합
-  const pops = world.sims.map((s) => ({
+  const pops = world.sims.filter(canWork).map((s) => ({
     id: s.id,
-    pop: world.sims.reduce((sum, o) => o.id === s.id ? sum : sum + Math.max(0, world.affinity[o.id][s.id]), 0),
-  })).filter((x) => x.pop > 0).sort((a, b) => (b.pop - a.pop) || (a.id - b.id));
+    pop: electorate.reduce((sum, o) => o.id === s.id ? sum : sum + Math.max(0, world.affinity[o.id][s.id]), 0),
+  })).filter((x) => x.pop > 0||bootstrap).sort((a, b) => (b.pop - a.pop) || (a.id - b.id));
   if (pops.length === 0) return; // 무산 — 현 시장 유지 (PLAN §17.8)
   const prevMayor = world.mayorId;
   // §22.20 **현직은 재선에 나선다.** 예전에는 후보가 인기 상위 2인뿐이라 재임자가
   // 후보에 못 드는 일이 잦았고(실측 3회 중 2회), 그러면 회고 투표가 아예 발동하지
   // 않는다 — 심판할 대상이 투표용지에 없기 때문이다. 현실의 선거도 현직이 나오고
   // 유권자가 그를 심판한다. 현직을 첫 자리에 두고 나머지를 인기순으로 채운다.
-  const incumbentAlive = prevMayor !== null && world.sims.some((s) => s.id === prevMayor);
+  const incumbentAlive = prevMayor !== null && world.sims.some((s) => s.id === prevMayor&&canWork(s));
   const ranked = pops.map((x) => x.id).filter((id) => id !== prevMayor);
   const candidates = incumbentAlive
     ? [prevMayor, ...ranked].slice(0, 2)
@@ -181,7 +186,7 @@ export function maybeElection(world, t, day, emit) {
     // responded === false 만 배수 대상 — null(기준선 없음)은 판정 불가라 배수 없음 (115차 ②)
     hoarding: world.treasury > floorDiv(cashTotal * E.hoardRatioPct, 100) && responded === false,
   };
-  for (const voter of world.sims) {
+  for (const voter of electorate) {
     let best = candidates[0];
     if (candidates.length > 1) {
       const r0 = retrospectiveScore(world, voter, candidates[0], sinceTick, world.logic, ctx);
@@ -218,7 +223,7 @@ export function maybeElection(world, t, day, emit) {
   }
   const mayor = world.sims.find((s) => s.id === winner);
   recordFact(mayor, t, world.logic, 'elected', { tags: ['politics'] });
-  for (const voter of world.sims) {
+  for (const voter of electorate) {
     if (voter.id !== winner) recordFact(voter, t, world.logic, 'voted', { subjectSimId: winner, tags: ['politics', `sim:${winner}`] });
   }
 }
@@ -230,7 +235,7 @@ export function updateCampaigners(world, day) {
   if (day % E.intervalDays === 0) { world.campaigners = []; return; } // 선거일: 클리어 (선거는 이후 실행)
   if (next - day <= E.campaignDays && next - day >= 1) {
     if (world.campaigners.length === 0) {
-      const pops = world.sims.map((s) => ({
+      const pops = world.sims.filter(canWork).map((s) => ({
         id: s.id,
         pop: world.sims.reduce((sum, o) => o.id === s.id ? sum : sum + Math.max(0, world.affinity[o.id][s.id]), 0),
       })).filter((x) => x.pop > 0).sort((a, b) => (b.pop - a.pop) || (a.id - b.id));
@@ -367,7 +372,7 @@ export function maybeFestival(world, t, day, emit) {
 export function mayorStipend(world, t, emit) {
   if (world.mayorId === null) return;
   const mayor = world.sims.find((s) => s.id === world.mayorId);
-  if (!mayor) return;
+  if (!mayor||!canWork(mayor)) return;
   // §17.15 수당은 국고 지출 — 잔고 내에서만 (재정난이면 미지급, 이벤트 없음)
   const pay = Math.min(world.logic.election.mayorStipend, world.treasury);
   if (pay <= 0) return;
@@ -413,18 +418,26 @@ export function maybeImmigration(world, t, day, emit) {
   const G = world.logic.growth;
   if (day === 0 || day % S.immigrationIntervalDays !== 0) return;
   // §17.21 평판 웨이브: 활기찬 마을일수록 여러 명이 온다 (각자 빈 침대 필요, 결정적)
-  const wave = Math.min(G.immigWaveMax + world.cityTier, 1 + Math.floor(world.reputation / G.immigPerExtra)); // §18.T4 등급 캡 확장
-  for (let wv = 0; wv < wave; wv++) immigrateOne(world, t, emit);
+  for (const village of world.villages) {
+    const government = governmentFor(world, village.id);
+    const wave = Math.min(G.immigWaveMax + government.cityTier,
+      1 + Math.floor(government.reputation / G.immigPerExtra));
+    const localEmit = village.id === PRIMARY_GOVERNMENT ? emit
+      : (type, id, payload) => emit(type, id, { ...payload, villageId: village.id });
+    for (let wv = 0; wv < wave; wv++) immigrateOne(world, t, localEmit, village.id);
+  }
 }
 
-function immigrateOne(world, t, emit) {
-  const beds = world.map.facilities.filter(isResidence)
+function immigrateOne(world, t, emit, villageId) {
+  const residents = world.sims.filter(s => (s.villageId ?? PRIMARY_GOVERNMENT) === villageId);
+  const homes = world.map.facilities.filter(f => (f.villageId ?? PRIMARY_GOVERNMENT) === villageId
+    && isAvailableResidence(f));
+  const beds = homes
     .reduce((n, f) => n + f.resources.length, 0);
-  if (beds <= world.sims.length) return; // 집 없으면 안 온다
+  if (beds <= residents.length) return; // 집 없으면 안 온다
   // 빈 침대 있는 주거 (배열 순 — §18.T3 아파트 포함)
-  const home = world.map.facilities
-    .filter(isResidence)
-    .find((f) => f.resources.length > world.sims.filter((s) => s.homeId === f.id).length);
+  const home = homes.find(f => f.resources.length > world.sims.filter(s => s.homeId === f.id).length
+    && ((world.villages.length === 1) || sameRegion(world.map, 2, 23, f.door.x, f.door.y)));
   if (!home) return;
   const traits = generateTraits(world.rngSim); // §12.1 순서, rngSim 소비
   const name = IMMIGRANT_NAMES[world.immigrantCounter % IMMIGRANT_NAMES.length];
@@ -454,7 +467,7 @@ function immigrateOne(world, t, emit) {
   // §23.14 돈은 makeSim이 **강등 전 직업** 기준으로 줬다 (Codex 지적). 정치인으로
   // 들어왔다가 사무직이 되면 정치인 초기 자금을 들고 사무직으로 사는 셈이다.
   // 강등이 실제로 일어났을 때만 새 직업 기준으로 다시 맞춘다 — 경계 유입 회계도 함께.
-  if (demotePublicIfOverQuota(world, sim, emit, 'immigration_quota')) {
+  if (demotePublicIfOverQuota({ ...world, sims: [...residents, sim] }, sim, emit, 'immigration_quota')) {
     sim.money = L.occupations[sim.traits.occupation].startMoney;
   }
   // §22.4 이민자가 들고 오는 초기 자금도 마을 밖에서 들어온 돈이다 (G1 폐쇄 회계의 경계 유입).
@@ -462,16 +475,22 @@ function immigrateOne(world, t, emit) {
   growIdMatrices(world); // §22.2 id 공간 기준 확장
   emit('immigrated', id, { name, occupation: sim.traits.occupation, homeId: home.id });
   for (const other of world.sims) {
-    if (other.id !== id) recordFact(other, t, L, 'new_neighbor', { subjectSimId: id, tags: [`sim:${id}`, 'town'] });
+    if (other.id !== id && (other.villageId ?? PRIMARY_GOVERNMENT) === villageId)
+      recordFact(other, t, L, 'new_neighbor', { subjectSimId: id, tags: [`sim:${id}`, 'town'] });
   }
 }
 
 // ---- §17.5 연애 (회고에서 호출 — 먼저 회고하는 쪽이 실행, PLAN §17.8) ----
 
 export function applyRomance(world, sim, t, emit) {
-  if (sim.traits.occupation === 'child') return; // §22.2 (91차 ②) 아이는 연애하지 않는다
+  if(isSettlementInTransit(world,sim.id)||isSettlementInTransit(world,world.partners[sim.id]))return;
+  if (sim.traits.age<19 || sim.traits.occupation === 'child') return; // School enrollment changes occupation, not adulthood.
   const R = world.logic.romance;
   const partner = world.partners[sim.id];
+  if(partner!==undefined){
+    const other=world.sims.find(s=>s.id===partner);
+    if(!other||other.traits.age<19||other.traits.occupation==='child')return;
+  }
   // ① 파혼: 어느 한 방향 호감 < breakup
   if (partner !== undefined && world.partnerStage[sim.id] === 'dating') {
     const other = world.sims.find((s) => s.id === partner);
@@ -493,16 +512,17 @@ export function applyRomance(world, sim, t, emit) {
     if (other.homeId !== sim.homeId) {
       const [lo, hi] = sim.id < partner ? [sim, other] : [other, sim];
       lo.householdId = hi.householdId = `household:marriage:${lo.id}:${hi.id}`;
+      if(queueMarriageMigration(world,lo,hi,t,emit,true))return;
       const loHome = world.map.facilities.find((f) => f.id === lo.homeId);
       const residents = world.sims.filter((s2) => s2.homeId === lo.homeId).length;
-      if (loHome.resources.length > residents) {
+      if (isAvailableResidence(loHome) && loHome.resources.length > residents) {
         const from = hi.homeId;
         hi.homeId = lo.homeId;
         syncResidenceVillage(world, hi.id);
         emit('moved_home', hi.id, { from, to: lo.homeId });
       } else {
         // 신혼집: 두 자리 빈 집(facilityId asc)으로 부부가 함께 이사
-        const fresh = world.map.facilities.find((f) => isResidence(f)
+        const fresh = world.map.facilities.find((f) => isAvailableResidence(f)
           && f.resources.length - world.sims.filter((s2) => s2.homeId === f.id).length >= 2);
         if (fresh) {
           for (const mover of [lo, hi]) {
@@ -550,9 +570,10 @@ export function applyRomance(world, sim, t, emit) {
       // 이주: id 높은 쪽이 낮은 쪽 집으로 (빈 침대 있을 때만 — 없으면 건설 수요로 해소될 때까지 대기)
       const [lo, hi] = sim.id < partner ? [sim, other] : [other, sim];
       lo.householdId = hi.householdId = `household:marriage:${lo.id}:${hi.id}`;
+      if(queueMarriageMigration(world,lo,hi,t,emit,false))return;
       const loHome = world.map.facilities.find((f) => f.id === lo.homeId);
       const residents = world.sims.filter((s) => s.homeId === lo.homeId).length;
-      if (hi.homeId !== lo.homeId && loHome.resources.length > residents) {
+      if (hi.homeId !== lo.homeId && isAvailableResidence(loHome) && loHome.resources.length > residents) {
         const from = hi.homeId;
         hi.homeId = lo.homeId;
         syncResidenceVillage(world, hi.id);
@@ -566,7 +587,7 @@ export function applyRomance(world, sim, t, emit) {
     let best = null, bestMutual = 0;
     for (const other of world.sims) {
       if (other.id === sim.id || world.partners[other.id] !== undefined) continue;
-      if (other.traits.occupation === 'child') continue; // §22.2 아이는 상대가 되지 않는다
+      if (other.traits.age<19 || other.traits.occupation === 'child') continue;
       if (!romanceAgeOk(sim, other, R)) continue; // §23.34 나이 조건
       const mutual = Math.min(world.affinity[sim.id][other.id], world.affinity[other.id][sim.id]);
       if (mutual >= R.datingMin && world.interactions[sim.id][other.id] >= R.datingInteractions
@@ -701,7 +722,8 @@ export function fireSelfOut(world, t, emit) {
     const inc = world.incidents[i];
     if (t - inc.sinceTick >= I.selfOutTicks) {
       world.incidents.splice(i, 1);
-      world.reputation = Math.max(0, world.reputation - I.selfOutRepPenalty);
+      const facility=world.map.facilities.find(f=>f.id===inc.facilityId);
+      changeReputation(world,-I.selfOutRepPenalty,facility?.villageId);
       emit('fire_out', null, { facilityId: inc.facilityId, by: 'self' });
     }
   }
@@ -749,12 +771,11 @@ export function maybePromotion(world, t, emit) {
 }
 
 // §18.T4: 현재 등급에서 zone 허용 타입 (기본 + 누적 언락)
-export function zoneAllowedTypes(world) {
+export function zoneAllowedTypes(world, villageId) {
   const out = ['house', 'cafe', 'office', 'park', 'primary_school','middle_school','high_school'];
-  for (let i = 1; i <= world.cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
+  for (let i = 1; i <= governmentFor(world, villageId).cityTier; i++) out.push(...world.logic.tiers[i].unlocks);
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**로 언락된다 (이슈 #52).
-  // 건설 레시피(ZONEABLE·비용·footprint)는 후속 라운드 — 그 전까지 zone 주문은
-  // 기존 'bad_type'(언락됐지만 레시피 미구현) 분기로 결정적으로 거부된다.
+  // Unlock permits an ordinary paid zone order, not instant construction or trains.
   if (world.transit?.stationUnlocked) out.push('train_station');
   for (const id of world.unlockedIndustries ?? []) if (!out.includes(id)) out.push(id);
   return out;
@@ -771,7 +792,7 @@ export function maybeBuyCar(world, sim, t, emit) {
   sim.money -= T.carPrice;
   sim.hasCar = true;
   const acqTax = floorDiv(T.carPrice * world.logic.economy.taxPct, 100);
-  world.treasury += acqTax; // 취득세 — 국고 순환
+  governmentFor(world,sim.villageId).treasury += acqTax;
   // §22.4 (93차 ②) 차값에서 취득세를 뺀 나머지는 마을 밖 제조사에게 나간다 — 경계 유출.
   world.externalOutflow = (world.externalOutflow ?? 0) + (T.carPrice - acqTax);
   emit('car_bought', sim.id, { price: T.carPrice, longTrips: sim.longTrips, balance: sim.money });
@@ -1085,6 +1106,7 @@ export function maybeFiscalReview(world, t, day, emit) {
 // (자재를 마을 밖에서 산다). 국고만 깎고 기록하지 않으면 G1 보존식이 깨진다.
 // 공채로는 포장하지 않는다 — 부채는 임금 보장 전용이다(사용자: "국고가 충분할 때").
 export function maybePublicWorks(world, t, day, emit) {
+  const root = world.rootWorld ?? world;
   const P = world.logic.publicWorks;
   const E = world.logic.election;
   if (P.paveMaxPerDay === 0 || P.paveCostPerTile === 0) return; // A/B 스위치
@@ -1096,7 +1118,7 @@ export function maybePublicWorks(world, t, day, emit) {
   if (tillElection <= E.campaignDays) return;
   if (day % world.logic.fiscal.reviewIntervalDays !== 0) return; // 재정 리뷰와 같은 주기
   const mayor = world.sims.find((s) => s.id === world.mayorId);
-  if (!mayor || mayor.isPlayer) return; // 플레이어 시장은 직접 통치한다
+  if (!mayor || !canWork(mayor) || mayor.isPlayer) return; // 플레이어 시장은 직접 통치한다
   // 국고가 충분할 때만 — §22.20·§22.22와 같은 기준을 본다
   const cashTotal = world.sims.reduce((n, s) => n + s.money, 0);
   if (world.treasury <= floorDiv(cashTotal * E.hoardRatioPct, 100)) return;
@@ -1113,6 +1135,7 @@ export function maybePublicWorks(world, t, day, emit) {
   for (const [k, v] of Object.entries(world.wear ?? {})) {
     const idx = Number(k);
     if (!Number.isSafeInteger(idx) || !Number.isSafeInteger(v)) continue;
+    if (roadMaintenanceVillage(root, idx) !== (world.municipalityId ?? PRIMARY_GOVERNMENT)) continue;
     if (v >= threshold) cands.push([idx, v]);
   }
   cands.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]));
@@ -1124,11 +1147,12 @@ export function maybePublicWorks(world, t, day, emit) {
     // (121차 ②) — 비용 검사 뒤에 두면 국고가 마른 날의 stale 엔트리가 다음 리뷰까지
     // 남고, remainingCandidates가 실제 미처리 수와 어긋난다.
     if (world.map.tiles[idx] !== TILE.GRASS) { delete world.wear[idx]; stale++; continue; }
-    if (isRoadProtected(world.map, idx % world.map.w, Math.floor(idx / world.map.w), true, world.plots)) continue;
+    if (isRoadProtected(root.map, idx % root.map.w, Math.floor(idx / root.map.w), true,
+      root.plots, root.projects, root.zoneOrders)) continue;
     if (paved.length >= P.paveMaxPerDay) continue; // 포장은 상한까지, 정리는 끝까지
     if (world.treasury - P.paveCostPerTile <= 0) continue; // 공채로 포장하지 않는다
     world.treasury -= P.paveCostPerTile;
-    world.externalOutflow = (world.externalOutflow ?? 0) + P.paveCostPerTile;
+    root.externalOutflow = (root.externalOutflow ?? 0) + P.paveCostPerTile;
     world.map.tiles[idx] = TILE.ROAD; // road_formed와 동일한 효과
     delete world.wear[idx];
     paved.push(idx);
@@ -1265,6 +1289,10 @@ export function deathRiskPer100k(world, sim, L) {
 // 행렬은 묘비로 남긴다(행을 지우면 id 인덱싱이 무너진다).
 function removeSim(world, sim, t, emit, cause, eventType = 'died') {
   const id = sim.id;
+  // Departing cash leaves the simulated economy with its owner. There is no
+  // in-world inheritance model; record this boundary flow, never invent a payee.
+  const cashOutflow=sim.money,root=world.rootWorld??world;
+  root.externalOutflow=(root.externalOutflow??0)+cashOutflow;
   // 예약 해제 — 죽은 사람이 자리를 붙들고 있으면 안 된다
   if (sim.state.facilityId !== null && sim.state.resourceId !== null) {
     const key = `${sim.state.facilityId}:${sim.state.resourceId}`;
@@ -1319,7 +1347,7 @@ function removeSim(world, sim, t, emit, cause, eventType = 'died') {
   }
   const idx = world.sims.findIndex((s) => s.id === id);
   if (idx >= 0) world.sims.splice(idx, 1);
-  emit(eventType, id, { name: sim.name, age: sim.traits.age, cause, pop: world.sims.length });
+  emit(eventType, id, { name: sim.name, age: sim.traits.age, cause, pop: world.sims.length, cashOutflow });
 }
 
 // 누적된 낮은 기분과 미충족 욕구가 실제로 쌓인 심은 마을을 떠난다.
@@ -1375,9 +1403,10 @@ export function remitPublicRevenue(world, t, emit) {
   for (const f of facs) {
     const amt = f.revenue;
     f.revenue = 0;
-    world.treasury += amt;
+    const government=governmentFor(world,f.villageId);
+    government.treasury += amt;
     total += amt;
-    emit('public_revenue_remitted', null, { facilityId: f.id, type: f.type, amount: amt, treasury: world.treasury });
+    emit('public_revenue_remitted', null, { facilityId: f.id, type: f.type, amount: amt, treasury: government.treasury });
   }
   return total;
 }

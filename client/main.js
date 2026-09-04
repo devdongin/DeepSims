@@ -1,14 +1,17 @@
 // DeepSims 클라이언트 — Phaser 아이소메트릭 렌더 + WS 동기화 (PLAN §6).
 // 이벤트 문장화는 클라이언트 몫 (구조화 payload → 한국어).
 import Phaser from 'phaser';
+import {resetSimCache,mergeSimBatch} from './sim-stream.js';
 
 const TW = 32, TH = 16; // 아이소 타일 (2:1)
 const TILE_COLORS = { 0: 0x4a6b3a, 1: 0x6b6154, 2: 0x8a7a5c, 3: 0x5c4a3a, 4: 0x2f4a28, 5: 0x2a3d5c,
   6: 0x3a6b9a, 7: 0x7a6b4a, 8: 0xd4c48a, 9: 0x6b6b72, 10: 0x5a7a4a, 11: 0x8a6a4a }; // §19 R-A
 const FACILITY_COLORS = { house: 0xc4694a, office: 0x7a8ba8, cafe: 0x4aa87a, park: 0x3a8a4a, bar: 0x8a5aa8, library: 0x5a7aa8, market: 0xa89a4a, pond: 0x4a8aa8, hospital: 0xd47a7a, city_hall: 0x8aa8d4, school: 0xd4b45a, restaurant: 0xd4885a, gym: 0x5ad4a8, cinema: 0x6a5ad4, police_station: 0x4a5ad4, fire_station: 0xd44a3a, apartment: 0xb08a5a, factory: 0x8a8a92, mall: 0xd49ad4, university: 0x5ab0d4 };
 const SIM_COLORS = [0xe8a94e, 0x7ab5e8, 0x8fd48a, 0xc79ae8, 0xe87a7a, 0xffd97a, 0x7ae8d4, 0xe87ab5, 0xa8e87a, 0xb59ae8];
+FACILITY_COLORS.train_station = 0x739da8; // Dedicated tile-render fallback until station art exists.
 
 let world = null;
+let updatePolicySummary=()=>{};
 let selectedSimId = null;
 let simSprites = new Map();
 // §23.39 심의 **안 변하는 부분** (이름·성·특성·능력치·잠재치·학력). 배치는 변동분만
@@ -498,7 +501,7 @@ class TownScene extends Phaser.Scene {
   // 화면 밖으로 걸어 나가면 그걸로 끝이었다. 카메라를 스프라이트에 붙인다 —
   // 서버 좌표가 아니라 눈에 보이는 자리를 따라가야 그림이 튀지 않는다(§23.3과 같은 이유).
   followSelected() {
-    if (!followSimId || !world) return;
+    if (followSimId == null || !world) return;
     const sp = simSprites.get(followSimId);
     const cam = this.cameras.main;
     let tx, ty;
@@ -821,14 +824,39 @@ class TownScene extends Phaser.Scene {
     return this.textures.exists(`walk${arch}_0`) ? `walk${arch}_0` : null;
   }
 
+  syncRail() {
+    const links=world?.rail?.links??[];
+    this.railMarkers??=new Map();
+    this.railGraphics??=this.add.graphics().setDepth(20);
+    if(!this.railGeometry||links.length!==this.railGeometry.length||links.some((l,i)=>l.path!==this.railGeometry[i].path||l.blocked!==this.railGeometry[i].blocked)){
+      this.railGraphics.clear();
+      for(const l of links){
+        this.railGraphics.lineStyle(3,l.blocked?0xb35b53:0xa6bec9,0.9);this.railGraphics.beginPath();
+        for(const [i,p] of (l.path??[]).entries()){
+          const x=isoX(p.x,p.y),y=isoY(p.x,p.y);
+          if(i===0)this.railGraphics.moveTo(x,y);else this.railGraphics.lineTo(x,y);
+        }
+        this.railGraphics.strokePath();
+      }
+      this.railGeometry=links.map(l=>({path:l.path,blocked:l.blocked}));
+    }
+    for(const l of links){
+      let marker=this.railMarkers.get(l.id);const x=isoX(l.train.x,l.train.y),y=isoY(l.train.x,l.train.y)-8;
+      if(!marker){marker=this.add.text(x,y,'',{fontSize:'16px',color:'#ffffff',backgroundColor:'#203441',padding:{x:3,y:2}}).setOrigin(0.5,1).setDepth(6000);this.railMarkers.set(l.id,marker);}
+      marker.setText(`${l.blocked?'⏸':'🚆'} ${l.train.passengers.length}/${l.capacity}`);
+      this.tweens.killTweensOf(marker);this.tweens.add({targets:marker,x,y,duration:200});
+    }
+    for(const [id,marker] of this.railMarkers)if(!links.some(l=>l.id===id)){marker.destroy();this.railMarkers.delete(id);}
+  }
+
   syncSims() {
+    this.syncRail();
     // §23.38 **화면 밖 사람은 스프라이트를 갖지 않는다.** 여태 전원에게 컨테이너(그림자 +
     // 몸 + 이름표, 차가 있으면 아이콘까지)를 만들었다. 인구 249면 오브젝트 1,000개, 그리고
     // 배치마다 전원에게 트윈을 만들고 죽였다(초당 약 1,000회). 지도가 다 보일 일은 없는데
     // 사람은 전부 살아 있었다 — 페이지가 튕기던 이유의 한 축이다.
     // 범위는 타일 컬링(§22.104)과 같은 u·v 역변환을 쓰되, 사람은 움직이므로 여유를 더 준다.
     const uv = this.visibleUV(40);
-    const seen = new Set();
     for (const sim of world.sims) {
       const u = sim.x - sim.y, v = sim.x + sim.y;
       if (u < uv.minU || u > uv.maxU || v < uv.minV || v > uv.maxV) {
@@ -841,7 +869,6 @@ class TownScene extends Phaser.Scene {
         }
         continue;
       }
-      seen.add(sim.id);
       let sp = simSprites.get(sim.id);
       const tx = isoX(sim.x, sim.y), ty = isoY(sim.x, sim.y) - 8;
       if (!sp) {
@@ -881,7 +908,8 @@ class TownScene extends Phaser.Scene {
       // §22.87 차를 타면 **차만 보인다** (사용자 지시: "자동차를 타면 자동차만 보여야지
       // 사람이랑 같이 보이지 않게 한다"). 예전에는 차 아이콘이 걸어가는 사람 위에 겹쳐서
       // 사람과 차가 한 몸처럼 붙어 다녔다. 이동 중에는 몸·이름표를 숨기고 차만 남긴다.
-      const driving = sim.hasCar && sim.state?.kind === 'walking';
+      sp.setVisible(sim.state?.kind!=='riding_train'); // Aboard a train, show the train rather than overlapping bodies/cars.
+      const driving = sim.hasCar && !sim.state?.rail && sim.state?.kind === 'walking';
       if (sp.carIcon) {
         sp.carIcon.setVisible(driving);
         if (driving && tx - sp.x !== 0) sp.carIcon.setFlipX(tx - sp.x > 0); // 가는 쪽을 본다
@@ -1116,7 +1144,7 @@ function showEmoteAt(x, y, text, ms = 3000) {
 }
 
 const PLACE_KO = { cafe: '카페', park: '공원', bar: '술집', office: '직장', library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청', school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', police_station: '경찰서', fire_station: '소방서', apartment: '아파트', factory: '공장', mall: '상가', university: '대학', workshop:'공방',lab:'연구소',warehouse:'창고', site: '공사장' };
-Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교'});
+Object.assign(PLACE_KO, {primary_school:'초등학교',middle_school:'중학교',high_school:'고등학교',train_station:'기차역'});
 // §22.12 한국어 조사 — 종성(받침)으로 고른다.
 // 예전에는 이름 뒤에 조사를 하드코딩해 "수아이(가)", "은지이(가)", "수아과(와)"가
 // 나왔다. 이벤트 피드는 가상 플레이어 3인이 모두 이 게임 최고의 자산으로 꼽은
@@ -1218,7 +1246,7 @@ const PLACE_FALLBACK = {
   house: '집', apartment: '아파트', office: '직장', cafe: '카페', park: '공원', bar: '술집',
   library: '도서관', market: '시장', pond: '낚시터', hospital: '병원', city_hall: '시청',
   school: '학교', restaurant: '식당', gym: '헬스장', cinema: '영화관', mall: '쇼핑몰',
-  police_station: '파출소', fire_station: '소방서',
+  police_station: '파출소', fire_station: '소방서', train_station:'기차역',
 };
 // 해시로 고르면 카페 9곳에 이름 8개라 반드시 겹친다. 그래서 **같은 종류 안에서 몇 번째인가**로
 // 고른다 — 이름이 동나면 "2호점"이 붙는다. id 정렬이라 목록 순서가 바뀌어도 이름은 그대로다.
@@ -2410,7 +2438,10 @@ function replyLine(e) {
 }
 
 function handleVisualEvent(e) {
-  if (e.type === 'city_promoted') { if (world) world.cityTier = e.payload.to; updateBadge(); fireworksBurst(); }
+  if (e.type === 'city_promoted') {
+    if (world && (!e.payload.villageId || e.payload.villageId === 'village:0')) world.cityTier = e.payload.to;
+    updateBadge(); fireworksBurst();
+  }
   const sp = (id) => simSprites.get(id);
   switch (e.type) {
     case 'conversation': {
@@ -2512,6 +2543,7 @@ const ACTION_KO = {
   grow_groceries: '주문 식료품 재배',
   stock_food: '식료품 비축',
   visit_culture: '문화 생활',
+  settle_village: '가족과 이주',
   // §23.8 여가 확대
   stroll: '산책', garden: '텃밭 가꾸기', music: '악기 연주', volunteer: '봉사 활동', board_game: '보드게임',
 };
@@ -2645,8 +2677,14 @@ function eventText(e) {
     }
     case 'car_bought': return `🚗 ${ga(n)} 차를 샀다 (장거리 ${e.payload.longTrips}회 · ${e.payload.price}원, 잔액 ${e.payload.balance})`;
     case 'station_unlocked': return `🚉 장거리 이동 수요가 문턱을 넘었다 — 기차역 언락! (수요 ${e.payload.demand}/${e.payload.threshold} · 충족도 ${e.payload.fulfillmentPct}% · 장거리 ${e.payload.totalLongTrips}회 · 차 ${e.payload.carsOwned}대)`;
+    case 'rail_opened': return `🚆 두 역을 잇는 무료 공공 셔틀이 개통됐습니다 (${e.payload.tiles}칸 · 정원 ${e.payload.capacity}명)`;
+    case 'rail_boarded': return `🚆 ${ga(n)} 열차에 탔습니다 (대기 ${e.payload.waitTicks}틱)`;
+    case 'rail_alighted': return `🚉 ${ga(n)} 열차에서 내려 목적지로 갑니다`;
+    case 'rail_suspended': return '⏸ 선로 또는 역을 사용할 수 없어 셔틀 운행을 멈췄습니다';
+    case 'rail_resumed': return '🚆 셔틀 운행을 재개했습니다';
+    case 'rail_cancelled': return `${ga(n)} 철도 여정을 중단하고 목적지까지의 경로를 다시 찾습니다`;
     case 'industry_unlocked': return `🏭 ${PLACE_KO[e.payload.facility]} 산업이 실제 수요로 열렸습니다 (${e.payload.evidence}/${e.payload.threshold})`;
-    case 'city_promoted': return `🏙️ ${ro('해솔' + e.payload.nameKo)} 승격했습니다! (인구 ${e.payload.pop}명) 🎆`;
+    case 'city_promoted': return `🏙️ ${ro((world?.villages?.find(v => v.id === e.payload.villageId)?.name ?? '해솔') + e.payload.nameKo)} 승격했습니다! (인구 ${e.payload.pop}명) 🎆`;
     case 'zoned': return `📐 시장이 공터 ${e.payload.plotId}에 ${PLACE_KO[e.payload.type] ?? e.payload.type} 건설을 지시했다 (−${e.payload.cost}원${e.payload.demolished ? ` + 도로 ${e.payload.demolished}칸 철거 ${e.payload.demolitionCost}원` : ''}, 국고 ${e.payload.treasury}원)`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준', healthCopayPct: '진료 자기부담', childAllowance: '아이당 일일 지원' };
@@ -2657,7 +2695,8 @@ function eventText(e) {
       const parts = Object.entries(e.payload.changes).map(([k, v2]) => (bf[k] !== undefined
         ? `${ko[k] ?? k} ${bf[k]}→${v2}${k.endsWith('Pct') ? '%' : '원'}`
         : `${ko[k] ?? k} ${v2}${k.endsWith('Pct') ? '%' : '원'}로`));
-      return `🏛️ 시정 발표: ${parts.join(', ')}`;
+      const town=e.payload.villageId?(world?.villages?.find(v=>v.id===e.payload.villageId)?.name??e.payload.villageId):'';
+      return `🏛️ ${town?town+' ':''}시정 발표: ${parts.join(', ')}`;
     }
     case 'starving': return `⚠️ ${ga(n)} 굶고 있습니다!`;
     case 'medical_visit_paid': return `🏥 ${n} 진료 완료: 환자 측 ${e.payload.patientCost}원 · 공공 부담 ${e.payload.subsidy}원`;
@@ -2687,6 +2726,18 @@ function eventText(e) {
     case 'item_spawned': return null; // 어디 떨어졌는지는 비밀 — 발견의 재미
     case 'season_changed': return `🍂 ${ {spring:'봄',summer:'여름',autumn:'가을',winter:'겨울'}[e.payload.to] }이 시작됐습니다`;
     case 'needs_tier_changed': return `${simName(e.simId)}의 생활 단계가 ${e.payload.to === 1 ? '시민' : '정착민'}으로 바뀌었습니다`;
+    case 'founding_petition_created': return `🏘️ ${ga(simName(e.simId))} 주거와 지역 공터 부족으로 개척 청원을 올렸습니다`;
+    case 'founding_petition_withdrawn': return `🏘️ 개척 청원 조건이 달라져 청원이 철회됐습니다`;
+    case 'founding_approved': return `🏘️ 개척 청원이 승인됐습니다. 파견 준비가 필요합니다`;
+    case 'founding_rejected': return `🏘️ 개척 청원이 거부됐습니다`;
+    case 'founding_funded': return `🏘️ 개척 주택의 건설비가 지급되고 부지가 예약됐습니다`;
+    case 'founding_cancelled': return `🏘️ 개척 계획의 조건이 달라져 취소됐습니다`;
+    case 'founding_homes_built': return `🏘️ 개척 주택이 완공되어 정착을 기다립니다`;
+    case 'founding_gathering': return `🏘️ 가족들이 이주를 준비합니다`;
+    case 'household_migration_gathering': return `📦 가족들이 다른 마을로 이사할 준비를 합니다`;
+    case 'household_migration_departed': return `📦 가족들이 새 집을 향해 출발했습니다`;
+    case 'founding_departed': return `🏘️ 가족들이 새 정착지로 출발했습니다`;
+    case 'village_founded': return `🏘️ 주민들이 도착해 새 마을을 세웠습니다`;
     case 'supply_delivered': return `🚚 ${ga(n)} 식료품 ${e.payload.quantity}개를 공급하고 ${e.payload.payment}원을 받았습니다`;
     // §23.31 '살림' 필터가 보여주겠다고 약속했는데 문장이 없어 화면이 비던 여섯 가지.
     // money_shared는 60일에 159건 — 이 게임에서 가장 다정한 사건이 통째로 침묵했다.
@@ -2798,7 +2849,13 @@ const FEED_STORY = new Set([
   'grew_up', 'died', 'emigrated', 'immigrated', 'bereaved', 'retired_now', 'moved_home',
   'joined_club', 'genius_born', 'heroic_save', 'festival', 'new_year', 'election',
   'city_promoted', 'station_unlocked', 'facility_built', 'argument', 'petition',
+  'rail_opened','rail_suspended','rail_resumed',
   'public_posts_filled', 'job_changed',
+  'founding_petition_created', 'founding_petition_withdrawn',
+  'founding_approved', 'founding_rejected',
+  'founding_funded', 'founding_cancelled', 'founding_homes_built',
+  'founding_gathering', 'founding_departed', 'village_founded',
+  'household_migration_gathering', 'household_migration_departed',
 ]);
 // conversation·greeting·gathering·invited는 뺐다. 실측에서 '이야기' 80줄이 전부 잡담(💬)이라
 // 결혼도 출생도 그 사이에 묻혔다 — 수다는 이 마을의 **바탕음**이지 사건이 아니다.
@@ -2853,14 +2910,15 @@ function chronicleText(e, nameOf) {
     case 'fire_out': return p.by === 'self'
       ? `💨 ${placeOfFac(p.facilityId)}의 불이 저절로 잦아들었습니다 (아무도 오지 않았습니다)`
       : `🚒 ${ga(nameOf(p.by))} ${placeOfFac(p.facilityId)} 화재를 진압했습니다`;
-    case 'city_promoted': return `🏙️ ${ga('해솔')} ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
+    case 'city_promoted': return `🏙️ ${ga(world?.villages?.find(v => v.id === p.villageId)?.name ?? '해솔')} ${ro(p.nameKo)} 승격했습니다 (인구 ${p.pop}명)`;
     case 'job_changed': return `💼 ${ga(n)} ${occKo(p.from)} 일을 접고 ${ro(occKo(p.to))} 전직했습니다`;
     case 'policy_changed': {
       const ko = { taxPct: '세율', welfareAmount: '복지 지급액', welfareThreshold: '복지 기준' };
       const parts = Object.entries(p.changes ?? {}).map(([k, v]) =>
         `${ko[k] ?? k} ${p.before?.[k] !== undefined ? `${p.before[k]}→` : ''}${v}${k === 'taxPct' ? '%' : '원'}`);
       const who = p.source === 'mayor' ? `시장 ${ga(n)} ` : '';
-      return `🏛️ ${who}정책을 바꿨습니다: ${parts.join(', ')}`;
+      const town=p.villageId?(world?.villages?.find(v=>v.id===p.villageId)?.name??p.villageId):'';
+      return `🏛️ ${town?town+' · ':''}${who}정책을 바꿨습니다: ${parts.join(', ')}`;
     }
     case 'started_dating': return `💕 ${wa(n)} ${ga(nameOf(p.withSimId))} 사귀기 시작했습니다`;
     case 'broke_up': return `💔 ${wa(n)} ${ga(nameOf(p.withSimId))} 헤어졌습니다`;
@@ -3585,7 +3643,7 @@ function connect() {
   // #143 숨은 탭에서는 서버 배치를 받지 않는다. 브라우저가 보이지 않는 동안 전체
   // sims JSON을 계속 파싱해 버리던 할당 폭주를 막고, 복귀 시 서버의 최신 snapshot
   // 하나로 회복한다. 시뮬레이션 자체와 다른 뷰어의 스트림은 계속 진행한다.
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'visibility', hidden: !forceLiveStream && (document.hidden || forcePausedStream) }));
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'visibility', simStatics:true, hidden: !forceLiveStream && (document.hidden || forcePausedStream) }));
 
   ws.onmessage = (raw) => {
     const msg = JSON.parse(raw.data);
@@ -3607,9 +3665,9 @@ function connect() {
         break;
       case 'snapshot':
         world = msg.world;
+        updatePolicySummary();
         // §23.39 스냅샷은 전체를 주므로 정적 지도를 여기서 새로 채운다.
-        simStatic.clear();
-        for (const sm of world.sims ?? []) simStatic.set(sm.id, sm);
+        resetSimCache(simStatic,world.sims);
         if (msg.world?.speed && window.__paintSpeed) window.__paintSpeed(msg.world.speed);
         $('status').textContent = '● 라이브';
         $('clock').textContent = fmtClock(world.worldTick);
@@ -3642,22 +3700,47 @@ function connect() {
         // §23.39 배치에는 변하는 것만 온다. 이름·특성·능력치·학력은 **달라진 사람 것만**
         // statics로 따라오므로, 기억해 둔 정적 부분과 합쳐 예전과 같은 모양을 만든다.
         // (스냅샷은 언제나 전체를 보내므로 이 지도는 접속 직후부터 채워져 있다.)
-        for (const st of msg.statics ?? []) simStatic.set(st.id, st);
-        world.sims = msg.sims.map((v) => {
-          const st = simStatic.get(v.id);
-          return st ? { ...st, ...v } : v;
-        });
+        world.sims = mergeSimBatch(simStatic,msg.sims,msg.statics);
         if (msg.treasury !== undefined) world.treasury = msg.treasury;
+        if (msg.publicTreasury !== undefined) world.publicTreasury = msg.publicTreasury;
         if (msg.incidents !== undefined) { world.incidents = msg.incidents; syncFires(); }
         if (msg.projects !== undefined) world.projects = msg.projects; // §19.3
         if (msg.speed && window.__paintSpeed) window.__paintSpeed(msg.speed); // §20
         if (msg.cityTier !== undefined && world.cityTier !== msg.cityTier) { world.cityTier = msg.cityTier; updateBadge(); }
         if (msg.transit) world.transit = msg.transit; // §19.12 역 수요 관측·언락 (zone 모달 게이트)
+        if(msg.rail){
+          const old=new Map((world.rail?.links??[]).map(l=>[l.id,l]));
+          world.rail={...world.rail,...msg.rail,links:msg.rail.links.map(l=>({...old.get(l.id),...l}))};
+        }
         if (msg.unlockedIndustries) world.unlockedIndustries = msg.unlockedIndustries;
         if (msg.housingMarket) world.housingMarket = msg.housingMarket;
         if (msg.householdDaily) world.householdDaily = msg.householdDaily;
+        if (msg.villages) world.villages = msg.villages;
+        if (msg.policyDefaults) world.policyDefaults=msg.policyDefaults;
+        updatePolicySummary();
         if (msg.plannedCenterCost !== undefined) world.plannedCenterCost = msg.plannedCenterCost;
+        if (msg.zoneCosts !== undefined) world.zoneCosts = msg.zoneCosts;
         for (const e of msg.events ?? []) {
+          if(e.type==='household_migration_gathering'){
+            const home=world.map.facilities.find(f=>f.id===e.payload.targetHomeId);
+            if(home)home.migrationIntentId=e.payload.intentId;
+          }
+          if(['household_intent_applied','household_intent_failed'].includes(e.type)){
+            for(const home of world.map.facilities)if(home.migrationIntentId===e.payload.intentId)delete home.migrationIntentId;
+          }
+          if (e.type === 'plot_relocated') {
+            const p = world.plots?.find(p => p.plotId === e.payload.plotId);
+            if (p) { p.x=e.payload.x; p.y=e.payload.y; }
+          }
+          if (e.type === 'village_land_assigned') {
+            const ids = new Set(e.payload.plotIds);
+            for (const p of world.plots ?? []) if (ids.has(p.plotId)) p.villageId=e.payload.villageId;
+          }
+          if(e.type==='village_founded'){
+            for(const f of world.map.facilities)if(e.payload.homeIds.includes(f.id)){
+              f.villageId=e.payload.id;delete f.foundingPetitionId;
+            }
+          }
           if (e.type === 'center_planned') {
             world.centers ??= [];
             if (!world.centers.some((c) => c.centerId === e.payload.centerId)) world.centers.push(e.payload);
@@ -3671,7 +3754,10 @@ function connect() {
         }
         // §18.T1: 정책 변경 이벤트로 클라 상태 동기화 — 슬라이더가 낡은 값을 재전송하지 않도록 (Codex 46차)
         for (const e of msg.events) {
-          if (e.type === 'policy_changed') world.policy = { ...(world.policy ?? {}), ...e.payload.changes };
+          if (e.type === 'policy_changed') {
+            const villageId=e.payload.villageId;
+            if(!villageId||villageId==='village:0')world.policy = { ...(world.policy ?? {}), ...e.payload.changes };
+          }
         }
         $('clock').textContent = fmtClock(world.worldTick);
         applyDaylight(world.worldTick);
@@ -3726,7 +3812,7 @@ function connect() {
             world.lostItems.push({ itemId: e.payload.itemId, x: e.payload.x, y: e.payload.y });
           } else if (e.type === 'item_found' && world?.lostItems) {
             world.lostItems = world.lostItems.filter((it) => it.itemId !== e.payload.itemId);
-          } else if (e.type === 'facility_built' || e.type === 'project_started') {
+          } else if (e.type === 'facility_built' || e.type === 'project_started' || e.type === 'rail_opened') {
             wsRef?.send(JSON.stringify({ type: 'resync' })); // 맵 대변형 — 새 스냅샷으로 재동기화
           } else if (e.type === 'weather_changed' && world) {
             world.weather = { day: e.payload.day, kind: e.payload.kind };
@@ -3765,6 +3851,10 @@ document.addEventListener('visibilitychange', () => {
   const modal = document.getElementById('policy-modal');
   const btn = document.getElementById('policy-btn');
   if (!btn) return;
+  const villageSelect=document.getElementById('pol-village');
+  const applyButton=document.getElementById('pol-apply');
+  const info=document.getElementById('pol-village-info');
+  let submitting=false;
   const els = {
     taxPct: [document.getElementById('pol-tax'), document.getElementById('pol-tax-v'), '%'],
     welfareAmount: [document.getElementById('pol-amt'), document.getElementById('pol-amt-v'), '원'],
@@ -3773,28 +3863,59 @@ document.addEventListener('visibilitychange', () => {
     childAllowance: [document.getElementById('pol-child'), document.getElementById('pol-child-v'), '원'],
   };
   const DEFAULTS = { taxPct: 15, welfareAmount: 200, welfareThreshold: 300, healthCopayPct: 100, childAllowance: 0 };
+  const context=()=>{
+    const village=world?.villages?.find(v=>v.id===villageSelect.value);
+    return village?{village,government:village.id==='village:0'?world:village.government}:null;
+  };
+  updatePolicySummary=()=>{
+    if(modal.style.display!=='flex')return;
+    const selected=context();
+    applyButton.disabled=submitting||!selected?.government;
+    info.textContent=selected?.government?`${selected.village.name} · 국고 ${selected.government.treasury}원`:'대상 마을을 확인할 수 없습니다.';
+  };
+  const fillInputs=()=>{
+    const selected=context();
+    applyButton.disabled=submitting||!selected?.government;
+    for (const [k, [input, label, unit]] of Object.entries(els)) {
+      input.value=selected?.government?.policy?.[k]??world?.policyDefaults?.[k]??DEFAULTS[k];
+      label.textContent=input.value+unit;
+    }
+    document.getElementById('pol-msg').textContent='';
+    updatePolicySummary();
+  };
   for (const [k, [input, label, unit]] of Object.entries(els)) {
     input.addEventListener('input', () => { label.textContent = input.value + unit; });
   }
   btn.addEventListener('click', () => {
-    for (const [k, [input, label, unit]] of Object.entries(els)) {
-      input.value = world?.policy?.[k] ?? DEFAULTS[k];
-      label.textContent = input.value + unit;
+    if(!world)return;
+    const previous=villageSelect.value;
+    villageSelect.replaceChildren();
+    for(const village of world.villages??[]){
+      const option=document.createElement('option');option.value=village.id;option.textContent=village.name;
+      villageSelect.append(option);
     }
-    document.getElementById('pol-msg').textContent = '';
+    villageSelect.value=world.villages.some(v=>v.id===previous)?previous:'village:0';
     modal.style.display = 'flex';
+    fillInputs();
   });
+  villageSelect.addEventListener('change',fillInputs);
   document.getElementById('pol-close').addEventListener('click', () => { modal.style.display = 'none'; });
-  document.getElementById('pol-apply').addEventListener('click', async () => {
-    const payload = {};
+  applyButton.addEventListener('click', async () => {
+    const selected=context();if(submitting||!selected?.government)return;
+    const payload = {villageId:selected.village.id};
     for (const [k, [input]] of Object.entries(els)) payload[k] = parseInt(input.value, 10);
-    const res = await fetch('/api/input', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientInputId: `policy:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, command: 'policy', payload }),
-    });
-    const j = await res.json();
-    document.getElementById('pol-msg').textContent = res.ok ? '시행되었습니다. 다음 틱부터 적용됩니다.' : `거부: ${j.error}`;
-    if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
+    submitting=true;applyButton.disabled=true;villageSelect.disabled=true;
+    try{
+      const res = await fetch('/api/input', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientInputId: `policy:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, command: 'policy', payload }),
+      });
+      const j = await res.json();
+      document.getElementById('pol-msg').textContent = res.ok ? `${selected.village.name} 정책 입력이 저장됐습니다. 다음 틱부터 적용됩니다.` : `거부: ${j.error}`;
+      if (res.ok) setTimeout(() => { modal.style.display = 'none'; }, 900);
+    }catch{
+      document.getElementById('pol-msg').textContent='응답을 받지 못했습니다. 연결 후 적용 여부를 확인해 주세요.';
+    }finally{submitting=false;applyButton.disabled=!context()?.government;villageSelect.disabled=false;}
   });
 })();
 
@@ -3835,46 +3956,55 @@ setInterval(pushSpark, 5000);
   const modal = document.getElementById('zone-modal');
   if (!modal) return;
   let cur = null; let dir = 0; let type = 'house';
-  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school:4000,middle_school:5000,high_school:6000, workshop:6000,lab:9000,warehouse:8000 };
+  const COST = { house: 2000, cafe: 3000, office: 3000, park: 1000, apartment: 6000, factory: 8000, mall: 8000, university: 10000, primary_school:4000,middle_school:5000,high_school:6000, workshop:6000,lab:9000,warehouse:8000,train_station:8000 };
   const TIER_NEED = { apartment: 1, factory: 2, mall: 2, university: 3 };
   // §19.12 기차역은 인구 등급이 아니라 **이동 수요**가 언락한다 (world.transit, 이슈 #52).
-  // 착공 레시피(ZONEABLE·비용)는 후속 라운드 — 언락 전에는 충족도 %를, 언락 후에는
-  // 언락 사실을 보여주고 '지시'는 잠근다 (서버가 bad_type으로 거부할 주문을 보내지 않는다).
+  // A reachable pair of completed stations enables the fare-free public shuttle.
   const stationLocked = () => !(world?.transit?.stationUnlocked);
+  const jurisdiction = () => {
+    const id=cur?.villageId??'village:0';
+    const village=world?.villages?.find(v=>v.id===id);
+    return {id,name:village?.name??id,government:id==='village:0'?world:village?.government};
+  };
   const render = () => {
+    const local=jurisdiction();
     const isStation = type === 'train_station';
     const need = TIER_NEED[type] ?? 0;
     const industryLocked = ['workshop','lab','warehouse'].includes(type) && !world?.unlockedIndustries?.includes(type);
-    const locked = (world?.cityTier ?? 0) < need || industryLocked;
+    const locked = !local.government || (local.government.cityTier ?? 0) < need || industryLocked || (isStation && stationLocked());
+    const cost = world?.zoneCosts?.[type] ?? COST[type];
     const pct = world?.transit?.fulfillmentPct ?? 0;
     const info = isStation
       ? `공터 ${cur.plotId} · ${type} · ` + (stationLocked()
         ? `🔒 이동 수요 ${pct}% — 100%에 언락`
-        : `🚉 언락됨 (수요 ${pct}%) · 착공 레시피는 후속 라운드`)
-      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${COST[type]}원` + (locked ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
-    document.getElementById('zone-info').textContent = info;
+        : `🚉 언락됨 (수요 ${pct}%) · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원 · 연결 가능한 역 2곳부터 무료 셔틀 운행`)
+      : `공터 ${cur.plotId} · ${type} · 방향 ${['↙','↘','↗','↖'][dir]} · 비용 ${cost}원` + (locked ? ` · 🔒${industryLocked?'산업 수요 필요':`${['','읍','시','대도시'][need]} 필요`}` : '');
+    document.getElementById('zone-info').textContent = `${local.name} · 국고 ${local.government?.treasury??'?'}원 · ${info}`;
     for (const b of modal.querySelectorAll('[data-zt]')) {
       const zt = b.dataset.zt;
-      const dim = zt === 'train_station' ? stationLocked() : (world?.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt));
+      const dim = !local.government || (zt === 'train_station' ? stationLocked() : (local.government.cityTier ?? 0) < (TIER_NEED[zt] ?? 0) || (['workshop','lab','warehouse'].includes(zt)&&!world?.unlockedIndustries?.includes(zt)));
       b.style.opacity = dim ? 0.4 : 1;
       b.style.borderColor = zt === type ? '#ffcf6a' : '#6b5638';
     }
     const go = document.getElementById('zone-go');
     const center = document.getElementById('zone-center');
-    const planned = world?.centers?.some((c) => c.x === cur.x && c.y === cur.y);
+    const planned = world?.centers?.some((c) => c.x === cur.x && c.y === cur.y && (c.villageId??'village:0')===local.id);
     center.textContent = planned ? '이미 지정된 계획 중심지' : `이 공터를 계획 중심지로 지정 (−${world?.plannedCenterCost ?? 5000}원)`;
-    center.disabled = !!planned;
-    go.disabled = isStation;
-    go.style.opacity = isStation ? 0.4 : 1;
+    center.disabled = !!planned || !local.government;
+    go.disabled = locked;
+    go.style.opacity = go.disabled ? 0.4 : 1;
   };
-  const plotsAvailable = () => (world?.plots ?? []).filter((p) => !p.used && !world.projects?.some((pr) => pr.plotId === p.plotId));
+  const plotsAvailable = () => (world?.plots ?? []).filter((p) => !p.used && p.foundingPetitionId==null
+    && !world.projects?.some((pr) => pr.plotId === p.plotId)
+    && !world.zoneOrders?.some((pr) => pr.plotId === p.plotId));
   window.openZoneModal = (plot) => {
     cur = plot; dir = 0; type = 'house';
     const select = document.getElementById('zone-plot');
     select.replaceChildren();
     for (const p of plotsAvailable()) {
       const option = document.createElement('option');
-      option.value = String(p.plotId); option.textContent = `공터 ${p.plotId} (${p.x}, ${p.y})`;
+      const name=world.villages?.find(v=>v.id===(p.villageId??'village:0'))?.name??(p.villageId??'village:0');
+      option.value = String(p.plotId); option.textContent = `${name} · 공터 ${p.plotId} (${p.x}, ${p.y})`;
       select.appendChild(option);
     }
     select.value = String(plot.plotId);
@@ -3893,17 +4023,19 @@ setInterval(pushSpark, 5000);
   document.getElementById('zone-rot').addEventListener('click', () => { dir = (dir + 1) % 4; render(); });
   document.getElementById('zone-close').addEventListener('click', () => { modal.style.display = 'none'; });
   document.getElementById('zone-center').addEventListener('click', async () => {
+    if(document.getElementById('zone-center').disabled)return;
     const msg = document.getElementById('zone-msg');
     try {
       const res = await fetch('/api/input', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientInputId: `center:${crypto.randomUUID()}`, command: 'plan_center', payload: { x: cur.x, y: cur.y } }),
+        body: JSON.stringify({ clientInputId: `center:${crypto.randomUUID()}`, command: 'plan_center', payload: { x: cur.x, y: cur.y, villageId:jurisdiction().id } }),
       });
       const j = await res.json();
       msg.textContent = res.ok ? '지정 요청을 보냈습니다. 적용 결과는 사건 기록에 표시됩니다.' : `거부: ${j.error}`;
     } catch { msg.textContent = '요청을 보내지 못했습니다. 연결을 확인하세요.'; }
   });
   document.getElementById('zone-go').addEventListener('click', async () => {
+    if(document.getElementById('zone-go').disabled)return;
     const res = await fetch('/api/input', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientInputId: `zone:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
